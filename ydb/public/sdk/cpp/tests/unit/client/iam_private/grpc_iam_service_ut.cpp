@@ -107,9 +107,7 @@ public:
         callback(std::move(issues), EStatus::CLIENT_CANCELLED);
     }
 
-    void PostToResponseQueue(TPostTaskCb&& callback) override {
-        callback();
-    }
+    void PostToResponseQueue(TPostTaskCb&&) override {}
 };
 
 using TTestOAuthFactory = TIamOAuthCredentialsProviderFactory<
@@ -228,12 +226,7 @@ TEST(IamCredentialsProvider, AuthInfoRetriesTransientIamFailure) {
     server.Stop();
 }
 
-// Regression test for the deprecated no-arg CreateProvider() on the IAM service-account
-// factory with a nested gRPC JWT auth provider. Before the fix, both providers shared a single
-// TSimpleCoreFacility, each registered a periodic refresh task, and TSimpleCoreFacility's
-// single-task invariant tripped Y_ABORT_UNLESS and killed the process. The fix gives the
-// nested auth provider its own facility (via a recursive no-arg CreateProvider()), so the two
-// periodic tasks land on separate facilities.
+// The no-arg service provider keeps nested gRPC authentication on a separate facility.
 TEST(IamServiceCredentialsProvider, NoArgCreateProviderWithGrpcInnerCreds) {
     TIamServiceStub stub;
     TIamGrpcServer server(&stub);

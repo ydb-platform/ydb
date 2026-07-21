@@ -11,6 +11,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
+#include <memory>
 #include <optional>
 
 namespace NYql {
@@ -30,6 +31,8 @@ class TKqpPhyQuery;
 
 namespace NKikimr::NKqp {
 
+class IRBOSemanticSnapshotSink;
+
 struct TKqlTransformContext : TThrRefBase {
     TKqlTransformContext(const TIntrusivePtr<NYql::TKikimrConfiguration>& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
         TIntrusivePtr<NYql::TKikimrTablesData> tables);
@@ -45,6 +48,9 @@ struct TKqlTransformContext : TThrRefBase {
     TIntrusivePtr<NYql::TExprNode> ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
+
+    // Optional query instrumentation. Reset intentionally preserves the sink.
+    std::shared_ptr<IRBOSemanticSnapshotSink> RBOSemanticSnapshotSink;
 
     void Reset();
 };

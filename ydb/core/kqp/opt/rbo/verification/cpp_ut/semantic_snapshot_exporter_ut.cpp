@@ -15,6 +15,8 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <stdexcept>
+
 namespace {
 
 using namespace NKikimr;
@@ -121,6 +123,36 @@ NJson::TJsonValue ParseSupported(const TSemanticSnapshotExportResult& result) {
     UNIT_ASSERT_C(NJson::ReadJsonTree(result.Json, &snapshot, true), result.Json);
     return snapshot;
 }
+
+NJson::TJsonValue ParseSupported(const TRBOSemanticSnapshotBoundaryResultV1& result) {
+    UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+    NJson::TJsonValue snapshot;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.Json, &snapshot, true), result.Json);
+    return snapshot;
+}
+
+class TRecordingSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
+public:
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        Results.push_back(std::move(result));
+    }
+
+    TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
+};
+
+class TThrowOnceSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
+public:
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        if (ThrowNext) {
+            ThrowNext = false;
+            throw std::runtime_error("test sink failure");
+        }
+        Results.push_back(std::move(result));
+    }
+
+    bool ThrowNext = true;
+    TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
+};
 
 TVector<TString> Strings(const NJson::TJsonValue& array) {
     TVector<TString> result;
@@ -365,6 +397,111 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             changedRoot, ctx.RboCtx, catalog.Catalog);
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "table identity");
+    }
+
+    Y_UNIT_TEST(NullPairSinkDoesNoSnapshotWork) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+        UNIT_ASSERT(!read->Props.OutputIUs);
+
+        TSemanticSnapshotPairCaptureV1 capture(nullptr);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        capture.CaptureFinal(root, ctx.RboCtx);
+
+        // Exporting either boundary asks the Read for its output IUs.  Keeping
+        // this cache empty makes the disabled path observably lazy.
+        UNIT_ASSERT(!read->Props.OutputIUs);
+    }
+
+    Y_UNIT_TEST(PairSinkReceivesInitialThenFinalWithOneSharedCatalog) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int32", true},
+            {"flag", "Bool", false},
+        }, {"k"});
+        auto initialRead = MakeRead(ctx, table, "a", {"k", "flag"});
+        TOpRoot initialRoot(initialRead, TPositionHandle(), {"a.k"});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(initialRoot, ctx.RboCtx);
+
+        const auto pos = TPositionHandle();
+        auto replacement = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("a.k"),
+                MakeConstant("Int32", "0", pos, &ctx.ExprCtx))});
+        TOpRoot finalRoot(replacement, pos, {"a.k"});
+        capture.CaptureFinal(finalRoot, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(
+            sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+
+        const auto initialSnapshot = ParseSupported(sink.Results[0]);
+        const auto finalSnapshot = ParseSupported(sink.Results[1]);
+        const auto& initialTables = initialSnapshot["schema"]["tables"].GetArraySafe();
+        const auto& finalTables = finalSnapshot["schema"]["tables"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(initialTables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalTables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialTables[0]["name"].GetStringSafe(),
+            finalTables[0]["name"].GetStringSafe());
+        UNIT_ASSERT_STRING_CONTAINS(finalTables[0]["name"].GetStringSafe(), "/Root/A");
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialTables[0]["columns"].GetArraySafe().size(),
+            finalTables[0]["columns"].GetArraySafe().size());
+    }
+
+    Y_UNIT_TEST(UnsupportedFinalSnapshotIsDeliveredWithoutThrowing) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        TOpRoot initialRoot(read, pos, {"a.k"});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(initialRoot, ctx.RboCtx);
+
+        auto limit = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot finalRoot(limit, pos, {"a.k"});
+        capture.CaptureFinal(finalRoot, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(sink.Results[0].IsSupported());
+        UNIT_ASSERT(
+            sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        UNIT_ASSERT(!sink.Results[1].IsSupported());
+        UNIT_ASSERT(sink.Results[1].Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit");
+    }
+
+    Y_UNIT_TEST(SinkFailureDoesNotDiscardTheSharedCatalog) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        TThrowOnceSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        capture.CaptureFinal(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT(
+            sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        ParseSupported(sink.Results[0]);
     }
 }
 

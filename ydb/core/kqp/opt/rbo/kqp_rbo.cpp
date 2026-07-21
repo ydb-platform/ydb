@@ -1,6 +1,7 @@
 #include "kqp_rbo.h"
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
+#include "verification/semantic_snapshot.h"
 
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 
@@ -176,10 +177,16 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(
+    TOpRoot& root,
+    TRBOContext& rboCtx,
+    IRBOSemanticSnapshotSink* semanticSnapshotSink)
+{
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
 
+    TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
+    semanticSnapshots.CaptureInitial(root, rboCtx);
     SubmitInitialPlanTrace(root, rboCtx);
 
     if (needToLog) {
@@ -207,6 +214,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics;
     ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
+    semanticSnapshots.CaptureFinal(root, rboCtx);
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }

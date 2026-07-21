@@ -338,7 +338,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(*OpRoot, rboCtx);
+                const auto semanticSnapshotSink = TransformCtx->RBOSemanticSnapshotSink;
+                auto output = RBO.Optimize(*OpRoot, rboCtx, semanticSnapshotSink.get());
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;

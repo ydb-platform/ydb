@@ -3,6 +3,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 class TOpRoot;
@@ -49,6 +51,51 @@ struct TSemanticSnapshotExportResult {
 
     TString Json;
     TString UnsupportedReason;
+};
+
+enum class ERBOSemanticSnapshotBoundaryV1 {
+    Initial,
+    Final,
+};
+
+struct TRBOSemanticSnapshotBoundaryResultV1 {
+    bool IsSupported() const noexcept {
+        return UnsupportedReason.empty();
+    }
+
+    ERBOSemanticSnapshotBoundaryV1 Boundary;
+    TString Json;
+    TString UnsupportedReason;
+};
+
+class IRBOSemanticSnapshotSink {
+public:
+    virtual ~IRBOSemanticSnapshotSink() = default;
+
+    // The result is passed by value so the sink owns the JSON or diagnostic.
+    virtual void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) = 0;
+};
+
+// Query-local helper that captures one shared initial catalog and uses it for
+// both boundary snapshots.  A null sink makes both methods no-ops.  Export and
+// sink failures are diagnostics only and never escape into query compilation.
+class TSemanticSnapshotPairCaptureV1 {
+public:
+    explicit TSemanticSnapshotPairCaptureV1(IRBOSemanticSnapshotSink* sink) noexcept;
+
+    TSemanticSnapshotPairCaptureV1(const TSemanticSnapshotPairCaptureV1&) = delete;
+    TSemanticSnapshotPairCaptureV1& operator=(const TSemanticSnapshotPairCaptureV1&) = delete;
+
+    void CaptureInitial(TOpRoot& root, const TRBOContext& ctx) noexcept;
+    void CaptureFinal(TOpRoot& root, const TRBOContext& ctx) noexcept;
+
+private:
+    void Deliver(TRBOSemanticSnapshotBoundaryResultV1 result) noexcept;
+
+    IRBOSemanticSnapshotSink* Sink = nullptr;
+    std::optional<TSemanticSnapshotCatalogV1> Catalog;
+    TString CatalogFailure;
+    bool InitialAttempted = false;
 };
 
 // Export the strict logical version-one snapshot consumed by rbo_verifier.

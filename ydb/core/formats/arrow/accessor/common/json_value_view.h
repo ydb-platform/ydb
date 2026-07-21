@@ -57,4 +57,7 @@ private:
     mutable TString ScalarHolder;
 };
 
+// Serialize a JSON value to text with round-trip-safe number formatting.
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json);
+
 } // namespace NKikimr::NArrow::NAccessor

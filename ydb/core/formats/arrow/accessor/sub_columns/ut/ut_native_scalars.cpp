@@ -11,6 +11,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <algorithm>
+#include <limits>
 
 using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::PrintBinaryJsons;
 
@@ -219,5 +220,26 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.s"), "x;yy;<null>;z;");
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.n"), "1;2.5;<null>;-3;");
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.b"), "true;false;<null>;true;");
+    }
+
+    Y_UNIT_TEST(ReencodeNearMaxDouble) {
+        const std::vector<std::pair<TString, double>> cases = {
+            {"1.7976931348623157e308", 1.7976931348623157e308},
+            {"-1.7976931348623157e308", -1.7976931348623157e308},
+        };
+        for (const auto& [lit, expected] : cases) {
+            const TString doc = TString(TStringBuilder() << "{\"n\":" << lit << "}");
+            auto native = BuildSubColumns({doc}, NativeSettings(0));
+            UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(native, EValueType::Double), 1, native->DebugJson().GetStringRobust());
+            UNIT_ASSERT(native->GetChunkedArray());   // read-back document reconstruction must not abort
+            const auto assertExact = [&](const std::shared_ptr<TSubColumnsArray>& arr) {
+                auto it = arr->GetColumnsData().BuildIterator(0);
+                auto bj = GetCodecForValueType(EValueType::Double)->ReadValueView(it.GetArray(), it.GetLocalIndex()).ToBinaryJson();
+                auto reader = NBinaryJson::TBinaryJsonReader::Make(bj);
+                UNIT_ASSERT_VALUES_EQUAL(reader->GetRootCursor().GetElement(0).GetNumber(), expected);
+            };
+            assertExact(native);
+            assertExact(SerializeRoundTrip(native, NativeSettings(0)));
+        }
     }
 };

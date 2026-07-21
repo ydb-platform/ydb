@@ -20,6 +20,7 @@
 #include <util/system/shellcommand.h>
 
 #include <mutex>
+#include <regex>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -76,6 +77,8 @@ NYql::TKikimrConfiguration::TPtr MakeConfiguration() {
         TVector<NKikimrKqp::TKqpSetting>{},
         true);
     config->SetEnableNewRBO(true);
+    config->SetEnableFallbackToYqlOptimizer(false);
+    config->SetAllowOlapDataQuery(true);
     config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     config->SetDefaultLangVer(NYql::GetMaxLangVersion());
     config->_ResultRowsLimit.Clear();
@@ -138,6 +141,19 @@ const NJson::TJsonValue& OnlyPlanNode(
     return *matches.front();
 }
 
+void CollectConjuncts(
+    const NJson::TJsonValue& expression,
+    TVector<const NJson::TJsonValue*>& conjuncts)
+{
+    if (expression["kind"].GetStringSafe() != "and") {
+        conjuncts.push_back(&expression);
+        return;
+    }
+    for (const auto& argument : expression["args"].GetArraySafe()) {
+        CollectConjuncts(argument, conjuncts);
+    }
+}
+
 void AssertLimit(const NJson::TJsonValue& limit, const TString& phase) {
     UNIT_ASSERT_VALUES_EQUAL(limit["phase"].GetStringSafe(), phase);
     const auto& count = limit["count"];
@@ -183,9 +199,48 @@ void CreateOrderedColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+TKikimrRunner MakeTpcdsRunner() {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* service = appConfig.MutableTableServiceConfig();
+    service->SetEnableNewRBO(true);
+    service->SetEnableFallbackToYqlOptimizer(false);
+    service->SetAllowOlapDataQuery(true);
+    service->SetDefaultLangVer(NYql::GetMaxLangVersion());
+    service->SetBackportMode(
+        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(TKikimrSettings(appConfig).SetWithSampleTables(false));
+}
+
+void CreateTpcdsColumnTables(TKikimrRunner& kikimr) {
+    const TString path = ArcadiaSourceRoot() +
+        "/ydb/core/kqp/ut/rbo/data/schema/tpcds.sql";
+    std::string schema = TFileInput(path).ReadAll();
+    const std::regex table(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
+    schema = std::regex_replace(
+        schema,
+        table,
+        "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(TString(schema)).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+TString TpcdsQuery96() {
+    const TString prelude = R"(
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
+$to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
+$round = ($x,$y) -> { return $x; };
+)";
+    return prelude + TFileInput(
+        ArcadiaSourceRoot() +
+        "/ydb/core/kqp/ut/rbo/data/yql-tpcds/q96.yql").ReadAll();
+}
+
 NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
-    const TRBOSemanticSnapshotBoundaryResultV1& final)
+    const TRBOSemanticSnapshotBoundaryResultV1& final,
+    ui64 timeoutMs = 10'000)
 {
     TTempDir tempDir;
     const auto initialPath = tempDir.Path() / "initial.json";
@@ -200,7 +255,7 @@ NJson::TJsonValue BuildVerificationProblem(
         << initialPath.GetPath()
         << finalPath.GetPath()
         << "--rows" << "2"
-        << "--timeout-ms" << "10000"
+        << "--timeout-ms" << ToString(timeoutMs)
         << "--emit-smt" << formulaPath.GetPath();
 
     const auto solver = TryGetEnv("RBO_Z3");
@@ -535,6 +590,131 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(PlanNodes(final, "filter").empty());
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesTpcdsQuery96) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateTpcdsColumnTables(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(TpcdsQuery96(), settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(initial, "scan").size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(final, "scan").size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(initial, "join").size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(final, "join").size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(final, "aggregate").size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(final, "sort").size(), 1);
+
+        for (const auto* scan : PlanNodes(initial, "scan")) {
+            UNIT_ASSERT((*scan)["predicate"].IsNull());
+        }
+        const auto initialFilters = PlanNodes(initial, "filter");
+        UNIT_ASSERT_VALUES_EQUAL(initialFilters.size(), 1);
+        TVector<const NJson::TJsonValue*> initialConjuncts;
+        CollectConjuncts((*initialFilters.front())["predicate"], initialConjuncts);
+        UNIT_ASSERT_VALUES_EQUAL(initialConjuncts.size(), 7);
+
+        UNIT_ASSERT(PlanNodes(final, "filter").empty());
+        TVector<const NJson::TJsonValue*> pushedConjuncts;
+        size_t scansWithPredicate = 0;
+        for (const auto* scan : PlanNodes(final, "scan")) {
+            const auto& predicate = (*scan)["predicate"];
+            if (!predicate.IsNull()) {
+                ++scansWithPredicate;
+                CollectConjuncts(predicate, pushedConjuncts);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scansWithPredicate, 3);
+        UNIT_ASSERT_VALUES_EQUAL(pushedConjuncts.size(), 4);
+        THashSet<TString> pushedColumns;
+        for (const auto* predicate : pushedConjuncts) {
+            UNIT_ASSERT_VALUES_EQUAL((*predicate)["left"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL((*predicate)["right"]["kind"].GetStringSafe(), "literal");
+            const TString column = (*predicate)["left"]["column"].GetStringSafe();
+            UNIT_ASSERT(pushedColumns.insert(column).second);
+            const TString kind = (*predicate)["kind"].GetStringSafe();
+            const auto& literal = (*predicate)["right"];
+            if (column == "time_dim.t_hour") {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "eq");
+                UNIT_ASSERT_VALUES_EQUAL(literal["type"].GetStringSafe(), "Int32");
+                UNIT_ASSERT_VALUES_EQUAL(literal["value"].GetIntegerSafe(), 8);
+            } else if (column == "time_dim.t_minute") {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "gte");
+                UNIT_ASSERT_VALUES_EQUAL(literal["type"].GetStringSafe(), "Int32");
+                UNIT_ASSERT_VALUES_EQUAL(literal["value"].GetIntegerSafe(), 30);
+            } else if (column == "household_demographics.hd_dep_count") {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "eq");
+                UNIT_ASSERT_VALUES_EQUAL(literal["type"].GetStringSafe(), "Int32");
+                UNIT_ASSERT_VALUES_EQUAL(literal["value"].GetIntegerSafe(), 5);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(column, "store.s_store_name");
+                UNIT_ASSERT_VALUES_EQUAL(kind, "eq");
+                UNIT_ASSERT_VALUES_EQUAL(literal["type"].GetStringSafe(), "String");
+                UNIT_ASSERT_VALUES_EQUAL(literal["value"].GetStringSafe(), "ese");
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pushedColumns, THashSet<TString>({
+            "time_dim.t_hour",
+            "time_dim.t_minute",
+            "household_demographics.hd_dep_count",
+            "store.s_store_name",
+        }));
+
+        bool sawDate = false;
+        bool sawDecimal = false;
+        for (const auto& table : initial["schema"]["tables"].GetArraySafe()) {
+            for (const auto& column : table["columns"].GetArraySafe()) {
+                const TString type = column["type"].GetStringSafe();
+                sawDate = sawDate || type == "Date";
+                sawDecimal = sawDecimal || type.StartsWith("Decimal(");
+            }
+        }
+        UNIT_ASSERT(sawDate);
+        UNIT_ASSERT(sawDecimal);
+
+        const auto countVoidExpressions = [](const NJson::TJsonValue& snapshot) {
+            size_t count = 0;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                for (const auto& column : (*project)["columns"].GetArraySafe()) {
+                    count += column["expression"]["kind"].GetStringSafe() == "void";
+                }
+            }
+            return count;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(countVoidExpressions(initial), 1);
+        UNIT_ASSERT_VALUES_EQUAL(countVoidExpressions(final), 1);
+
+        THashMap<TString, size_t> edgeKinds;
+        for (const auto& edge : final["stage_graph"]["edges"].GetArraySafe()) {
+            ++edgeKinds[edge["kind"].GetStringSafe()];
+        }
+        UNIT_ASSERT_VALUES_EQUAL(edgeKinds["map"], 3);
+        UNIT_ASSERT_VALUES_EQUAL(edgeKinds["broadcast"], 3);
+        UNIT_ASSERT_VALUES_EQUAL(edgeKinds["union_all"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(edgeKinds["merge"], 1);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1], 60'000);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
             TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");

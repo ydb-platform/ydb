@@ -47,6 +47,47 @@ def minimal_snapshot():
     }
 
 
+def count_star_snapshot():
+    value = minimal_snapshot()
+    value["plan"]["nodes"] = [
+        value["plan"]["nodes"][0],
+        {
+            "id": "count_input",
+            "op": "project",
+            "input": "scan",
+            "ordered": False,
+            "columns": [
+                {
+                    "output": "_count_input",
+                    "expression": {"kind": "void"},
+                }
+            ],
+        },
+        {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "count_input",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "_count_input",
+                    "function": "count",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        },
+    ]
+    value["plan"]["root"] = "aggregate"
+    value["plan"]["output"] = ["result"]
+    return value
+
+
 class SnapshotTest(unittest.TestCase):
     def test_valid_snapshot_has_inferred_root_schema(self):
         snapshot = parse_snapshot(minimal_snapshot())
@@ -187,6 +228,60 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
+    def test_date_and_exact_decimal_types_are_equality_only_atoms(self):
+        value = minimal_snapshot()
+        value["schema"]["tables"][0]["columns"].extend([
+            {"name": "date", "type": "Date", "nullable": True},
+            {"name": "amount", "type": "Decimal(5,2)", "nullable": True},
+        ])
+        value["plan"]["nodes"][0]["columns"].extend([
+            {"source": "date", "output": "a.date"},
+            {"source": "amount", "output": "a.amount"},
+        ])
+        value["plan"]["output"] = ["a.date", "a.amount"]
+        snapshot = parse_snapshot(value)
+        self.assertEqual(
+            [(column.type, column.nullable) for column in snapshot.output_schema()],
+            [("Date", True), ("Decimal(5,2)", True)],
+        )
+
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "eq",
+            "left": {"kind": "column", "column": "a.date"},
+            "right": {"kind": "column", "column": "a.date"},
+        }
+        parse_snapshot(value)
+
+        ordered = copy.deepcopy(value)
+        ordered["plan"]["nodes"][1]["predicate"]["kind"] = "lt"
+        with self.assertRaisesRegex(SnapshotError, "lt requires integer arguments"):
+            parse_snapshot(ordered)
+
+        literal = copy.deepcopy(value)
+        literal["plan"]["nodes"][1]["predicate"] = {
+            "kind": "eq",
+            "left": {"kind": "column", "column": "a.date"},
+            "right": {"kind": "literal", "type": "Date", "value": "2000-01-01"},
+        }
+        with self.assertRaisesRegex(SnapshotError, "value does not have type 'Date'"):
+            parse_snapshot(literal)
+
+    def test_decimal_type_identity_is_canonical_and_validated(self):
+        for scalar_type in (
+            "Decimal",
+            "Decimal(0,0)",
+            "Decimal(05,2)",
+            "Decimal(5,02)",
+            "Decimal(5,6)",
+            "Decimal(36,2)",
+            "Decimal(5, 2)",
+        ):
+            with self.subTest(scalar_type=scalar_type):
+                value = minimal_snapshot()
+                value["schema"]["tables"][0]["columns"][0]["type"] = scalar_type
+                with self.assertRaisesRegex(SnapshotError, "unsupported scalar type"):
+                    parse_snapshot(value)
+
     def test_aggregate_contract_is_strict_and_typed(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][-1] = {
@@ -230,6 +325,120 @@ class SnapshotTest(unittest.TestCase):
         bad_phase["plan"]["nodes"][-1]["phase"] = "partial"
         with self.assertRaisesRegex(SnapshotError, "unsupported aggregate phase"):
             parse_snapshot(bad_phase)
+
+    def test_void_is_an_exact_non_nullable_count_input_expression(self):
+        value = count_star_snapshot()
+        snapshot = parse_snapshot(value)
+        expression = snapshot.plan.nodes[1].columns[0].expression
+        self.assertEqual((expression.kind, expression.result_type, expression.nullable), (
+            "void",
+            "Void",
+            False,
+        ))
+
+        for extra in ("type", "nullable", "value", "args"):
+            with self.subTest(extra=extra):
+                malformed = copy.deepcopy(value)
+                malformed["plan"]["nodes"][1]["columns"][0]["expression"][extra] = None
+                with self.assertRaisesRegex(SnapshotError, f"unknown fields: {extra}"):
+                    parse_snapshot(malformed)
+
+        typed_void = copy.deepcopy(value)
+        typed_void["plan"]["nodes"][1]["columns"][0]["expression"] = {
+            "kind": "literal",
+            "type": "Void",
+            "value": 0,
+        }
+        with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'Void'"):
+            parse_snapshot(typed_void)
+
+        predicate_void = minimal_snapshot()
+        predicate_void["plan"]["nodes"][1]["predicate"] = {"kind": "void"}
+        with self.assertRaisesRegex(SnapshotError, "canonical count aggregate"):
+            parse_snapshot(predicate_void)
+
+    def test_void_may_pass_through_a_join_to_count_star(self):
+        value = count_star_snapshot()
+        value["schema"]["tables"].append({
+            "name": "B",
+            "columns": [{"name": "k", "type": "Int64", "nullable": False}],
+            "unique_keys": [],
+        })
+        value["plan"]["nodes"][1]["columns"].append({
+            "output": "a.k",
+            "expression": {"kind": "column", "column": "a.k"},
+        })
+        value["plan"]["nodes"].insert(2, {
+            "id": "scan_b",
+            "op": "scan",
+            "table": "B",
+            "columns": [{"source": "k", "output": "b.k"}],
+            "predicate": None,
+            "pushed_limit": None,
+        })
+        value["plan"]["nodes"].insert(3, {
+            "id": "join",
+            "op": "join",
+            "left": "count_input",
+            "right": "scan_b",
+            "kind": "inner",
+            "predicate": {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "a.k"},
+                "right": {"kind": "column", "column": "b.k"},
+            },
+        })
+        value["plan"]["nodes"][4]["input"] = "join"
+        parse_snapshot(value)
+
+    def test_void_is_rejected_outside_a_canonical_count_input(self):
+        root_void = count_star_snapshot()
+        root_void["plan"]["nodes"] = root_void["plan"]["nodes"][:2]
+        root_void["plan"]["root"] = "count_input"
+        root_void["plan"]["output"] = ["_count_input"]
+
+        equality_void = count_star_snapshot()
+        equality_void["plan"]["nodes"][1]["columns"][0]["expression"] = {
+            "kind": "eq",
+            "left": {"kind": "void"},
+            "right": {"kind": "void"},
+        }
+
+        opaque_void = count_star_snapshot()
+        opaque_void["plan"]["nodes"][1]["columns"][0]["expression"] = {
+            "kind": "opaque",
+            "fingerprint": "opaque-with-void",
+            "type": "Int64",
+            "nullable": False,
+            "args": [{"kind": "void"}],
+        }
+
+        grouped_void = count_star_snapshot()
+        grouped_void["plan"]["nodes"][2]["keys"] = ["_count_input"]
+
+        non_count_void = count_star_snapshot()
+        non_count_void["plan"]["nodes"][2]["aggregates"][0].update({
+            "function": "sum",
+            "type": "Int64",
+        })
+
+        distinct_count_void = count_star_snapshot()
+        distinct_count_void["plan"]["nodes"][2]["aggregates"][0]["distinct"] = True
+
+        for label, malformed in (
+            ("root", root_void),
+            ("equality", equality_void),
+            ("opaque argument", opaque_void),
+            ("group key", grouped_void),
+            ("non-count aggregate", non_count_void),
+            ("distinct count", distinct_count_void),
+        ):
+            with self.subTest(location=label):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "canonical count aggregate",
+                ):
+                    parse_snapshot(malformed)
 
     def test_incomplete_stage_graph_is_rejected(self):
         value = copy.deepcopy(minimal_snapshot())

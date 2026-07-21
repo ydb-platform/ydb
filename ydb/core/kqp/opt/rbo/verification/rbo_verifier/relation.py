@@ -27,7 +27,7 @@ from .ir import (
     validate_snapshot,
 )
 from .scalar import Encoder as ScalarEncoder
-from .scalar import SMT_SORT, Value
+from .scalar import Value, smt_sort
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +133,7 @@ class Database:
                     )
                     value = script.fresh_constant(
                         f"{table.name}_{slot}_{column.name}_value",
-                        SMT_SORT[column.type],
+                        smt_sort(column.type),
                     )
                     values[column.name] = Value(column.type, is_null, value)
                     cells[column.name] = WitnessCell(column.type, is_null, value)

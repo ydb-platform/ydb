@@ -559,7 +559,7 @@ class SortIrTest(unittest.TestCase):
             with self.subTest(scalar_type=scalar_type):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "String and Utf8 ordering is not modeled",
+                    "only integer ordering is modeled",
                 ):
                     parse_snapshot(value)
 

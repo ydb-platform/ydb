@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/scheme_types/scheme_decimal_type.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -40,7 +41,63 @@ class TUnsupportedSnapshot final : public yexception {
     ythrow TUnsupportedSnapshot() << reason;
 }
 
+bool IsCanonicalDecimalParameters(
+    std::string_view precisionText,
+    std::string_view scaleText)
+{
+    const auto parse = [](std::string_view digits, ui32& value) {
+        if (digits.empty() || (digits.size() > 1 && digits.front() == '0')) {
+            return false;
+        }
+        value = 0;
+        for (const char digit : digits) {
+            if (digit < '0' || digit > '9') {
+                return false;
+            }
+            value = value * 10 + static_cast<ui32>(digit - '0');
+            if (value > 35) {
+                return false;
+            }
+        }
+        return true;
+    };
+    ui32 precision = 0;
+    ui32 scale = 0;
+    return parse(precisionText, precision) &&
+        parse(scaleText, scale) &&
+        precision > 0 && scale <= precision;
+}
+
+bool IsCanonicalDecimalType(TStringBuf type) {
+    const std::string_view text(type.data(), type.size());
+    constexpr std::string_view Prefix = "Decimal(";
+    if (!text.starts_with(Prefix) || !text.ends_with(')')) {
+        return false;
+    }
+    const auto body = text.substr(Prefix.size(), text.size() - Prefix.size() - 1);
+    const auto comma = body.find(',');
+    if (comma == std::string_view::npos || body.find(',', comma + 1) != std::string_view::npos) {
+        return false;
+    }
+    return IsCanonicalDecimalParameters(
+        body.substr(0, comma),
+        body.substr(comma + 1));
+}
+
 bool IsSupportedType(TStringBuf type) {
+    static const THashSet<TString> Types = {
+        "Bool",
+        "Int8", "Int16", "Int32", "Int64",
+        "Uint8", "Uint16", "Uint32", "Uint64",
+        "String", "Utf8", "Date",
+    };
+    if (Types.contains(type)) {
+        return true;
+    }
+    return IsCanonicalDecimalType(type);
+}
+
+bool IsSupportedLiteralType(TStringBuf type) {
     static const THashSet<TString> Types = {
         "Bool",
         "Int8", "Int16", "Int32", "Int64",
@@ -181,7 +238,18 @@ TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr
     if (!IsDataOrOptionalOfData(annotation, optional, data) || !data) {
         Unsupported("Scalar expression is not Data or Optional<Data>");
     }
-    const TString type(NUdf::GetDataTypeInfo(data->GetSlot()).Name);
+    TString type(NUdf::GetDataTypeInfo(data->GetSlot()).Name);
+    if (data->GetSlot() == NUdf::EDataSlot::Decimal) {
+        const auto* decimal = dynamic_cast<const TDataExprParamsType*>(data);
+        if (!decimal) {
+            Unsupported("Decimal expression type has no precision and scale");
+        }
+        type = TStringBuilder()
+            << "Decimal(" << decimal->GetParamOne() << ","
+            << decimal->GetParamTwo() << ")";
+    } else if (dynamic_cast<const TDataExprParamsType*>(data)) {
+        Unsupported(TStringBuilder() << "Unsupported parameterized scalar type " << type);
+    }
     if (!IsSupportedType(type)) {
         Unsupported(TStringBuilder() << "Unsupported scalar type " << type);
     }
@@ -218,7 +286,7 @@ void CheckUnsignedRange(ui64 value, TStringBuf type) {
 
 NJson::TJsonValue LiteralExpr(const TExprNode& node) {
     const TString type(node.Content());
-    if (!IsSupportedType(type) || node.ChildrenSize() != 1 || !node.Child(0)->IsAtom()) {
+    if (!IsSupportedLiteralType(type) || node.ChildrenSize() != 1 || !node.Child(0)->IsAtom()) {
         Unsupported(TStringBuilder() << "Unsupported literal callable " << node.Content());
     }
     const TString value(node.Child(0)->Content());
@@ -299,6 +367,18 @@ bool IsIntegerType(TStringBuf type) {
     return type.StartsWith("Int") || type.StartsWith("Uint");
 }
 
+TString MetadataTypeName(const TKikimrColumnMetadata& column) {
+    if (column.TypeInfo.GetTypeId() == NScheme::NTypeIds::Decimal) {
+        const auto& decimal = column.TypeInfo.GetDecimalType();
+        return TStringBuilder()
+            << "Decimal(" << decimal.GetPrecision() << "," << decimal.GetScale() << ")";
+    }
+    if (column.Type.StartsWith("Decimal")) {
+        Unsupported("Decimal metadata has no precision and scale");
+    }
+    return column.Type;
+}
+
 ui32 IntegerTypeWidth(TStringBuf type) {
     if (type.EndsWith("64")) {
         return 64;
@@ -356,16 +436,55 @@ TString DataTypeDescriptorName(const TExprNode& node, bool* nullable = nullptr) 
     if (!dataType->IsCallable("DataType")) {
         Unsupported("Opaque scalar has a non-data type descriptor");
     }
-    CheckScalarArity(*dataType, 1, 1);
-    if (!dataType->Child(0)->IsAtom() ||
-        !IsSupportedType(dataType->Child(0)->Content()))
-    {
+    if (dataType->ChildrenSize() == 0 || !dataType->Child(0)->IsAtom()) {
         Unsupported("Opaque scalar has an unsupported DataType descriptor");
+    }
+
+    const TStringBuf name = dataType->Child(0)->Content();
+    TString type;
+    if (name == "Decimal") {
+        CheckScalarArity(*dataType, 3, 3);
+        if (!dataType->Child(1)->IsAtom() ||
+            !dataType->Child(2)->IsAtom())
+        {
+            Unsupported("Opaque scalar has an unsupported DataType descriptor");
+        }
+        const TStringBuf precision = dataType->Child(1)->Content();
+        const TStringBuf scale = dataType->Child(2)->Content();
+        if (!IsCanonicalDecimalParameters(
+                std::string_view(precision.data(), precision.size()),
+                std::string_view(scale.data(), scale.size())))
+        {
+            Unsupported("Opaque scalar has an unsupported DataType descriptor");
+        }
+        type = TStringBuilder() << "Decimal(" << precision << "," << scale << ")";
+    } else {
+        CheckScalarArity(*dataType, 1, 1);
+        if (!IsSupportedType(name) || IsCanonicalDecimalType(name)) {
+            Unsupported("Opaque scalar has an unsupported DataType descriptor");
+        }
+        type = name;
     }
     if (nullable) {
         *nullable = optional;
     }
-    return TString(dataType->Child(0)->Content());
+    return type;
+}
+
+TString NothingTypeName(const TExprNode& node) {
+    bool nullable = false;
+    const TString type = ScalarTypeName(node, &nullable);
+    if (!nullable) {
+        Unsupported("Nothing expression is not optional");
+    }
+    CheckScalarArity(node, 1, 1);
+    bool descriptorNullable = false;
+    if (DataTypeDescriptorName(*node.Child(0), &descriptorNullable) != type ||
+        !descriptorNullable)
+    {
+        Unsupported("Nothing type descriptor does not match its result");
+    }
+    return type;
 }
 
 void CheckOpaqueCallable(const TExprNode& node) {
@@ -385,15 +504,7 @@ void CheckOpaqueCallable(const TExprNode& node) {
     }
 
     if (name == "Nothing") {
-        bool nullable = false;
-        const TString type = ScalarTypeName(node, &nullable);
-        if (!nullable) {
-            Unsupported("Nothing expression is not optional");
-        }
-        CheckScalarArity(node, 1, 1);
-        if (DataTypeDescriptorName(*node.Child(0)) != type) {
-            Unsupported("Nothing type descriptor does not match its result");
-        }
+        NothingTypeName(node);
         return;
     }
 
@@ -679,16 +790,26 @@ NJson::TJsonValue ExportExprNode(
         return ColumnExpr(name);
     }
 
+    if (node.IsCallable("Void")) {
+        if (node.ChildrenSize() != 0) {
+            Unsupported("Void must have no arguments");
+        }
+        if (!node.GetTypeAnn() ||
+            node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Void)
+        {
+            Unsupported("Void expression is not typed Void");
+        }
+        auto result = JsonMap();
+        result["kind"] = "void";
+        return result;
+    }
+
     if (IsSupportedType(node.Content())) {
         return LiteralExpr(node);
     }
 
     if (node.IsCallable("Nothing")) {
-        bool nullable = false;
-        const TString type = TypeName(node.GetTypeAnn(), &nullable);
-        if (!nullable) {
-            Unsupported("Nothing expression is not optional");
-        }
+        const TString type = NothingTypeName(node);
         auto result = JsonMap();
         result["kind"] = "null";
         result["type"] = type;
@@ -1356,6 +1477,9 @@ private:
                         !outputNames.contains(column))
                     {
                         Unsupported(TStringBuilder() << "Invalid Sort key " << column);
+                    }
+                    if (!IsIntegerType(TypeName(OutputType(*sort.GetInput(), column)))) {
+                        Unsupported("Sort ordering is modeled only for integers");
                     }
 
                     auto item = JsonMap();
@@ -2087,6 +2211,9 @@ private:
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
                 }
+                if (!IsIntegerType(TypeName(OutputType(*boundary.ProducerNode, column)))) {
+                    Unsupported("StageGraph Merge ordering is modeled only for integers");
+                }
                 auto item = JsonMap();
                 item["column"] = column;
                 item["ascending"] = sort.Ascending;
@@ -2427,10 +2554,11 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
                     Unsupported(TStringBuilder() << "Missing metadata for column " << path << "." << name);
                 }
                 const auto& column = it->second;
-                if (column.SetNotNullInProgress || !IsSupportedType(column.Type)) {
+                const TString type = MetadataTypeName(column);
+                if (column.SetNotNullInProgress || !IsSupportedType(type)) {
                     Unsupported(TStringBuilder() << "Unsupported metadata for column " << path << "." << name);
                 }
-                table.Columns.push_back({name, column.Type, !column.NotNull});
+                table.Columns.push_back({name, type, !column.NotNull});
             };
             for (const auto& name : metadata.ColumnOrder) {
                 appendColumn(name);

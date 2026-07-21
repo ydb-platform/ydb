@@ -133,6 +133,13 @@ version-dependent SMT string parser in the trusted path; string operations stay
 opaque until explicitly modeled. Because those atoms have no YDB ordering,
 `Sort` and `Merge` on `String` or `Utf8` fail closed during snapshot validation.
 
+Version-one `Date` and canonical parameterized `Decimal(p,s)` are also
+equality-only atoms, initially for benchmark columns that are carried but not
+actively transformed. Exact type identity and NULLs are preserved, while
+literals and ordering fail closed. Their unbounded carrier is an over-approximate
+domain: it can make a witness spurious, but cannot make an inequivalent bounded
+plan verify.
+
 ## Relational semantics
 
 Each base table has a fixed number of symbolic row slots. A slot contains a
@@ -251,7 +258,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Strict v1 snapshot decoder.
 - Empty source, scan, project, filter, joins, and logical UnionAll.
 - Nullable exact YQL Bool, integer-width, String, and Utf8 identities with
-  structurally identified scalar UFs. Solver domains may be shared, but snapshot
+  structurally identified scalar UFs, plus equality-only passive Date and exact
+  parameterized Decimal identities. Solver domains may be shared, but snapshot
   type identity is never collapsed.
 - Bag-equivalence formula, deterministic SMT-LIB, witness decoding, CLI, and
   mutation tests.
@@ -301,6 +309,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer statistics metadata. The supported Boolean/comparison subset is
   evaluated before per-task pushed limits, rejects projections and unknown
   process operations, and is covered by a real-host bounded proof.
+- The exact new-RBO `TPCDS_YQL` q96 schema and query pass strict initial/final
+  export and produce `VERIFIED_BOUNDED` at two rows per table and two tasks. This
+  covers passive Date/Decimal catalog columns, canonical `Void` for `COUNT(*)`,
+  four scans, three joins, split aggregation, TopSort/Merge/Limit, and
+  Map/Broadcast/UnionAll StageGraph routing.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

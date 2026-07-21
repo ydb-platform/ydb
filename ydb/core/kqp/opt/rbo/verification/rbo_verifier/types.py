@@ -1,6 +1,10 @@
 """Exact scalar identities supported by semantic snapshot version one."""
 
+import re
+
 BOOL = "Bool"
+DATE = "Date"
+VOID = "Void"
 
 INTEGER_TYPES = frozenset(
     {
@@ -16,7 +20,21 @@ INTEGER_TYPES = frozenset(
 )
 
 STRING_TYPES = frozenset({"String", "Utf8"})
-SCALAR_TYPES = frozenset({BOOL}) | INTEGER_TYPES | STRING_TYPES
+FIXED_SCALAR_TYPES = frozenset({BOOL, DATE}) | INTEGER_TYPES | STRING_TYPES
+
+_DECIMAL_TYPE = re.compile(
+    r"Decimal\((?P<precision>[1-9]|[12][0-9]|3[0-5]),"
+    r"(?P<scale>0|[1-9]|[12][0-9]|3[0-5])\)"
+)
+
+
+def is_decimal_type(scalar_type: str) -> bool:
+    match = _DECIMAL_TYPE.fullmatch(scalar_type)
+    return bool(match) and int(match["scale"]) <= int(match["precision"])
+
+
+def is_scalar_type(scalar_type: str) -> bool:
+    return scalar_type in FIXED_SCALAR_TYPES or is_decimal_type(scalar_type)
 
 
 def integer_width(scalar_type: str) -> int | None:
@@ -46,10 +64,14 @@ def integer_comparison_compatible(left: str, right: str) -> bool:
 
 
 def family(scalar_type: str) -> str:
+    if scalar_type == VOID:
+        return "unit"
     if scalar_type == BOOL:
         return "bool"
     if scalar_type in INTEGER_TYPES:
         return "int"
     if scalar_type in STRING_TYPES:
         return "string"
+    if scalar_type == DATE or is_decimal_type(scalar_type):
+        return "atom"
     raise ValueError(f"unsupported scalar type {scalar_type!r}")

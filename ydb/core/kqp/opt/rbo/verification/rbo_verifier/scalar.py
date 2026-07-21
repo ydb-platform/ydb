@@ -7,13 +7,11 @@ from typing import Mapping
 
 from . import smt
 from .ir import Expr
-from .types import BOOL, SCALAR_TYPES, family
+from .types import BOOL, VOID, family
 
 
-SMT_SORT = {
-    scalar_type: smt.BOOL if family(scalar_type) == "bool" else smt.INT
-    for scalar_type in SCALAR_TYPES
-}
+def smt_sort(scalar_type: str) -> str:
+    return smt.BOOL if family(scalar_type) in {"bool", "unit"} else smt.INT
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +36,9 @@ class Encoder:
         if expression.kind == "column":
             assert expression.column is not None
             return row[expression.column]
+
+        if expression.kind == "void":
+            return Value(VOID, smt.FALSE, smt.FALSE)
 
         if expression.kind == "literal":
             assert expression.result_type is not None
@@ -127,7 +128,7 @@ class Encoder:
         flat_sorts = tuple(
             sort
             for argument in arguments
-            for sort in (smt.BOOL, SMT_SORT[argument.type])
+            for sort in (smt.BOOL, smt_sort(argument.type))
         )
         if functions is None:
             functions = _OpaqueFunctions(
@@ -143,7 +144,7 @@ class Encoder:
                 value=self.script.fresh_function(
                     f"opaque_value:{expression.fingerprint}",
                     flat_sorts,
-                    SMT_SORT[expression.result_type],
+                    smt_sort(expression.result_type),
                 ),
             )
             self._opaque[key] = functions
@@ -205,6 +206,8 @@ def _default(scalar_type: str) -> smt.Term:
         return smt.FALSE
     if scalar_family == "int":
         return smt.ZERO
-    if scalar_family == "string":
+    if scalar_family in {"string", "atom"}:
         return smt.ZERO
+    if scalar_family == "unit":
+        return smt.FALSE
     raise AssertionError(f"unknown scalar type {scalar_type!r}")

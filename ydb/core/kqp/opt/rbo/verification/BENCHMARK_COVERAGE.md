@@ -40,11 +40,11 @@ snapshots, and construct the SMT obligation without invoking a solver:
 
 ```bash
 set -o pipefail
-env -u RBO_Z3 ./ya make --build relwithdebinfo -tA \
+RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*TPCH*' 2>&1 | tail -n 100
 
-env -u RBO_Z3 ./ya make --build relwithdebinfo -tA \
+RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*TPCDS*' 2>&1 | tail -n 100
 ```
@@ -54,6 +54,7 @@ focused queries currently need a 60-second budget:
 
 ```bash
 set -o pipefail
+RBO_COVERAGE_USE_SOLVER=1 \
 RBO_Z3=/path/to/z3 \
 RBO_COVERAGE_TIMEOUT_MS=60000 \
 RBO_COVERAGE_QUERIES=96 \
@@ -65,15 +66,27 @@ RBO_COVERAGE_QUERIES=96 \
 `RBO_COVERAGE_QUERIES` accepts comma-separated IDs and inclusive ranges, for
 example `1,4-7,96`; omitted or empty selects the whole suite.
 `RBO_COVERAGE_TIMEOUT_MS` is the positive per-query solver timeout and defaults
-to 10000. `RBO_Z3` is optional; when absent, supported queries stop after SMT
-generation.
+to 10000. Solver use is deliberately explicit: absent, empty, or zero
+`RBO_COVERAGE_USE_SOLVER` always selects formula-only mode, even if an ambient
+`RBO_Z3` exists. The value `1` requires a non-empty `RBO_Z3`; every other value
+fails closed.
 
 Each suite writes the stable report names `tpch_coverage.json` or
-`tpcds_coverage.json` into the test output directory. The version-one report
+`tpcds_coverage.json` into the test output directory. The version-two report
 contains suite, bounds, solver presence, timeout, per-query timing and status,
-the status summary, and grouped unsupported and optimizer-failure inventories.
-Counterexample, unknown, schema-mismatch, and solver-error rows also preserve
-the two snapshots and, when one was emitted, the SMT formula as test artifacts.
+the status summary, grouped unsupported and optimizer-failure inventories, and
+the evaluated coverage policy. Counterexample, unknown, schema-mismatch, and
+solver-error rows also preserve the two snapshots and, when one was emitted,
+the SMT formula as test artifacts.
+
+The checked-in policy is a monotonic formula-construction floor: TPCH currently
+has no required query and TPC-DS requires q88 and q96. It is enforced only for
+a complete formula-only suite, so focused development and solver experiments do
+not pretend to measure corpus coverage. Required queries must remain
+`FORMULA_EMITTED`; newly supported queries are allowed without editing the
+floor. Policy parsing and evaluation fail closed, and the report records the
+required IDs, all formula-emitting IDs, enforcement mode, and every violation
+before the test fails.
 
 ## Status interpretation
 
@@ -90,12 +103,13 @@ the two snapshots and, when one was emitted, the SMT formula as test artifacts.
 | `HARNESS_ERROR` | Suite setup, snapshot capture, verifier invocation, or report protocol failed. |
 
 The current test fails on `COUNTEREXAMPLE`, `SCHEMA_MISMATCH`, `SOLVER_ERROR`,
-or `HARNESS_ERROR`. `UNKNOWN`, `UNSUPPORTED`, and `OPTIMIZER_FAILURE` remain
-visible coverage gaps.
+`HARNESS_ERROR`, or an enforced coverage-policy violation. `UNKNOWN`,
+`UNSUPPORTED`, and `OPTIMIZER_FAILURE` remain visible coverage gaps when they do
+not regress a required formula-only query.
 
 ## Last complete formula-only baseline
 
-This baseline was rerun on 2026-07-21 without `RBO_Z3`; therefore its two
+This baseline was rerun on 2026-07-21 in formula-only mode; therefore its two
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |

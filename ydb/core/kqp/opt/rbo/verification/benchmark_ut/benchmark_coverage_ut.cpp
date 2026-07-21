@@ -13,6 +13,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/testing/common/scope.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
@@ -26,6 +27,7 @@
 #include <util/system/shellcommand.h>
 
 #include <exception>
+#include <initializer_list>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -38,6 +40,11 @@ constexpr const char* TestCluster = "local_ut";
 constexpr ui64 RowBound = 2;
 constexpr ui64 TaskBound = 2;
 constexpr ui64 DefaultTimeoutMs = 10'000;
+constexpr const char* CoverageReportFormat =
+    "ydb-rbo-benchmark-coverage";
+constexpr ui64 CoverageReportVersion = 2;
+constexpr const char* CoveragePolicyFormat =
+    "ydb-rbo-benchmark-coverage-policy";
 
 struct TSuite {
     TString Name;
@@ -51,6 +58,205 @@ const TSuite Tpch{
     "TPCH_YQL", "tpch", "schema/tpch.sql", "yql-tpch/q", 22};
 const TSuite Tpcds{
     "TPCDS_YQL", "tpcds", "schema/tpcds.sql", "yql-tpcds/q", 99};
+
+struct TSuiteCoveragePolicy {
+    ui32 QueryCount = 0;
+    std::set<ui32> RequiredFormulaQueries;
+};
+
+struct TCoveragePolicy {
+    TMap<TString, TSuiteCoveragePolicy> Suites;
+};
+
+struct TPolicyEvaluation {
+    bool Valid = true;
+    bool FullSelection = false;
+    bool Enforced = false;
+    std::set<ui32> RequiredFormulaQueries;
+    std::set<ui32> FormulaEmittedQueries;
+    TVector<TString> Violations;
+};
+
+TString CoveragePolicyPath() {
+    return ArcadiaSourceRoot() +
+        "/ydb/core/kqp/opt/rbo/verification/benchmark_ut/coverage_policy.json";
+}
+
+void RequirePolicyKeys(
+    const NJson::TJsonValue& value,
+    std::initializer_list<TStringBuf> required,
+    TStringBuf context)
+{
+    if (!value.IsMap()) {
+        ythrow yexception() << context << " must be an object";
+    }
+    std::set<TString> expected;
+    for (const TStringBuf key : required) {
+        expected.emplace(key);
+    }
+    const auto& fields = value.GetMapSafe();
+    for (const auto& [key, field] : fields) {
+        Y_UNUSED(field);
+        if (!expected.contains(key)) {
+            ythrow yexception()
+                << context << " has unexpected field " << key;
+        }
+    }
+    for (const auto& key : expected) {
+        if (!fields.contains(key)) {
+            ythrow yexception()
+                << context << " is missing field " << key;
+        }
+    }
+}
+
+ui64 PolicyUint(
+    const NJson::TJsonValue& value,
+    TStringBuf context)
+{
+    if (!value.IsUInteger()) {
+        ythrow yexception() << context << " must be an unsigned integer";
+    }
+    return value.GetUIntegerSafe();
+}
+
+TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
+    NJson::TJsonValue root;
+    if (!NJson::ReadJsonTree(text, &root, false)) {
+        ythrow yexception() << "coverage policy is not valid JSON";
+    }
+    RequirePolicyKeys(
+        root,
+        {"format", "version", "row_bound", "task_bound", "suites"},
+        "coverage policy");
+    if (!root["format"].IsString() ||
+        root["format"].GetStringSafe() != CoveragePolicyFormat)
+    {
+        ythrow yexception()
+            << "coverage policy has unsupported format";
+    }
+    if (PolicyUint(root["version"], "coverage policy version") != 1) {
+        ythrow yexception()
+            << "coverage policy has unsupported version";
+    }
+    if (PolicyUint(root["row_bound"], "coverage policy row_bound") != RowBound ||
+        PolicyUint(root["task_bound"], "coverage policy task_bound") != TaskBound)
+    {
+        ythrow yexception()
+            << "coverage policy bounds do not match the dashboard";
+    }
+
+    const auto& suites = root["suites"];
+    RequirePolicyKeys(suites, {Tpch.Name, Tpcds.Name}, "coverage policy suites");
+
+    TCoveragePolicy policy;
+    for (const TSuite* suite : {&Tpch, &Tpcds}) {
+        const auto& encoded = suites[suite->Name];
+        const TString context = TStringBuilder()
+            << "coverage policy suite " << suite->Name;
+        RequirePolicyKeys(
+            encoded,
+            {"query_count", "required_formula_queries"},
+            context);
+        if (PolicyUint(encoded["query_count"], context + " query_count") !=
+            suite->QueryCount)
+        {
+            ythrow yexception()
+                << context << " query_count does not match the corpus";
+        }
+        const auto& required = encoded["required_formula_queries"];
+        if (!required.IsArray()) {
+            ythrow yexception()
+                << context << " required_formula_queries must be an array";
+        }
+
+        TSuiteCoveragePolicy suitePolicy;
+        suitePolicy.QueryCount = suite->QueryCount;
+        ui32 previous = 0;
+        for (const auto& encodedId : required.GetArraySafe()) {
+            const ui64 id = PolicyUint(
+                encodedId,
+                context + " required query id");
+            if (id < 1 || id > suite->QueryCount) {
+                ythrow yexception()
+                    << context << " required query id " << id
+                    << " is outside the corpus";
+            }
+            if (id <= previous) {
+                ythrow yexception()
+                    << context
+                    << " required query ids must be strictly increasing";
+            }
+            previous = static_cast<ui32>(id);
+            suitePolicy.RequiredFormulaQueries.insert(previous);
+        }
+        policy.Suites.emplace(suite->Name, std::move(suitePolicy));
+    }
+    return policy;
+}
+
+TCoveragePolicy LoadCoveragePolicy() {
+    return DecodeCoveragePolicy(
+        TFileInput(CoveragePolicyPath()).ReadAll());
+}
+
+bool IsFullSelection(
+    const TSuite& suite,
+    const std::set<ui32>& selected)
+{
+    if (selected.size() != suite.QueryCount) {
+        return false;
+    }
+    for (ui32 queryId = 1; queryId <= suite.QueryCount; ++queryId) {
+        if (!selected.contains(queryId)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TPolicyEvaluation EvaluateCoveragePolicy(
+    const TCoveragePolicy& policy,
+    const TSuite& suite,
+    const std::set<ui32>& selected,
+    const TMap<ui32, TString>& statuses,
+    bool solverPresent)
+{
+    const auto suitePolicy = policy.Suites.find(suite.Name);
+    if (suitePolicy == policy.Suites.end() ||
+        suitePolicy->second.QueryCount != suite.QueryCount)
+    {
+        ythrow yexception()
+            << "coverage policy does not match suite " << suite.Name;
+    }
+
+    TPolicyEvaluation result;
+    result.FullSelection = IsFullSelection(suite, selected);
+    result.Enforced = !solverPresent && result.FullSelection;
+    result.RequiredFormulaQueries =
+        suitePolicy->second.RequiredFormulaQueries;
+    for (const auto& [queryId, status] : statuses) {
+        if (status == "FORMULA_EMITTED") {
+            result.FormulaEmittedQueries.insert(queryId);
+        }
+    }
+    if (!result.Enforced) {
+        return result;
+    }
+    for (const ui32 queryId : result.RequiredFormulaQueries) {
+        const auto status = statuses.find(queryId);
+        if (status == statuses.end()) {
+            result.Violations.push_back(TStringBuilder()
+                << suite.Name << " q" << queryId
+                << " has no coverage outcome; expected FORMULA_EMITTED");
+        } else if (status->second != "FORMULA_EMITTED") {
+            result.Violations.push_back(TStringBuilder()
+                << suite.Name << " q" << queryId
+                << " regressed from FORMULA_EMITTED to " << status->second);
+        }
+    }
+    return result;
+}
 
 class TRecordingSink final : public IRBOSemanticSnapshotSink {
 public:
@@ -189,6 +395,23 @@ $round = ($x,$y) -> { return $x; };
         suite.QueryPrefix + ToString(queryId) + ".yql")).ReadAll();
 }
 
+TMaybe<TString> CoverageSolver() {
+    const auto enabled = TryGetEnv("RBO_COVERAGE_USE_SOLVER");
+    if (!enabled || enabled->empty() || *enabled == "0") {
+        return Nothing();
+    }
+    if (*enabled != "1") {
+        ythrow yexception()
+            << "RBO_COVERAGE_USE_SOLVER must be 0 or 1; got " << *enabled;
+    }
+    const auto solver = TryGetEnv("RBO_Z3");
+    if (!solver || solver->empty()) {
+        ythrow yexception()
+            << "RBO_COVERAGE_USE_SOLVER=1 requires a non-empty RBO_Z3";
+    }
+    return solver;
+}
+
 ui64 TimeoutMs() {
     const auto value = TryGetEnv("RBO_COVERAGE_TIMEOUT_MS");
     if (!value) {
@@ -254,6 +477,43 @@ NJson::TJsonValue JsonIds(const TVector<ui32>& ids) {
     for (const ui32 id : ids) {
         result.AppendValue(id);
     }
+    return result;
+}
+
+NJson::TJsonValue JsonIds(const std::set<ui32>& ids) {
+    return JsonIds(TVector<ui32>(ids.begin(), ids.end()));
+}
+
+NJson::TJsonValue PolicyJson(
+    const TPolicyEvaluation& evaluation,
+    bool solverPresent)
+{
+    NJson::TJsonValue result(NJson::JSON_MAP);
+    result["format"] = CoveragePolicyFormat;
+    result["version"] = 1;
+    result["valid"] = evaluation.Valid;
+    result["mode"] = solverPresent ? "solver" : "formula_only";
+    result["full_selection"] = evaluation.FullSelection;
+    result["enforced"] = evaluation.Enforced;
+    result["required_formula_queries"] =
+        JsonIds(evaluation.RequiredFormulaQueries);
+    result["formula_emitted_queries"] =
+        JsonIds(evaluation.FormulaEmittedQueries);
+    NJson::TJsonValue violations(NJson::JSON_ARRAY);
+    for (const auto& violation : evaluation.Violations) {
+        violations.AppendValue(violation);
+    }
+    result["violations"] = std::move(violations);
+    return result;
+}
+
+NJson::TJsonValue CoverageReportHeader(const TSuite& suite) {
+    NJson::TJsonValue result(NJson::JSON_MAP);
+    result["format"] = CoverageReportFormat;
+    result["version"] = CoverageReportVersion;
+    result["suite"] = suite.Name;
+    result["row_bound"] = RowBound;
+    result["task_bound"] = TaskBound;
     return result;
 }
 
@@ -534,7 +794,11 @@ TOutcome ClassifyQuery(
 }
 
 void RunCoverage(const TSuite& suite) {
-    const auto solver = TryGetEnv("RBO_Z3");
+    TMaybe<TString> solver;
+    TMaybe<TCoveragePolicy> policy;
+    std::set<ui32> selected;
+    TMap<ui32, TString> statuses;
+    TVector<TString> policyLoadViolations;
     ui64 timeoutMs = DefaultTimeoutMs;
     bool timeoutResolved = false;
     NJson::TJsonValue rows(NJson::JSON_ARRAY);
@@ -552,6 +816,9 @@ void RunCoverage(const TSuite& suite) {
         } else if (outcome.Status == "OPTIMIZER_FAILURE") {
             optimizerFailures[outcome.Reason].push_back(queryId);
         }
+        if (queryId >= 1 && queryId <= suite.QueryCount) {
+            statuses[queryId] = outcome.Status;
+        }
         fatal = fatal || outcome.Fatal;
         outcome.Json["suite"] = suite.Name;
         outcome.Json["source"] = std::move(source);
@@ -562,9 +829,11 @@ void RunCoverage(const TSuite& suite) {
     };
 
     try {
+        policy = LoadCoveragePolicy();
         timeoutMs = TimeoutMs();
         timeoutResolved = true;
-        const auto selected = SelectedQueries(suite);
+        selected = SelectedQueries(suite);
+        solver = CoverageSolver();
         auto kikimr = MakeRunner();
         CreateTables(kikimr, suite);
 
@@ -601,17 +870,52 @@ void RunCoverage(const TSuite& suite) {
                 std::move(outcome));
         }
     } catch (const std::exception& error) {
+        if (!policy) {
+            policyLoadViolations.push_back(TStringBuilder()
+                << "coverage policy is invalid: " << error.what());
+        }
         record(
             0,
             "",
             HarnessError(
                 0, 0, 0, TStringBuilder() << "suite execution threw: " << error.what()));
     } catch (...) {
+        if (!policy) {
+            policyLoadViolations.push_back(
+                "coverage policy is invalid: non-standard exception");
+        }
         record(
             0,
             "",
             HarnessError(0, 0, 0, "suite execution threw a non-standard exception"));
     }
+
+    TPolicyEvaluation policyEvaluation;
+    if (!policy) {
+        policyEvaluation.Valid = false;
+        policyEvaluation.Enforced = true;
+        policyEvaluation.Violations = policyLoadViolations;
+    } else {
+        try {
+            policyEvaluation = EvaluateCoveragePolicy(
+                *policy,
+                suite,
+                selected,
+                statuses,
+                solver.Defined());
+        } catch (const std::exception& error) {
+            policyEvaluation.Valid = false;
+            policyEvaluation.Enforced = true;
+            policyEvaluation.Violations.push_back(TStringBuilder()
+                << "coverage policy evaluation failed: " << error.what());
+        } catch (...) {
+            policyEvaluation.Valid = false;
+            policyEvaluation.Enforced = true;
+            policyEvaluation.Violations.push_back(
+                "coverage policy evaluation failed: non-standard exception");
+        }
+    }
+    fatal = fatal || !policyEvaluation.Violations.empty();
 
     NJson::TJsonValue summaryJson(NJson::JSON_MAP);
     for (const auto& [status, count] : summary) {
@@ -635,12 +939,7 @@ void RunCoverage(const TSuite& suite) {
         optimizerJson.AppendValue(std::move(item));
     }
 
-    NJson::TJsonValue report(NJson::JSON_MAP);
-    report["format"] = "ydb-rbo-benchmark-coverage";
-    report["version"] = 1;
-    report["suite"] = suite.Name;
-    report["row_bound"] = RowBound;
-    report["task_bound"] = TaskBound;
+    NJson::TJsonValue report = CoverageReportHeader(suite);
     report["solver_present"] = solver.Defined();
     report["timeout_ms"] = timeoutResolved
         ? NJson::TJsonValue(timeoutMs)
@@ -649,6 +948,7 @@ void RunCoverage(const TSuite& suite) {
     report["queries"] = std::move(rows);
     report["unsupported_inventory"] = std::move(unsupportedJson);
     report["optimizer_failure_inventory"] = std::move(optimizerJson);
+    report["policy"] = PolicyJson(policyEvaluation, solver.Defined());
 
     const auto reportPath = GetOutputPath() / (suite.Slug + "_coverage.json");
     TFileOutput(reportPath.GetPath()).Write(NJson::WriteJson(
@@ -657,13 +957,172 @@ void RunCoverage(const TSuite& suite) {
         true));
     Cout << suite.Name << " summary: "
          << NJson::WriteJson(report["summary"], false, true) << Endl
+         << "Coverage policy: "
+         << NJson::WriteJson(report["policy"], false, true) << Endl
          << "Coverage report: " << reportPath.GetPath() << Endl;
-    UNIT_ASSERT_C(!fatal, "correctness or harness failure; see " << reportPath.GetPath());
+    UNIT_ASSERT_C(
+        !fatal,
+        "correctness, harness, or coverage policy failure; see "
+            << reportPath.GetPath());
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
+    Y_UNIT_TEST(PolicyFileMatchesFixedContract) {
+        const auto policy = LoadCoveragePolicy();
+        UNIT_ASSERT_VALUES_EQUAL(policy.Suites.size(), 2);
+        UNIT_ASSERT(policy.Suites.at(Tpch.Name).RequiredFormulaQueries.empty());
+        UNIT_ASSERT(
+            policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
+            std::set<ui32>({88, 96}));
+
+        const auto report = CoverageReportHeader(Tpcds);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["format"].GetStringSafe(),
+            CoverageReportFormat);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["version"].GetUIntegerSafe(),
+            CoverageReportVersion);
+    }
+
+    Y_UNIT_TEST(PolicyAllowsMonotonicCoverageImprovements) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const TMap<ui32, TString> statuses = {
+            {1, "FORMULA_EMITTED"},
+            {88, "FORMULA_EMITTED"},
+            {96, "FORMULA_EMITTED"},
+        };
+        const auto evaluation = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            false);
+        UNIT_ASSERT(evaluation.Enforced);
+        UNIT_ASSERT(evaluation.Violations.empty());
+        UNIT_ASSERT(
+            evaluation.FormulaEmittedQueries ==
+            std::set<ui32>({1, 88, 96}));
+    }
+
+    Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const TMap<ui32, TString> statuses = {
+            {88, "UNSUPPORTED"},
+        };
+        const auto evaluation = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            false);
+        UNIT_ASSERT(evaluation.Enforced);
+        UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 2);
+        UNIT_ASSERT(evaluation.Violations[0].Contains(
+            "q88 regressed from FORMULA_EMITTED to UNSUPPORTED"));
+        UNIT_ASSERT(evaluation.Violations[1].Contains(
+            "q96 has no coverage outcome"));
+
+        const auto report = PolicyJson(evaluation, false);
+        UNIT_ASSERT(report["enforced"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["violations"].GetArraySafe().size(),
+            2);
+    }
+
+    Y_UNIT_TEST(PolicyDoesNotGateFocusedOrSolverRuns) {
+        const auto policy = LoadCoveragePolicy();
+        const TMap<ui32, TString> statuses;
+        const auto focused = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            {88, 96},
+            statuses,
+            false);
+        UNIT_ASSERT(!focused.Enforced);
+        UNIT_ASSERT(focused.Violations.empty());
+
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const auto solver = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            true);
+        UNIT_ASSERT(!solver.Enforced);
+        UNIT_ASSERT(solver.Violations.empty());
+    }
+
+    Y_UNIT_TEST(PolicySolverRequiresExplicitOptIn) {
+        {
+            NTesting::TScopedEnvironment environment{{
+                {"RBO_COVERAGE_USE_SOLVER", ""},
+                {"RBO_Z3", "/ambient/z3"},
+            }};
+            UNIT_ASSERT(!CoverageSolver());
+        }
+        {
+            NTesting::TScopedEnvironment environment{{
+                {"RBO_COVERAGE_USE_SOLVER", "1"},
+                {"RBO_Z3", ""},
+            }};
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                CoverageSolver(),
+                yexception,
+                "requires a non-empty RBO_Z3");
+        }
+        {
+            NTesting::TScopedEnvironment environment{{
+                {"RBO_COVERAGE_USE_SOLVER", "1"},
+                {"RBO_Z3", "/explicit/z3"},
+            }};
+            const auto solver = CoverageSolver();
+            UNIT_ASSERT(solver);
+            UNIT_ASSERT_VALUES_EQUAL(*solver, "/explicit/z3");
+        }
+    }
+
+    Y_UNIT_TEST(PolicyRejectsMalformedDocuments) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy("{"),
+            yexception,
+            "not valid JSON");
+
+        NJson::TJsonValue encoded;
+        UNIT_ASSERT(NJson::ReadJsonTree(
+            TFileInput(CoveragePolicyPath()).ReadAll(),
+            &encoded,
+            true));
+        encoded["unexpected"] = true;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "unexpected field unexpected");
+
+        encoded.EraseValue("unexpected");
+        NJson::TJsonValue unordered(NJson::JSON_ARRAY);
+        unordered.AppendValue(96);
+        unordered.AppendValue(88);
+        encoded["suites"][Tpcds.Name]["required_formula_queries"] =
+            std::move(unordered);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "strictly increasing");
+    }
+
     Y_UNIT_TEST(TPCH) {
         RunCoverage(Tpch);
     }

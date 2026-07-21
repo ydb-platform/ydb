@@ -56,25 +56,19 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         geometry.SetNumFailRealms(1);
         geometry.SetNumFailDomainsPerFailRealm(1);
         geometry.SetNumVDisksPerFailDomain(1);
+        auto *selfManagementConfig = config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::SSD);
 
         try {
-            keeper.AllocateStaticGroup(
-                &config,
-                TGroupId::Zero(),
-                1,
-                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
-                geometry,
-                {},
-                NKikimrBlobStorage::SSD,
-                {},
-                {},
-                200,
-                &baseConfig,
-                false,
-                false,
-                false,
-                TBridgePileId(),
-                std::nullopt);
+            keeper.AllocateStaticGroup({
+                .Config = &config,
+                .GroupId = TGroupId::Zero(),
+                .GroupGeneration = 1,
+                .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                .RequiredSpace = 200,
+                .BaseConfig = &baseConfig,
+            });
             UNIT_FAIL("Expected group allocation to fail");
         } catch (const NStorage::TDistributedConfigKeeper::TExConfigError& ex) {
             const TString error = ex.what();
@@ -114,24 +108,16 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         geometry.SetNumFailRealms(1);
         geometry.SetNumFailDomainsPerFailRealm(1);
         geometry.SetNumVDisksPerFailDomain(1);
+        auto *selfManagementConfig = config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::SSD);
 
-        keeper.AllocateStaticGroup(
-            &config,
-            TGroupId::Zero(),
-            1,
-            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
-            geometry,
-            {},
-            NKikimrBlobStorage::SSD,
-            {},
-            {},
-            0,
-            nullptr,
-            false,
-            false,
-            false,
-            TBridgePileId(),
-            std::nullopt);
+        keeper.AllocateStaticGroup({
+            .Config = &config,
+            .GroupId = TGroupId::Zero(),
+            .GroupGeneration = 1,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+        });
 
         const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
         UNIT_ASSERT_VALUES_EQUAL(serviceSet.PDisksSize(), 1);

@@ -696,6 +696,7 @@ Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
 TKikimrRunner KikimrWithZeroSnapshotTimeout() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     featureFlags.SetEnableCompactFulltextIndex(true);
     featureFlags.SetEnableJsonIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);

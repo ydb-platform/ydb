@@ -4598,6 +4598,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchPrefixedRowIdComplexKey) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
     auto kikimr = Kikimr(std::move(featureFlags));
@@ -4668,6 +4669,7 @@ static TKikimrRunner KikimrPrefixRowId() {
     featureFlags.SetEnableFulltextIndexPrefix(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     return Kikimr(std::move(featureFlags));
 }
 

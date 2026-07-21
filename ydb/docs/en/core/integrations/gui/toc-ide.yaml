@@ -1,6 +1,13 @@
 items:
 - name: DBeaver
   href: dbeaver.md
+<<<<<<< HEAD
+=======
+- name: DBeaver Plugin
+  href: dbeaver-plugin.md
+- name: VS Code
+  href: vscode-plugin.md
+>>>>>>> 933933bf907 (Auto-translate docs from PR #44184 (#47237))
 - name: DataGrip
   href: datagrip.md
 - name: Jupyter Notebook

@@ -24,7 +24,7 @@ namespace NKafka {
 
     void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         KAFKA_LOG_D("Received ADD_PARTITIONS_TO_TXN request");
-        if (KafkaTableFeatureFlagChanged()) {
+        if (ev->Get()->InitialEnableServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
@@ -46,9 +46,9 @@ namespace NKafka {
     // Thus we can just ignore this request.
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received ADD_OFFSETS_TO_TXN request");
-        if (KafkaTableFeatureFlagChanged()) {
+        if (ev->Get()->InitialEnableServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-            SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             Die(ctx);
             return;
@@ -59,9 +59,9 @@ namespace NKafka {
 
     void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received TXN_OFFSET_COMMIT request");
-        if (KafkaTableFeatureFlagChanged()) {
+        if (ev->Get()->InitialEnableServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-            SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             Die(ctx);
             return;
@@ -102,9 +102,9 @@ namespace NKafka {
     */
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received END_TXN request");
-        if (KafkaTableFeatureFlagChanged()) {
+        if (ev->Get()->InitialEnableServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             Die(ctx);
             return;
@@ -182,7 +182,7 @@ namespace NKafka {
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
         if (KafkaTableFeatureFlagChanged()) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             Die(ctx);
             return;
@@ -249,9 +249,9 @@ namespace NKafka {
     }
 
     bool TTransactionActor::KafkaTableFeatureFlagChanged() const {
-        if (ResourceDatabasePath == DatabasePath) {
-            return false;
-        }
+        // if (ResourceDatabasePath == DatabasePath) {
+        //     return false;
+        // }
         return InitialServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
     }
 

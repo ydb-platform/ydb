@@ -356,74 +356,77 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
-        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-            KAFKA_LOG_D("Flag changed on TAddPartitionsToTxnRequestData");
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TAddPartitionsToTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
-                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
-            CloseConnection = true;
-            return;
-        }
+        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        //     KAFKA_LOG_D("Flag changed on TAddPartitionsToTxnRequestData");
+        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+        //         NKafkaTransactions::BuildResponse<TAddPartitionsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+        //         EKafkaErrors::INVALID_TXN_STATE));
+        //     return;
+        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
             header->CorrelationId,
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value()
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
-        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-            KAFKA_LOG_D("Flag changed on TAddOffsetsToTxnRequestData");
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-                EKafkaErrors::INVALID_TXN_STATE));
-            // CloseConnection = true;
-            return;
-        }
+        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        //     KAFKA_LOG_D("Flag changed on TAddOffsetsToTxnRequestData");
+        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+        //         NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+        //         EKafkaErrors::INVALID_TXN_STATE));
+        //     // CloseConnection = true;
+        //     return;
+        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
             header->CorrelationId,
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value()
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
-        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-            KAFKA_LOG_D("Flag changed on TTxnOffsetCommitRequestData");
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-                EKafkaErrors::INVALID_TXN_STATE));
-            // CloseConnection = true;
-            return;
-        }
+        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        //     KAFKA_LOG_D("Flag changed on TTxnOffsetCommitRequestData");
+        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+        //         NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+        //         EKafkaErrors::INVALID_TXN_STATE));
+        //     // CloseConnection = true;
+        //     return;
+        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
             header->CorrelationId,
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value()
         ));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
-        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-            KAFKA_LOG_D("Flag changed on TEndTxnRequestData");
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-                EKafkaErrors::INVALID_TXN_STATE));
-            // CloseConnection = true;
-            return;
-        }
+        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        //     KAFKA_LOG_D("Flag changed on TEndTxnRequestData");
+        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+        //         NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+        //         EKafkaErrors::INVALID_TXN_STATE));
+        //     // CloseConnection = true;
+        //     return;
+        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
             header->CorrelationId,
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value()
         ));
     }
 

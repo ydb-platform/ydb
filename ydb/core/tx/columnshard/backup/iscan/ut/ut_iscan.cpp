@@ -90,7 +90,9 @@ class TGrabActor: public TActorBootstrapped<TGrabActor> {
     std::deque<TAutoPtr<IEventHandle>> Inputs;
     TMutex Mutex;
     std::unique_ptr<NColumnShard::NBackup::TExportDriver> Driver;
-    std::unique_ptr<NTable::IScan> Exporter;
+
+    // non-owning pointer to the exporter actor
+    NTable::IScan* Exporter = nullptr;
 
 public:
     // Non-owning pointer to the actor runtime
@@ -108,12 +110,14 @@ public:
 
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
 
-        Exporter =
+        std::unique_ptr<NTable::IScan> exporter =
             NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
-        UNIT_ASSERT(Exporter);
+        UNIT_ASSERT(exporter);
+        Exporter = exporter.get();
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         auto initialState = Exporter->Prepare(Driver.get(), MakeSchema());
         UNIT_ASSERT_VALUES_EQUAL(initialState.Scan, NTable::EScan::Feed);
+        Y_UNUSED(exporter.release());
 
         NTable::TLead lead;
         auto seekState = Exporter->Seek(lead, 0);

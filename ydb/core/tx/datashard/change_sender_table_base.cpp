@@ -42,6 +42,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
+        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
     }
 
@@ -129,6 +130,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
+
+        auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 

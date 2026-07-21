@@ -75,6 +75,7 @@ class TChangeSender: public TActor<TChangeSender> {
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
+        auto& records = ev->Get()->Records;
         if (!IsActive()) {
             std::move(records.begin(), records.end(), std::back_inserter(Enqueued));
         } else {
@@ -109,6 +110,7 @@ class TChangeSender: public TActor<TChangeSender> {
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
+        const auto& msg = *ev->Get();
         auto it = Senders.find(msg.PathId);
         if (it != Senders.end()) {
             Y_ENSURE(it->second.UserTableId == msg.UserTableId);
@@ -138,6 +140,7 @@ class TChangeSender: public TActor<TChangeSender> {
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
+        const auto& pathId = ev->Get()->PathId;
         auto it = Senders.find(pathId);
         if (it == Senders.end()) {
             YDB_LOG_WARN("Unknown change sender removal ignored",
@@ -162,6 +165,7 @@ class TChangeSender: public TActor<TChangeSender> {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
+        Become(&TThis::StateActive);
         LogPrefix.Clear();
 
         for (auto& [pathId, sender] : Senders) {

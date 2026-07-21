@@ -150,17 +150,28 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     VolatileStateChangeTime = TActivationContext::Now();
 }
 
+bool TTabletInfo::IsReadyToWork() const {
+    if (IsLeader()) {
+        return AsLeader().IsReadyToWork();
+    }
+    return true;
+}
+
+bool TTabletInfo::IsReadyToBoot() const {
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
+}
+
 bool TTabletInfo::IsReadyToStart(TInstant now) const {
     if (IsFollower()) {
         if (!GetLeader().IsRunning()) {
             return false;
         }
     }
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
 }
 
 bool TTabletInfo::IsStarting() const {
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
 }
 
 bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
@@ -168,28 +179,31 @@ bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
 }
 
 bool TTabletInfo::IsRunning() const {
-    return Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
+    return IsReadyToWork() && Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
 }
 
 bool TTabletInfo::IsBooting() const {
-    return VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
+    return IsReadyToWork() && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
 }
 
 bool TTabletInfo::IsAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
 }
 
 bool TTabletInfo::CanBeAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
 bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
-    return Node != nullptr
+    return IsReadyToWork()
+            && Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
                 || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING

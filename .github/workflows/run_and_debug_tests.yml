@@ -46,6 +46,14 @@ on:
         required: false
         type: string
         default: 'auto'
+      shard_profile:
+        description: 'Adaptive profile when shard_count=auto'
+        required: false
+        type: choice
+        options:
+          - pr
+          - soft
+        default: 'pr'
       increment:
         description: 'Run only suites affected by the change (graph_compare, like PR-check). Use for PR refs.'
         required: false
@@ -137,6 +145,7 @@ jobs:
       build_preset: ${{ inputs.build_preset }}
       mode: ${{ inputs.mode }}
       shard_count: ${{ inputs.shard_count }}
+      shard_profile: ${{ inputs.shard_profile }}
       test_size: ${{ inputs.test_size }}
       increment: ${{ inputs.increment }}
       pr_number: ${{ needs.resolve.outputs.pr_number }}

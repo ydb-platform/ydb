@@ -43,7 +43,7 @@ python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
 echo "Weighting: $(jq -c '.weighting' "$FILTERED_SUMMARY")"
 
 if [ "$SHARD_COUNT" = "auto" ]; then
-  CHOOSE_ARGS=(--threads "${TEST_THREADS:-52}")
+  CHOOSE_ARGS=(--threads "${TEST_THREADS:-52}" --profile "${SHARD_PROFILE:-pr}")
   if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
     CHOOSE_ARGS+=(--no-peak-cap)
   fi

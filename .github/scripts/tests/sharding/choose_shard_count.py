@@ -5,12 +5,19 @@ Estimated single-job duration D (minutes) is derived from the total suite
 weight (seconds of summed test runtime) divided by the test thread count:
     D = total_weight_sec / (60 * threads)
 
-Profile (calibrated on PR-check duration distribution, see
-.github/docs/pr-check-sharding-plan.md):
-    D <  light_threshold  -> 1 shard (sharding overhead beats the gain)
-    D <  120 min          -> 4 shards
-    D <  200 min          -> 8 shards
-    otherwise             -> 12 shards
+Profiles (by estimated single-job minutes D):
+
+  pr (default, current production adaptive):
+    D <  60 min  -> 1 shard
+    D < 120 min  -> 4 shards
+    D < 200 min  -> 8 shards
+    otherwise    -> 12 shards
+
+  soft (cheaper / milder concurrency — forecast "adaptive soft"):
+    D <  60 min  -> 1 shard
+    D < 120 min  -> 2 shards
+    D < 200 min  -> 4 shards
+    otherwise    -> 8 shards
 
 Always keep enough shards so the ideal per-shard wall time stays within
 ``max_shard_wall_min`` (default 4h). Peak-hour and pool-capacity caps may
@@ -27,6 +34,7 @@ import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 DEFAULT_THREADS = 52
 DEFAULT_LIGHT_THRESHOLD_MIN = 60.0
@@ -35,6 +43,29 @@ DEFAULT_PEAK_HOURS_UTC = range(9, 17)
 DEFAULT_PEAK_CAP = 4
 # Slowest shard estimated wall time must stay within this budget.
 DEFAULT_MAX_SHARD_WALL_MIN = 240.0
+
+# Named adaptive profiles (tiers = (upper_exclusive_min, shard_count)).
+SHARD_PROFILES: dict[str, dict[str, Any]] = {
+    "pr": {
+        "light_threshold_min": DEFAULT_LIGHT_THRESHOLD_MIN,
+        "tiers": DEFAULT_TIERS,
+        "peak_cap": DEFAULT_PEAK_CAP,
+    },
+    "soft": {
+        "light_threshold_min": DEFAULT_LIGHT_THRESHOLD_MIN,
+        "tiers": ((120.0, 2), (200.0, 4), (float("inf"), 8)),
+        "peak_cap": DEFAULT_PEAK_CAP,
+    },
+}
+DEFAULT_PROFILE = "pr"
+
+
+def resolve_profile(name: str | None) -> dict[str, Any]:
+    key = (name or DEFAULT_PROFILE).strip().lower()
+    if key not in SHARD_PROFILES:
+        known = ", ".join(sorted(SHARD_PROFILES))
+        raise ValueError(f"unknown shard profile {name!r}; expected one of: {known}")
+    return SHARD_PROFILES[key]
 
 
 def estimate_single_job_minutes(total_weight_sec: float, threads: int) -> float:
@@ -91,30 +122,37 @@ def choose_shard_count(
     total_weight_sec: float,
     *,
     threads: int = DEFAULT_THREADS,
-    light_threshold_min: float = DEFAULT_LIGHT_THRESHOLD_MIN,
-    peak_cap: int = DEFAULT_PEAK_CAP,
+    light_threshold_min: float | None = None,
+    peak_cap: int | None = None,
     is_peak: bool = False,
     max_shards: int = 0,
     max_shard_wall_min: float = DEFAULT_MAX_SHARD_WALL_MIN,
+    profile: str = DEFAULT_PROFILE,
+    tiers: tuple[tuple[float, int], ...] | None = None,
 ) -> tuple[int, float]:
     """Return (shard_count, estimated_single_job_minutes)."""
+    prof = resolve_profile(profile)
+    light = float(prof["light_threshold_min"] if light_threshold_min is None else light_threshold_min)
+    use_tiers = tiers if tiers is not None else tuple(prof["tiers"])
+    use_peak_cap = int(prof["peak_cap"] if peak_cap is None else peak_cap)
+
     estimate_min = estimate_single_job_minutes(total_weight_sec, threads)
     wall_floor = min_shards_for_wall_budget(
         total_weight_sec,
         threads=threads,
         max_shard_wall_min=max_shard_wall_min,
     )
-    if estimate_min < light_threshold_min:
+    if estimate_min < light:
         count = 1
     else:
-        count = DEFAULT_TIERS[-1][1]
-        for upper_min, tier_count in DEFAULT_TIERS:
-            if estimate_min < upper_min:
-                count = tier_count
+        count = int(use_tiers[-1][1])
+        for upper_min, tier_count in use_tiers:
+            if estimate_min < float(upper_min):
+                count = int(tier_count)
                 break
     count = max(count, wall_floor)
-    if is_peak and count > peak_cap:
-        count = peak_cap
+    if is_peak and count > use_peak_cap:
+        count = use_peak_cap
     if max_shards > 0:
         count = min(count, max_shards)
     # Wall-time SLA wins over peak/capacity caps.
@@ -135,12 +173,23 @@ def main() -> int:
     )
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     parser.add_argument(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        choices=sorted(SHARD_PROFILES),
+        help="Adaptive tier profile: pr (4/8/12) or soft (2/4/8)",
+    )
+    parser.add_argument(
         "--light-threshold-min",
         type=float,
-        default=DEFAULT_LIGHT_THRESHOLD_MIN,
-        help="Estimated single-job minutes below which sharding is not worth it",
+        default=None,
+        help="Override profile light threshold (minutes)",
     )
-    parser.add_argument("--peak-cap", type=int, default=DEFAULT_PEAK_CAP)
+    parser.add_argument(
+        "--peak-cap",
+        type=int,
+        default=None,
+        help="Override profile peak-hour shard cap",
+    )
     parser.add_argument(
         "--no-peak-cap",
         action="store_true",
@@ -175,6 +224,7 @@ def main() -> int:
         is_peak=peak,
         max_shards=args.max_shards,
         max_shard_wall_min=args.max_shard_wall_min,
+        profile=args.profile,
     )
     wall_floor = min_shards_for_wall_budget(
         total_weight_sec,
@@ -182,7 +232,7 @@ def main() -> int:
         max_shard_wall_min=args.max_shard_wall_min,
     )
     print(
-        f"estimated single-job duration: {estimate_min:.1f} min "
+        f"profile={args.profile} estimated single-job duration: {estimate_min:.1f} min "
         f"(weight {total_weight_sec:.0f}s / {args.threads} threads), "
         f"wall_floor={wall_floor} (<= {args.max_shard_wall_min:.0f} min/shard), "
         f"peak={peak} (hour {hour} UTC) -> shard_count={count}",

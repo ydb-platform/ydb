@@ -26,6 +26,14 @@ on:
         required: false
         type: string
         default: auto
+      shard_profile:
+        description: 'Adaptive profile when shard_count=auto: pr (4/8/12) or soft (2/4/8)'
+        required: false
+        type: choice
+        options:
+          - pr
+          - soft
+        default: pr
       test_size:
         description: 'Test sizes: small, medium, large (default: small,medium)'
         required: false
@@ -206,6 +214,7 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       mode: ${{ inputs.mode }}
       shard_count: ${{ inputs.shard_count }}
+      shard_profile: ${{ inputs.shard_profile }}
       test_size: ${{ inputs.test_size }}
       increment: true
       pr_number: ${{ needs.gate.outputs.pr_number }}

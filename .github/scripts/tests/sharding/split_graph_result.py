@@ -136,6 +136,11 @@ def main() -> int:
         required=True,
         help='"auto" or integer shard count',
     )
+    parser.add_argument(
+        "--profile",
+        default="pr",
+        help='Adaptive profile when --shard-count=auto: pr (4/8/12) or soft (2/4/8)',
+    )
     parser.add_argument("-o", "--output", type=Path, required=True, help="shard_plan.json")
     parser.add_argument("--build-type", default="relwithdebinfo")
     parser.add_argument("--branch", default="main")
@@ -200,9 +205,10 @@ def main() -> int:
         shard_count, estimate_min = choose_shard_count(
             total_weight,
             threads=args.threads,
+            profile=args.profile,
         )
         print(
-            f"Adaptive shard count from graph weight {total_weight:.0f}s "
+            f"Adaptive shard count (profile={args.profile}) from graph weight {total_weight:.0f}s "
             f"(~{estimate_min:.1f} min single job) -> {shard_count}",
             file=sys.stderr,
         )

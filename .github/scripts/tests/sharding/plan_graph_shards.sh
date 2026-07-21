@@ -38,6 +38,7 @@ run_split() {
   python3 "$SCRIPT_DIR/split_graph_result.py" \
     "$GRAPH_JSON" \
     --shard-count "$count" \
+    --profile "${SHARD_PROFILE:-pr}" \
     --plan-mode "$PLAN_MODE" \
     -o "$PLAN_FILE" \
     --build-type "${BUILD_PRESET:-relwithdebinfo}" \

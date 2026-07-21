@@ -565,10 +565,18 @@ class ChooseShardCountTest(unittest.TestCase):
         self.assertEqual(self._choose(150), 8)
         self.assertEqual(self._choose(250), 12)
 
+    def test_soft_profile_tiers(self):
+        self.assertEqual(self._choose(90, profile="soft"), 2)
+        self.assertEqual(self._choose(150, profile="soft"), 4)
+        self.assertEqual(self._choose(250, profile="soft"), 8)
+        self.assertEqual(self._choose(30, profile="soft"), 1)
+
     def test_peak_cap_limits_heavy_runs(self):
         self.assertEqual(self._choose(250, is_peak=True), 4)
         self.assertEqual(self._choose(90, is_peak=True), 4)
         self.assertEqual(self._choose(30, is_peak=True), 1)
+        # soft peak: heavy would be 8, capped to 4
+        self.assertEqual(self._choose(250, profile="soft", is_peak=True), 4)
 
     def test_max_shards_bound(self):
         self.assertEqual(self._choose(250, max_shards=6), 6)

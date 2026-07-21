@@ -50,6 +50,11 @@ on:
         required: false
         type: string
         default: 'auto'
+      shard_profile:
+        description: 'Adaptive profile when shard_count=auto: pr (4/8/12) or soft (2/4/8)'
+        required: false
+        type: string
+        default: 'pr'
       increment:
         description: 'Run only suites affected by graph_compare (like PR-check)'
         required: false
@@ -278,6 +283,7 @@ jobs:
         id: plan
         env:
           SHARD_COUNT: ${{ inputs.shard_count }}
+          SHARD_PROFILE: ${{ inputs.shard_profile }}
           BUILD_PRESET: ${{ inputs.build_preset }}
           HISTORY_BRANCH: ${{ inputs.history_branch }}
           HISTORY_DAYS_BACK: "3"

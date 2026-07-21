@@ -710,10 +710,8 @@ namespace NActors {
                     ++*ReadUnavail;
                     IssueReadForSession(session);
                 } else if (res < 0) {
-                    Cerr << TString(TStringBuilder() << "read disconnect errno# " << strerror(-res) << Endl);
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
-                    Cerr << TString(TStringBuilder() << "read disconnect EOF" << Endl);
                     session.Disconnect(TDisconnectReason::EndOfStream());
                 } else {
                     *BytesReceived += res;
@@ -749,10 +747,8 @@ namespace NActors {
                     ++*WriteUnavail;
                     SubmitIovec(session);
                 } else if (res < 0) {
-                    Cerr << TString(TStringBuilder() << "write disconnect errno# " << strerror(-res) << Endl);
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
-                    Cerr << TString(TStringBuilder() << "write disconnect EOF" << Endl);
                     session.Disconnect(TDisconnectReason::EndOfStream());
                 } else {
                     *BytesSent += res;

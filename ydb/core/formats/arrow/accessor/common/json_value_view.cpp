@@ -1,8 +1,12 @@
 #include "json_value_view.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <util/generic/ylimits.h>
 #include <util/string/cast.h>
@@ -11,6 +15,16 @@
 #include <limits>
 
 namespace NKikimr::NArrow::NAccessor {
+
+namespace {
+
+NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& json) {
+    auto result = NBinaryJson::SerializeToBinaryJson(NJson::WriteJson(&json, false));
+    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(result));
+    return std::get<NBinaryJson::TBinaryJson>(std::move(result));
+}
+
+}   // namespace
 
 std::optional<TString> TJsonValueView::JsonNumberToString(double jsonNumber) {
     if (std::isnan(jsonNumber)) {
@@ -88,6 +102,34 @@ std::optional<TStringBuf> TJsonValueView::GetBinaryJsonBlobOptional() const {
         return std::nullopt;
     }
     return Bytes;
+}
+
+NJson::TJsonValue TJsonValueView::ToJsonValue() const {
+    switch (Kind) {
+        case EKind::BinaryJson: {
+            const auto text = NBinaryJson::SerializeToJson(Bytes);
+            NJson::TJsonValue result;
+            AFL_VERIFY(NJson::ReadJsonTree(text, &result));
+            return result;
+        }
+        case EKind::String:
+            return NJson::TJsonValue(Bytes);
+        case EKind::Number:
+            return NJson::TJsonValue(Number);
+        case EKind::Bool:
+            return NJson::TJsonValue(Bool);
+    }
+}
+
+NBinaryJson::TBinaryJson TJsonValueView::ToBinaryJson() const {
+    switch (Kind) {
+        case EKind::BinaryJson:
+            return NBinaryJson::TBinaryJson(Bytes.data(), Bytes.size());
+        case EKind::String:
+        case EKind::Number:
+        case EKind::Bool:
+            return JsonValueToBinaryJsonVerified(ToJsonValue());
+    }
 }
 
 std::optional<TStringBuf> TJsonValueView::ScalarFromBinaryJson() const {

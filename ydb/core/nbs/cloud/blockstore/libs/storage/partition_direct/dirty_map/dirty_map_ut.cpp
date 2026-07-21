@@ -100,15 +100,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         vchunkConfig.AppendHost();
         const auto newIdx = static_cast<THostIndex>(5);
-        dirtyMap.ResizeHosts(vchunkConfig.GetHostCount());
         dirtyMap.UpdateConfig(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
             dirtyMap.GetPBufferCounters(newIdx).CurrentBytesCount);
-        UNIT_ASSERT_STRING_CONTAINS(
-            dirtyMap.DebugPrintDDiskState(),
-            "H5-{Disabled,0,0}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};"
+            "H5+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)

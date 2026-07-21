@@ -522,7 +522,8 @@ private:
             pathWithMd5.Md5);
     }
 
-    bool BuildUploadList(
+    // Returns formatted error message if attachments exceed the limit; empty string otherwise.
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TString* lambda,
@@ -537,7 +538,7 @@ private:
         return ret;
     }
 
-    bool BuildUploadList(
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TExploringNodeVisitor& explorer,
@@ -581,7 +582,6 @@ private:
                 uploadList->emplace(f);
             }
         }
-        bool fallbackFlag = false;
         for (TNode* node : explorer.GetNodes()) {
             node->Freeze(typeEnv);
 
@@ -733,11 +733,17 @@ private:
 
         i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
-            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
-            fallbackFlag = true;
+            const auto filesCount = uploadList->size();
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " file(s), " << sizeSum << " > " << dataLimit;
+            // Keep the "Too big attachment" prefix — analytics tools parse it.
+            return TStringBuilder()
+                << "Too big attachment: " << filesCount
+                << " file(s) attached with a total size of "
+                << sizeSum << " bytes, which exceeds the limit of "
+                << dataLimit << " bytes";
         }
 
-        return fallbackFlag;
+        return {};
     }
 
     TStatusCallbackPair GetLambda(
@@ -822,10 +828,8 @@ private:
         }
 
         const bool localRun = enableLocalRun && (!State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
-        bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
-
-        if (fallbackFlag) {
-            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+        if (auto error = BuildUploadList(uploadList, localRun, explorer, typeEnv, files)) {
+            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << error << ": " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -975,7 +979,8 @@ private:
                 return true;
             });
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
-            bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            const bool initialFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            bool enableFullResultWrite = initialFullResultWrite;
             if (enableFullResultWrite) {
                 const auto type = result.Input().Ref().GetTypeAnn();
                 const auto integration = GetDqIntegrationForFullResTable(State);
@@ -987,6 +992,11 @@ private:
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
+            YQL_CLOG(INFO, ProviderDq) << "FullResultWrite decision: initial=" << initialFullResultWrite
+                << " effective=" << enableFullResultWrite
+                << " discard=" << fillSettings.Discard
+                << " hasDqGateway=" << (bool)State->DqGateway
+                << " hasYtFullResultParam=" << graphParams.contains("yt.full_result_table");
 
             TString lambda;
             bool untrustedUdfFlag;
@@ -1082,10 +1092,13 @@ private:
             }
 
             return WrapFutureCallback<false>(future, [localRun, startTime, type, rowSpec, skiffType, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State, skiffConverter = SkiffConverter](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
-
                 auto duration = TInstant::Now() - startTime;
-                YQL_CLOG(INFO, ProviderDq) << "Execution Result complete, duration: " << duration;
+                YQL_CLOG(INFO, ProviderDq) << state->SessionId << " Execution Result complete, duration: " << duration
+                    << " localRun=" << localRun
+                    << " enableFullResultWrite=" << enableFullResultWrite
+                    << " truncated=" << res.Truncated
+                    << " rowsCount=" << res.RowsCount
+                    << " dataBytes=" << res.Data.size();
                 if (state->Metrics) {
                     state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
                     state->Metrics->SetCounter(
@@ -1428,7 +1441,6 @@ private:
             return SyncStatus(FallbackWithMessage(pull.Ref(), err, ctx, true));
         }
 
-        bool fallbackFlag = false;
         if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
             return SyncStatus(FallbackWithMessage(
                 pull.Ref(),
@@ -1451,13 +1463,17 @@ private:
             return SyncError();
         }
 
+        TString tooBigAttachmentError;
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             for (auto& t : tasks) {
                 TUploadList uploadList;
                 TString lambda = t.GetProgram().GetRaw();
-                fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
+                if (auto error = BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files)) {
+                    tooBigAttachmentError = error;
+                    break;
+                }
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                 *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -1475,8 +1491,8 @@ private:
 
         MarkProgressStarted(publicIds->AllPublicIds, State->ProgressWriter);
 
-        if (fallbackFlag) {
-            return SyncStatus(FallbackWithMessage(pull.Ref(), "Too big attachment", ctx, true));
+        if (tooBigAttachmentError) {
+            return SyncStatus(FallbackWithMessage(pull.Ref(), tooBigAttachmentError, ctx, true));
         }
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref());
@@ -1984,7 +2000,6 @@ private:
                 return FallbackWithMessage(*input, err, ctx, false);
             }
 
-            bool fallbackFlag = false;
             if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
                 return FallbackWithMessage(
                     *input,
@@ -2006,13 +2021,17 @@ private:
                 return IGraphTransformer::TStatus::Error;
             }
 
+            TString tooBigAttachmentError;
             {
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
                 TTypeEnvironment typeEnv(alloc);
                 for (auto& t : tasks) {
                     TUploadList uploadList;
                     TString lambda = t.GetProgram().GetRaw();
-                    fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
+                    if (auto error = BuildUploadList(&uploadList, false, &lambda, typeEnv, files)) {
+                        tooBigAttachmentError = error;
+                        break;
+                    }
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                     *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -2028,8 +2047,8 @@ private:
                 }
             }
 
-            if (fallbackFlag) {
-                return FallbackWithMessage(*input, "Too big attachment", ctx, false);
+            if (tooBigAttachmentError) {
+                return FallbackWithMessage(*input, tooBigAttachmentError, ctx, false);
             }
 
             if (State->Metrics) {

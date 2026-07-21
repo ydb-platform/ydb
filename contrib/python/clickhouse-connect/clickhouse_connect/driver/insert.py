@@ -97,6 +97,7 @@ class InsertContext(BaseQueryContext):
             self.block_row_count = self._calc_block_size()
 
     def _calc_block_size(self) -> int:
+        assert self._data is not None
         if self.req_block_size:
             return self.req_block_size
         row_size = 0

@@ -46,22 +46,19 @@ TPartitionActor::TPartitionActor(
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s TPartitionActor: initialization started",
+        "%s initialization started",
         LogTitle.GetWithTime().c_str());
 }
 
 TPartitionActor::~TPartitionActor() = default;
 
-void TPartitionActor::PassAway()
+void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: before detach");
-}
-
-void TPartitionActor::OnDetach(const TActorContext& ctx)
-{
+        "%s OnDetach",
+        LogTitle.GetWithTime().c_str());
     Die(ctx);
 }
 
@@ -70,6 +67,13 @@ void TPartitionActor::OnTabletDead(
     const TActorContext& ctx)
 {
     Y_UNUSED(ev);
+
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "%s OnTabletDead",
+        LogTitle.GetWithTime().c_str());
+
     Die(ctx);
 }
 
@@ -510,84 +514,6 @@ void TPartitionActor::HandleInitialAllocationResult(
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
 }
 
-void TPartitionActor::HandleAddHostToDBG(
-    const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    const auto* msg = ev->Get();
-    const auto dbgId = msg->DirectBlockGroupId;
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHostToDBG dbgId=%lu",
-        LogTitle.GetWithTime().c_str(),
-        dbgId);
-
-    // TEvAddHostToDBG is only sent via a running FastPathService (by a DBG or
-    // by the mon page button), so it (and the allocated DBGs) is alive by the
-    // time we handle the request.
-    Y_ABORT_UNLESS(FastPathService);
-
-    if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {
-        return;
-    }
-
-    const auto& dbgConn =
-        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
-    const auto currentSize = static_cast<ui32>(dbgConn.GetConnections().size());
-
-    // Persist the intent before the BSController request (sent from the tx's
-    // completion). A crash after the DDisk is allocated but before the
-    // connection is persisted then leaves a durable intent, replayed on
-    // restart.
-    AddHostInFlight = TAddHostInFlight{
-        .DirectBlockGroupId = dbgId,
-        .NewHostIndex = static_cast<THostIndex>(currentSize),
-    };
-
-    ExecuteTx(
-        ctx,
-        CreateTx<TStartAddHost>(dbgId, static_cast<THostIndex>(currentSize)));
-}
-
-void TPartitionActor::SendAllocateDDiskForAddHost(
-    const TActorContext& ctx,
-    size_t dbgId,
-    THostIndex newHostIndex)
-{
-    Y_ABORT_UNLESS(AddHostInFlight.has_value());
-
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionsCount =
-        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
-        RegionSize;
-
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
-
-    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
-    // re-sent request returns the same DDisk from BSController's persisted
-    // allocation, so a retry (e.g. after a restart) is safe.
-    const ui32 numDDisks = static_cast<ui32>(newHostIndex) + 1;
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-    request->Record.SetTabletId(TabletID());
-
-    auto* op = request->Record.AddDirectBlockGroupOperations();
-    op->SetDirectBlockGroupId(dbgId);
-    auto* define = op->MutableDefineDirectBlockGroup();
-    define->SetNumDDisks(numDDisks);
-    define->SetNumChunksPerDDisk(regionsCount);
-    define->SetNumPersistentBuffers(numDDisks);
-
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
-}
-
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
     const TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -718,11 +644,13 @@ STFUNC(TPartitionActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
+                LOG_ERROR(
                     TActivationContext::AsActorContext(),
                     NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
             }
             break;
     }

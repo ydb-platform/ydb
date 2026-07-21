@@ -22,8 +22,20 @@ void TClassifierSettings::TParser::operator()(TString* setting) const {
     *setting = Value;
 }
 
+void TClassifierSettings::TParser::operator()(std::optional<bool>* setting) const {
+    if (Value.empty()) {
+        setting->reset();
+    } else {
+        *setting = FromString<bool>(Value);
+    }
+}
+
 void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) const {
-    *setting = Value;
+    if (Value.empty()) {
+        setting->reset();
+    } else {
+        *setting = Value;
+    }
 }
 
 void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* setting) const {
@@ -56,6 +68,13 @@ TString TClassifierSettings::TExtractor::operator()(TString* setting) const {
     return *setting;
 }
 
+TString TClassifierSettings::TExtractor::operator()(std::optional<bool>* setting) const {
+    if (!*setting) {
+        return TString{};
+    }
+    return **setting ? "true" : "false";
+}
+
 TString TClassifierSettings::TExtractor::operator()(std::optional<TString>* setting) const {
     return setting->value_or(TString{});
 }
@@ -84,6 +103,7 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
         {"has_app_name", &HasAppName},
         {"has_full_scan", &HasFullScan},
         {"has_path", &HasPath},
+        {"has_stream", &HasStream},
         {"action", &Action}
     };
     return properties;

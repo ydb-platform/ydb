@@ -1105,7 +1105,9 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
         // clang-format on
     }
 
-    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(Aggregate->GetOutputIUs());
+    // Keep grouping and DistinctAll keys in the combiner, but not its output.
+    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(
+        NPhysicalConvertionUtils::GetLiveOutputIUs(*Aggregate));
 
     // clang-format off
     return Ctx.Builder(Pos)

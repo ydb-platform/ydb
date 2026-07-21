@@ -275,7 +275,12 @@ int BuildAST(int argc, char** argv) {
     opts.AddLongOption("mem-limit", "Set memory limit in megabytes").Handler1T<ui32>(0, NYql::SetAddressSpaceLimit);
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([&gatewaysConfig, &clusterMapping](const TString& file) {
         gatewaysConfig = ParseProtoConfig<NYql::TGatewaysConfig>(file);
-        GetClusterMappingFromGateways(*gatewaysConfig, clusterMapping);
+
+        THashMap<TString, TString> local;
+        GetClusterMappingFromGateways(*gatewaysConfig, local);
+        for (const auto& [cluster, service] : local) {
+            clusterMapping.emplace(cluster, service); // priority to argv
+        }
     });
     opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE").Handler1T<TString>([](const TString& file) {
         auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);

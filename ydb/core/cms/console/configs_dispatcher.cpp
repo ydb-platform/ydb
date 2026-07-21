@@ -509,8 +509,8 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             f->SetDeprecated(deprecatedPaths.contains(path));
         }
     } catch (const yexception& ex) {
-        YDB_LOG_ERROR("Got invalid config from console",
-            {"error", ex.what()});
+        // Never deliver a partially-parsed config; fail loudly instead.
+        Y_ABORT("Failed to parse resolved YAML config into proto: %s", ex.what());
     }
 
     return newYamlProtoConfig;

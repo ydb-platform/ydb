@@ -95,6 +95,8 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
     }
     TabletPipes.clear();
+    PipesRequested.clear();
+    ReadyPartitionTablets = 0;
     while (!PartitionsLocationQueue.empty()) {
         SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
         PartitionsLocationQueue.pop_front();
@@ -416,6 +418,11 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
+        if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+            it->second.Ready = true;
+            ++ReadyPartitionTablets;
+        }
+
         PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
     }
     else
@@ -430,6 +437,11 @@ void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext&
 {
     auto it = TabletPipes.find(tabletId);
     if (it != TabletPipes.end()) {
+        if (it->second.Ready) {
+            PQ_ENSURE(ReadyPartitionTablets > 0);
+            --ReadyPartitionTablets;
+            it->second.Ready = false;
+        }
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
         PipesRequested.erase(tabletId);
@@ -626,16 +638,7 @@ void TPersQueueReadBalancer::SendPartitionsLocationError(const TActorId& sender,
 }
 
 bool TPersQueueReadBalancer::AllPartitionPipesReady() const {
-    if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
-        return false;
-    }
-    for (const auto& [_, partitionInfo] : PartitionsInfo) {
-        auto iter = TabletPipes.find(partitionInfo.TabletId);
-        if (iter == TabletPipes.end() || !iter->second.NodeId || !iter->second.Generation) {
-            return false;
-        }
-    }
-    return true;
+    return !TabletsInfo.empty() && ReadyPartitionTablets == TabletsInfo.size();
 }
 
 void TPersQueueReadBalancer::SchedulePartitionsLocationWakeup(const TActorContext& ctx) {
@@ -700,7 +703,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
             GetPipeClient(tabletId, ctx);
             return false;
         }
-        if (!iter->second.NodeId || !iter->second.Generation) {
+        if (!iter->second.Ready) {
             return false;
         }
 

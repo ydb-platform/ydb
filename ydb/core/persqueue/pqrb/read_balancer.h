@@ -261,10 +261,12 @@ private:
         TActorId PipeActor;
         TMaybe<ui64> NodeId;
         TMaybe<ui32> Generation;
+        bool Ready = false;
     };
 
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
+    ui32 ReadyPartitionTablets = 0;
 
     TDatabaseInfo DatabaseInfo;
 

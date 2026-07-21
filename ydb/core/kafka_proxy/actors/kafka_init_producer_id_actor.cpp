@@ -56,7 +56,7 @@ namespace NKafka {
         if (IsTransactionalProducerInitialization()) {
             if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
                 KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-                SendResponseFail(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                SendResponseFail(EKafkaErrors::INVALID_TXN_STATE,
                     "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
                 Die(ctx);
                 return;

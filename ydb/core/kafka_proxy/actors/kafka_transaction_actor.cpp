@@ -26,8 +26,9 @@ namespace NKafka {
         KAFKA_LOG_D("Received ADD_PARTITIONS_TO_TXN request");
         if (ev->Get()->InitialEnableServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-            SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            // TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::SCHEME_ERROR, GetMetadataDatabasePath(), ctx);
             Die(ctx);
             return;
         }
@@ -51,6 +52,7 @@ namespace NKafka {
             SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             Die(ctx);
+            // TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::SCHEME_ERROR, GetMetadataDatabasePath(), ctx);
             return;
         }
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
@@ -63,6 +65,7 @@ namespace NKafka {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            // TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::SCHEME_ERROR, GetMetadataDatabasePath(), ctx);
             Die(ctx);
             return;
         }
@@ -106,6 +109,7 @@ namespace NKafka {
             KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
             SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            // TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::SCHEME_ERROR, GetMetadataDatabasePath(), ctx);
             Die(ctx);
             return;
         }
@@ -152,7 +156,7 @@ namespace NKafka {
         bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx)
                 || TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
         if (requestedTableCreation) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
                 "Kafka metadata tables are not initialized yet. Please retry.");
             Die(ctx);
             return;
@@ -184,6 +188,7 @@ namespace NKafka {
         if (KafkaTableFeatureFlagChanged()) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            // TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::SCHEME_ERROR, GetMetadataDatabasePath(), ctx);
             Die(ctx);
             return;
         }

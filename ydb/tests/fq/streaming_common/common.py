@@ -133,7 +133,9 @@ class YdbClient:
             statement, settings=settings, retry_settings=self.retry_settings
         )
 
-    def create_external_data_source(self, source_name: str, endpoint: str, database: str, shared_reading: bool = False) -> None:
+    def create_external_data_source(
+        self, source_name: str, endpoint: str, database: str, shared_reading: bool = False
+    ) -> None:
         self.query(f'''
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = 'Ydb',
@@ -171,6 +173,7 @@ class YdbClient:
         deadline = time.monotonic() + timeout
 
         with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
             def _read_single() -> str:
                 remaining = deadline - time.monotonic()
                 message = reader.receive_message(timeout=remaining)
@@ -194,6 +197,7 @@ class YdbClient:
         deadline = time.monotonic() + timeout
 
         with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
             def _read_batch() -> list[str]:
                 remaining = deadline - time.monotonic()
                 batch = reader.receive_batch(timeout=remaining)

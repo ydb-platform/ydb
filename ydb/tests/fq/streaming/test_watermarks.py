@@ -38,6 +38,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
         tasks: int = 2,
         settings: dict[str, str] = {},
+        input_parsing: bool = False,
         cascade_hopping: bool = False,
     ) -> str:
         query_name = entity_name(scenario)
@@ -47,6 +48,59 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         settings_str = f"WITH ({', '.join(f'{k} = {v}' for k, v in settings.items())})" if settings else ""
         idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if tasks > 1 else ''
+        input = (
+            f'''
+            $input = (
+                SELECT
+                    Yson::ConvertTo(Yson::ParseJson(line), Struct<ts: String, pass: Uint64, id: String>) AS row
+                FROM
+                    {input_name}
+                    FLATTEN LIST BY (
+                        String::SplitToList(Data, '.') AS line
+                    )
+                WHERE
+                    line != ''
+            );
+
+            $input = (
+                SELECT
+                    ts,
+                    pass,
+                    id
+                FROM
+                    $input
+                    FLATTEN COLUMNS
+            );
+
+            $input = (
+                SELECT
+                    CAST(ts AS Timestamp) AS event_time,
+                    pass,
+                    id
+                FROM
+                    $input WITH (
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        {idleness_clause}
+                    ) AS input
+            );
+        '''
+            if input_parsing
+            else f'''
+            $input = (
+                SELECT
+                    CAST(ts AS Timestamp) AS event_time,
+                    pass,
+                    id
+                FROM
+                    {input_name} WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (ts String, pass Uint64, id String),
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        {idleness_clause}
+                    )
+            );
+        '''
+        )
         process = '''
             $process = (
                 SELECT
@@ -74,19 +128,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             CREATE STREAMING QUERY `{query_name}` {settings_str} AS DO BEGIN
             PRAGMA ydb.MaxTasksPerStage = '{tasks}';
 
-            $input = (
-                SELECT
-                    CAST(ts AS Timestamp) AS event_time,
-                    pass,
-                    id
-                FROM
-                    {input_name} WITH (
-                        FORMAT = json_each_row,
-                        SCHEMA (ts String, pass Uint64, id String),
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
-                        {idleness_clause}
-                    )
-            );
+            {input}
 
             {process}
 
@@ -151,6 +193,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"wm_{shared_reading}{tasks}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading, tasks)
+
         try:
             self._write_topic(
                 ydb_client,
@@ -214,6 +257,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_gt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
             self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
@@ -246,6 +290,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_lt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
             self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
@@ -277,6 +322,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_topic_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+
         try:
             self._write_topic(ydb_client, [self._event(0, "first-0")], partition_id=0)
             self._write_topic(ydb_client, [self._event(0, "second-0")], partition_id=1)
@@ -287,10 +333,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(20, "first-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "second-20")], partition_id=1)
 
-            expected = ["first-0", "second-0"]
-            self._read_topic_check_rows(ydb_client, expected)
-
-            expected = ["first-10", "second-10"]
+            expected = ["first-0", "second-0", "first-10", "second-10"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -306,8 +349,9 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = "empty_partition"
+        query_name = f"empty_partition_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+
         try:
             self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)
             self._write_topic(ydb_client, [self._event(10, "active-10")], partition_id=0)
@@ -342,67 +386,9 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"wm_after_parsing_{shared_reading}{tasks}{local_topics}"
-        input_name, output_name, _ = self.get_io_names(
-            kikimr, query_name, local_topics, entity_name, partitions_count=tasks, shared=shared_reading
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks, input_parsing=True
         )
-
-        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if tasks > 1 else ''
-        kikimr.ydb_client.query(f'''
-            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
-            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
-
-            $input = (
-                SELECT
-                    Yson::ConvertTo(Yson::ParseJson(line), Struct<ts: String, pass: Uint64, id: String>) AS row
-                FROM
-                    {input_name}
-                    FLATTEN LIST BY (
-                        String::SplitToList(Data, '.') AS line
-                    )
-                WHERE
-                    line != ''
-            );
-
-            $input = (
-                SELECT
-                    ts,
-                    pass,
-                    id
-                FROM
-                    $input
-                    FLATTEN COLUMNS
-            );
-
-            $input = (
-                SELECT
-                    CAST(ts AS Timestamp) AS event_time,
-                    pass,
-                    id
-                FROM
-                    $input WITH (
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
-                        {idleness_clause}
-                    ) AS input
-            );
-
-            $output = (
-                SELECT
-                    HOP_END() AS event_time,
-                    AGGREGATE_LIST(id) AS id
-                FROM
-                    $input
-                WHERE
-                    pass > 0
-                GROUP BY
-                    HoppingWindow(event_time, 'PT1S', 'PT1S')
-            );
-
-            INSERT INTO {output_name}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(id))))
-            FROM $output;
-            END DO;
-        ''')
-        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
 
         try:
             self._write_topic(

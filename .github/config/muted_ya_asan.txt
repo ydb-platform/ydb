@@ -602,6 +602,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.BadRequest

@@ -35,13 +35,8 @@ REGRESSION_WORKFLOWS = [
     "Nightly-Build",
 ]
 
-# From runner_capacity.yml (keep in sync when quotas change).
-QUOTA_INSTANCES = 140
-RESERVED_INSTANCES = 22
-HEADROOM = 0.9
-VCPU_QUOTA = 8000
-VCPU_RESERVED = 200
-RWDI_VCPU = 64
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CAPACITY_CONFIG = SCRIPT_DIR / "../../../config/runner_capacity.yml"
 
 PREPARE_MIN = 8.0
 MERGE_MIN = 2.0
@@ -55,10 +50,60 @@ SAMPLE_RUNS_PER_DAY = 12
 MC_WEEKS = 12
 
 
-def pool_budget() -> int:
-    by_instances = int((QUOTA_INSTANCES - RESERVED_INSTANCES) * HEADROOM)
-    by_vcpu = int((VCPU_QUOTA - VCPU_RESERVED) * HEADROOM / RWDI_VCPU)
-    return min(by_instances, by_vcpu)
+def load_capacity_config(path: Path) -> dict[str, Any]:
+    try:
+        import yaml  # type: ignore
+    except ImportError as exc:
+        raise SystemExit(
+            "PyYAML is required to read runner_capacity.yml "
+            "(pip install pyyaml)"
+        ) from exc
+    with path.open(encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict):
+        raise SystemExit(f"invalid capacity config: {path}")
+    return data
+
+
+def pool_budget(config: dict[str, Any], preset_label: str = "build-preset-relwithdebinfo") -> dict[str, Any]:
+    """Same budget idea as estimate_runner_capacity.py, but for an empty pool."""
+    quotas = config["quotas"]
+    reserved = config.get("reserved") or {}
+    headroom = float(config.get("headroom_fraction", 1.0))
+    footprints = config.get("footprints") or {}
+    fp = footprints.get(preset_label) or config.get("default_footprint") or {}
+    if "vcpu" not in fp:
+        raise SystemExit(f"no footprint for {preset_label} in capacity config")
+
+    free_instances = (quotas["instances"] - reserved.get("instances", 0)) * headroom
+    free_vcpu = (quotas["vcpu"] - reserved.get("vcpu", 0)) * headroom
+    free_ram = (quotas["ram_gb"] - reserved.get("ram_gb", 0)) * headroom
+    free_ssd = (quotas["nrd_ssd_gb"] - reserved.get("nrd_ssd_gb", 0)) * headroom
+
+    fits = [
+        free_instances,
+        free_vcpu / fp["vcpu"],
+        free_ram / fp["ram_gb"],
+        free_ssd / fp["nrd_ssd_gb"],
+    ]
+    budget = max(int(math.floor(min(fits))), 0)
+    return {
+        "pool_budget_runners": budget,
+        "preset_label": preset_label,
+        "quotas": quotas,
+        "reserved": reserved,
+        "headroom_fraction": headroom,
+        "footprint": fp,
+        "free_before_runners": {
+            "instances": round(free_instances, 1),
+            "vcpu": round(free_vcpu, 1),
+            "ram_gb": round(free_ram, 1),
+            "nrd_ssd_gb": round(free_ssd, 1),
+        },
+        "limiting_resource": ["instances", "vcpu", "ram_gb", "nrd_ssd_gb"][
+            min(range(len(fits)), key=lambda i: fits[i])
+        ],
+    }
 
 
 def run_gh_json(args: list[str]) -> Any:
@@ -330,6 +375,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--repo", default=DEFAULT_REPO)
+    parser.add_argument(
+        "--capacity-config",
+        type=Path,
+        default=DEFAULT_CAPACITY_CONFIG,
+        help="Path to runner_capacity.yml (quotas / footprints)",
+    )
+    parser.add_argument(
+        "--preset-label",
+        default="build-preset-relwithdebinfo",
+        help="Runner footprint used for pool budget (default: rwdi)",
+    )
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -337,11 +393,24 @@ def main() -> int:
     repo = args.repo
     random.seed(args.seed)
 
+    capacity_path = args.capacity_config.resolve()
+    if not capacity_path.is_file():
+        raise SystemExit(f"capacity config not found: {capacity_path}")
+    capacity_cfg = load_capacity_config(capacity_path)
+    budget_info = pool_budget(capacity_cfg, preset_label=args.preset_label)
+    pool = int(budget_info["pool_budget_runners"])
+
     end = date.today()
     start = end - timedelta(days=args.days)
-    pool = pool_budget()
     print(f"Period: {start} .. {end}", file=sys.stderr)
-    print(f"Pool budget (approx): {pool} runners", file=sys.stderr)
+    print(f"Capacity config: {capacity_path}", file=sys.stderr)
+    print(
+        f"Pool budget: {pool} runners "
+        f"(limited by {budget_info['limiting_resource']}, "
+        f"quotas instances={capacity_cfg['quotas']['instances']} "
+        f"vcpu={capacity_cfg['quotas']['vcpu']})",
+        file=sys.stderr,
+    )
 
     pr_id = workflow_id(repo, PR_CHECK_WORKFLOW)
     daily = collect_pr_daily_totals(repo, start, end, pr_id)
@@ -440,6 +509,8 @@ def main() -> int:
     result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "period": {"start": start.isoformat(), "end": end.isoformat()},
+        "capacity_config_path": str(capacity_path),
+        "pool_budget": budget_info,
         "pool_budget_runners": pool,
         "empirical_pr_check_rwdi": emp,
         "week_baseline": baseline,

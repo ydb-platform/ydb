@@ -73,7 +73,8 @@ private:
         }
     }
 
-    TString LogPrefix() const;
+
+    NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
     const TContext::TPtr Context;

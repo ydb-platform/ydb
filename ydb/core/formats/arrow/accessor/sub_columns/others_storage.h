@@ -123,7 +123,7 @@ public:
             AFL_VERIFY(IsValid());
             return *Values;
         }
-        i64 GetLocalIndex() const {
+        ui32 GetLocalIndex() const {
             AFL_VERIFY(IsValid());
             return CurrentIndex;
         }

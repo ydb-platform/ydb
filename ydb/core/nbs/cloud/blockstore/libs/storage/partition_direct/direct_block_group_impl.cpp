@@ -293,7 +293,9 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
 
     if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
     {
-        childSpan->Event("WaitConnectionReady");
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
+        }
 
         auto waitReadyCb = [weakSelf = weak_from_this(),
                             promise = std::move(promise),
@@ -496,7 +498,9 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
     {
-        childSpan->Event("WaitConnectionReady");
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
+        }
 
         auto waitReadyCb = [weakSelf = weak_from_this(),
                             promise = std::move(promise),
@@ -848,7 +852,9 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     if (DDiskConnections[ddiskHostIndex].SessionState !=
         EDDiskSessionState::Locked)
     {
-        childSpan->Event("WaitConnectionReady");
+        if (childSpan) {
+            childSpan->Event("WaitConnectionReady");
+        }
 
         auto cb = CreateWaitSessionCbForSyncWithPBuffer(
             std::move(promise),
@@ -857,7 +863,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
             pbufferHostIndex,
             ddiskHostIndex,
             segments,
-            childSpan);
+            std::move(childSpan));
         DDiskConnections[ddiskHostIndex].GetFuture().Subscribe(std::move(cb));
 
         return flushFuture;

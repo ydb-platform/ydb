@@ -123,11 +123,12 @@ bool HasStageGraphState(TOpRoot& root) {
     return hasStageId;
 }
 
-bool HasAggregate(TOpRoot& root) {
+bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
     bool result = false;
     THashSet<const IOperator*> visited;
     VisitOperators(root.GetInput(), visited, [&](IOperator& op) {
-        result = result || op.GetKind() == EOperator::Aggregate;
+        result = result || op.GetKind() == EOperator::Aggregate ||
+            op.GetKind() == EOperator::Sort;
     });
     return result;
 }
@@ -594,9 +595,6 @@ private:
                     Unsupported("Map must have one input");
                 }
                 auto& map = static_cast<TOpMap&>(base);
-                if (map.IsOrdered()) {
-                    Unsupported("Ordered Map is absent from logical snapshot v1");
-                }
                 const auto inputNames = OutputNames(*map.GetInput());
                 THashSet<TString> renameSources;
                 for (const auto& element : map.MapElements) {
@@ -641,6 +639,7 @@ private:
                 node["op"] = "project";
                 node["input"] = children[0];
                 node["columns"] = std::move(columns);
+                node["ordered"] = map.IsOrdered();
                 return node;
             }
 
@@ -680,6 +679,70 @@ private:
                     ? Uint64LiteralExpr(*offset, "Limit offset")
                     : NJson::TJsonValue(NJson::JSON_NULL);
                 node["phase"] = Phase(limit.GetLimitPhase());
+                return node;
+            }
+
+            case EOperator::Sort: {
+                if (children.size() != 1) {
+                    Unsupported("Sort must have one input");
+                }
+                auto& sort = static_cast<TOpSort&>(base);
+                const auto& inputIUs = sort.GetInput()->GetOutputIUs();
+                const auto& outputIUs = sort.GetOutputIUs();
+                if (inputIUs.size() != outputIUs.size()) {
+                    Unsupported("Sort output IUs do not match its input");
+                }
+                for (size_t index = 0; index < inputIUs.size(); ++index) {
+                    const TString inputName = inputIUs[index].GetFullName();
+                    const TString outputName = outputIUs[index].GetFullName();
+                    if (inputName != outputName) {
+                        Unsupported("Sort output IUs do not match its input");
+                    }
+
+                    bool inputNullable = false;
+                    bool outputNullable = false;
+                    const TString inputType = TypeName(
+                        OutputType(*sort.GetInput(), inputName),
+                        &inputNullable);
+                    const TString outputType = TypeName(
+                        OutputType(sort, outputName),
+                        &outputNullable);
+                    if (inputType != outputType || inputNullable != outputNullable) {
+                        Unsupported(TStringBuilder()
+                            << "Sort output type disagrees with input IU " << inputName);
+                    }
+                }
+
+                const auto inputNames = OutputNames(*sort.GetInput());
+                const auto outputNames = OutputNames(sort);
+                const auto& sortElements = sort.GetSortElements();
+                if (sortElements.empty()) {
+                    Unsupported("Sort order must not be empty");
+                }
+
+                auto order = JsonArray();
+                for (const auto& element : sortElements) {
+                    const TString column = element.SortColumn.GetFullName();
+                    if (column.empty() || !inputNames.contains(column) ||
+                        !outputNames.contains(column))
+                    {
+                        Unsupported(TStringBuilder() << "Invalid Sort key " << column);
+                    }
+
+                    auto item = JsonMap();
+                    item["column"] = column;
+                    item["ascending"] = element.Ascending;
+                    item["nulls_first"] = element.NullsFirst;
+                    order.AppendValue(std::move(item));
+                }
+
+                node["op"] = "sort";
+                node["input"] = children[0];
+                node["order"] = std::move(order);
+                node["limit"] = sort.LimitCond
+                    ? Uint64LiteralExpr(*sort.LimitCond, "Sort limit")
+                    : NJson::TJsonValue(NJson::JSON_NULL);
+                node["phase"] = Phase(sort.GetSortPhase());
                 return node;
             }
 
@@ -1811,7 +1874,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureInitial(
                 CatalogFailure = std::move(catalog.UnsupportedReason);
                 result.UnsupportedReason = CatalogFailure;
             } else {
-                if (HasAggregate(root)) {
+                if (NeedsInitialSnapshotTypeMaterialization(root)) {
                     root.RecomputeOutputIUsSubtree();
                     if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
                         Unsupported("RBO type annotation failed for the initial semantic snapshot");

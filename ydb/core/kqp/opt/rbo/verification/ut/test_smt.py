@@ -54,6 +54,15 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.mod(value, 0)
 
+    def test_integer_less_than_is_typed_and_constant_folded(self):
+        left = smt.symbol("left", smt.INT)
+        right = smt.symbol("right", smt.INT)
+        self.assertEqual(smt.lt(left, right).render(), "(< left right)")
+        self.assertEqual(smt.lt(smt.int_value(1), smt.int_value(2)), smt.TRUE)
+        self.assertEqual(smt.lt(left, left), smt.FALSE)
+        with self.assertRaises(smt.SmtError):
+            smt.lt(smt.TRUE, right)
+
 
 if __name__ == "__main__":
     unittest.main()

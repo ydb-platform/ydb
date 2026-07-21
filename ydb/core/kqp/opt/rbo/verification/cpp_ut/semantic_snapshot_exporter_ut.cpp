@@ -327,6 +327,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(scan["pushed_limit"].IsNull());
 
         const auto& project = FindNode(snapshot, "project");
+        UNIT_ASSERT_VALUES_EQUAL(project["ordered"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(
             ProjectionOutputs(project),
             (TVector<TString>{"a.flag", "a.payload", "out.k", "out.flag_copy"}));
@@ -338,6 +339,29 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             Strings(snapshot["plan"]["output"]),
             (TVector<TString>{"out.flag_copy", "out.k", "a.payload"}));
+    }
+
+    Y_UNIT_TEST(ExportsOrderedMapProjection) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TInfoUnit("a.k"),
+                pos,
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps)},
+            true);
+        TOpRoot root(map, pos, {"result"});
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& project = FindNode(snapshot, "project");
+        UNIT_ASSERT_VALUES_EQUAL(project["ordered"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(ProjectionOutputs(project), TVector<TString>{"result"});
     }
 
     Y_UNIT_TEST(ExportsJoinKeysAndResidualPredicate) {
@@ -657,6 +681,250 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 std::numeric_limits<ui64>::max());
             UNIT_ASSERT(node["offset"].IsNull());
             UNIT_ASSERT_VALUES_EQUAL(node["phase"].GetStringSafe(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsPlainSortTopSortOrderLimitAndEveryPhase) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int32", true},
+            {"payload", "Utf8", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"k", "payload"});
+        SetOutputType(ctx, *read, {
+            {"a.k", NUdf::EDataSlot::Int32},
+            {"a.payload", NUdf::EDataSlot::Utf8, true},
+        });
+        const auto pos = TPositionHandle();
+        const TVector<TSortElement> order = {
+            TSortElement(TInfoUnit("a.k"), true, false),
+            TSortElement(TInfoUnit("a.payload"), false, true),
+        };
+
+        auto plainSort = MakeIntrusive<TOpSort>(read, pos, order);
+        SetOutputType(ctx, *plainSort, {
+            {"a.k", NUdf::EDataSlot::Int32},
+            {"a.payload", NUdf::EDataSlot::Utf8, true},
+        });
+        TOpRoot plainRoot(plainSort, pos, {"a.k", "a.payload"});
+        const auto plainSnapshot = ParseSupported(
+            ExportSemanticSnapshotV1(plainRoot, ctx.RboCtx));
+        const auto& plain = FindNode(plainSnapshot, "sort");
+        UNIT_ASSERT_VALUES_EQUAL(plain.GetMapSafe().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(
+            plain["input"].GetStringSafe(),
+            FindNode(plainSnapshot, "scan")["id"].GetStringSafe());
+        UNIT_ASSERT(plain["limit"].IsNull());
+        UNIT_ASSERT_VALUES_EQUAL(plain["phase"].GetStringSafe(), "undefined");
+        const auto& plainOrder = plain["order"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[0].GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[0]["column"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[0]["ascending"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[0]["nulls_first"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[1]["column"].GetStringSafe(), "a.payload");
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[1]["ascending"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(plainOrder[1]["nulls_first"].GetBooleanSafe(), true);
+
+        const TVector<std::pair<EOpPhase, TString>> phases = {
+            {EOpPhase::Undefined, "undefined"},
+            {EOpPhase::Intermediate, "intermediate"},
+            {EOpPhase::Final, "final"},
+        };
+        for (const auto& [phase, expected] : phases) {
+            auto topSort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TPhysicalOpProps{},
+                order,
+                std::optional<TExpression>{MakeConstant(
+                    "Uint64",
+                    "18446744073709551615",
+                    pos,
+                    &ctx.ExprCtx)},
+                phase);
+            SetOutputType(ctx, *topSort, {
+                {"a.k", NUdf::EDataSlot::Int32},
+                {"a.payload", NUdf::EDataSlot::Utf8, true},
+            });
+            TOpRoot topRoot(topSort, pos, {"a.k", "a.payload"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(topRoot, ctx.RboCtx));
+            const auto& top = FindNode(snapshot, "sort");
+            UNIT_ASSERT_VALUES_EQUAL(top["limit"]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(top["limit"]["type"].GetStringSafe(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(
+                top["limit"]["value"].GetUIntegerSafe(),
+                std::numeric_limits<ui64>::max());
+            UNIT_ASSERT_VALUES_EQUAL(top["phase"].GetStringSafe(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(top["order"].GetArraySafe().size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(InvalidSortSemanticsFailClosed) {
+        const auto pos = TPositionHandle();
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto sort = MakeIntrusive<TOpSort>(read, pos, TVector<TSortElement>{});
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Int32}});
+            TOpRoot root(sort, pos, {"a.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort order must not be empty");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("missing"), true, true)});
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Int32}});
+            TOpRoot root(sort, pos, {"a.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Invalid Sort key missing");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            const TVector<TSortElement> order = {
+                TSortElement(TInfoUnit("a.k"), true, true),
+            };
+            auto exportLimit = [&](TExpression expression) {
+                auto sort = MakeIntrusive<TOpSort>(
+                    read,
+                    pos,
+                    TPhysicalOpProps{},
+                    order,
+                    std::optional<TExpression>{std::move(expression)},
+                    EOpPhase::Undefined);
+                SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Int32}});
+                TOpRoot root(sort, pos, {"a.k"});
+                return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            };
+
+            auto malformed = MakeConstant("Uint64", "1", pos, &ctx.ExprCtx);
+            malformed.Node = nullptr;
+            auto result = exportLimit(std::move(malformed));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort limit is not a one-body lambda");
+
+            auto nonLiteralBody = ctx.ExprCtx.NewCallable(
+                pos,
+                "Uint64",
+                {ctx.ExprCtx.NewCallable(pos, "Void", {})});
+            result = exportLimit(TExpression(nonLiteralBody, &ctx.ExprCtx));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort limit must be a Uint64 literal");
+
+            result = exportLimit(MakeConstant("Int64", "1", pos, &ctx.ExprCtx));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort limit must be a Uint64 literal");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"k", "Int32", true},
+                {"x", "Int32", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"k", "x"});
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int32},
+                {"a.x", NUdf::EDataSlot::Int32},
+            });
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.k"), true, true)});
+            SetOutputType(ctx, *sort, {
+                {"a.k", NUdf::EDataSlot::Int32},
+                {"a.x", NUdf::EDataSlot::Int32},
+            });
+            sort->Props.OutputIUs = TVector<TInfoUnit>{
+                TInfoUnit("a.x"),
+                TInfoUnit("a.k"),
+            };
+            TOpRoot root(sort, pos, {"a.k", "a.x"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort output IUs");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.k"), true, true)});
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Uint32}});
+            TOpRoot root(sort, pos, {"a.k"});
+
+            auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort output type");
+
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Date}});
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Date}});
+            result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar type Date");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TPhysicalOpProps{},
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.k"), true, true)},
+                std::nullopt,
+                static_cast<EOpPhase>(99));
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Int32}});
+            TOpRoot root(sort, pos, {"a.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unknown operator phase");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.k"), true, true)});
+            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Int32}});
+            sort->Children.clear();
+            TOpRoot root(sort, pos, {"a.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort must have one input");
         }
     }
 
@@ -1486,6 +1754,34 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto& trait = FindNode(snapshot, "aggregate")["aggregates"][0];
         UNIT_ASSERT_VALUES_EQUAL(trait["type"].GetStringSafe(), "Uint64");
         UNIT_ASSERT_VALUES_EQUAL(trait["nullable"].GetBooleanSafe(), false);
+    }
+
+    Y_UNIT_TEST(InitialPairCaptureMaterializesMapAndSortTypesInsideFailClosedPath) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+        auto sort = MakeIntrusive<TOpSort>(
+            map,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("a.k"), true, false)});
+        TOpRoot root(sort, pos, {"a.k"});
+        UNIT_ASSERT(!map->GetTypeAnn());
+        UNIT_ASSERT(!sort->GetTypeAnn());
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        const auto snapshot = ParseSupported(sink.Results[0]);
+        UNIT_ASSERT(map->GetTypeAnn());
+        UNIT_ASSERT(sort->GetTypeAnn());
+        const auto& order = FindNode(snapshot, "sort")["order"][0];
+        UNIT_ASSERT_VALUES_EQUAL(order["column"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(order["ascending"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(order["nulls_first"].GetBooleanSafe(), false);
     }
 
     Y_UNIT_TEST(PairCaptureRejectsAStagedInitialBoundary) {

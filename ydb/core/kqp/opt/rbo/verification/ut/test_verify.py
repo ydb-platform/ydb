@@ -185,6 +185,7 @@ def passthrough_stage_snapshot(connection=None):
         "id": "project",
         "op": "project",
         "input": "a",
+        "ordered": False,
         "columns": [
             {
                 "output": "result",
@@ -291,6 +292,7 @@ def serial_then_parallel_stage_snapshot(staged):
         "id": "gather",
         "op": "project",
         "input": "a",
+        "ordered": False,
         "columns": [
             {
                 "output": "middle",
@@ -302,6 +304,7 @@ def serial_then_parallel_stage_snapshot(staged):
         "id": "project",
         "op": "project",
         "input": "gather",
+        "ordered": False,
         "columns": [
             {
                 "output": "result",
@@ -625,6 +628,7 @@ def constant_snapshot(value, output="result", scalar_type=None):
                         "id": "project",
                         "op": "project",
                         "input": "source",
+                        "ordered": False,
                         "columns": [
                             {
                                 "output": output,
@@ -699,6 +703,7 @@ class SolverProtocolTest(unittest.TestCase):
                             "id": "project",
                             "op": "project",
                             "input": "source",
+                            "ordered": False,
                             "columns": [
                                 {
                                     "output": "result",
@@ -818,6 +823,10 @@ def _restricted_domain_has_model(script):
             return evaluate(term.arguments[0], constants, functions) == evaluate(
                 term.arguments[1], constants, functions
             )
+        if term.operation == "<":
+            return evaluate(term.arguments[0], constants, functions) < evaluate(
+                term.arguments[1], constants, functions
+            )
         if term.operation == "ite":
             branch = term.arguments[1] if evaluate(term.arguments[0], constants, functions) else term.arguments[2]
             return evaluate(branch, constants, functions)
@@ -875,6 +884,12 @@ def _evaluate_ground_term(term, constants, function_value=None):
         return _evaluate_ground_term(
             term.arguments[0], constants, function_value
         ) == _evaluate_ground_term(
+            term.arguments[1], constants, function_value
+        )
+    if term.operation == "<":
+        return _evaluate_ground_term(
+            term.arguments[0], constants, function_value
+        ) < _evaluate_ground_term(
             term.arguments[1], constants, function_value
         )
     if term.operation == "ite":
@@ -1372,7 +1387,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                     _restricted_domain_has_model(build_problem(logical, staged, 2).script)
                 )
 
-    def test_merge_order_survives_parse_but_evaluation_is_unsupported(self):
+    def test_merge_order_survives_parse_and_requires_an_ordered_producer(self):
         order = [
             {"column": "a.k", "ascending": True, "nulls_first": False},
             {"column": "a.x", "ascending": False, "nulls_first": True},
@@ -1391,7 +1406,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                 ("a.x", False, True),
             ],
         )
-        with self.assertRaisesRegex(VerificationError, "Merge ordering.*not modeled"):
+        with self.assertRaisesRegex(VerificationError, "merge edge .* input is not ordered"):
             build_problem(logical, staged, 2)
 
     def test_serial_gather_then_parallel_union_stays_single_task(self):

@@ -147,6 +147,42 @@ void AssertLimit(const NJson::TJsonValue& limit, const TString& phase) {
     UNIT_ASSERT(limit["offset"].IsNull());
 }
 
+void AssertSort(
+    const NJson::TJsonValue& sort,
+    const TString& phase,
+    bool hasLimit)
+{
+    UNIT_ASSERT_VALUES_EQUAL(sort["phase"].GetStringSafe(), phase);
+    const auto& order = sort["order"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(order.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(order[0]["ascending"].GetBooleanSafe(), false);
+    UNIT_ASSERT_VALUES_EQUAL(order[0]["nulls_first"].GetBooleanSafe(), true);
+    UNIT_ASSERT_VALUES_EQUAL(order[1]["ascending"].GetBooleanSafe(), true);
+    UNIT_ASSERT_VALUES_EQUAL(order[1]["nulls_first"].GetBooleanSafe(), true);
+    if (!hasLimit) {
+        UNIT_ASSERT(sort["limit"].IsNull());
+        return;
+    }
+    const auto& limit = sort["limit"];
+    UNIT_ASSERT_VALUES_EQUAL(limit["kind"].GetStringSafe(), "literal");
+    UNIT_ASSERT_VALUES_EQUAL(limit["type"].GetStringSafe(), "Uint64");
+    UNIT_ASSERT_VALUES_EQUAL(limit["value"].GetUIntegerSafe(), 1);
+}
+
+void CreateOrderedColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboOrdered` (
+            Id Uint64 NOT NULL,
+            A Int64,
+            B Int64,
+            Payload Uint64,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final)
@@ -280,6 +316,87 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(
             edges[0]["consumer"].GetStringSafe(),
             final["stage_graph"]["root_stage"].GetStringSafe());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostProducesTopSortAndMergeSnapshots) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT A, B
+                FROM `/Root/RboOrdered`
+                ORDER BY A DESC, B ASC
+                LIMIT 1;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto& initialSort = OnlyPlanNode(initial, "sort");
+        AssertSort(initialSort, "undefined", false);
+        const auto& initialLimit = OnlyPlanNode(initial, "limit");
+        AssertLimit(initialLimit, "undefined");
+        const auto initialProjects = PlanNodes(initial, "project");
+        UNIT_ASSERT_VALUES_EQUAL(initialProjects.size(), 2);
+        const NJson::TJsonValue* orderedProject = nullptr;
+        for (const auto* project : initialProjects) {
+            if ((*project)["input"].GetStringSafe() ==
+                initialSort["id"].GetStringSafe())
+            {
+                orderedProject = project;
+            }
+        }
+        UNIT_ASSERT(orderedProject);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*orderedProject)["ordered"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialLimit["input"].GetStringSafe(),
+            (*orderedProject)["id"].GetStringSafe());
+
+        const auto& finalSort = OnlyPlanNode(final, "sort");
+        AssertSort(finalSort, "intermediate", true);
+        const auto& finalProject = OnlyPlanNode(final, "project");
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalProject["input"].GetStringSafe(),
+            finalSort["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(finalProject["ordered"].GetBooleanSafe(), false);
+        const auto& finalLimit = OnlyPlanNode(final, "limit");
+        AssertLimit(finalLimit, "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalLimit["input"].GetStringSafe(),
+            finalProject["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["plan"]["root"].GetStringSafe(),
+            finalLimit["id"].GetStringSafe());
+
+        const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "merge");
+        UNIT_ASSERT_VALUES_EQUAL(
+            edges[0]["order"].GetArraySafe(),
+            finalSort["order"].GetArraySafe());
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

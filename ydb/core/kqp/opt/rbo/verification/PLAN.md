@@ -11,13 +11,17 @@ machinery and must remain outside the verifier kernel.
 
 ## Verification contract
 
-The checker solves:
+For deterministic plans the checker solves:
 
 ```text
 schema constraints
 and bounded symbolic input tables
 and Eval(initial RBO plan) != Eval(final StageGraph program)
 ```
+
+Unordered Limit makes evaluation a finite set of enabled bags. In that case
+equality is mutual inclusion of the two outcome sets, with shared-DAG choices
+correlated and distinct stage-task executions independent.
 
 Results have five distinct meanings:
 
@@ -122,8 +126,9 @@ Implementation sequence:
 2. M1: inner, cross, left/right/full outer, semi, and anti/only joins;
 3. M1: logical bag `UnionAll`;
 4. M1: root projection and column order;
-5. later: common aggregates, sort/top-sort, and limit;
-6. later: subplans, distinct expansion, range reads, and OLAP pushdowns.
+5. M4: common aggregates and unordered literal Limit;
+6. later: sort/top-sort and ordered Merge;
+7. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter will lower an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -134,6 +139,16 @@ Unordered results are compared by symbolic tuple multiplicity. Ordered results
 are compared as sequences where order is observable. Root output names and
 their order are an external schema contract and must match exactly; the exporter
 may add a mechanical final projection when internal IU IDs differ.
+
+Limit count/offset and pushed scan limits are exact non-null `Uint64` literals
+in v1. An unordered Limit enumerates every row mask of the required result
+cardinality instead of selecting a fixed prefix. The kernel compares enabled
+bag families, carries choices through shared DAG nodes, and fails closed above
+256 alternatives or 4096 cross-plan outcome pairs. A pushed column-scan limit
+runs after source partitioning and therefore applies once per task. Exact reuse
+of one Limit node remains correlated. Distinct Limit observers downstream of an
+order-preserving stream fan-out remain unsupported until a common latent-order
+model is added; Aggregate, Join, and UnionAll establish new unordered streams.
 
 ## StageGraph semantics
 
@@ -179,8 +194,9 @@ Before treating optimizer findings as credible:
 1. Compare every symbolic operator encoding with an independent concrete
    evaluator on exhaustively enumerated tiny databases.
 2. Mutation-test the checker by deleting a filter, changing a join kind/key,
-   dropping a UnionAll branch, changing a shuffle key/hash, and corrupting an
-   aggregate phase.
+   dropping a UnionAll branch, changing a shuffle key/hash, corrupting an
+   aggregate phase, moving Limit across Filter, and dropping/corrupting split
+   Limit phases.
 3. Preserve and replay every solver witness.
 4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage dashboard;
    report unsupported features separately from failures.
@@ -226,9 +242,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
 ### M4: benchmark coverage
 
-- Grouped/scalar aggregates, including split intermediate/final execution,
-  NULLs, distinct variants, and exact numeric behavior.
-- Order, Merge, top-sort, limit, and required scalar refinements.
+- Grouped/scalar count and integer sum, including split intermediate/final
+  execution, NULLs, and exact 64-bit numeric behavior; distinct variants remain.
+- Unordered literal Limit/offset, split per-task execution, and column-source
+  pushed limits, with exhaustive and mutation tests.
+- Order, Merge, top-sort, and required scalar refinements remain.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

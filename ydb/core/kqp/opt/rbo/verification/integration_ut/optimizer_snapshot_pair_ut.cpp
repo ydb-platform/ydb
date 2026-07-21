@@ -116,6 +116,37 @@ NJson::TJsonValue ParseSnapshot(const TRBOSemanticSnapshotBoundaryResultV1& resu
     return snapshot;
 }
 
+TVector<const NJson::TJsonValue*> PlanNodes(
+    const NJson::TJsonValue& snapshot,
+    const TString& op)
+{
+    TVector<const NJson::TJsonValue*> matches;
+    for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+        if (node["op"].GetStringSafe() == op) {
+            matches.push_back(&node);
+        }
+    }
+    return matches;
+}
+
+const NJson::TJsonValue& OnlyPlanNode(
+    const NJson::TJsonValue& snapshot,
+    const TString& op)
+{
+    const auto matches = PlanNodes(snapshot, op);
+    UNIT_ASSERT_VALUES_EQUAL_C(matches.size(), 1, op);
+    return *matches.front();
+}
+
+void AssertLimit(const NJson::TJsonValue& limit, const TString& phase) {
+    UNIT_ASSERT_VALUES_EQUAL(limit["phase"].GetStringSafe(), phase);
+    const auto& count = limit["count"];
+    UNIT_ASSERT_VALUES_EQUAL(count["kind"].GetStringSafe(), "literal");
+    UNIT_ASSERT_VALUES_EQUAL(count["type"].GetStringSafe(), "Uint64");
+    UNIT_ASSERT_VALUES_EQUAL(count["value"].GetUIntegerSafe(), 1);
+    UNIT_ASSERT(limit["offset"].IsNull());
+}
+
 NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final)
@@ -166,7 +197,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         const TString query = R"(--!syntax_v1
-                SELECT Key FROM `/Root/KeyValue`;
+                SELECT Key FROM `/Root/KeyValue` LIMIT 1;
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -186,6 +217,69 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(final["version"].GetIntegerSafe(), 1);
         UNIT_ASSERT(initial["stage_graph"].IsNull());
         UNIT_ASSERT(final["stage_graph"].IsMap());
+
+        const auto& initialScan = OnlyPlanNode(initial, "scan");
+        const auto& initialProject = OnlyPlanNode(initial, "project");
+        const auto& initialLimit = OnlyPlanNode(initial, "limit");
+        UNIT_ASSERT(initialScan["pushed_limit"].IsNull());
+        AssertLimit(initialLimit, "undefined");
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialProject["input"].GetStringSafe(),
+            initialScan["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialLimit["input"].GetStringSafe(),
+            initialProject["id"].GetStringSafe());
+
+        const auto& finalScan = OnlyPlanNode(final, "scan");
+        UNIT_ASSERT(finalScan["pushed_limit"].IsNull());
+        const auto finalLimits = PlanNodes(final, "limit");
+        UNIT_ASSERT_VALUES_EQUAL(finalLimits.size(), 2);
+        const NJson::TJsonValue* intermediateLimit = nullptr;
+        const NJson::TJsonValue* finalLimit = nullptr;
+        for (const auto* limit : finalLimits) {
+            const auto phase = (*limit)["phase"].GetStringSafe();
+            if (phase == "intermediate") {
+                intermediateLimit = limit;
+            } else if (phase == "final") {
+                finalLimit = limit;
+            }
+        }
+        UNIT_ASSERT(intermediateLimit);
+        UNIT_ASSERT(finalLimit);
+        AssertLimit(*intermediateLimit, "intermediate");
+        AssertLimit(*finalLimit, "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*intermediateLimit)["input"].GetStringSafe(),
+            finalScan["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*finalLimit)["input"].GetStringSafe(),
+            (*intermediateLimit)["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["plan"]["root"].GetStringSafe(),
+            (*finalLimit)["id"].GetStringSafe());
+
+        const auto& stages = final["stage_graph"]["stages"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+        const NJson::TJsonValue* rowSource = nullptr;
+        for (const auto& stage : stages) {
+            if (!stage["source_storage"].IsNull() &&
+                stage["source_storage"].GetStringSafe() == "row")
+            {
+                UNIT_ASSERT(!rowSource);
+                rowSource = &stage;
+            }
+        }
+        UNIT_ASSERT(rowSource);
+        const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "union_all");
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["parallel"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            edges[0]["producer"].GetStringSafe(),
+            (*rowSource)["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            edges[0]["consumer"].GetStringSafe(),
+            final["stage_graph"]["root_stage"].GetStringSafe());
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

@@ -74,6 +74,7 @@ SCAN_A = {
         {"source": "k", "output": "a.k"},
         {"source": "x", "output": "a.x"},
     ],
+    "pushed_limit": None,
 }
 SCAN_B = {
     "id": "b",
@@ -83,6 +84,7 @@ SCAN_B = {
         {"source": "k", "output": "b.k"},
         {"source": "x", "output": "b.x"},
     ],
+    "pushed_limit": None,
 }
 KEY_EQUALITY = {
     "kind": "eq",
@@ -518,6 +520,7 @@ def union_snapshot(duplicate):
                 "op": "scan",
                 "table": "A",
                 "columns": [{"source": "k", "output": "u.k"}],
+                "pushed_limit": None,
             }
         ]
     return parse_snapshot(
@@ -556,6 +559,7 @@ def filtered_snapshot(predicate):
                         "op": "scan",
                         "table": "T",
                         "columns": [{"source": "flag", "output": "t.flag"}],
+                        "pushed_limit": None,
                     },
                     {
                         "id": "filter",
@@ -973,7 +977,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     database = Database(snapshot, 2, script)
                     relation = RelationEvaluator(
                         snapshot, database, ScalarEncoder(script)
-                    ).root()
+                    ).root().certain()
                     key_values = (None, 0, 1) if nullable_key else (0, 1)
                     minimum, maximum = bounds[input_type]
                     concrete_values = tuple(dict.fromkeys((minimum, 0, 1, maximum)))
@@ -1015,7 +1019,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     database,
                     ScalarEncoder(script),
                     router,
-                ).root()
+                ).root().certain()
                 for rows, placements in product(
                     product(states, repeat=2),
                     product((False, True), repeat=2),

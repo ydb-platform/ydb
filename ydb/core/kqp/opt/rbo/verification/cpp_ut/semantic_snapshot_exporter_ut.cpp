@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -323,6 +324,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(scanColumns[1]["output"].GetStringSafe(), "a.flag");
         UNIT_ASSERT_VALUES_EQUAL(scanColumns[2]["source"].GetStringSafe(), "payload");
         UNIT_ASSERT_VALUES_EQUAL(scanColumns[2]["output"].GetStringSafe(), "a.payload");
+        UNIT_ASSERT(scan["pushed_limit"].IsNull());
 
         const auto& project = FindNode(snapshot, "project");
         UNIT_ASSERT_VALUES_EQUAL(
@@ -600,7 +602,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "output IU order");
     }
 
-    Y_UNIT_TEST(UnsupportedOperatorFailsClosed) {
+    Y_UNIT_TEST(ExportsLimitCountOffsetAndPhase) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
         auto read = MakeRead(ctx, table, "a", {"k"});
@@ -608,14 +610,190 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto limit = MakeIntrusive<TOpLimit>(
             read,
             pos,
+            MakeConstant("Uint64", "3", pos, &ctx.ExprCtx),
             MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
-            EOpPhase::Undefined);
+            EOpPhase::Final);
         TOpRoot root(limit, pos, {"a.k"});
 
-        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "limit");
+        UNIT_ASSERT_VALUES_EQUAL(node["input"].GetStringSafe(), FindNode(snapshot, "scan")["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(node["count"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(node["count"]["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(node["count"]["value"].GetUIntegerSafe(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(node["offset"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(node["offset"]["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(node["offset"]["value"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(node["phase"].GetStringSafe(), "final");
+    }
+
+    Y_UNIT_TEST(ExportsEveryLimitPhaseNullOffsetAndUint64Max) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        const TVector<std::pair<EOpPhase, TString>> phases = {
+            {EOpPhase::Undefined, "undefined"},
+            {EOpPhase::Intermediate, "intermediate"},
+            {EOpPhase::Final, "final"},
+        };
+        for (const auto& [phase, expected] : phases) {
+            auto limit = MakeIntrusive<TOpLimit>(
+                read,
+                pos,
+                MakeConstant(
+                    "Uint64",
+                    "18446744073709551615",
+                    pos,
+                    &ctx.ExprCtx),
+                phase);
+            TOpRoot root(limit, pos, {"a.k"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& node = FindNode(snapshot, "limit");
+            UNIT_ASSERT_VALUES_EQUAL(
+                node["count"]["value"].GetUIntegerSafe(),
+                std::numeric_limits<ui64>::max());
+            UNIT_ASSERT(node["offset"].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(node["phase"].GetStringSafe(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsColumnReadPushdownAtAStageBoundary) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k"},
+            NYql::EStorageType::ColumnStorage);
+        const auto pos = TPositionHandle();
+        read->Limit = ctx.ExprCtx.NewCallable(
+            pos,
+            "Uint64",
+            {ctx.ExprCtx.NewAtom(pos, "7")});
+        TOpRoot root(read, pos, {"a.k"});
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& pushedLimit = FindNode(snapshot, "scan")["pushed_limit"];
+        UNIT_ASSERT_VALUES_EQUAL(pushedLimit["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(pushedLimit["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(pushedLimit["value"].GetUIntegerSafe(), 7);
+    }
+
+    Y_UNIT_TEST(InvalidLimitSemanticsFailClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        const auto pos = TPositionHandle();
+
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto invalidCount = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot invalidCountRoot(invalidCount, pos, {"a.k"});
+        auto result = ExportSemanticSnapshotV1(invalidCountRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT(result.Json.empty());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Limit");
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Limit count must be a Uint64 literal");
+
+        auto invalidOffset = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot invalidOffsetRoot(invalidOffset, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(invalidOffsetRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Limit offset must be a Uint64 literal");
+
+        auto nonLiteralBody = ctx.ExprCtx.NewCallable(
+            pos,
+            "Uint64",
+            {ctx.ExprCtx.NewCallable(pos, "Void", {})});
+        auto nonLiteralCount = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            TExpression(nonLiteralBody, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot nonLiteralCountRoot(nonLiteralCount, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(nonLiteralCountRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Limit count must be a Uint64 literal");
+
+        auto invalidOutput = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        invalidOutput->Props.OutputIUs = {TInfoUnit("wrong")};
+        TOpRoot invalidOutputRoot(invalidOutput, pos, {"wrong"});
+        result = ExportSemanticSnapshotV1(invalidOutputRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Limit output IUs");
+
+        auto invalidPhase = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            static_cast<EOpPhase>(99));
+        TOpRoot invalidPhaseRoot(invalidPhase, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(invalidPhaseRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unknown operator phase");
+    }
+
+    Y_UNIT_TEST(InvalidReadPushdownLimitFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        const auto pos = TPositionHandle();
+
+        auto rowRead = MakeRead(ctx, table, "a", {"k"});
+        rowRead->Limit = ctx.ExprCtx.NewCallable(
+            pos,
+            "Uint64",
+            {ctx.ExprCtx.NewAtom(pos, "1")});
+        TOpRoot rowRoot(rowRead, pos, {"a.k"});
+        auto result = ExportSemanticSnapshotV1(rowRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "only for column storage");
+
+        auto columnRead = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k"},
+            NYql::EStorageType::ColumnStorage);
+        columnRead->Limit = ctx.ExprCtx.NewCallable(
+            pos,
+            "Int64",
+            {ctx.ExprCtx.NewAtom(pos, "1")});
+        TOpRoot columnRoot(columnRead, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(columnRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "StageGraph source boundary");
+
+        columnRead->Props.StageId = columnRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(columnRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "Read pushed limit must be a Uint64 literal");
+
+        columnRead->Limit = ctx.ExprCtx.NewCallable(
+            pos,
+            "Uint64",
+            {ctx.ExprCtx.NewAtom(pos, "1")});
+        columnRead->SortDir = ESortDir::Asc;
+        result = ExportSemanticSnapshotV1(columnRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "pushdown or ordering semantics");
     }
 
     Y_UNIT_TEST(InitialCatalogSurvivesAPlanThatRemovesItsTable) {
@@ -1365,7 +1543,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto limit = MakeIntrusive<TOpLimit>(
             read,
             pos,
-            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx),
             EOpPhase::Undefined);
         TOpRoot finalRoot(limit, pos, {"a.k"});
         const ui32 finalStage = finalRoot.PlanProps.StageGraph.AddSourceStage(
@@ -1380,7 +1558,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
         UNIT_ASSERT(!sink.Results[1].IsSupported());
         UNIT_ASSERT(sink.Results[1].Json.empty());
-        UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit");
+        UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit count");
     }
 
     Y_UNIT_TEST(SinkFailureDoesNotDiscardTheSharedCatalog) {

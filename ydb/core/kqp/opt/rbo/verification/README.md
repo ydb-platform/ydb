@@ -5,7 +5,8 @@ This directory contains the standalone bounded-equivalence checker described in
 a bounded input database on which their result bags differ.
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
-hooks, the M3 StageGraph routing slice, and the first M4 aggregate slice.
+hooks, the M3 StageGraph routing slice, and the aggregate and unordered-Limit
+parts of M4.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -62,6 +63,40 @@ Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.
 
+An unordered `Limit` is not modeled as an arbitrary fixed vector prefix. For
+each input outcome, the kernel enumerates every guarded-row mask whose size is
+`min(count, max(input_size - offset, 0))`. Plans are equivalent only when their
+sets of enabled output bags mutually include one another. Choice identities are
+carried through the DAG, so two uses of one Limit node share a choice, while
+stage-task instances choose independently. Count and offset are restricted to
+non-null `Uint64` literals in v1; parameterized or otherwise computed limits
+fail closed. Phase is preserved as `undefined`, `intermediate`, or `final`, but
+does not itself change runtime semantics. Distinct Limit observers downstream
+of one order-preserving plan stream fan-out fail closed until their latent
+order correlation is modeled; Aggregate, Join, and UnionAll start new unordered
+streams.
+
+```json
+{
+  "id": "n2",
+  "op": "limit",
+  "input": "n1",
+  "count": {"kind": "literal", "type": "Uint64", "value": 10},
+  "offset": null,
+  "phase": "final"
+}
+```
+
+The current exporter emits `pushed_limit` on every scan, either `null` or the
+same exact literal shape. Its absence in a legacy-v1 snapshot means `null`,
+because the earlier v1 exporter rejected every pushed read limit. A non-null
+pushed limit is valid only on a column-storage source and executes independently
+on each source task after symbolic row partitioning.
+
+The explicit outcome family is capped at 256 alternatives, including Cartesian
+products and gathers, and cross-plan equality is capped at 4096 outcome pairs;
+exceeding either audit bound returns `UNSUPPORTED` rather than approximating.
+
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:
 
@@ -87,7 +122,8 @@ phase explicitly:
 
 ## StageGraph v1 shape
 
-The strict decoder rejects unknown or missing fields. The abbreviated shape is:
+The strict decoder rejects unknown fields and missing required fields (with the
+documented legacy-v1 scan exception above). The abbreviated shape is:
 
 ```json
 {
@@ -141,12 +177,12 @@ Run its tests with:
 Solver integration tests are enabled when an explicit solver binary is
 available. Formula construction and parsing tests do not depend on Z3.
 
-The medium integration test constructs a real new-RBO `IKqpHost`, captures its
-initial/final pair, and invokes the normal CLI. It always requires successful
-strict decoding and SMT construction. Set `RBO_Z3` to additionally require a
-`VERIFIED_BOUNDED` verdict; M2b will replace that opt-in path with a hermetic
-solver dependency. The fixture clears the host's implicit result-row cap because
-`Limit` remains an explicit M4 item.
+The medium integration test constructs a real new-RBO `IKqpHost`, compiles an
+explicit `LIMIT 1` query, checks its initial and split intermediate/final Limit
+shapes, and invokes the normal CLI on the captured pair. It always requires
+successful strict decoding and SMT construction. Set `RBO_Z3` to additionally
+require a `VERIFIED_BOUNDED` verdict; M2b will replace that opt-in path with a
+hermetic solver dependency.
 
 ```bash
 RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \
@@ -169,8 +205,9 @@ python3 -m rbo_verifier before.json after.json \
 
 The command prints a JSON verdict. A `COUNTEREXAMPLE` verdict contains only the
 present base-table rows; opaque-function and symbolic-routing interpretations
-are deliberately not treated as a stable witness format, so concrete replay is
-the confirmation boundary. Every bounded verdict reports both `row_bound` and
-the fixed `task_bound` of two. A `SCHEMA_MISMATCH` verdict is a direct
-correctness failure and does not depend on either bound. Use `--emit-smt
-formula.smt2` without `--solver` to inspect the exact proof obligation.
+and the unmatched unordered-Limit choice are deliberately not treated as a
+stable witness format, so concrete replay is the confirmation boundary. Every
+bounded verdict reports both `row_bound` and the fixed `task_bound` of two. A
+`SCHEMA_MISMATCH` verdict is a direct correctness failure and does not depend on
+either bound. Use `--emit-smt formula.smt2` without `--solver` to inspect the
+exact proof obligation.

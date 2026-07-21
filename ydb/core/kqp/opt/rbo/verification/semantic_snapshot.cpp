@@ -250,6 +250,30 @@ NJson::TJsonValue LiteralExpr(const TExprNode& node) {
     return result;
 }
 
+NJson::TJsonValue Uint64LiteralExpr(const TExprNode& node, TStringBuf field) {
+    if (!node.IsCallable("Uint64") || node.ChildrenSize() != 1 ||
+        !node.Child(0)->IsAtom())
+    {
+        Unsupported(TStringBuilder() << field << " must be a Uint64 literal");
+    }
+    return LiteralExpr(node);
+}
+
+NJson::TJsonValue Uint64LiteralExpr(const TExpression& expression, TStringBuf field) {
+    if (!expression.Node || !expression.Node->IsLambda() ||
+        expression.Node->ChildrenSize() != 2)
+    {
+        Unsupported(TStringBuilder() << field << " is not a one-body lambda");
+    }
+    const auto* arguments = expression.Node->Child(0);
+    if (!arguments->IsArguments() || arguments->ChildrenSize() != 1 ||
+        !arguments->Child(0)->IsArgument())
+    {
+        Unsupported(TStringBuilder() << field << " does not have exactly one row argument");
+    }
+    return Uint64LiteralExpr(*expression.GetExpressionBody(), field);
+}
+
 NJson::TJsonValue ExportExprNode(
     const TExprNode& node,
     const TExprNode* rowArgument,
@@ -517,8 +541,14 @@ private:
                     Unsupported("Read unexpectedly has children");
                 }
                 auto& read = static_cast<TOpRead&>(base);
-                if (read.RangeInfo || read.OlapFilterLambda || read.Limit || read.SortDir != ESortDir::None) {
-                    Unsupported("Read has pushdown, limit, or ordering semantics absent from logical snapshot v1");
+                if (read.RangeInfo || read.OlapFilterLambda || read.SortDir != ESortDir::None) {
+                    Unsupported("Read has pushdown or ordering semantics absent from logical snapshot v1");
+                }
+                if (read.Limit && read.StorageType != NYql::EStorageType::ColumnStorage) {
+                    Unsupported("Read pushed limit is supported only for column storage");
+                }
+                if (read.Limit && !StageGraphPresent) {
+                    Unsupported("Read pushed limit requires a StageGraph source boundary");
                 }
                 if (read.Columns.empty() || read.Columns.size() != read.OutputIUs.size()) {
                     Unsupported("Read has an empty or inconsistent column mapping");
@@ -553,6 +583,9 @@ private:
                 node["op"] = "scan";
                 node["table"] = table.Identity;
                 node["columns"] = std::move(columns);
+                node["pushed_limit"] = read.Limit
+                    ? Uint64LiteralExpr(*read.Limit, "Read pushed limit")
+                    : NJson::TJsonValue(NJson::JSON_NULL);
                 return node;
             }
 
@@ -620,6 +653,33 @@ private:
                 node["op"] = "filter";
                 node["input"] = children[0];
                 node["predicate"] = ExportExpr(filter.FilterExpr, inputNames);
+                return node;
+            }
+
+            case EOperator::Limit: {
+                if (children.size() != 1) {
+                    Unsupported("Limit must have one input");
+                }
+                auto& limit = static_cast<TOpLimit&>(base);
+                const auto& inputIUs = limit.GetInput()->GetOutputIUs();
+                const auto& outputIUs = limit.GetOutputIUs();
+                if (inputIUs.size() != outputIUs.size()) {
+                    Unsupported("Limit output IUs do not match its input");
+                }
+                for (size_t index = 0; index < inputIUs.size(); ++index) {
+                    if (inputIUs[index].GetFullName() != outputIUs[index].GetFullName()) {
+                        Unsupported("Limit output IUs do not match its input");
+                    }
+                }
+
+                node["op"] = "limit";
+                node["input"] = children[0];
+                node["count"] = Uint64LiteralExpr(limit.GetLimitCond(), "Limit count");
+                const auto offset = limit.GetOffsetCond();
+                node["offset"] = offset
+                    ? Uint64LiteralExpr(*offset, "Limit offset")
+                    : NJson::TJsonValue(NJson::JSON_NULL);
+                node["phase"] = Phase(limit.GetLimitPhase());
                 return node;
             }
 

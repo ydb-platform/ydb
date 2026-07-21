@@ -23,7 +23,7 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSS = {}, bool automaticManagement = true) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
         NKikimrBlobStorage::TStorageConfig config;
@@ -31,7 +31,10 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, {}, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (goodConfigOut) {
+            *goodConfigOut = goodConfig;
+        }
         return ss;
     }
 
@@ -46,6 +49,9 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         , ui32 overrideReplicasInRingCount = 0
         , ui32 overrideRingsCount = 0
         , ui32 replicasSpecificVolume = 1000
+        , std::unordered_set<ui32> nodesToUse = {}
+        , bool *goodConfigOut = nullptr
+        , bool automaticManagement = true
     ) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
@@ -74,7 +80,10 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, oldSS, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (goodConfigOut) {
+            *goodConfigOut = goodConfig;
+        }
         return ss;
     }
 
@@ -208,6 +217,158 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             "{ RingGroups { NToSelect: 3 Ring { Node: 1 Node: 2 Node: 3 }"
             " Ring { Node: 4 Node: 5 Node: 6 } Ring { Node: 7 Node: 8 Node: 9 } } }");
         CheckStateStorage2(GenerateSimpleStateStorage(16, {}, 0, 2, 5), "{ RingGroups { NToSelect: 1 Ring { Node: 1 Node: 2 Node: 3 Node: 4 } Ring { Node: 5 Node: 6 Node: 7 Node: 8 } } }");
+    }
+
+    Y_UNIT_TEST(NodesToUseEmptyMeansNoRestriction) {
+        // Explicit regression check: passing an empty nodesToUse set behaves exactly
+        // like not passing the parameter at all (default argument in other tests).
+        CheckStateStorage(GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}), 5, {1, 2, 3, 4, 5, 6, 7, 8});
+        CheckStateStorage(GenerateDCStateStorage(3, 1, 1, {}, {}, {}, 9, 0, 0, 1000, {}), 3, {1, 2, 3});
+    }
+
+    Y_UNIT_TEST(NodesToUseRestrictsSimplePool) {
+        // Out of 10 available nodes, only {5, 6, 7} are allowed to be used.
+        CheckStateStorage(GenerateSimpleStateStorage(10, {}, 0, 0, 200, {5, 6, 7}), 3, {5, 6, 7});
+    }
+
+    Y_UNIT_TEST(NodesToUseKeepsOriginalNodeIds) {
+        // Restrict a big pool of 100 nodes down to 8 specific nodes; the algorithm
+        // should behave exactly as if only those 8 nodes existed, while preserving
+        // their original (non-contiguous) node ids.
+        CheckStateStorage(
+            GenerateSimpleStateStorage(100, {}, 0, 0, 200, {10, 20, 30, 40, 50, 60, 70, 80}),
+            5, {10, 20, 30, 40, 50, 60, 70, 80});
+    }
+
+    Y_UNIT_TEST(NodesToUseIgnoresUnknownNodeIds) {
+        // Node ids in nodesToUse that are not present in baseConfig's AllNodes
+        // must simply be ignored, not cause a crash or a bad config.
+        CheckStateStorage(GenerateSimpleStateStorage(3, {}, 0, 0, 200, {1, 2, 3, 9999}), 3, {1, 2, 3});
+    }
+
+    Y_UNIT_TEST(NodesToUseForcesAlternateNodeSelectionInDC) {
+        // Without restriction, the default pick within each 3-node rack is its
+        // first node: {1, 4, 7, 10, 13, 16, 19, 22, 25}.
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
+
+        // Excluding those default nodes from nodesToUse forces the generator to
+        // fall back to the next available node in each rack.
+        std::unordered_set<ui32> nodesToUse = {
+            2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 23, 24, 26, 27
+        };
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, 0, 1000, nodesToUse),
+            9, {2, 5, 8, 11, 14, 17, 20, 23, 26});
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Cases where the requested configuration (via overrideRingsCount/overrideReplicasInRingCount)
+    // can not be honored because nodesToUse restricts the available nodes too much.
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideRingsCountSingleGroup) {
+        // Only 3 nodes are usable (all with a known GOOD self-heal state, via GenerateDCStateStorage),
+        // but the caller explicitly asks for 8 rings: impossible to satisfy.
+        bool goodConfig = true;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, /*overrideReplicasInRingCount=*/0, /*overrideRingsCount=*/8,
+            1000, /*nodesToUse=*/{1, 2, 3}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+
+        // Sanity check: with exactly as many nodes as requested rings, the override is satisfiable.
+        bool goodConfig2 = false;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, 0, /*overrideRingsCount=*/3, 1000, /*nodesToUse=*/{1, 2, 3}, &goodConfig2);
+        UNIT_ASSERT(goodConfig2);
+    }
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideReplicasInRingCountSingleGroup) {
+        // Only 2 nodes are usable, but the caller explicitly asks for 3 replicas per ring:
+        // impossible to satisfy (would need at least 3 nodes for a single ring).
+        bool goodConfig = true;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, /*overrideReplicasInRingCount=*/3, /*overrideRingsCount=*/1,
+            1000, /*nodesToUse=*/{1, 2}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+    }
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideRingsCountMultiGroup) {
+        // 3-DC topology, but nodesToUse leaves only 2 nodes in one of the DCs while the
+        // caller explicitly requests 9 rings (3 per group) - the smallest group can't supply 3 rings.
+        std::unordered_set<ui32> nodesToUse = {
+            1, 4, 7,             // dc-0: full rack representation (3 nodes)
+            10, 13,              // dc-1: only 2 nodes available
+            19, 22, 25,          // dc-2: full rack representation (3 nodes)
+        };
+        bool goodConfig = true;
+        GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, /*overrideRingsCount=*/9, 1000, nodesToUse, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+    }
+
+    Y_UNIT_TEST(NodesToUseSufficientForOverrideKeepsGoodConfig) {
+        // Same restriction style as above, but this time nodesToUse leaves exactly enough
+        // nodes in every group to satisfy the override - the config must be reported as good.
+        std::unordered_set<ui32> nodesToUse = {
+            1, 4, 7,
+            10, 13, 16,
+            19, 22, 25,
+        };
+        bool goodConfig = false;
+        GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, /*overrideRingsCount=*/9, 1000, nodesToUse, &goodConfig);
+        UNIT_ASSERT(goodConfig);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // AutomaticManagement (AutomaticStateStorageManagement / AutomaticStateStorageBoardManagement /
+    // AutomaticSchemeBoardManagement) semantics at the GenerateStateStorageConfig level: when the
+    // subsystem's automatic management is disabled, self-heal must keep the current (old) config
+    // untouched and report the result as "good", regardless of node states or overrides.
+
+    Y_UNIT_TEST(AutomaticManagementDisabledKeepsOldConfigUnchanged) {
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(42);
+        }
+
+        bool goodConfig = false;
+        auto ss = GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}, &goodConfig, oldSS, /*automaticManagement=*/false);
+
+        // The generator must not have touched node selection at all: result equals oldSS verbatim.
+        UNIT_ASSERT_EQUAL(TStringBuilder() << ss, TStringBuilder() << oldSS);
+        UNIT_ASSERT(goodConfig);
+    }
+
+    Y_UNIT_TEST(AutomaticManagementEnabledGeneratesNewConfig) {
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(42);
+        }
+
+        bool goodConfig = false;
+        auto ss = GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}, &goodConfig, oldSS, /*automaticManagement=*/true);
+
+        // With automatic management enabled (default), a fresh configuration must be generated
+        // from the current node pool, ignoring the stale oldSS content.
+        UNIT_ASSERT(TStringBuilder() << ss != TStringBuilder() << oldSS);
+        CheckStateStorage(ss, 5, {1, 2, 3, 4, 5, 6, 7, 8});
+    }
+
+    Y_UNIT_TEST(AutomaticManagementDisabledIgnoresBadNodeStates) {
+        // Even if nodesToUse/overrides would normally produce a bad config, disabling automatic
+        // management must short-circuit generation entirely and still report "good", since the
+        // old config is kept as-is and self-heal is not supposed to touch it.
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(7);
+        }
+        bool goodConfig = false;
+        GenerateSimpleStateStorage(100, {}, /*overrideReplicasInRingCount=*/0, /*overrideRingsCount=*/8,
+            200, /*nodesToUse=*/{1, 2, 3}, &goodConfig, oldSS, /*automaticManagement=*/false);
+        UNIT_ASSERT(goodConfig);
     }
 }
 
@@ -438,7 +599,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         NKikimrBlobStorage::TStorageConfig Config;
         NKikimrBlobStorage::TBaseConfig BaseConfig;
 
-        void AddNode(ui32 nodeId, const TString& host, ui32 port = 19001, 
+        void AddNode(ui32 nodeId, const TString& host, ui32 port = 19001,
                      const TString& dataCenter = "", const TString& rack = "") {
             auto *node = Config.AddAllNodes();
             node->SetNodeId(nodeId);

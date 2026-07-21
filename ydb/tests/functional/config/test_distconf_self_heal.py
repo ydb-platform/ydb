@@ -26,6 +26,28 @@ def get_ring_group(request_config, config_name):
         return config["Ring"]
 
 
+def extract_node_ids(ring):
+    """Recursively collect all node ids referenced by a (possibly nested) TRing structure."""
+    node_ids = set()
+    if "Node" in ring:
+        node_ids.update(ring["Node"])
+    for nested in ring.get("Ring", []):
+        node_ids.update(extract_node_ids(nested))
+    return node_ids
+
+
+def extract_all_node_ids(config, config_name):
+    """Collect all node ids present in either the RingGroups or single Ring representation."""
+    config = config[f"{config_name}Config"]
+    node_ids = set()
+    if "RingGroups" in config:
+        for rg in config["RingGroups"]:
+            node_ids.update(extract_node_ids(rg))
+    elif "Ring" in config:
+        node_ids.update(extract_node_ids(config["Ring"]))
+    return node_ids
+
+
 class KiKiMRDistConfSelfHealTest(object):
     nodes_count = 9
     erasure = Erasure.MIRROR_3_DC
@@ -33,6 +55,11 @@ class KiKiMRDistConfSelfHealTest(object):
     separate_node_configs = True
     state_storage_rings = None
     n_to_select = None
+    # extra fields merged into the static self_management_config section of the initial
+    # (bootstrap) YAML config; NB: Cfg->SelfManagementConfig used by distconf self-heal is read
+    # once at node startup and is NOT affected by dynamic ReplaceConfig calls, so options like
+    # automatic_*_management / *_self_heal_allowed_nodes must be set here, before cluster start.
+    self_management_extra_options = {}
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -58,6 +85,9 @@ class KiKiMRDistConfSelfHealTest(object):
             additional_log_configs=log_configs,
             n_to_select=cls.n_to_select,
             state_storage_rings=cls.state_storage_rings)
+
+        if cls.self_management_extra_options:
+            cls.configurator.yaml_config["self_management_config"].update(cls.self_management_extra_options)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
@@ -234,3 +264,73 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
+
+
+class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):
+    # 3 extra spare nodes (10, 11, 12) relative to the base 9-node MIRROR_3_DC topology so that
+    # forbidding one node still leaves enough nodes for a valid, fully-healthy configuration.
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 12
+    rgOffset = 1
+
+    forbidden_node_id = nodes_count
+    allowed_node_ids = sorted(set(range(1, nodes_count + 1)) - {forbidden_node_id})
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": True,
+        "state_storage_self_heal_allowed_nodes": allowed_node_ids,
+        "automatic_state_storage_board_management": True,
+        "state_storage_board_self_heal_allowed_nodes": allowed_node_ids,
+        "automatic_scheme_board_management": True,
+        "scheme_board_self_heal_allowed_nodes": allowed_node_ids,
+    }
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+
+        logger.info("Start SelfHeal with allowed nodes restriction (forbidding node %s) for %s",
+                    self.forbidden_node_id, configName)
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
+        time.sleep(10)
+
+        healed_config = self.do_request_config()
+        node_ids = extract_all_node_ids(healed_config, configName)
+
+        assert_that(len(node_ids) > 0, f"Healed {configName} config has no nodes: {healed_config}")
+        assert_that(self.forbidden_node_id not in node_ids,
+                    f"Forbidden node {self.forbidden_node_id} present in healed {configName} config: {node_ids}")
+        assert_that(node_ids <= set(self.allowed_node_ids),
+                    f"Healed {configName} config uses nodes outside the allowed list: {node_ids - set(self.allowed_node_ids)}")
+
+
+class TestKiKiMRDistConfSelfHealAutomaticManagementDisabled(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": False,
+        "automatic_state_storage_board_management": False,
+        "automatic_scheme_board_management": False,
+    }
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        # Manually push the config into a "bad"/suboptimal state (ReconfigStateStorage is a
+        # direct manual API and is unaffected by AutomaticManagement flags).
+        self.do_bad_config(configName)
+        bad_config = get_ring_group(self.do_request_config(), configName)
+
+        logger.info("Attempting SelfHeal with automatic management disabled for %s", configName)
+        self.check_failed(
+            {"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}},
+            "Current configuration is recommended. Nothing to self-heal.")
+        time.sleep(5)
+
+        # The config must remain completely untouched: self-heal must not have modified it since
+        # automatic management for this subsystem is disabled.
+        unchanged_config = get_ring_group(self.do_request_config(), configName)
+        assert_eq(unchanged_config, bad_config)

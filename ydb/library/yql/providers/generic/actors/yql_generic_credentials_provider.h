@@ -17,19 +17,10 @@ namespace NYql::NDq {
             const TString& structuredToken,
             const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory);
 
-        // FillCredentials sets the credentials to access the remote datasource into the DataSourceInstance object.
+        // Produce generic credentials asynchronously
         // It can be either IAM-token or login + password for basic auth.
-        // Returns empty string on success or (non-empty) an error message.
-        // Requires IsReady().
-        TString FillCredentials(NYql::TGenericDataSourceInstance& dsi) const;
-
+        // Set exception in future on errors
         NThreading::TFuture<TGenericCredentials> AsyncCredentials() const;
-
-        // Return true when provider is ready to serve requests
-        bool IsReady() const;
-
-        // Invoke callback asynchronously when provider is ready to serve requests
-        void Subscribe(std::function<void(void)>&& callback);
 
     private:
         struct BasicAuthCredentials {

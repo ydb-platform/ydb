@@ -18,7 +18,7 @@ from ..rbo_verifier.verify import (
     query_solver,
     term_value,
 )
-from .plan import InspectionError
+from .plan import InspectionError, snapshot_digest
 
 
 TRACE_FORMAT = "ydb-rbo-concrete-trace"
@@ -135,6 +135,10 @@ class PreparedInspection:
             "version": TRACE_VERSION,
             "row_bound": self.row_bound,
             "task_bound": TASKS,
+            "inputs": {
+                "before_semantic_sha256": snapshot_digest(self.before),
+                "after_semantic_sha256": snapshot_digest(self.after),
+            },
         }
         if query.status == "unsat":
             return common | {"status": "VERIFIED_BOUNDED"}

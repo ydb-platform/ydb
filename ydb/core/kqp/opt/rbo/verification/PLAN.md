@@ -242,8 +242,12 @@ contains enough source-distribution information to verify them.
   connection, and root-boundary result from one solver model. Optional
   read-only observers collect immutable terms; definitional model aliases are
   added only after normal formula construction and are audit-capped.
-- `tools/replay.py` consumes witness JSON, creates the bounded database in a real
-  YDB instance, and compares new-RBO execution with a trusted baseline.
+- `kqp_rbo_replay` consumes the inspector's concrete trace, creates the bounded
+  database under generated namespaces in two isolated YDB targets, verifies the
+  optimizer mode through explain metadata, and compares new-RBO execution with
+  a trusted baseline. It uses BulkUpsert for setup so candidate writes do not
+  pass through the optimizer under test, rejects observably nondeterministic
+  traces, and retains every created namespace for diagnosis.
 - `tools/bisect.py` reruns the optimizer with a stop-after-application debug hook
   and invokes the unchanged verifier on each prefix.
 
@@ -346,7 +350,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 ### M5: confirmation and localization — in progress
 
 - Separate normalized-plan and exact concrete-counterexample inspector.
-- Real-YDB replay tool.
+- Separate real-YDB replay tool for deterministic, range-valid inspector
+  witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
+  multi-result TPC-DS q14, q23, and q39 remain an explicit replay extension.
 - Rule-application snapshot hook and separate bisection driver.
 - CI policy for confirmed counterexamples and bounded verification coverage.
 

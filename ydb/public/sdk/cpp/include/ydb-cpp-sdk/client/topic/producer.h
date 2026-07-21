@@ -185,8 +185,8 @@ public:
         return Impl_->Write(TWriteMessage(std::forward<T>(message)));
     }
 
-    //! Write single message asynchronously. T converts to TWriteMessage, then IProducer::Write is called.
-    [[nodiscard]] NThreading::TFuture<TWriteResult> WriteAsync(T&& message) {}
+    //! Write single message asynchronously. T converts to TWriteMessage, then IProducer::WriteAsync is called.
+    [[nodiscard]] NThreading::TFuture<TWriteResult> WriteAsync(T&& message) {
         return Impl_->WriteAsync(TWriteMessage(std::forward<T>(message)));
     }
 

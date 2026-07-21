@@ -2235,6 +2235,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
 }
 
 NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message) {
+    TWriteMessage ownedMessage(std::move(message));
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
@@ -2268,7 +2269,7 @@ NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message)
             };
         }
 
-        co_return WriteInternal(std::move(*continuationToken), std::move(message));
+        co_return WriteInternal(std::move(*continuationToken), std::move(ownedMessage));
     }
 }
 

@@ -245,6 +245,17 @@ def fallback_weight_for_node(
     return float(weights.get(size, DEFAULT_SIZE_WEIGHTS["small"])), f"size_{size}"
 
 
+def is_graph_test_node(uid: str, node: dict[str, Any] | None) -> bool:
+    """True for ya test result nodes (not build/support peers in graph.result)."""
+    if node and node.get("node-type") == "test":
+        return True
+    return str(uid).startswith("test-")
+
+
+def _size_rank(size: str, size_weights: dict[str, float]) -> float:
+    return float(size_weights.get(size, size_weights.get("small", 60.0)))
+
+
 def plan_uid_weights(
     uids: list[str],
     nodes_by_uid: dict[str, dict[str, Any]],
@@ -255,8 +266,11 @@ def plan_uid_weights(
 ) -> tuple[dict[str, float], dict[str, Any]]:
     """Weight result UIDs for LPT packing.
 
-    History: longest suite_folder prefix match; p90 is split across all UIDs that
-    matched that same history key (not once per distinct child path).
+    History: longest suite_folder prefix match on test nodes only. For each
+    matched history key, p90 is given to the heaviest ya SIZE present among
+    those test nodes (large > medium > small) and split across that size only.
+    Smaller co-located sizes and non-test result peers use size fallback so
+    adding SIZE(LARGE) increases total weight instead of re-slicing the same p90.
 
     Fallback: ya test size (small/medium/large) from graph ``--test-size`` or
     context SIZE; missing size defaults to small.
@@ -266,20 +280,31 @@ def plan_uid_weights(
         weights_cfg.update(size_weights)
 
     path_by_uid: dict[str, str | None] = {}
+    size_by_resolved: dict[str, str] = {}
     match_by_uid: dict[str, tuple[float, str, str | None]] = {}
-    history_uid_counts: Counter[str] = Counter()
+    # suite -> size -> test UIDs eligible for that history key
+    history_tests: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
 
     for uid in uids:
         node = nodes_by_uid.get(uid) or {}
         path = extract_node_path(node)
         path_by_uid[uid] = path
-        if not path:
+        size = resolve_node_test_size(uid, node, size_by_uid=size_by_uid)
+        size_by_resolved[uid] = size
+        if not path or not is_graph_test_node(uid, node):
             match_by_uid[uid] = (0.0, "fallback", None)
             continue
         p90, source, suite = longest_history_match(path, duration_p90)
         match_by_uid[uid] = (p90, source, suite)
         if source == "history" and suite is not None:
-            history_uid_counts[suite] += 1
+            history_tests[suite][size].append(uid)
+
+    owner_size_by_suite: dict[str, str] = {}
+    history_uid_counts: Counter[str] = Counter()
+    for suite, by_size in history_tests.items():
+        owner = max(by_size.keys(), key=lambda s: _size_rank(s, weights_cfg))
+        owner_size_by_suite[suite] = owner
+        history_uid_counts[suite] = len(by_size[owner])
 
     per_uid: dict[str, float] = {}
     source_counts: Counter[str] = Counter()
@@ -290,7 +315,12 @@ def plan_uid_weights(
     for uid in uids:
         node = nodes_by_uid.get(uid) or {}
         p90, source, suite = match_by_uid[uid]
-        if source == "history" and suite is not None:
+        size = size_by_resolved[uid]
+        if (
+            source == "history"
+            and suite is not None
+            and owner_size_by_suite.get(suite) == size
+        ):
             weight = p90 / max(history_uid_counts[suite], 1)
             per_uid[uid] = weight
             history_weight += weight

@@ -2,9 +2,9 @@
 """Plan graph-replay sharding by partitioning graph.result UIDs across runners.
 
 Bin-packs individual result UIDs by history p90 weights (longest prefix match
-on node paths; p90 split across UIDs matched to the same history key). Missing
-history falls back to size-based weights (small for lint/import_test, medium
-otherwise). Each shard keeps the full graph and runs a subset of
+on test-node paths; p90 goes to the heaviest ya SIZE at that history key).
+Missing history / non-owner sizes / non-test peers fall back to size-based
+weights. Each shard keeps the full graph and runs a subset of
 ``graph.result`` via filter_graph_for_shard.
 
 Used for increment cuts (``increment_graph``) and full PR-check scope

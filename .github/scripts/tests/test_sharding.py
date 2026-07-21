@@ -731,32 +731,76 @@ class FilterGraphForShardTest(unittest.TestCase):
 
     def test_plan_uid_weights_splits_history_by_matched_suite(self):
         nodes = {
-            "a": {
-                "uid": "a",
+            "test-a": {
+                "uid": "test-a",
+                "node-type": "test",
                 "target_properties": {"module_dir": "ydb/tests/foo"},
                 "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
             },
-            "b": {
-                "uid": "b",
+            "test-b": {
+                "uid": "test-b",
+                "node-type": "test",
                 "target_properties": {"module_dir": "ydb/tests/foo/child"},
                 "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
             },
-            "large": {
-                "uid": "large",
+            "test-large": {
+                "uid": "test-large",
+                "node-type": "test",
                 "target_properties": {"module_dir": "ydb/tests/bar"},
                 "cmds": [{"cmd_args": ["run_test", "--test-size", "large"]}],
             },
         }
         weights, stats = plan_uid_weights(
-            ["a", "b", "large"],
+            ["test-a", "test-b", "test-large"],
             nodes,
             {"ydb/tests/foo": 100.0},
         )
-        self.assertEqual(weights["a"], 50.0)
-        self.assertEqual(weights["b"], 50.0)
-        self.assertEqual(weights["large"], 3600.0)
+        self.assertEqual(weights["test-a"], 50.0)
+        self.assertEqual(weights["test-b"], 50.0)
+        self.assertEqual(weights["test-large"], 3600.0)
         self.assertEqual(stats["history_uid_count"], 2)
         self.assertEqual(stats["size_large_uid_count"], 1)
+
+    def test_plan_uid_weights_history_owned_by_heaviest_size(self):
+        """Large co-located with small/non-test must not re-slice the same p90."""
+        nodes = {
+            "test-large": {
+                "uid": "test-large",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/olap/large"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "large"]}],
+            },
+            "test-small": {
+                "uid": "test-small",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/olap/large"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "small"]}],
+            },
+            "support-peer": {
+                "uid": "support-peer",
+                "target_properties": {"module_dir": "ydb/tests/olap/large"},
+            },
+        }
+        with_large, stats_large = plan_uid_weights(
+            ["test-large", "test-small", "support-peer"],
+            nodes,
+            {"ydb/tests/olap/large": 1000.0},
+        )
+        self.assertEqual(with_large["test-large"], 1000.0)
+        self.assertEqual(with_large["test-small"], 60.0)
+        self.assertEqual(with_large["support-peer"], 60.0)
+        self.assertEqual(stats_large["history_uid_count"], 1)
+        self.assertEqual(sum(with_large.values()), 1120.0)
+
+        without_large, stats_small = plan_uid_weights(
+            ["test-small", "support-peer"],
+            nodes,
+            {"ydb/tests/olap/large": 1000.0},
+        )
+        self.assertEqual(without_large["test-small"], 1000.0)
+        self.assertEqual(without_large["support-peer"], 60.0)
+        self.assertEqual(stats_small["history_uid_count"], 1)
+        self.assertLess(sum(without_large.values()), sum(with_large.values()))
 
     def test_split_graph_result_balances_large_connected_component(self):
         graph = {

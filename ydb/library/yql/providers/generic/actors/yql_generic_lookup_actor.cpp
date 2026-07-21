@@ -198,6 +198,7 @@ namespace NYql::NDq {
     private: // events
         STRICT_STFUNC_EXC(StateFunc,
             hFunc(TEvLookupRequest, Handle)
+            hFunc(TEvGotCredentials, Handle)
             hFunc(TEvListSplitsIterator, Handle)
             hFunc(TEvListSplitsPart, Handle)
             hFunc(TEvReadSplitsIterator, Handle)
@@ -237,12 +238,6 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            auto error = CredentialsProvider->FillCredentials(*readRequest.mutable_data_source_instance());
-            if (error) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
-                return;
-            }
-
             *readRequest.add_splits() = std::move(split);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
@@ -366,29 +361,39 @@ namespace NYql::NDq {
                 .SentTime = TInstant::Now(),
                 .FullscanLimit = fullscanLimit
             });
-            if (Y_UNLIKELY(!CredentialsProvider->IsReady())) { // avoid self-message
-                CredentialsProvider->Subscribe([
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId(),
-                    state = std::move(state)
-                ]() mutable {
-                    actorSystem->Send(selfId, new TEvLookupRetry(std::move(state)));
-                });
-                return;
-            }
             SendRequest(state);
         }
 
-        // must be called with bound Alloc
         void SendRequest(TLookupState::TPtr state) {
-            auto startCycleCount = GetCycleCountFast();
-            NConnector::NApi::TListSplitsRequest splitRequest;
+            CredentialsProvider->AsyncCredentials().Subscribe([
+                    actorSystem = TActivationContext::ActorSystem(),
+                    selfId = SelfId(),
+                    state = std::move(state)
+            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+                try {
+                    actorSystem->Send(
+                        selfId,
+                        new TEvGotCredentials(ExtractFromConstFuture(future), std::move(state)));
+                } catch (std::exception& ex) {
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
+                }
+            });
+        }
 
-            auto error = FillSelect(*splitRequest.add_selects(), state);
+        void Handle(TEvGotCredentials::TPtr ev) {
+            auto startCycleCount = GetCycleCountFast();
+            auto state = std::move(ev->Get()->State);
+            NConnector::NApi::TListSplitsRequest splitRequest;
+            auto& select = *splitRequest.add_selects();
+            auto error = FillSelect(select, state);
+
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
-            };
+            }
+            auto& dsi = *LookupSource.mutable_data_source_instance();
+            *dsi.mutable_credentials() = std::move(ev->Get()->Credentials);
+            *select.mutable_data_source_instance() = dsi;
 
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
@@ -595,13 +600,8 @@ namespace NYql::NDq {
             }
         }
 
-        // must be called with bound Alloc
         TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state) {
             auto dsi = LookupSource.data_source_instance();
-            auto error = CredentialsProvider->FillCredentials(dsi);
-            if (error) {
-                return error;
-            }
             *select.mutable_data_source_instance() = dsi;
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
@@ -620,6 +620,7 @@ namespace NYql::NDq {
             }
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
+            auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
             if (!request) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
@@ -645,7 +646,7 @@ namespace NYql::NDq {
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        const Generic::TLookupSource LookupSource;
+        Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType

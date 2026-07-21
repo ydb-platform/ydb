@@ -98,6 +98,10 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         if (appFlags.GetEnableColumnStore()) {
             featureFlags.SetEnableColumnStore(true);
         }
+
+        if (appFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
+            featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(true);
+        }
     }
 
     if (!appConfig) {

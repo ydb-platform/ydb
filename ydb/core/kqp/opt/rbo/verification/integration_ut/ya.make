@@ -19,6 +19,10 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+DATA(
+    arcadia/ydb/core/kqp/ut/rbo/data
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

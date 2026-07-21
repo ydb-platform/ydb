@@ -443,6 +443,50 @@ def aggregate_stage_snapshot(
     )
 
 
+def count_star_snapshot():
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1]["nullable"] = True
+    project = {
+        "id": "count_input",
+        "op": "project",
+        "input": "a",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "_count_input",
+                "expression": {"kind": "void"},
+            }
+        ],
+    }
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "count_input",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "_count_input",
+                "function": "count",
+                "output": "result",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [copy.deepcopy(SCAN_A), project, aggregate],
+            "aggregate",
+            ["result"],
+        )
+    )
+
+
 def partial_only_count_snapshot():
     aggregate = {
         "id": "partial",
@@ -922,6 +966,24 @@ def _evaluate_ground_term(term, constants, function_value=None):
 
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_void_count_input_implements_count_star(self):
+        snapshot = count_star_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot, database, ScalarEncoder(script)
+        ).root().certain()
+
+        states = (None, (0, None), (0, 7))
+        for rows in product(states, repeat=2):
+            with self.subTest(rows=rows):
+                actual = self._symbolic_bag(
+                    relation,
+                    self._constants(database, rows),
+                )
+                expected = Counter({(sum(row is not None for row in rows),): 1})
+                self.assertEqual(actual, expected)
+
     def test_partial_sum_canonicalization_preserves_64_bit_wrapping(self):
         cases = (
             ("Int64", ((1 << 63) - 1, 1), -(1 << 63)),
@@ -1186,6 +1248,37 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):
+    def test_identical_passive_date_and_decimal_columns_have_no_model(self):
+        snapshot = parse_snapshot(_snapshot_with_stage_graph(
+            {
+                "tables": [{
+                    "name": "A",
+                    "columns": [
+                        {"name": "d", "type": "Date", "nullable": True},
+                        {"name": "n", "type": "Decimal(5,2)", "nullable": True},
+                    ],
+                    "unique_keys": [],
+                }]
+            },
+            [{
+                "id": "scan",
+                "op": "scan",
+                "table": "A",
+                "columns": [
+                    {"source": "d", "output": "d"},
+                    {"source": "n", "output": "n"},
+                ],
+                "pushed_limit": None,
+            }],
+            "scan",
+            ["d", "n"],
+        ))
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(snapshot, snapshot, 1).script
+            )
+        )
+
     def test_identical_join_has_no_restricted_model(self):
         snapshot = right_join({"kind": "and", "args": [KEY_EQUALITY, RESIDUAL]})
         self.assertFalse(

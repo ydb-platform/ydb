@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/opt/rbo/verification/semantic_snapshot.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/scheme_types/scheme_decimal_type.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -73,9 +74,18 @@ const TKikimrTableDescription& AddTable(
 
     ui32 id = 1;
     for (const auto& column : columns) {
+        TKikimrColumnMetadata metadata(
+            column.Name,
+            id++,
+            column.Type,
+            column.NotNull);
+        if (const auto decimal = NScheme::TDecimalType::ParseTypeName(column.Type)) {
+            metadata.Type = "Decimal";
+            metadata.TypeInfo = NScheme::TTypeInfo(*decimal);
+        }
         table.Metadata->Columns.emplace(
             column.Name,
-            TKikimrColumnMetadata(column.Name, id++, column.Type, column.NotNull));
+            std::move(metadata));
         table.Metadata->ColumnOrder.push_back(column.Name);
     }
     UNIT_ASSERT(table.Load(ctx.ExprCtx));
@@ -280,6 +290,24 @@ TExprNode::TPtr DataTypeDescriptor(
         TPositionHandle(),
         "DataType",
         {ctx.ExprCtx.NewAtom(TPositionHandle(), typeName)});
+    result->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
+    return result;
+}
+
+TExprNode::TPtr DecimalDataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf precision,
+    TStringBuf scale,
+    const TTypeAnnotationNode* type)
+{
+    auto result = ctx.ExprCtx.NewCallable(
+        TPositionHandle(),
+        "DataType",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "Decimal"),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), precision),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), scale),
+        });
     result->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
     return result;
 }
@@ -519,6 +547,250 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto& project = FindNode(snapshot, "project");
         UNIT_ASSERT_VALUES_EQUAL(project["ordered"].GetBooleanSafe(), true);
         UNIT_ASSERT_VALUES_EQUAL(ProjectionOutputs(project), TVector<TString>{"result"});
+    }
+
+    Y_UNIT_TEST(ExportsPassiveDateAndExactDecimalCatalogTypes) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Passive", {
+            {"d", "Date", false},
+            {"n", "Decimal(5,2)", false},
+        });
+        auto read = MakeRead(ctx, table, "p", {"d", "n"});
+        TOpRoot root(read, TPositionHandle(), {"p.d", "p.n"});
+
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog));
+        const auto& columns = snapshot["schema"]["tables"].GetArraySafe()[0]
+            ["columns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(columns[0]["type"].GetStringSafe(), "Date");
+        UNIT_ASSERT_VALUES_EQUAL(columns[1]["type"].GetStringSafe(), "Decimal(5,2)");
+
+        for (const TString type : {
+            "Decimal",
+            "Decimal(0,0)",
+            "Decimal(05,2)",
+            "Decimal(5,02)",
+            "Decimal(5,6)",
+            "Decimal(36,2)",
+            "Decimal(5, 2)",
+        }) {
+            auto malformed = catalog.Catalog;
+            malformed.Tables[0].Columns[1].Type = type;
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx, malformed);
+            UNIT_ASSERT_C(!result.IsSupported(), type);
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Invalid catalog column");
+        }
+    }
+
+    Y_UNIT_TEST(DateLiteralFailsClosed) {
+        TExportTestContext ctx;
+        const auto result = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedLiteral(
+                ctx,
+                "Date",
+                "0",
+                ScalarType(ctx, NUdf::EDataSlot::Date)));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported literal callable Date");
+    }
+
+    Y_UNIT_TEST(ExportsDecimalNothingAndTypeDescriptor) {
+        TExportTestContext ctx;
+        const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+            NUdf::EDataSlot::Decimal,
+            "5",
+            "2");
+        const auto* optionalDecimal = ctx.ExprCtx.MakeType<TOptionalExprType>(decimalType);
+        auto optionalDescriptor = TypedCallable(
+            ctx,
+            "OptionalType",
+            {DecimalDataTypeDescriptor(ctx, "5", "2", decimalType)},
+            ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimal));
+        const auto nullExpression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "Nothing",
+                {std::move(optionalDescriptor)},
+                optionalDecimal));
+        UNIT_ASSERT_VALUES_EQUAL(nullExpression["kind"].GetStringSafe(), "null");
+        UNIT_ASSERT_VALUES_EQUAL(nullExpression["type"].GetStringSafe(), "Decimal(5,2)");
+
+        TExportTestContext castContext;
+        const auto* intType = ScalarType(castContext, NUdf::EDataSlot::Int32);
+        const auto* castDecimal = castContext.ExprCtx.MakeType<TDataExprParamsType>(
+            NUdf::EDataSlot::Decimal,
+            "5",
+            "2");
+        const auto* optionalCastDecimal = castContext.ExprCtx.MakeType<TOptionalExprType>(castDecimal);
+        const auto castExpression = ExportMapExpression(
+            castContext,
+            "a",
+            TypedCallable(
+                castContext,
+                "SafeCast",
+                {
+                    TypedMember(castContext, "a.x", intType),
+                    DecimalDataTypeDescriptor(castContext, "5", "2", castDecimal),
+                },
+                optionalCastDecimal));
+        UNIT_ASSERT_VALUES_EQUAL(castExpression["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(castExpression["type"].GetStringSafe(), "Decimal(5,2)");
+        UNIT_ASSERT(castExpression["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(MalformedDecimalTypeDescriptorsFailClosed) {
+        for (const auto& [precision, scale] : TVector<std::pair<TString, TString>>{
+            {"0", "0"},
+            {"05", "2"},
+            {"5", "02"},
+            {"5", "6"},
+            {"36", "2"},
+            {"5", " 2"},
+        }) {
+            TExportTestContext ctx;
+            const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+                NUdf::EDataSlot::Decimal,
+                "5",
+                "2");
+            const auto* optionalDecimal = ctx.ExprCtx.MakeType<TOptionalExprType>(decimalType);
+            auto optionalDescriptor = TypedCallable(
+                ctx,
+                "OptionalType",
+                {DecimalDataTypeDescriptor(ctx, precision, scale, decimalType)},
+                ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimal));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Nothing",
+                    {std::move(optionalDescriptor)},
+                    optionalDecimal));
+            UNIT_ASSERT_C(!result.IsSupported(), TStringBuilder() << precision << "," << scale);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unsupported DataType descriptor");
+        }
+
+        for (const TString descriptorName : {"Decimal", "Decimal(5,2)"}) {
+            TExportTestContext ctx;
+            const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+                NUdf::EDataSlot::Decimal,
+                "5",
+                "2");
+            const auto* optionalDecimal = ctx.ExprCtx.MakeType<TOptionalExprType>(decimalType);
+            auto optionalDescriptor = TypedCallable(
+                ctx,
+                "OptionalType",
+                {DataTypeDescriptor(ctx, descriptorName, decimalType)},
+                ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimal));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Nothing",
+                    {std::move(optionalDescriptor)},
+                    optionalDecimal));
+            UNIT_ASSERT_C(!result.IsSupported(), descriptorName);
+        }
+    }
+
+    Y_UNIT_TEST(DecimalLiteralFailsClosed) {
+        TExportTestContext ctx;
+        const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+            NUdf::EDataSlot::Decimal,
+            "5",
+            "2");
+        const auto result = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "Decimal",
+                {
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "12.34"),
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "5"),
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "2"),
+                },
+                decimalType));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar callable Decimal");
+    }
+
+    Y_UNIT_TEST(ExportsCanonicalVoidCountStarExtractor) {
+        TExportTestContext ctx;
+        auto extractor = TypedCallable(
+            ctx,
+            "Void",
+            {},
+            ctx.ExprCtx.MakeType<TVoidExprType>());
+
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            std::move(extractor));
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "void");
+    }
+
+    Y_UNIT_TEST(MalformedVoidCountStarExtractorsFailClosed) {
+        {
+            TExportTestContext ctx;
+            auto extractor = ctx.ExprCtx.NewCallable(
+                TPositionHandle(),
+                "Void",
+                {});
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(extractor));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Void expression is not typed Void");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto extractor = TypedCallable(
+                ctx,
+                "Void",
+                {ctx.ExprCtx.NewAtom(TPositionHandle(), "unexpected")},
+                ctx.ExprCtx.MakeType<TVoidExprType>());
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(extractor));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Void must have no arguments");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto extractor = TypedCallable(
+                ctx,
+                "Void",
+                {},
+                ScalarType(ctx, NUdf::EDataSlot::Int32));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(extractor));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Void expression is not typed Void");
+        }
     }
 
     Y_UNIT_TEST(OpaqueExpressionFingerprintIsAlphaStableAndKeepsOrderedUses) {
@@ -1215,12 +1487,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {
             {"k", "Int32", true},
-            {"payload", "Utf8", false},
+            {"payload", "Int32", false},
         });
         auto read = MakeRead(ctx, table, "a", {"k", "payload"});
         SetOutputType(ctx, *read, {
             {"a.k", NUdf::EDataSlot::Int32},
-            {"a.payload", NUdf::EDataSlot::Utf8, true},
+            {"a.payload", NUdf::EDataSlot::Int32, true},
         });
         const auto pos = TPositionHandle();
         const TVector<TSortElement> order = {
@@ -1231,7 +1503,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto plainSort = MakeIntrusive<TOpSort>(read, pos, order);
         SetOutputType(ctx, *plainSort, {
             {"a.k", NUdf::EDataSlot::Int32},
-            {"a.payload", NUdf::EDataSlot::Utf8, true},
+            {"a.payload", NUdf::EDataSlot::Int32, true},
         });
         TOpRoot plainRoot(plainSort, pos, {"a.k", "a.payload"});
         const auto plainSnapshot = ParseSupported(
@@ -1272,7 +1544,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 phase);
             SetOutputType(ctx, *topSort, {
                 {"a.k", NUdf::EDataSlot::Int32},
-                {"a.payload", NUdf::EDataSlot::Utf8, true},
+                {"a.payload", NUdf::EDataSlot::Int32, true},
             });
             TOpRoot topRoot(topSort, pos, {"a.k", "a.payload"});
 
@@ -1413,7 +1685,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Date}});
             result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
             UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar type Date");
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Sort ordering is modeled only for integers");
         }
 
         {
@@ -1865,6 +2139,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {"x", "Int32", false},
         });
         auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        SetOutputType(ctx, *read, {
+            {"a.k", NUdf::EDataSlot::Int32},
+            {"a.x", NUdf::EDataSlot::Int32, true},
+        });
         auto project = MakeCopyMap(ctx, read, "result", "a.k");
         TOpRoot root(project, TPositionHandle(), {"result"});
 

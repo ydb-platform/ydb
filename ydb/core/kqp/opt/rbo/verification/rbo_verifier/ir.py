@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeAlias
 
-from .types import BOOL, SCALAR_TYPES, family, integer_comparison_compatible
+from .types import BOOL, VOID, family, integer_comparison_compatible, is_scalar_type
 
 
 FORMAT = "ydb-rbo-semantic-snapshot"
@@ -315,7 +315,7 @@ def _keys(
 
 def _scalar_type(value: Any, path: str) -> str:
     result = _string(value, path)
-    if result not in SCALAR_TYPES:
+    if not is_scalar_type(result):
         _fail(path, f"unsupported scalar type {result!r}")
     return result
 
@@ -339,6 +339,10 @@ def _parse_expr(value: Any, path: str) -> Expr:
     if kind == "column":
         _keys(obj, {"kind", "column"}, path)
         return Expr(kind=kind, column=_string(obj["column"], f"{path}.column"))
+
+    if kind == "void":
+        _keys(obj, {"kind"}, path)
+        return Expr(kind=kind, result_type=VOID, nullable=False)
 
     if kind == "literal":
         _keys(obj, {"kind", "type", "value"}, path)
@@ -826,7 +830,13 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
     if expr.kind == "column":
         if expr.column not in columns:
             _fail(path, f"column {expr.column!r} is not available")
-        return columns[expr.column].value_type
+        value_type = columns[expr.column].value_type
+        if value_type.name == VOID:
+            _fail(path, "void may only flow transparently to a canonical count aggregate")
+        return value_type
+
+    if expr.kind == "void":
+        _fail(path, "void may only flow transparently to a canonical count aggregate")
 
     if expr.kind in {"literal", "null", "opaque"}:
         assert expr.result_type is not None and expr.nullable is not None
@@ -895,6 +905,78 @@ def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, UnionAll):
         return tuple(item.node for item in node.inputs)
     raise AssertionError(f"unknown node class {type(node).__name__}")
+
+
+def _void_columns(columns: Mapping[str, Column]) -> set[str]:
+    return {name for name, column in columns.items() if column.type == VOID}
+
+
+def _validate_void_dataflow(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+) -> None:
+    """Keep the unit carrier on passive paths that terminate in COUNT(*)."""
+
+    message = "void may only flow transparently to a canonical count aggregate"
+    root_voids = _void_columns(schemas[snapshot.plan.root])
+    if root_voids:
+        _fail("snapshot.plan.root", message)
+
+    for node in snapshot.plan.nodes:
+        if isinstance(node, (EmptySource, Scan)):
+            continue
+
+        if isinstance(node, Project):
+            input_voids = _void_columns(schemas[node.input])
+            passed = {
+                column.expression.column
+                for column in node.columns
+                if column.expression.kind == "column"
+                and column.expression.column in input_voids
+            }
+            if passed != input_voids:
+                _fail(f"node {node.id!r}", message)
+            continue
+
+        if isinstance(node, (Filter, Limit, Sort)):
+            continue
+
+        if isinstance(node, Aggregate):
+            input_voids = _void_columns(schemas[node.input])
+            for input_name in input_voids:
+                traits = tuple(
+                    trait for trait in node.aggregates if trait.input == input_name
+                )
+                if (
+                    node.distinct_all
+                    or input_name in node.keys
+                    or not traits
+                    or any(
+                        trait.function != "count" or trait.distinct or trait.unwrap
+                        for trait in traits
+                    )
+                ):
+                    _fail(f"node {node.id!r}", message)
+            continue
+
+        if isinstance(node, Join):
+            dropped = set()
+            if node.kind in {"left_semi", "left_anti"}:
+                dropped = _void_columns(schemas[node.right])
+            elif node.kind in {"right_semi", "right_anti"}:
+                dropped = _void_columns(schemas[node.left])
+            if dropped:
+                _fail(f"node {node.id!r}", message)
+            continue
+
+        if isinstance(node, UnionAll):
+            for item in node.inputs:
+                input_voids = _void_columns(schemas[item.node])
+                if not input_voids.issubset(item.columns):
+                    _fail(f"node {node.id!r}", message)
+            continue
+
+        raise AssertionError(f"unknown node class {type(node).__name__}")
 
 
 def stage_input_slots(plan: Plan, stage: Stage) -> tuple[tuple[str, int, str], ...]:
@@ -1046,13 +1128,18 @@ def _validate_stage_graph(
         for column in edge.keys:
             if column not in columns:
                 _fail(f"{edge_path}.keys", f"column {column!r} is not produced")
+            if columns[column].type == VOID:
+                _fail(
+                    f"{edge_path}.keys",
+                    "void may only flow transparently to a canonical count aggregate",
+                )
         for item in edge.order:
             if item.column not in columns:
                 _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
-            if family(columns[item.column].type) == "string":
+            if family(columns[item.column].type) != "int":
                 _fail(
                     f"{edge_path}.order",
-                    "String and Utf8 ordering is not modeled",
+                    "only integer ordering is modeled",
                 )
 
     for stage in graph.stages:
@@ -1280,7 +1367,17 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             _unique([column.output for column in node.columns], f"node {node.id!r} output")
             result = {}
             for index, column in enumerate(node.columns):
-                value_type = _infer_expr(column.expression, input_schema, f"node {node.id!r}.columns[{index}]")
+                expression_path = f"node {node.id!r}.columns[{index}]"
+                if column.expression.kind == "void":
+                    value_type = ValueType(VOID, False)
+                elif (
+                    column.expression.kind == "column"
+                    and column.expression.column in input_schema
+                    and input_schema[column.expression.column].type == VOID
+                ):
+                    value_type = input_schema[column.expression.column].value_type
+                else:
+                    value_type = _infer_expr(column.expression, input_schema, expression_path)
                 result[column.output] = Column(column.output, value_type.name, value_type.nullable)
 
         elif isinstance(node, Filter):
@@ -1300,10 +1397,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"node {node.id!r}.order[{index}]",
                         f"column {item.column!r} is not available",
                     )
-                if family(result[item.column].type) == "string":
+                if family(result[item.column].type) != "int":
                     _fail(
                         f"node {node.id!r}.order[{index}]",
-                        "String and Utf8 ordering is not modeled",
+                        "only integer ordering is modeled",
                     )
 
         elif isinstance(node, Aggregate):
@@ -1327,6 +1424,17 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 input_column = input_schema.get(trait.input)
                 if input_column is None:
                     _fail(trait_path, f"input column {trait.input!r} is not available")
+                if input_column.type == VOID and (
+                    node.distinct_all
+                    or trait.input in node.keys
+                    or trait.function != "count"
+                    or trait.distinct
+                    or trait.unwrap
+                ):
+                    _fail(
+                        trait_path,
+                        "void may only flow transparently to a canonical count aggregate",
+                    )
 
                 if trait.function == "count":
                     if trait.output_type != "Uint64" or trait.output_nullable:
@@ -1420,5 +1528,6 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     for column in snapshot.plan.output:
         if column not in root_schema:
             _fail("snapshot.plan.output", f"column {column!r} is not produced by the root")
+    _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas)
     return schemas

@@ -37,11 +37,13 @@ outgoing edge occurrences. Shuffle-elimination/co-partitioning assumptions are
 rejected until the snapshot can substantiate them.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
-unsigned integer widths, `String`, and `Utf8`) even when several identities use
-the same SMT domain. Integer slots currently use an unbounded SMT carrier rather
-than explicit source-type range constraints. This may produce an out-of-range
-`COUNTEREXAMPLE`, which replay can reject, but cannot turn a real bounded
-counterexample into `VERIFIED_BOUNDED`.
+unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
+`Decimal(p,s)`) even when several identities use the same SMT domain. Decimal
+identity requires `1 <= p <= 35` and `0 <= s <= p`, with no alternate spelling.
+Integer, Date, and Decimal slots currently use unbounded SMT carriers rather
+than source-domain range constraints. This may produce an out-of-range or
+symbolic-atom `COUNTEREXAMPLE`, which replay can reject, but cannot turn a real
+bounded counterexample into `VERIFIED_BOUNDED`.
 
 Scalar syntax outside the explicit Boolean/equality core is represented by a
 shared typed uninterpreted function when the C++ exporter can positively audit
@@ -91,15 +93,24 @@ encoding is exact within the declared row/task/family bounds: it rejects an
 unordered or differently ordered producer and enumerates all sorted,
 producer-order-preserving interleavings.
 
-`String` and `Utf8` remain equality-only uninterpreted atoms. Their YDB ordering
-is not modeled, so using either type in Sort or Merge order metadata returns
-`UNSUPPORTED` during strict validation instead of inventing an ordering.
+`String`, `Utf8`, `Date`, and Decimal remain equality-only uninterpreted atoms.
+Date and Decimal are admitted for catalog columns, exact NULLs, pass-through
+values, equality, grouping, and opaque-function boundaries; their literals are
+not modeled. None of these atom types has modeled YDB ordering, so using one in
+Sort or Merge order metadata returns `UNSUPPORTED` during strict validation
+instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
 inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both sums use
 the runtime's exact 64-bit modular overflow. A column-storage source is split
 into symbolic source tasks before a pushed intermediate aggregate executes.
+The optimizer's canonical `COUNT(*)` extractor is represented by the exact
+zero-child, typed `Void` expression and evaluated as one non-null unit value;
+it may pass through routing and relational operators, but every path must
+terminate in a non-distinct, non-unwrapped `count`. Inspecting, dropping, or
+exposing that unit fails closed. `Void` is not a catalog, literal, NULL, or
+opaque-result type.
 `distinct`, `DistinctAll`, `unwrap`, min/max, average, and variance currently
 return `UNSUPPORTED` rather than use an approximation.
 Intermediate aggregation models the pre-physical logical state per task and
@@ -238,8 +249,11 @@ captured initial/final pair through the normal CLI. One test covers an explicit
 `ORDER BY A DESC, B ASC LIMIT 1`: it checks the initial Sort+Limit, final
 per-task intermediate TopSort, exact Merge metadata (including NULL placement),
 and final Limit. A column-store test compares an initial logical Filter with the
-final pushed OLAP predicate and requires the normal bounded proof. All tests
-always require strict decoding and SMT construction. Set
+final pushed OLAP predicate and requires the normal bounded proof. The benchmark
+test loads the exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
+checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
+and proves the two-row/two-task obligation with a query-specific 60-second
+solver budget. All tests always require strict decoding and SMT construction. Set
 `RBO_Z3` to additionally require `VERIFIED_BOUNDED`; M2b will replace that
 opt-in path with a hermetic solver dependency.
 

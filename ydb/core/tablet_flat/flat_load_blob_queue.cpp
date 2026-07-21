@@ -9,15 +9,6 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 namespace {
-    struct TLogPrefix {
-        const TLoadBlobQueueConfig& Config;
-
-        friend IOutputStream& operator<<(IOutputStream& out, const TLogPrefix& value) {
-            out << (value.Config.Follower ? "Follower" : "Leader")
-                << "{" << value.Config.TabletID << ":" << value.Config.Generation << ":-} ";
-            return out;
-        }
-    };
 
     struct TDumpLogoBlobs {
         const TVector<TLogoBlobID>& Blobs;
@@ -107,7 +98,7 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
 
         if (newBlobs) {
             YDB_LOG_DEBUG("Sending TEvGet batch bytes, total",
-                {"logPrefix", TLogPrefix{ Config }},
+                {"logPrefix", LogPrefix()},
                 {"batchSize", batchSize},
                 {"activeBytesInFly", ActiveBytesInFly},
                 {"blobs", TDumpLogoBlobs{ newBlobs }});
@@ -137,7 +128,7 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
 bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     if (msg->Status != NKikimrProto::OK) {
         YDB_LOG_ERROR("EvGet failed",
-            {"logPrefix", TLogPrefix{ Config }},
+            {"logPrefix", LogPrefix()},
             {"request", msg->Print(false)});
 
         if (msg->Status == NKikimrProto::NODATA) {
@@ -154,7 +145,7 @@ bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     for (auto* x = resBegin; x != resEnd; ++x) {
         if (x->Status != NKikimrProto::OK) {
             YDB_LOG_ERROR("EvGet failed for blob",
-                {"logPrefix", TLogPrefix{ Config }},
+                {"logPrefix", LogPrefix()},
                 {"id", x->Id},
                 {"request", msg->Print(false)});
 

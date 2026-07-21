@@ -373,7 +373,7 @@ private:
     NTable::TDatabase DB;
     TDryRunPages Pages;
     TDryRunStats Stats;
-    
+
     bool ProcessPendingScheduled = false;
     TDeque<TAutoPtr<ITransaction>> PendingTx;
 };
@@ -388,8 +388,11 @@ public:
     ITransaction *CreateTxUploadSnapshot(TEvSnapshotData::TPtr ev, size_t startLine = 0);
     ITransaction *CreateTxUploadChangelog(TEvChangelogData::TPtr ev, size_t startLine = 0);
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletID() << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TRecoveryShard"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletID()});
     }
 
     explicit TRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info)
@@ -423,6 +426,8 @@ public:
     void DefaultSignalTabletActive(const TActorContext &) override {}
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRestoreBackup, Handle);
             hFunc(TEvBackupReaderResult, Handle);
@@ -450,7 +455,6 @@ public:
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
         YDB_LOG_DEBUG("Backup info",
-            {"logPrefix", LogPrefix()},
             {"totalBytes", TotalBytes},
             {"dryRun", DryRun});
 
@@ -466,28 +470,24 @@ public:
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
-        YDB_LOG_DEBUG("Uploading schema",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("Uploading schema");
         Execute(CreateTxUploadSchema(ev));
     }
 
     void Handle(TEvSnapshotData::TPtr& ev) {
         YDB_LOG_DEBUG("Uploading snapshot",
-            {"logPrefix", LogPrefix()},
             {"table", ev->Get()->TableName});
         Execute(CreateTxUploadSnapshot(ev));
     }
 
     void Handle(TEvChangelogData::TPtr& ev) {
         YDB_LOG_DEBUG("Uploading changelog",
-            {"logPrefix", LogPrefix()},
             {"lines", ev->Get()->Lines.size()});
         Execute(CreateTxUploadChangelog(ev));
     }
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
         YDB_LOG_NOTICE("Starting restore",
-            {"logPrefix", LogPrefix()},
             {"path", backupPath},
             {"skipChecksum", skipChecksumValidation},
             {"dryRun", dryRun});
@@ -505,18 +505,15 @@ public:
         if (success) {
             if (error) {
                 YDB_LOG_NOTICE("Restore completed with warning",
-                    {"logPrefix", LogPrefix()},
                     {"error", error});
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
             } else {
-                YDB_LOG_NOTICE("Restore completed",
-                    {"logPrefix", LogPrefix()});
+                YDB_LOG_NOTICE("Restore completed");
                 RestoreState = ERestoreState::Done;
             }
         } else {
             YDB_LOG_ERROR("Restore failed",
-                {"logPrefix", LogPrefix()},
                 {"error", error});
             RestoreState = ERestoreState::Error;
             Error = error;
@@ -618,7 +615,7 @@ public:
                     "\r\n"
                     "restoreBackup requires POST"));
                 return true;
-            } 
+            }
         }
 
         TStringStream str;
@@ -788,7 +785,7 @@ private:
 
 class TTxUploadSchema : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadSchema(TRecoveryShard* self, TEvSchemaData::TPtr& schema)
         : TBase(self)
@@ -815,7 +812,6 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (Error) {
             YDB_LOG_ERROR("Schema upload failed",
-                {"logPrefix", LogPrefix()},
                 {"error", Error});
             Self->CompleteRestore(false, Error);
             ctx.Send(Schema->Sender, new TEvDataAck(false, Error));
@@ -831,7 +827,7 @@ private:
 
 class TTxUploadSnapshot : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadSnapshot(TRecoveryShard* self, TEvSnapshotData::TPtr& snapshot, size_t startLine)
         : TBase(self)
@@ -879,7 +875,6 @@ public:
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
             YDB_LOG_DEBUG("Snapshot upload partial, continuing",
-                {"logPrefix", LogPrefix()},
                 {"line", i});
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
@@ -892,7 +887,6 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
             YDB_LOG_DEBUG("Snapshot chunk uploaded",
-                {"logPrefix", LogPrefix()},
                 {"bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
@@ -900,7 +894,6 @@ public:
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
             YDB_LOG_ERROR("Snapshot upload failed",
-                {"logPrefix", LogPrefix()},
                 {"error", Result.GetErrorMessage()});
             Self->CompleteRestore(false, Result.GetErrorMessage());
             ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
@@ -916,7 +909,7 @@ private:
 
 class TTxUploadChangelog : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadChangelog(TRecoveryShard* self, TEvChangelogData::TPtr& changelog, size_t startLine)
         : TBase(self)
@@ -1012,7 +1005,6 @@ public:
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
             YDB_LOG_DEBUG("Changelog upload partial, continuing",
-                {"logPrefix", LogPrefix()},
                 {"line", i});
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
             Result.PartialDone(processedBytes);
@@ -1025,7 +1017,6 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
             YDB_LOG_DEBUG("Changelog chunk uploaded",
-                {"logPrefix", LogPrefix()},
                 {"bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
@@ -1033,7 +1024,6 @@ public:
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
             YDB_LOG_ERROR("Changelog upload failed",
-                {"logPrefix", LogPrefix()},
                 {"error", Result.GetErrorMessage()});
             Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
             ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
@@ -1074,13 +1064,16 @@ public:
         , SkipChecksumValidation(skipChecksumValidation)
     {}
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << ExpectedTabletId << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TBackupReader"},
+            {"selfId", SelfId()},
+            {"expectedTabletId", ExpectedTabletId});
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         YDB_LOG_NOTICE("Validating backup",
-            {"logPrefix", LogPrefix()},
             {"path", BackupPath});
 
         if (!BackupPath.Exists()) {
@@ -1103,13 +1096,14 @@ public:
         }
 
         YDB_LOG_NOTICE("Backup validated",
-            {"logPrefix", LogPrefix()},
             {"totalBytes", totalBytes});
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvReadBackup, Handle);
             hFunc(TEvDataAck, Handle);
@@ -1118,8 +1112,7 @@ public:
     }
 
     void Handle(TEvReadBackup::TPtr&) {
-        YDB_LOG_DEBUG("Sending schema data",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("Sending schema data");
         try {
             TString schemaData = TFileInput(SchemaFilePath).ReadAll();
             Send(Owner, new TEvSchemaData(std::move(schemaData)));
@@ -1153,7 +1146,6 @@ public:
                     }
 
                     YDB_LOG_DEBUG("Processing snapshot file",
-                        {"logPrefix", LogPrefix()},
                         {"path", CurrentFilePath});
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
@@ -1165,8 +1157,7 @@ public:
                     CurrentTableName.clear();
                     ChangelogProcessed = true;
 
-                    YDB_LOG_DEBUG("Processing changelog",
-                        {"logPrefix", LogPrefix()});
+                    YDB_LOG_DEBUG("Processing changelog");
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1174,8 +1165,7 @@ public:
                     }
                 } else {
                     // All files processed
-                    YDB_LOG_DEBUG("All files processed",
-                        {"logPrefix", LogPrefix()});
+                    YDB_LOG_DEBUG("All files processed");
                     return SendResultAndDie(true);
                 }
             }
@@ -1209,18 +1199,17 @@ public:
     }
 
     bool ValidateSnapshot() {
-        YDB_LOG_DEBUG("Validating snapshot",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("Validating snapshot");
         if (!SnapshotDirPath.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
             return false;
         }
- 
+
         if (!SchemaFilePath.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
             return false;
         }
-    
+
         auto manifestFile = SnapshotDirPath.Child("manifest.json");
         if (!manifestFile.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
@@ -1359,7 +1348,6 @@ public:
                     return false;
                 }
                 YDB_LOG_DEBUG("Checksum validated",
-                    {"logPrefix", LogPrefix()},
                     {"file", name});
             }
         }
@@ -1368,8 +1356,7 @@ public:
     }
 
     bool ValidateChangelog() {
-        YDB_LOG_DEBUG("Validating changelog",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("Validating changelog");
         if (!ChangelogFilePath.Exists()) {
             SendResultAndDie(false, TStringBuilder()
                 << "Changelog file doesn't exist: " << ChangelogFilePath);
@@ -1434,8 +1421,7 @@ public:
             return false;
         }
 
-        YDB_LOG_DEBUG("Changelog validated",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("Changelog validated");
         return true;
     }
 
@@ -1451,7 +1437,7 @@ public:
                 << "Failed to parse changelog line " << line << ": " << e.what()
                 << ", last valid line: " << lastValidLine;
             return false;
-        }   
+        }
 
         if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
             error = TStringBuilder()
@@ -1492,7 +1478,6 @@ public:
     void SendResultAndDie(bool success, const TString& error = "") {
         if (!success) {
             YDB_LOG_ERROR("Failed",
-                {"logPrefix", LogPrefix()},
                 {"error", error});
         }
         Send(Owner, new TEvBackupReaderResult(success, error));

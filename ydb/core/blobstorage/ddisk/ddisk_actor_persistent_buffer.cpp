@@ -1059,7 +1059,7 @@ namespace NKikimr::NDDisk {
         const TWriteInstruction instr(record.GetInstruction());
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
         TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
-        const std::vector<ui64> payloadChecksums(record.GetChecksums().begin(), record.GetChecksums().end());
+        std::vector<ui64> payloadChecksums(record.GetChecksums().begin(), record.GetChecksums().end());
         const ui32 sectorsCnt = selector.Size / SectorSize;
         Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord && sectorsCnt > 0);
 
@@ -1091,7 +1091,9 @@ namespace NKikimr::NDDisk {
             // sector alongside every record already queued. A brand-new batch (handled above) always
             // fits a single record trivially, so this check only matters here. Bail out (fall back to
             // the direct, non-batched write path in the caller) rather than overflow the header sector.
-            const auto& existingRecords = PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie].Records;
+            const auto it = PersistentBufferDiskOperationInflight.find(PersistentBufferBatchWriteCookie);
+            Y_ABORT_UNLESS(it != PersistentBufferDiskOperationInflight.end());
+            const auto& existingRecords = it->second.Records;
             ui32 usedBytes = sizeof(TPersistentBufferHeader);
             for (auto& r : existingRecords) {
                 usedBytes += LsnRecordMetadataSize(r.Sectors.size() - 1, !r.PayloadChecksums.empty());
@@ -1127,7 +1129,7 @@ namespace NKikimr::NDDisk {
             .Size = selector.Size,
             .DataParts = {{0, payload}},
             .PartsCount = 1,
-            .PayloadChecksums = payloadChecksums,
+            .PayloadChecksums = std::move(payloadChecksums),
         });
 
         auto& r = inflight.Records.back();
@@ -1485,6 +1487,7 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(pr.PayloadChecksums.size() == pr.Size / SectorSize);
                     const ui32 firstBlock = (inflightRecord.OffsetInBytes - pr.OffsetInBytes) / SectorSize;
                     const ui32 blockCount = inflightRecord.Size / SectorSize;
+                    Y_ABORT_UNLESS(firstBlock + blockCount <= pr.PayloadChecksums.size());
                     checksums.assign(pr.PayloadChecksums.begin() + firstBlock, pr.PayloadChecksums.begin() + firstBlock + blockCount);
                 }
             }

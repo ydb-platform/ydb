@@ -17,6 +17,7 @@ END()
 
 RECURSE_FOR_TESTS(
     benchmark_ut
+    bisect_ut
     cpp_ut
     inspect_ut
     integration_ut
@@ -26,8 +27,10 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     bin
+    bisect_bin
     inspect_bin
     inspector
     replay
     replay_bin
+    tools
 )

@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/topic
 )
 

@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_topic_deferred_publish.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/ydb_topic_deferred_publish.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <iostream>

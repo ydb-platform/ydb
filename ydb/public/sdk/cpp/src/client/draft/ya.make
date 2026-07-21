@@ -6,7 +6,6 @@ SRCS(
     ydb_dynamic_config.cpp
     ydb_replication.cpp
     ydb_scripting.cpp
-    ydb_topic_deferred_publish.cpp
     ydb_view.cpp
 )
 

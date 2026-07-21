@@ -622,13 +622,23 @@ namespace NKikimr::NStorage {
         ) {
         if (!automaticManagement) {
             ss->CopyFrom(oldConfig);
-            for (const auto& rg : oldConfig.GetRingGroups()) {
-                for (const auto& ring : rg.GetRing()) {
-                    for (ui32 nodeId : ring.GetNode()) {
-                        usedNodes.insert(nodeId);
-                    }
+
+            const auto collectNodes = [&](const auto& self, const auto& ring) -> void {
+                for (ui32 nodeId : ring.GetNode()) {
+                    usedNodes.insert(nodeId);
                 }
+                for (const auto& subRing : ring.GetRing()) {
+                    self(self, subRing);
+                }
+            };
+
+            if (oldConfig.HasRing()) {
+                collectNodes(collectNodes, oldConfig.GetRing());
             }
+            for (const auto& rg : oldConfig.GetRingGroups()) {
+                collectNodes(collectNodes, rg);
+            }
+
             return true;
         }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;

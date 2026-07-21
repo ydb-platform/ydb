@@ -405,6 +405,62 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
+
+    Y_UNIT_TEST(RealHostVerifiesCanonicalOpaqueArithmetic) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT A + 1 AS Adjusted
+                FROM `/Root/RboOrdered`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto opaqueExpressions = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> result;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                for (const auto& column : (*project)["columns"].GetArraySafe()) {
+                    const auto& expression = column["expression"];
+                    if (expression["kind"].GetStringSafe() == "opaque") {
+                        result.push_back(&expression);
+                    }
+                }
+            }
+            return result;
+        };
+
+        const auto initialOpaque = opaqueExpressions(initial);
+        const auto finalOpaque = opaqueExpressions(final);
+        UNIT_ASSERT_VALUES_EQUAL(initialOpaque.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalOpaque.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*initialOpaque[0])["fingerprint"].GetStringSafe(),
+            (*finalOpaque[0])["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL((*initialOpaque[0])["type"].GetStringSafe(), "Int64");
+        UNIT_ASSERT((*initialOpaque[0])["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL((*initialOpaque[0])["args"].GetArraySafe().size(), 1);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
 }
 
 } // namespace NKikimr::NKqp

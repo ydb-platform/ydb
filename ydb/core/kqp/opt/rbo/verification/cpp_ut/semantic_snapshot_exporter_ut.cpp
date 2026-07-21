@@ -218,6 +218,122 @@ TIntrusivePtr<TOpMap> MakeCopyMap(
         &ctx.ExpressionProps)});
 }
 
+const TTypeAnnotationNode* ScalarType(
+    TExportTestContext& ctx,
+    NUdf::EDataSlot slot,
+    bool nullable = false)
+{
+    const TTypeAnnotationNode* result = ctx.ExprCtx.MakeType<TDataExprType>(slot);
+    return nullable ? ctx.ExprCtx.MakeType<TOptionalExprType>(result) : result;
+}
+
+TExprNode::TPtr TypedMember(
+    TExportTestContext& ctx,
+    TStringBuf name,
+    const TTypeAnnotationNode* type)
+{
+    auto member = MakeColumnAccess(
+        TInfoUnit(TString(name)),
+        TPositionHandle(),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps).GetExpressionBody();
+    member->SetTypeAnn(type);
+    return member;
+}
+
+TExprNode::TPtr TypedLiteral(
+    TExportTestContext& ctx,
+    TStringBuf callable,
+    TStringBuf value,
+    const TTypeAnnotationNode* type)
+{
+    auto literal = ctx.ExprCtx.NewCallable(
+        TPositionHandle(),
+        callable,
+        {ctx.ExprCtx.NewAtom(TPositionHandle(), value)});
+    literal->SetTypeAnn(type);
+    return literal;
+}
+
+TExprNode::TPtr TypedCallable(
+    TExportTestContext& ctx,
+    TStringBuf callable,
+    TExprNode::TListType children,
+    const TTypeAnnotationNode* type)
+{
+    auto result = ctx.ExprCtx.NewCallable(
+        TPositionHandle(),
+        callable,
+        std::move(children));
+    result->SetTypeAnn(type);
+    return result;
+}
+
+TExprNode::TPtr DataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf typeName,
+    const TTypeAnnotationNode* type)
+{
+    auto result = ctx.ExprCtx.NewCallable(
+        TPositionHandle(),
+        "DataType",
+        {ctx.ExprCtx.NewAtom(TPositionHandle(), typeName)});
+    result->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
+    return result;
+}
+
+TSemanticSnapshotExportResult ExportMapExpressionResult(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TExpression expression,
+    bool nullableInput = false)
+{
+    const auto& table = AddTable(ctx, "/Root/Opaque", {
+        {"x", "Int32", !nullableInput},
+        {"y", "Int32", !nullableInput},
+    });
+    auto read = MakeRead(ctx, table, alias, {"x", "y"});
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            std::move(expression))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
+TSemanticSnapshotExportResult ExportMapExpressionResult(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TExprNode::TPtr expression,
+    bool nullableInput = false)
+{
+    return ExportMapExpressionResult(
+        ctx,
+        alias,
+        TExpression(std::move(expression), &ctx.ExprCtx, &ctx.ExpressionProps),
+        nullableInput);
+}
+
+NJson::TJsonValue ExportMapExpression(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TExprNode::TPtr expression,
+    bool nullableInput = false)
+{
+    const auto snapshot = ParseSupported(ExportMapExpressionResult(
+        ctx,
+        alias,
+        std::move(expression),
+        nullableInput));
+
+    const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(columns.back()["output"].GetStringSafe(), "result");
+    return columns.back()["expression"];
+}
+
 TString ExportDeterministicPlan() {
     TExportTestContext ctx;
     const auto& table = AddTable(ctx, "/Root/A", {
@@ -362,6 +478,319 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto& project = FindNode(snapshot, "project");
         UNIT_ASSERT_VALUES_EQUAL(project["ordered"].GetBooleanSafe(), true);
         UNIT_ASSERT_VALUES_EQUAL(ProjectionOutputs(project), TVector<TString>{"result"});
+    }
+
+    Y_UNIT_TEST(OpaqueExpressionFingerprintIsAlphaStableAndKeepsOrderedUses) {
+        TExportTestContext first;
+        const auto* firstInt = ScalarType(first, NUdf::EDataSlot::Int32);
+        const auto firstExpression = ExportMapExpression(
+            first,
+            "a",
+            TypedCallable(
+                first,
+                "+",
+                {
+                    TypedMember(first, "a.x", firstInt),
+                    TypedMember(first, "a.y", firstInt),
+                },
+                firstInt));
+
+        TExportTestContext renamed;
+        const auto* renamedInt = ScalarType(renamed, NUdf::EDataSlot::Int32);
+        const auto renamedExpression = ExportMapExpression(
+            renamed,
+            "renamed",
+            TypedCallable(
+                renamed,
+                "+",
+                {
+                    TypedMember(renamed, "renamed.x", renamedInt),
+                    TypedMember(renamed, "renamed.y", renamedInt),
+                },
+                renamedInt));
+
+        UNIT_ASSERT_VALUES_EQUAL(firstExpression["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(firstExpression["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT(!firstExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            firstExpression["fingerprint"].GetStringSafe(),
+            renamedExpression["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_STRING_CONTAINS(firstExpression["fingerprint"].GetStringSafe(), "yql-opaque-v1");
+        UNIT_ASSERT_STRING_CONTAINS(firstExpression["fingerprint"].GetStringSafe(), "+");
+        UNIT_ASSERT(!firstExpression["fingerprint"].GetStringSafe().Contains("a.x"));
+        UNIT_ASSERT(!firstExpression["fingerprint"].GetStringSafe().Contains("a.y"));
+
+        const auto& firstArgs = firstExpression["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(firstArgs.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(firstArgs[0]["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(firstArgs[1]["column"].GetStringSafe(), "a.y");
+        const auto& renamedArgs = renamedExpression["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(renamedArgs[0]["column"].GetStringSafe(), "renamed.x");
+        UNIT_ASSERT_VALUES_EQUAL(renamedArgs[1]["column"].GetStringSafe(), "renamed.y");
+    }
+
+    Y_UNIT_TEST(OpaqueExpressionFingerprintPreservesStructureAndRepetition) {
+        const auto exportBinary = [](
+            TStringBuf callable,
+            TStringBuf rightColumn,
+            std::optional<TStringBuf> literal = std::nullopt,
+            bool literalFirst = false)
+        {
+            TExportTestContext ctx;
+            const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            auto left = TypedMember(ctx, "a.x", type);
+            auto right = literal
+                ? TypedLiteral(ctx, "Int32", *literal, type)
+                : TypedMember(ctx, rightColumn, type);
+            if (literalFirst) {
+                std::swap(left, right);
+            }
+            return ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(ctx, callable, {left, right}, type));
+        };
+
+        const auto distinct = exportBinary("+", "a.y");
+        const auto repeated = exportBinary("+", "a.x");
+        const auto subtracted = exportBinary("-", "a.y");
+        const auto multiplied = exportBinary("*", "a.y");
+        const auto literalOne = exportBinary("+", "", TStringBuf("1"));
+        const auto literalTwo = exportBinary("+", "", TStringBuf("2"));
+        const auto literalFirst = exportBinary("+", "", TStringBuf("1"), true);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            distinct["fingerprint"].GetStringSafe(),
+            repeated["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(distinct["args"].GetArraySafe().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(repeated["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            distinct["fingerprint"].GetStringSafe(),
+            subtracted["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            distinct["fingerprint"].GetStringSafe(),
+            multiplied["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            literalOne["fingerprint"].GetStringSafe(),
+            literalTwo["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            literalOne["fingerprint"].GetStringSafe(),
+            literalFirst["fingerprint"].GetStringSafe());
+
+        TExportTestContext shared;
+        const auto* sharedType = ScalarType(shared, NUdf::EDataSlot::Int32);
+        auto sharedChild = TypedCallable(
+            shared,
+            "*",
+            {
+                TypedMember(shared, "a.x", sharedType),
+                TypedLiteral(shared, "Int32", "2", sharedType),
+            },
+            sharedType);
+        const auto sharedExpression = ExportMapExpression(
+            shared,
+            "a",
+            TypedCallable(shared, "+", {sharedChild, sharedChild}, sharedType));
+
+        TExportTestContext duplicated;
+        const auto* duplicatedType = ScalarType(duplicated, NUdf::EDataSlot::Int32);
+        const auto makeChild = [&]() {
+            return TypedCallable(
+                duplicated,
+                "*",
+                {
+                    TypedMember(duplicated, "a.x", duplicatedType),
+                    TypedLiteral(duplicated, "Int32", "2", duplicatedType),
+                },
+                duplicatedType);
+        };
+        const auto duplicatedExpression = ExportMapExpression(
+            duplicated,
+            "a",
+            TypedCallable(duplicated, "+", {makeChild(), makeChild()}, duplicatedType));
+        UNIT_ASSERT_VALUES_EQUAL(
+            sharedExpression["fingerprint"].GetStringSafe(),
+            duplicatedExpression["fingerprint"].GetStringSafe());
+    }
+
+    Y_UNIT_TEST(ExportsReviewedTotalOpaqueStructuralFormsAndNullability) {
+        TExportTestContext ctx;
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+
+        auto safeCast = TypedCallable(
+            ctx,
+            "SafeCast",
+            {
+                TypedMember(ctx, "a.x", intType),
+                DataTypeDescriptor(ctx, "Int32", intType),
+            },
+            optionalInt);
+        auto exists = TypedCallable(ctx, "Exists", {safeCast}, boolType);
+        auto just = TypedCallable(
+            ctx,
+            "Just",
+            {TypedMember(ctx, "a.y", intType)},
+            optionalInt);
+        auto coalesce = TypedCallable(
+            ctx,
+            "Coalesce",
+            {just, TypedMember(ctx, "a.x", intType)},
+            intType);
+        auto convert = TypedCallable(
+            ctx,
+            "Convert",
+            {
+                TypedMember(ctx, "a.x", intType),
+                DataTypeDescriptor(ctx, "Int32", intType),
+            },
+            intType);
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(ctx, "If", {exists, coalesce, convert}, intType));
+
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(expression["args"].GetArraySafe().size(), 2);
+        for (const auto callable : {"SafeCast", "Exists", "Just", "Coalesce", "Convert", "If"}) {
+            UNIT_ASSERT_STRING_CONTAINS(expression["fingerprint"].GetStringSafe(), callable);
+        }
+
+        TExportTestContext nullable;
+        const auto* nullableType = ScalarType(nullable, NUdf::EDataSlot::Int32, true);
+        const auto nullableExpression = ExportMapExpression(
+            nullable,
+            "a",
+            TypedCallable(
+                nullable,
+                "+",
+                {
+                    TypedMember(nullable, "a.x", nullableType),
+                    TypedMember(nullable, "a.y", nullableType),
+                },
+                nullableType),
+            true);
+        UNIT_ASSERT(nullableExpression["nullable"].GetBooleanSafe());
+
+        TExportTestContext comparison;
+        const auto* comparisonInt = ScalarType(comparison, NUdf::EDataSlot::Int32, true);
+        const auto* comparisonBool = ScalarType(comparison, NUdf::EDataSlot::Bool, true);
+        const auto comparisonExpression = ExportMapExpression(
+            comparison,
+            "a",
+            TypedCallable(
+                comparison,
+                ">=",
+                {
+                    TypedMember(comparison, "a.x", comparisonInt),
+                    TypedMember(comparison, "a.y", comparisonInt),
+                },
+                comparisonBool),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(comparisonExpression["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(comparisonExpression["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(UnsafeOrUnauditedOpaqueExpressionsFailClosed) {
+        const auto exportCallable = [](
+            TStringBuf callable,
+            const std::function<void(TExprNode&)>& mutate = {})
+        {
+            TExportTestContext ctx;
+            const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            TExpression expression(
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedMember(ctx, "a.x", type),
+                        TypedLiteral(ctx, "Int32", "1", type),
+                    },
+                    type),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            if (mutate) {
+                mutate(*expression.GetExpressionBody());
+            }
+            return ExportMapExpressionResult(ctx, "a", std::move(expression));
+        };
+
+        for (const auto callable : {"/", "Unwrap", "StrictCast", "Udf", "Apply", "Now", "CurrentActorId"}) {
+            const auto result = exportCallable(callable);
+            UNIT_ASSERT_C(!result.IsSupported(), callable);
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar callable");
+        }
+
+        auto result = exportCallable("+", [](TExprNode& node) {
+            node.SetSideEffects(ESideEffects::General);
+        });
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "side-effecting or CSE-unsafe");
+
+        result = exportCallable("+", [](TExprNode& node) {
+            node.SetPosAware();
+        });
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "position-aware");
+
+        result = exportCallable("+", [](TExprNode& node) {
+            node.SetUnorderedChildren();
+        });
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unordered children");
+
+        {
+            TExportTestContext ctx;
+            const auto pos = TPositionHandle();
+            const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            auto row = ctx.ExprCtx.NewArgument(pos, "row");
+            auto foreign = ctx.ExprCtx.NewArgument(pos, "foreign");
+            auto member = ctx.ExprCtx.NewCallable(
+                pos,
+                "Member",
+                {foreign, ctx.ExprCtx.NewAtom(pos, "a.x")});
+            member->SetTypeAnn(type);
+            auto body = TypedCallable(
+                ctx,
+                "+",
+                {member, TypedLiteral(ctx, "Int32", "1", type)},
+                type);
+            auto arguments = ctx.ExprCtx.NewArguments(pos, {row});
+            TExpression expression(
+                ctx.ExprCtx.NewLambda(pos, std::move(arguments), std::move(body)),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+
+            result = ExportMapExpressionResult(ctx, "a", std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "input row column a.x");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto pos = TPositionHandle();
+            const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            auto row = ctx.ExprCtx.NewArgument(pos, "row");
+            auto free = ctx.ExprCtx.NewArgument(pos, "free");
+            free->SetTypeAnn(type);
+            auto body = TypedCallable(
+                ctx,
+                "+",
+                {free, TypedLiteral(ctx, "Int32", "1", type)},
+                type);
+            auto arguments = ctx.ExprCtx.NewArguments(pos, {row});
+            TExpression expression(
+                ctx.ExprCtx.NewLambda(pos, std::move(arguments), std::move(body)),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+
+            result = ExportMapExpressionResult(ctx, "a", std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "free Argument");
+        }
     }
 
     Y_UNIT_TEST(ExportsJoinKeysAndResidualPredicate) {

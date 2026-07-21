@@ -8,6 +8,7 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 
+#include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/utf8.h>
@@ -275,6 +276,335 @@ NJson::TJsonValue Uint64LiteralExpr(const TExpression& expression, TStringBuf fi
     return Uint64LiteralExpr(*expression.GetExpressionBody(), field);
 }
 
+bool IsIntegerType(TStringBuf type) {
+    return type.StartsWith("Int") || type.StartsWith("Uint");
+}
+
+TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
+    return TypeName(node.GetTypeAnn(), nullable);
+}
+
+void CheckScalarArity(const TExprNode& node, size_t minimum, size_t maximum) {
+    if (node.ChildrenSize() < minimum || node.ChildrenSize() > maximum) {
+        Unsupported(TStringBuilder()
+            << "Opaque scalar callable " << node.Content()
+            << " has unsupported arity " << node.ChildrenSize());
+    }
+}
+
+TString DataTypeDescriptorName(const TExprNode& node) {
+    const TExprNode* dataType = &node;
+    if (node.IsCallable("OptionalType")) {
+        CheckScalarArity(node, 1, 1);
+        dataType = node.Child(0);
+    }
+    if (!dataType->IsCallable("DataType")) {
+        Unsupported("Opaque scalar has a non-data type descriptor");
+    }
+    CheckScalarArity(*dataType, 1, 1);
+    if (!dataType->Child(0)->IsAtom() ||
+        !IsSupportedType(dataType->Child(0)->Content()))
+    {
+        Unsupported("Opaque scalar has an unsupported DataType descriptor");
+    }
+    return TString(dataType->Child(0)->Content());
+}
+
+void CheckOpaqueCallable(const TExprNode& node) {
+    const TStringBuf name = node.Content();
+
+    if (IsSupportedType(name)) {
+        LiteralExpr(node);
+        bool nullable = false;
+        if (ScalarTypeName(node, &nullable) != name || nullable) {
+            Unsupported("Opaque scalar literal type annotation does not match its callable");
+        }
+        return;
+    }
+
+    if (name == "Member") {
+        return;
+    }
+
+    if (name == "Nothing") {
+        bool nullable = false;
+        const TString type = ScalarTypeName(node, &nullable);
+        if (!nullable) {
+            Unsupported("Nothing expression is not optional");
+        }
+        CheckScalarArity(node, 1, 1);
+        if (DataTypeDescriptorName(*node.Child(0)) != type) {
+            Unsupported("Nothing type descriptor does not match its result");
+        }
+        return;
+    }
+
+    if (name == "DataType") {
+        DataTypeDescriptorName(node);
+        return;
+    }
+
+    if (name == "OptionalType") {
+        DataTypeDescriptorName(node);
+        return;
+    }
+
+    // This is deliberately a positive list.  TExprNode exposes side-effect and
+    // CSE-safety flags, but YQL has no generic totality contract for a callable.
+    // Keep every accepted family small enough to audit and fail closed for UDFs,
+    // division, strict casts, Unwrap, and every other not-yet-reviewed form.
+    if (name == "+" || name == "-" || name == "*") {
+        CheckScalarArity(node, 2, 2);
+        if (!IsIntegerType(ScalarTypeName(node))) {
+            Unsupported(TStringBuilder() << "Opaque arithmetic result is not an integer: " << name);
+        }
+        for (const auto& child : node.Children()) {
+            if (!IsIntegerType(ScalarTypeName(*child))) {
+                Unsupported(TStringBuilder() << "Opaque arithmetic operand is not an integer: " << name);
+            }
+        }
+        return;
+    }
+
+    if (name == "!=" || name == "<" || name == "<=" || name == ">" || name == ">=") {
+        CheckScalarArity(node, 2, 2);
+        if (ScalarTypeName(node) != "Bool") {
+            Unsupported(TStringBuilder() << "Opaque comparison result is not Bool: " << name);
+        }
+        ScalarTypeName(*node.Child(0));
+        ScalarTypeName(*node.Child(1));
+        return;
+    }
+
+    if (name == "And" || name == "Or") {
+        CheckScalarArity(node, 1, std::numeric_limits<size_t>::max());
+        return;
+    }
+    if (name == "Not") {
+        CheckScalarArity(node, 1, 1);
+        return;
+    }
+    if (name == "==" || name == "IsNotDistinctFrom") {
+        CheckScalarArity(node, 2, 2);
+        return;
+    }
+
+    if (name == "Just") {
+        CheckScalarArity(node, 1, 1);
+        bool nullable = false;
+        const TString resultType = ScalarTypeName(node, &nullable);
+        if (!nullable || resultType != ScalarTypeName(*node.Child(0))) {
+            Unsupported("Opaque Just has inconsistent types");
+        }
+        return;
+    }
+    if (name == "Exists") {
+        CheckScalarArity(node, 1, 1);
+        bool resultNullable = false;
+        bool inputNullable = false;
+        if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
+            Unsupported("Opaque Exists result is not non-null Bool");
+        }
+        ScalarTypeName(*node.Child(0), &inputNullable);
+        if (!inputNullable) {
+            Unsupported("Opaque Exists input is not optional");
+        }
+        return;
+    }
+    if (name == "Coalesce") {
+        CheckScalarArity(node, 1, std::numeric_limits<size_t>::max());
+        bool resultNullable = false;
+        const TString resultType = ScalarTypeName(node, &resultNullable);
+        bool allNullable = true;
+        for (const auto& child : node.Children()) {
+            bool childNullable = false;
+            if (ScalarTypeName(*child, &childNullable) != resultType) {
+                Unsupported("Opaque Coalesce has inconsistent types");
+            }
+            allNullable = allNullable && childNullable;
+        }
+        if (resultNullable != allNullable) {
+            Unsupported("Opaque Coalesce has inconsistent nullability");
+        }
+        return;
+    }
+    if (name == "If") {
+        CheckScalarArity(node, 3, 3);
+        const TString resultType = ScalarTypeName(node);
+        if (ScalarTypeName(*node.Child(0)) != "Bool") {
+            Unsupported("Opaque If condition is not Bool");
+        }
+        if (ScalarTypeName(*node.Child(1)) != resultType ||
+            ScalarTypeName(*node.Child(2)) != resultType)
+        {
+            Unsupported("Opaque If has inconsistent branch types");
+        }
+        return;
+    }
+
+    if (name == "SafeCast" || name == "Convert") {
+        CheckScalarArity(node, 2, 2);
+        const TString resultType = ScalarTypeName(node);
+        ScalarTypeName(*node.Child(0));
+        if (!node.Child(1)->IsCallable("DataType") &&
+            !node.Child(1)->IsCallable("OptionalType"))
+        {
+            Unsupported(TStringBuilder() << "Opaque " << name << " has an unsupported target type");
+        }
+        if (DataTypeDescriptorName(*node.Child(1)) != resultType) {
+            Unsupported(TStringBuilder() << "Opaque " << name << " target type does not match its result");
+        }
+        if (name == "Convert") {
+            const auto options = CastResult<false>(node.Child(0)->GetTypeAnn(), node.GetTypeAnn());
+            if (options & (NUdf::ECastOptions::MayFail | NUdf::ECastOptions::Impossible)) {
+                Unsupported("Opaque Convert may fail");
+            }
+        }
+        return;
+    }
+
+    Unsupported(TStringBuilder() << "Unsupported scalar callable " << name);
+}
+
+class TOpaqueExpressionEncoder {
+public:
+    TOpaqueExpressionEncoder(
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+    {
+    }
+
+    NJson::TJsonValue Export(const TExprNode& node) {
+        if (!node.IsCallable()) {
+            Unsupported("Opaque scalar root is not a callable");
+        }
+        bool nullable = false;
+        const TString resultType = ScalarTypeName(node, &nullable);
+
+        TStringBuilder fingerprint;
+        AppendIdentityField(fingerprint, "format", "yql-opaque-v1");
+        Encode(node, fingerprint, 0);
+        if (fingerprint.size() > MaxFingerprintBytes) {
+            Unsupported("Opaque scalar fingerprint exceeds the audit limit");
+        }
+
+        auto args = JsonArray();
+        for (const auto& column : Columns) {
+            args.AppendValue(ColumnExpr(column));
+        }
+
+        auto result = JsonMap();
+        result["kind"] = "opaque";
+        result["fingerprint"] = TString(fingerprint);
+        result["type"] = resultType;
+        result["nullable"] = nullable;
+        result["args"] = std::move(args);
+        return result;
+    }
+
+private:
+    static constexpr size_t MaxNodes = 256;
+    static constexpr size_t MaxDepth = 64;
+    static constexpr size_t MaxFingerprintBytes = 64 * 1024;
+
+    TString TypeFingerprint(const TExprNode& node) const {
+        return node.GetTypeAnn() ? FormatType(node.GetTypeAnn()) : TString("<none>");
+    }
+
+    void CheckSafeNode(const TExprNode& node) {
+        if (++NodeCount > MaxNodes) {
+            Unsupported("Opaque scalar exceeds the node audit limit");
+        }
+        if (node.HasResult()) {
+            Unsupported("Opaque scalar contains an executed Result node");
+        }
+        if (node.IsPosAware()) {
+            Unsupported("Opaque scalar contains a position-aware node");
+        }
+        if (node.HasSideEffects() || !node.IsCseeSafe()) {
+            Unsupported("Opaque scalar contains a side-effecting or CSE-unsafe node");
+        }
+        if ((node.IsCallable() || node.IsList()) && node.UnorderedChildren()) {
+            Unsupported("Opaque scalar contains a node with unordered children");
+        }
+    }
+
+    void EncodeMember(const TExprNode& node, TStringBuilder& out) {
+        if (node.ChildrenSize() != 2 || !node.Child(1)->IsAtom()) {
+            Unsupported("Malformed Member expression");
+        }
+        const TString column(node.Child(1)->Content());
+        if (node.Child(0) != RowArgument || !VisibleColumns.contains(column)) {
+            Unsupported(TStringBuilder() << "Member does not reference the input row column " << column);
+        }
+        ScalarTypeName(node);
+
+        size_t index = 0;
+        const auto existing = ColumnIndices.find(column);
+        if (existing == ColumnIndices.end()) {
+            index = Columns.size();
+            ColumnIndices.emplace(column, index);
+            Columns.push_back(column);
+        } else {
+            index = existing->second;
+        }
+
+        AppendIdentityField(out, "node", "member");
+        AppendIdentityField(out, "type", TypeFingerprint(node));
+        AppendIdentityField(out, "argument", ToString(index));
+    }
+
+    void Encode(const TExprNode& node, TStringBuilder& out, size_t depth) {
+        if (depth > MaxDepth) {
+            Unsupported("Opaque scalar exceeds the nesting audit limit");
+        }
+        CheckSafeNode(node);
+
+        if (node.IsCallable("Member")) {
+            EncodeMember(node, out);
+            return;
+        }
+
+        switch (node.Type()) {
+            case TExprNode::Callable:
+                CheckOpaqueCallable(node);
+                AppendIdentityField(out, "node", "callable");
+                AppendIdentityField(out, "content", node.Content());
+                break;
+            case TExprNode::Atom:
+                AppendIdentityField(out, "node", "atom");
+                AppendIdentityField(out, "content", node.Content());
+                AppendIdentityField(out, "flags", ToString(node.GetFlagsToCompare()));
+                break;
+            case TExprNode::List:
+                Unsupported("Opaque scalar contains an unsupported List node");
+            case TExprNode::Lambda:
+                Unsupported("Opaque scalar contains a nested Lambda");
+            case TExprNode::Argument:
+                Unsupported("Opaque scalar contains a free Argument");
+            case TExprNode::Arguments:
+                Unsupported("Opaque scalar contains an Arguments node");
+            case TExprNode::World:
+                Unsupported("Opaque scalar contains World");
+        }
+
+        AppendIdentityField(out, "type", TypeFingerprint(node));
+        AppendIdentityField(out, "children", ToString(node.ChildrenSize()));
+        for (const auto& child : node.Children()) {
+            Encode(*child, out, depth + 1);
+        }
+    }
+
+private:
+    const TExprNode* RowArgument;
+    const THashSet<TString>& VisibleColumns;
+    THashMap<TString, size_t> ColumnIndices;
+    TVector<TString> Columns;
+    size_t NodeCount = 0;
+};
+
 NJson::TJsonValue ExportExprNode(
     const TExprNode& node,
     const TExprNode* rowArgument,
@@ -345,7 +675,7 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
-    Unsupported(TStringBuilder() << "Unsupported scalar callable " << node.Content());
+    return TOpaqueExpressionEncoder(rowArgument, visibleColumns).Export(node);
 }
 
 NJson::TJsonValue ExportExpr(

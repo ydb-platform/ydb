@@ -2,8 +2,10 @@
 #include <ydb/core/persqueue/common/key.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
 #include <deque>
@@ -73,6 +75,42 @@ struct TPosition {
     ui16 PartNo;
 };
 
+struct TPackedBatchDataOwner final: public TAtomicRefCount<TPackedBatchDataOwner> {
+    explicit TPackedBatchDataOwner(TString&& data);
+
+    void RegisterBatch(ui32 payloadSize);
+
+    TString Data;
+    ui32 InitialBatchCount = 0;
+    ui64 InitialPayloadSize = 0;
+};
+
+class TPackedBatchData {
+public:
+    TPackedBatchData() = default;
+    TPackedBatchData(const char* data, size_t size);
+    explicit TPackedBatchData(TBuffer&& data);
+    TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size);
+
+    const char* data() const noexcept;
+
+    size_t size() const noexcept;
+    size_t Size() const noexcept;
+    size_t Capacity() const noexcept;
+    bool Empty() const noexcept;
+    bool IsShared() const noexcept;
+    const TPackedBatchDataOwner* SharedOwner() const noexcept;
+
+    void Materialize();
+    void Reset();
+
+private:
+    TBuffer Buffer;
+    TIntrusivePtr<TPackedBatchDataOwner> Owner;
+    ui32 Offset = 0;
+    ui32 PayloadSize = 0;
+};
+
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)
 //on disk representation:
@@ -87,12 +125,13 @@ struct TBatch {
     TVector<TClientBlob> Blobs;
     TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
-    TBuffer PackedData;
+    TPackedBatchData PackedData;
     TInstant EndWriteTimestamp;
 
     TBatch();
     TBatch(const ui64 offset, const ui16 partNo);
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data);
+    TBatch(const NKikimrPQ::TBatchHeader& header, TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 payloadOffset);
 
     static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs);
 
@@ -128,7 +167,13 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size);
 
 class TBlobIterator {
 public:
+    enum class EDataOwnership {
+        Borrowed,
+        Shared,
+    };
+
     TBlobIterator(const TKey& key, const TString& blob);
+    TBlobIterator(const TKey& key, const TString& blob, EDataOwnership ownership);
 
     //return true is there is batch
     bool IsValid();
@@ -142,6 +187,7 @@ private:
     NKikimrPQ::TBatchHeader Header;
 
     const TKey& Key;
+    TIntrusivePtr<TPackedBatchDataOwner> Owner;
     const char *Data;
     const char *End;
 
@@ -151,6 +197,7 @@ private:
 };
 
 class TPartitionedBlob;
+struct TPartitionBlobEncoder;
 
 //THead represents bathes, stored in head(at most 8 Mb)
 struct THead {
@@ -164,6 +211,9 @@ private:
     ui16 InternalPartsCount = 0;
 
     friend class TPartitionedBlob;
+    friend struct TPartitionBlobEncoder;
+
+    void MaterializeRetainedSharedData();
 
     class TBatchAccessor {
         TBatch& Batch;
@@ -201,13 +251,14 @@ public:
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 
     void AddBatch(const TBatch& batch);
+    void AddBatch(TBatch&& batch);
     void ClearBatches();
     const std::deque<TBatch>& GetBatches() const;
     const TBatch& GetBatch(ui32 idx) const;
     const TBatch& GetLastBatch() const;
     TBatchAccessor MutableBatch(ui32 idx);
     TBatchAccessor MutableLastBatch();
-    TBatch ExtractFirstBatch();
+    TBatch ExtractFirstBatch(bool materializeSharedData = true);
     void AddBlob(const TClientBlob& blob);
 
     friend IOutputStream& operator <<(IOutputStream& out, const THead& value);

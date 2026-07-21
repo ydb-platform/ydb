@@ -7,6 +7,7 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
 
+#include <cstring>
 
 namespace NKikimr::NPQ {
 namespace {
@@ -185,11 +186,12 @@ Y_UNIT_TEST(TestBatchPacking) {
         ));
     }
     batch.Pack();
-    TBuffer b = batch.PackedData;
+    TBuffer b(batch.PackedData.data(), batch.PackedData.size());
     UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     batch.Unpack();
     batch.Pack();
-    UNIT_ASSERT(batch.PackedData == b);
+    UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.size(), b.size());
+    UNIT_ASSERT(!batch.PackedData.size() || std::memcmp(batch.PackedData.data(), b.Data(), batch.PackedData.size()) == 0);
     TString str;
     batch.SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());

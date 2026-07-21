@@ -288,7 +288,7 @@ Unlike POSIX permissions, which are set on the NFS server, NFSv4 ACLs are config
      - `w` — write-data or create-file.
      - `a` — append-data or create-subdirectory.
      - `t` — read-attributes.
-     - `D` — delete-child.
+     - `D` - delete-child.
 
    This command sets:
 
@@ -353,9 +353,9 @@ Export and import via NFS use the same [resource broker](../../reference/configu
 
 ### Actor system IO pool
 
-File operations (write during export, read during import) are performed by actors in the [actor system](../../reference/configuration/actor_system_config.md#tuneconfig) pool. By default this pool contains `1` threads. Since file system operations are blocking, the `IO` pool can become a bottleneck during intensive export or import.
+File operations (write during export, read during import) are performed by actors in the `IO` pool of the [actor system](../../reference/configuration/actor_system_config.md#tuneconfig). By default this pool contains `1` thread. Since file system operations are blocking, the `IO` pool can become a bottleneck during intensive export or import.
 
-To increase the number of `threads` in the IO pool, modify the parameter in the [actor system configuration](../../reference/configuration/actor_system_config.md#tuneconfig):
+To increase the number of threads in the IO pool, modify the `threads` parameter in the [actor system configuration](../../reference/configuration/actor_system_config.md#tuneconfig):
 
 
 ```yaml

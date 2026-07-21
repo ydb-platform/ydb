@@ -162,6 +162,10 @@ class TestWatermarksInYdb(StreamingTestBase):
         if shared_reading and tasks > 1:
             time.sleep(2 * self.idle_timeout_seconds)  # leave a bit more time to fire up idle timeout
 
+    def _wait_for_shared_reading_start(self, shared_reading: bool) -> None:
+        if shared_reading:
+            time.sleep(self.idle_timeout_seconds + 1)
+
     def _read_topic(self, ydb_client: YdbClient, messages_count: int) -> list[str]:
         return ydb_client.topic_read(self.output_topic, self.consumer_name, messages_count)
 
@@ -257,6 +261,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_gt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
@@ -290,6 +295,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_lt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
@@ -322,6 +328,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_topic_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic(ydb_client, [self._event(0, "first-0")], partition_id=0)
@@ -351,6 +358,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"empty_partition_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        self._wait_for_shared_reading_start(shared_reading)
 
         try:
             self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)

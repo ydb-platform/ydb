@@ -25,3 +25,7 @@ RECURSE(
     yson
     ordered_maps
 )
+
+RECURSE_FOR_TESTS(
+    fuzz_targets
+)

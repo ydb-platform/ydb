@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package NKikimrFuzz;
+
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/table_stats.proto";
+import "ydb/core/protos/feature_flags.proto";
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/public/api/protos/ydb_scheme.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_rate_limiter.proto";
+import "ydb/core/protos/replication.proto";
+import "ydb/core/protos/kesus.proto";
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/forced_compaction.proto";
+
+message TFuzzInput {
+    NKikimrMiniKQL.TType mini_kql_type = 1;
+    Ydb.Type ydb_type = 2;
+    Ydb.ResultSet result_set = 3;
+    NKikimrSchemeOp.TDirEntry dir_entry = 4;
+    NKikimrSchemeOp.TPathDescription path_description = 5;
+    Ydb.Scheme.ModifyPermissionsRequest permissions = 6;
+    Ydb.Value tuple_value = 7;
+    Ydb.Type tuple_type = 8;
+    NKikimrProto.TTypeInfo type_info = 9;
+    uint32 type_id_hint = 10;
+    NKikimrTableStats.TTableStats table_stats = 11;
+    NKikimrConfig.TFeatureFlags feature_flags = 12;
+    NKikimrMiniKQL.TValue mini_kql_value = 13;
+    Ydb.Value ydb_value = 14;
+    string type_mod = 15;
+    string permission_name = 16;
+    uint32 acl_mask = 17;
+    string owner = 18;
+    string acl_text = 19;
+    bool is_container = 20;
+    string parse_string = 21;  // For parsing functions (HTTP, JSON, etc.)
+    string http_header = 22;    // For HTTP header parsing
+    NKikimrSchemeOp.TExternalDataSourceDescription external_data_source_description = 23;
+    NKikimrSchemeOp.TExternalTableDescription external_table_description = 24;
+    NKikimrSchemeOp.TReplicationDescription replication_description = 25;
+    NKikimrReplication.TEvDescribeReplicationResult ev_describe_replication_result = 26;
+    NKikimrSchemeOp.TKesusDescription kesus_description = 27;
+    Ydb.Coordination.Config coordination_config = 28;
+    Ydb.RateLimiter.Resource rate_limiter_resource = 29;
+    NKikimrKesus.TStreamingQuoterResource streaming_quoter_resource = 30;
+    NKikimrPQ.TPQTabletConfig.TConsumer pq_consumer = 31;
+    NKikimrSchemeOp.TPersQueueGroupDescription pq_group_description = 32;
+    NKikimrIndexBuilder.TIndexBuildSettings index_build_settings = 33;
+    NKikimrForcedCompaction.TForcedCompactionSettings forced_compaction_settings = 34;
+    Ydb.Table.AlterTableRequest alter_table_request = 35;
+    Ydb.Table.CreateTableRequest create_table_request = 36;
+    Ydb.Table.SequenceDescription sequence_description = 37;
+    NKikimrSchemeOp.TAlterColumnTable alter_column_table = 38;
+}

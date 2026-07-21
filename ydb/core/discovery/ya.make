@@ -12,3 +12,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    fuzz_targets
+)

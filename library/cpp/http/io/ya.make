@@ -31,5 +31,6 @@ RECURSE(
 RECURSE_FOR_TESTS(
     benchmark
     fuzz
+    fuzz_targets
     ut
 )

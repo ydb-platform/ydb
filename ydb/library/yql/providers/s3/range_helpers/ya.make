@@ -16,6 +16,10 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    fuzz_targets
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

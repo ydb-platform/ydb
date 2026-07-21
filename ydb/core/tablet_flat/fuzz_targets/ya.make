@@ -1,0 +1,10 @@
+RECURSE(
+    borrowlogic_stateful
+    gclogic_gc_result_stateful
+    gclogic_stateful
+    key_page_cache_stateful
+    key_range_cache_stateful
+    page_cache_actor_stateful
+    page_collection_cache_stateful
+    shared_page_cache_stateful
+)

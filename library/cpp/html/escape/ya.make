@@ -7,6 +7,10 @@ SRCS(
 
 END()
 
+RECURSE(
+    fuzz_targets
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

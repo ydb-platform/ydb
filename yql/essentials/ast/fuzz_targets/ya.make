@@ -1,0 +1,9 @@
+RECURSE(
+    constraint_set_deserialize
+    expr_context_stateful
+    expr_serialize_roundtrip
+    yql_ast_escaping
+    yql_ast_parse_roundtrip
+    yql_expr_compile_roundtrip
+    yql_expr_graph_deserialize
+)

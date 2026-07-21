@@ -318,6 +318,10 @@ ENDIF()
 
 END()
 
+RECURSE(
+    fuzz_targets
+)
+
 RECURSE_FOR_TESTS(
     build_index/ut
     ut_bloom_filter

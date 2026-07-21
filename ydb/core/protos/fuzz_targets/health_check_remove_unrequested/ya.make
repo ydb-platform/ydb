@@ -1,0 +1,14 @@
+FUZZ()
+PEERDIR(
+    ydb/core/protos
+    ydb/core/health_check
+    ydb/public/api/protos
+    ydb/core/util
+    ydb/core/tablet
+    ydb/core/scheme
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
+    contrib/libs/protobuf-mutator
+)
+SRCS(main.cpp)
+END()

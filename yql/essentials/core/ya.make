@@ -151,6 +151,7 @@ RECURSE(
     expr_nodes_gen
     extract_predicate
     facade
+    fuzz_targets
     peephole_opt
     qplayer
     services

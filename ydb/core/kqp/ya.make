@@ -63,6 +63,7 @@ RECURSE(
     expr_nodes
     federated_query
     finalize_script_service
+    fuzz_targets
     gateway
     host
     node_service

@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut_auditsettings
     ut_topic_cloud_events
     ut_background_cleaning

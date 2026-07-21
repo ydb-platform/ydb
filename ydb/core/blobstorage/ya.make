@@ -47,6 +47,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut_blobstorage
     ut_group
     ut_mirror3of4

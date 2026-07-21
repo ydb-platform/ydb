@@ -24,6 +24,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    fuzz_targets
     ordered_maps
 )
 

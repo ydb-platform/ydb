@@ -11,6 +11,8 @@ using TCpuId = ui32;
 
 // Simple data structure to operate with set of cpus
 struct TCpuMask {
+    static constexpr TCpuId MaxParsedCpuId = 65535;
+
     TStackVec<bool, 1024> Cpus;
 
     // Creates empty mask
@@ -40,6 +42,9 @@ struct TCpuMask {
                 } else {
                     l = r = FromString<TCpuId>(s);
                 }
+                if (l > r || r > MaxParsedCpuId) {
+                    ythrow yexception() << "invalid cpu range '" << s << "'";
+                }
                 if (r >= Cpus.size()) {
                     Cpus.resize(r + 1, false);
                 }
@@ -48,7 +53,7 @@ struct TCpuMask {
                 }
             }
         } catch (...) {
-            ythrow TWithBackTrace<yexception>() << "Exception occured while parsing cpu list '" << cpuList << "': " << CurrentExceptionMessage();
+            ythrow TWithBackTrace<yexception>() << "Exception occurred while parsing cpu list '" << cpuList << "': " << CurrentExceptionMessage();
         }
     }
 

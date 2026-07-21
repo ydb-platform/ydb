@@ -1,0 +1,10 @@
+RECURSE(
+    yaml_config_build_storage_cmd
+    yaml_config_metadata_ops
+    yaml_config_model_ops
+    yaml_config_parse
+    yaml_config_parse_full
+    yaml_config_static_validator
+    yaml_config_stateful_merge
+    yaml_config_storage_proto_roundtrip
+)

@@ -7,7 +7,7 @@
 ## Key features of the plugin {#features}
 
 - Connecting to {{ ydb-name }} with all [authentication](../../security/authentication.md) methods: anonymous, static, token-based, service account, and metadata.
-- Hierarchical object navigator: tables ( [row](../../concepts/glossary.md#row-oriented-table) and [column](../../concepts/glossary.md#column-oriented-table)), [topics](../../concepts/datamodel/topic.md), [views](../../concepts/datamodel/view.md), [external data sources](../../concepts/glossary.md#external-data-source), [external tables](../../concepts/glossary.md#external-table), [transfers](../../concepts/transfer.md), [streaming queries](../../concepts/glossary.md#streaming-query).
+- Hierarchical object navigator: tables ([row](../../concepts/glossary.md#row-oriented-table) and [column](../../concepts/glossary.md#column-oriented-table)), [topics](../../concepts/datamodel/topic.md), [views](../../concepts/datamodel/view.md), [external data sources](../../concepts/glossary.md#external-data-source), [external tables](../../concepts/glossary.md#external-table), [transfers](../../concepts/transfer.md), [streaming queries](../../concepts/glossary.md#streaming-query).
 - System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/glossary.md#resource-pool).
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting, autocompletion of tables and columns.
 - Query execution and result visualization: table, JSON, diagram.
@@ -98,7 +98,7 @@ Connection without credentials. Used for local or test installations of {{ ydb-s
 
 ### Static Credentials (login and password) {#auth-static}
 
-Authentication by login and password. Specify the username in the **Username** field and the password in the **Password** field. on the {{ ydb-short-name }} server. Used if [login and password authentication](../../security/authentication.md#static-credentials) is enabled
+Authentication by login and password. Specify the username in the **Username** field and the password in the **Password** field. Used if [login and password authentication](../../security/authentication.md#static-credentials) is enabled on the {{ ydb-short-name }} server.
 
 {% note info %}
 

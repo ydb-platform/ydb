@@ -73,7 +73,9 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // The topic path lands in tx.Tables (B walk).
     Y_UNIT_TEST_F(DirectTopicMatches, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
+        featureFlags.SetEnableTopicsSqlIoOperations(true);
+        featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(true);
 
         constexpr TStringBuf topicName = "test_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
@@ -96,7 +98,9 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // direct topic; path is `<table>/<stream>`.
     Y_UNIT_TEST_F(CdcStreamMatches, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
+        featureFlags.SetEnableTopicsSqlIoOperations(true);
+        featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(true);
 
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_cdc", "/Root/t_cdc/cf"));
@@ -129,6 +133,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // Uses a loopback Ydb-typed EDS pointing at our own runner + a local topic
     // as the target object (SetupMockPqGateway + real local PQ serves reads).
     Y_UNIT_TEST_F(FederatedEdsPathMatches, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableHasPredicatesInResourcePoolClassifiers(true);
         SetupMockPqGateway();
         constexpr TStringBuf topicName = "eds_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
@@ -162,6 +167,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // appears in TDqPqTopicSource.TopicPath — the (D) walk's unique-coverage
     // case verified on real cluster).
     Y_UNIT_TEST_F(FederatedTopicRemoteNameMatches, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableHasPredicatesInResourcePoolClassifiers(true);
         SetupMockPqGateway();
         constexpr TStringBuf topicName = "remote_by_name_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
@@ -196,6 +202,8 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // KindExternalTable — External Table on top of an ObjectStorage EDS.
     // Both the ET path and the underlying EDS path land in tx.Tables (B walk).
     Y_UNIT_TEST_F(ExternalTableMatches, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableHasPredicatesInResourcePoolClassifiers(true);
+
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_et", "/Root/et_s3"));
 

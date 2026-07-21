@@ -461,6 +461,86 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
+
+    Y_UNIT_TEST(RealHostVerifiesPushedOlapFilter) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, A, B, Payload
+                FROM `/Root/RboOrdered`
+                WHERE A >= 30 AND B == 5;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto& initialScan = OnlyPlanNode(initial, "scan");
+        UNIT_ASSERT(initialScan["predicate"].IsNull());
+        const auto& initialFilter = OnlyPlanNode(initial, "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialFilter["predicate"]["kind"].GetStringSafe(),
+            "and");
+
+        const auto& finalScan = OnlyPlanNode(final, "scan");
+        UNIT_ASSERT(!finalScan["predicate"].IsNull());
+        UNIT_ASSERT(finalScan["pushed_limit"].IsNull());
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalScan["predicate"]["kind"].GetStringSafe(),
+            "and");
+        const auto& conjuncts = finalScan["predicate"]["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 2);
+        THashSet<TString> kinds;
+        THashSet<TString> columns;
+        for (const auto& conjunct : conjuncts) {
+            const TString kind = conjunct["kind"].GetStringSafe();
+            const TString column = conjunct["left"]["column"].GetStringSafe();
+            kinds.insert(kind);
+            columns.insert(column);
+            UNIT_ASSERT_VALUES_EQUAL(
+                conjunct["right"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                conjunct["right"]["type"].GetStringSafe(),
+                "Int32");
+            if (column == "A") {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "gte");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    conjunct["right"]["value"].GetIntegerSafe(),
+                    30);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(column, "B");
+                UNIT_ASSERT_VALUES_EQUAL(kind, "eq");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    conjunct["right"]["value"].GetIntegerSafe(),
+                    5);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(kinds, THashSet<TString>({"eq", "gte"}));
+        UNIT_ASSERT_VALUES_EQUAL(columns, THashSet<TString>({"A", "B"}));
+        UNIT_ASSERT(PlanNodes(final, "filter").empty());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
 }
 
 } // namespace NKikimr::NKqp

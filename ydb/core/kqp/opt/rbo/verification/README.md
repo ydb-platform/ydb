@@ -6,8 +6,9 @@ a bounded input database on which their result bags or ordered sequences differ.
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit, and
-ordered Sort/TopSort/Merge parts of M4. Hermetic solver packaging, broad
-TPCH/TPCDS coverage, replay, and rule bisection remain future milestones.
+ordered Sort/TopSort/Merge and pushed OLAP-filter parts of M4. Hermetic solver
+packaging, broad TPCH/TPCDS coverage, replay, and rule bisection remain future
+milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -50,6 +51,12 @@ it as deterministic and total. The current reviewed families are integer
 determinism flag, so all other callables fail closed rather than relying on a
 denylist. This includes UDF and PG calls, division, strict casts, `Unwrap`,
 runtime-dependent generators, free variables, and unsafe AST metadata.
+
+The explicit comparison core accepts unequal integer widths only when YQL's
+common integer type represents both operands without wrapping: equal signedness,
+or a signed type wider than the unsigned type. This covers the canonical
+`Int64`-column/`Int32`-literal benchmark form while mixed-width cases that would
+bitcast or wrap still fail closed.
 
 Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
 It preserves exact callable/atom bytes, normalized atom flags, formatted types,
@@ -128,6 +135,16 @@ same exact literal shape. Its absence in a legacy-v1 snapshot means `null`,
 because the earlier v1 exporter rejected every pushed read limit. A non-null
 pushed limit is valid only on a column-storage source and executes independently
 on each source task after symbolic row partitioning.
+
+The exporter also emits `predicate` on every scan, with legacy absence meaning
+`null`. A non-null predicate is decoded from the executed `OlapFilterLambda`
+rather than `OriginalPredicate` statistics metadata. Version one accepts only a
+one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
+its scalar subset is physical columns, supported literals, Boolean
+AND/OR/NOT, equality, lossless integer ordering, and filter-boundary
+`Coalesce(predicate, false)`. Projection wrappers, range reads, malformed type
+descriptors, and unknown operations fail closed. The predicate filters raw scan
+rows before symbolic source partitioning and any per-task pushed limit.
 
 Every explicit outcome family is capped at 256 alternatives, including
 unordered-Limit choices, Sort permutations, Merge interleavings, latent
@@ -220,7 +237,9 @@ captured initial/final pair through the normal CLI. One test covers an explicit
 `LIMIT 1` and its split intermediate/final form. The ordered test covers
 `ORDER BY A DESC, B ASC LIMIT 1`: it checks the initial Sort+Limit, final
 per-task intermediate TopSort, exact Merge metadata (including NULL placement),
-and final Limit. Both always require strict decoding and SMT construction. Set
+and final Limit. A column-store test compares an initial logical Filter with the
+final pushed OLAP predicate and requires the normal bounded proof. All tests
+always require strict decoding and SMT construction. Set
 `RBO_Z3` to additionally require `VERIFIED_BOUNDED`; M2b will replace that
 opt-in path with a hermetic solver dependency.
 

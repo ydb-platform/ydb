@@ -299,6 +299,41 @@ bool IsIntegerType(TStringBuf type) {
     return type.StartsWith("Int") || type.StartsWith("Uint");
 }
 
+ui32 IntegerTypeWidth(TStringBuf type) {
+    if (type.EndsWith("64")) {
+        return 64;
+    }
+    if (type.EndsWith("32")) {
+        return 32;
+    }
+    if (type.EndsWith("16")) {
+        return 16;
+    }
+    if (type.EndsWith("8")) {
+        return 8;
+    }
+    return 0;
+}
+
+bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
+    if (!IsIntegerType(left) || !IsIntegerType(right)) {
+        return false;
+    }
+    const ui32 leftWidth = IntegerTypeWidth(left);
+    const ui32 rightWidth = IntegerTypeWidth(right);
+    if (!leftWidth || !rightWidth) {
+        return false;
+    }
+    const bool leftSigned = left.StartsWith("Int");
+    const bool rightSigned = right.StartsWith("Int");
+    if (leftSigned == rightSigned) {
+        return true;
+    }
+    const ui32 signedWidth = leftSigned ? leftWidth : rightWidth;
+    const ui32 unsignedWidth = leftSigned ? rightWidth : leftWidth;
+    return signedWidth > unsignedWidth;
+}
+
 TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
     return TypeName(node.GetTypeAnn(), nullable);
 }
@@ -311,9 +346,10 @@ void CheckScalarArity(const TExprNode& node, size_t minimum, size_t maximum) {
     }
 }
 
-TString DataTypeDescriptorName(const TExprNode& node) {
+TString DataTypeDescriptorName(const TExprNode& node, bool* nullable = nullptr) {
     const TExprNode* dataType = &node;
-    if (node.IsCallable("OptionalType")) {
+    const bool optional = node.IsCallable("OptionalType");
+    if (optional) {
         CheckScalarArity(node, 1, 1);
         dataType = node.Child(0);
     }
@@ -325,6 +361,9 @@ TString DataTypeDescriptorName(const TExprNode& node) {
         !IsSupportedType(dataType->Child(0)->Content()))
     {
         Unsupported("Opaque scalar has an unsupported DataType descriptor");
+    }
+    if (nullable) {
+        *nullable = optional;
     }
     return TString(dataType->Child(0)->Content());
 }
@@ -693,12 +732,16 @@ NJson::TJsonValue ExportExprNode(
             }
             const TString leftType = ScalarTypeName(*node.Child(0));
             const TString rightType = ScalarTypeName(*node.Child(1));
-            if (leftType != rightType) {
+            if (leftType != rightType &&
+                !IntegerComparisonCompatible(leftType, rightType))
+            {
                 Unsupported(TStringBuilder()
                     << node.Content() << " comparison operand types differ: "
                     << leftType << " and " << rightType);
             }
-            if (!equality && !IsIntegerType(leftType)) {
+            if (!equality &&
+                !IntegerComparisonCompatible(leftType, rightType))
+            {
                 Unsupported(TStringBuilder()
                     << node.Content() << " ordering is modeled only for integers");
             }
@@ -765,11 +808,23 @@ void CheckOlapBoolOpType(const TExprNode& node) {
     if (node.ChildrenSize() != 4) {
         return;
     }
-    const auto annotation = node.Child(3)->GetTypeAnn();
-    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Type ||
-        TypeName(annotation->Cast<TTypeExprType>()->GetType()) != "Bool")
-    {
+    const auto* descriptor = node.Child(3);
+    bool descriptorNullable = false;
+    if (DataTypeDescriptorName(*descriptor, &descriptorNullable) != "Bool") {
         Unsupported("OLAP Boolean operation has an invalid result type descriptor");
+    }
+    if (const auto annotation = descriptor->GetTypeAnn()) {
+        if (annotation->GetKind() != ETypeAnnotationKind::Type) {
+            Unsupported("OLAP Boolean operation type annotation is not Type");
+        }
+        bool annotationNullable = false;
+        if (TypeName(
+                annotation->Cast<TTypeExprType>()->GetType(),
+                &annotationNullable) != "Bool" ||
+            annotationNullable != descriptorNullable)
+        {
+            Unsupported("OLAP Boolean operation type annotation disagrees with its descriptor");
+        }
     }
 }
 

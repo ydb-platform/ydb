@@ -90,7 +90,8 @@ The explicit scalar core initially contains:
 
 - column access, typed literal, and typed NULL;
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
-- ordinary nullable equality and null-safe equality;
+- ordinary nullable equality, null-safe equality, and integer ordering when
+  YQL's common integer type preserves both operands exactly;
 - filter truth conversion.
 
 Every other deterministic, total scalar subtree is represented as a typed
@@ -146,7 +147,8 @@ Implementation sequence:
 4. M1: root projection and column order;
 5. M4: common aggregates and unordered literal Limit;
 6. M4: Sort/TopSort, ordered literal Limit, and ordered Merge;
-7. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+7. M4: actual column-store filter pushdown from the executed OLAP dialect;
+8. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -295,6 +297,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   independence, nullability, and fail-closed safety gates. A real-host integer
   arithmetic query shares the fingerprint across both boundaries and verifies
   through the normal obligation.
+- Actual pushed column-store filters are decoded from `OlapFilterLambda`, not
+  optimizer statistics metadata. The supported Boolean/comparison subset is
+  evaluated before per-task pushed limits, rejects projections and unknown
+  process operations, and is covered by a real-host bounded proof.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

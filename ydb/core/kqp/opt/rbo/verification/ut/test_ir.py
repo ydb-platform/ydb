@@ -108,7 +108,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "scan predicate must be Boolean"):
             parse_snapshot(non_boolean)
 
-    def test_ordered_comparison_requires_matching_integer_types(self):
+    def test_ordered_comparison_requires_losslessly_compatible_integer_types(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][1]["predicate"] = {
             "kind": "lt",
@@ -135,6 +135,28 @@ class SnapshotTest(unittest.TestCase):
             "null_safe": True,
         }
         with self.assertRaisesRegex(SnapshotError, "valid only for equality"):
+            parse_snapshot(value)
+
+    def test_lossless_mixed_width_integer_comparisons_are_supported(self):
+        value = minimal_snapshot()
+        value["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "gte",
+            "left": {"kind": "column", "column": "a.k"},
+            "right": {"kind": "literal", "type": "Int32", "value": 30},
+        }
+        parse_snapshot(value)
+
+        value["schema"]["tables"][0]["columns"][0]["type"] = "Int16"
+        value["plan"]["nodes"][1]["predicate"]["right"] = {
+            "kind": "literal",
+            "type": "Uint8",
+            "value": 30,
+        }
+        parse_snapshot(value)
+
+        value["schema"]["tables"][0]["columns"][0]["type"] = "Int8"
+        with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
             parse_snapshot(value)
 
     def test_unknown_field_is_rejected(self):

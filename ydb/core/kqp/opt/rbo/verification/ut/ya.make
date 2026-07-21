@@ -7,6 +7,7 @@ TEST_SRCS(
     test_olap_filter.py
     test_sort.py
     test_scalar.py
+    test_stagegraph_reference.py
     test_smt.py
     test_verify.py
 )

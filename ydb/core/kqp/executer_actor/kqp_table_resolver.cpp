@@ -27,12 +27,13 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames, NWilson::TTraceId resolveTraceId)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , ResolveTraceId(std::move(resolveTraceId)) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -457,17 +458,20 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, NWilson::TTraceId(ResolveTraceId));
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, NWilson::TTraceId(ResolveTraceId));
         } else {
             NavigationFinished = true;
         }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
+            0, 0, NWilson::TTraceId(ResolveTraceId));
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
@@ -537,13 +541,17 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
+
+    // Parent (the executer's ResolveTables span) for the scheme-cache/scheme-board round-trip spans.
+    const NWilson::TTraceId ResolveTraceId;
 };
 
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames,
+    NWilson::TTraceId resolveTraceId) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames, std::move(resolveTraceId));
 }
 
 } // namespace NKikimr::NKqp

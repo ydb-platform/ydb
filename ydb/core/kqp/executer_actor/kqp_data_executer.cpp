@@ -811,13 +811,17 @@ private:
 
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
+            // Span created before the send so the snapshot acquisition (scheme cache + coordinator
+            // round-trips inside long-tx-service) nests under it via the propagated trace id.
+            ExecuterStateSpan = this->MakePrepareChild(TWilsonKqp::DataExecuterAcquireSnapshot, TWilsonKqp::KqpSession, "WaitForSnapshot", "Snapshot", NWilson::EFlags::NONE);
+
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
+                0, 0, ExecuterStateSpan.GetTraceId());
 
             KQP_STLOG_T(KQPDATA, "Create temporary mvcc snapshot, become WaitSnapshotState",
                 (trace_id, TraceId()));
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = this->MakePrepareChild(TWilsonKqp::DataExecuterAcquireSnapshot, TWilsonKqp::KqpSession, "WaitForSnapshot", "Snapshot", NWilson::EFlags::NONE);
 
             return;
         }

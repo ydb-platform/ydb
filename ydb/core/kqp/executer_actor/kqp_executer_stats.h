@@ -448,6 +448,11 @@ public:
 
     bool CollectStatsByLongTasks = false;
 
+    // When set, every task's stats are retained per stage (not just the longest one) so the
+    // user-facing channel can emit a span per task. Gated on the user channel being active, so
+    // normal FULL-stats queries (and the plan/SVG they feed) keep the cheap longest-task behavior.
+    bool RetainAllTasks = false;
+
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
         : StatsMode(statsMode)

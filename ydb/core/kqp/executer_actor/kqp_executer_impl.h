@@ -186,6 +186,9 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
+        // Retain every task's stats only when the user-facing channel sampled this query, so the
+        // per-task span tree is populated without imposing that cost on ordinary FULL-stats queries.
+        Stats->RetainAllTasks = static_cast<bool>(ExecuterSpan.User());
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -1103,7 +1106,8 @@ protected:
 
         ExecuterStateSpan = MakePrepareChild(TWilsonKqp::ExecuterTableResolve, TWilsonKqp::KqpSession, "WaitForTableResolve", "ResolveTables");
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false,
+            ExecuterStateSpan.GetTraceId());
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         KQP_STLOG_T(KQPEX, "Got request, become WaitResolveState",

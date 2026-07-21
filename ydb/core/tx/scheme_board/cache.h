@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
@@ -28,6 +29,7 @@ namespace NSchemeCache {
         // - IsImplicit == true when the entry is a fallback entry
         TVector<TEntryFallbackInfo> EntriesFallbackInfo;
         bool HasSysViewEntries = false;
+        NWilson::TSpan Span; // resolve round-trip through the scheme cache (into the scheme board)
 
         TSchemeCacheNavigateContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
             : Sender(sender)
@@ -46,6 +48,7 @@ namespace NSchemeCache {
         TAutoPtr<TSchemeCacheRequest> Request;
         const TInstant CreatedAt;
         TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
+        NWilson::TSpan Span; // resolve round-trip through the scheme cache (into the scheme board)
 
         TSchemeCacheRequestContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
             : Sender(sender)

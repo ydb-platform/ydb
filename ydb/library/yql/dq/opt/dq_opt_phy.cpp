@@ -3240,5 +3240,4 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
     return TExprBase(res);
 }
 
-
 } // namespace NYql::NDq

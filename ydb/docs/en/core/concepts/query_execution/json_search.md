@@ -64,7 +64,7 @@ If the predicate cannot be turned into an index lookup, the behavior of {{ ydb-s
 * When the optimizer automatically selects an index, the query is simply executed without index acceleration (the result remains correct).
 * When the index is explicitly specified via the expression `VIEW`, an error is returned.
 
-See more details [{#T}](../../yql/reference/syntax/select/json_index.md).
+See more details [here](../../yql/reference/syntax/select/json_index.md).
 
 Additional information:
 

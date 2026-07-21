@@ -114,7 +114,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Sessions
 
-Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/execution_process.md#sessions).
+Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/index.md#sessions).
 
 ### Client-side timeout {#client-timeout}
 
@@ -250,7 +250,7 @@ Views can be user-defined or system.
 
 #### System views {#system-view}
 
-**system views** — these are special views automatically created by the system to monitor the state of the database and the cluster. They reside in the special directory `.sys` located in the root folder of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for the cluster, as well as access‑control issues, are in [{#T}](../devops/observability/system-views.md).
+**system views** — these are special views automatically created by the system to monitor the state of the database and the cluster. They reside in the special directory `.sys` located in the root directory of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for the cluster, as well as access‑control issues, are in [{#T}](../devops/observability/system-views.md).
 
 ### Topic {#topic}
 
@@ -701,7 +701,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 ### State storage {#state-storage}
 
-**State storage**, **StateStorage** is a distributed service that stores information about tablets, namely:
+**State storage**, **state storage**, **StateStorage** is a distributed service that stores information about tablets, namely:
 
 * The current tablet leader or its absence.
 * Tablet replicas.
@@ -723,7 +723,7 @@ Because of its nature, the state storage service operates on a best‑effort bas
 
 #### Compaction {#compaction}
 
-**Compaction** is an internal background process that reorganizes data of an [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) are organized as LSM trees. Therefore, there is **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource‑intensive, so measures are taken to minimize its overhead, for example by limiting the number of concurrent compactions.
+**Compaction**, **compaction** is an internal background process that reorganizes data of an [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) are organized as LSM trees. Therefore, there is **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource‑intensive, so measures are taken to minimize its overhead, for example by limiting the number of concurrent compactions.
 
 #### gRPC proxy {#grpc-proxy}
 
@@ -799,13 +799,13 @@ Technically, the DS proxy is implemented as an [actor service](#actor-service), 
 
 #### Failure realm {#fail-realm}
 
-**failure realm** is a set of [failure domains](#fail-domain) that can fail simultaneously for a common cause. A correlated failure of two [VDisks](#vdisk) in the same failure realm is more likely than a failure of two VDisks from different failure realms.
+**failure realm** or **fail realm** is a set of [failure domains](#fail-domain) that can fail simultaneously for a common cause. A correlated failure of two [VDisks](#vdisk) in the same failure realm is more likely than a failure of two VDisks from different failure realms.
 
 An example of a failure realm is a set of equipment located in a single [data center or availability zone](#regions-az) that can fail entirely due to a natural disaster, a large‑scale power outage, or a similar event.
 
 #### Failure domain {#fail-domain}
 
-**failure domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisk](#vdisk) within the same failure domain is more likely than a failure of two VDisk from different failure domains. When the failure domains are different, the probability of simultaneous failure also depends on whether the considered domains belong to the same failure realm or to different ones.
+**failure domain** or **fail domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisk](#vdisk) within the same failure domain is more likely than a failure of two VDisk from different failure domains. When the failure domains are different, the probability of simultaneous failure also depends on whether the considered domains belong to the same failure realm or to different ones.
 
 An example of a failure domain is a set of disks attached to a single server, because all disks of that server can become unavailable if the server’s power supply or network controller fails. Typically, a common failure domain includes all servers located in the same [server rack](#rack), since power or network issues at the rack level render all equipment in the rack unavailable. Thus, a typical failure domain corresponds to a server rack (if the [cluster](#cluster) is configured with rack‑aware topology) or to an individual server.
 
@@ -828,7 +828,7 @@ Distributed transactions {{ ydb-short-name }} are inspired by the research paper
 
 #### Optimistic locking {#optimistic-locking}
 
-As in many other database management systems, queries {{ ydb-short-name }} can place locks on specific data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but at commit time. The first approach is called **pessimistic locking** (for example, used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
+As in many other database management systems, queries {{ ydb-short-name }} can place locks on specific data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but at commit time. The first approach is called **pessimistic locking** or **perssimistic locking** (for example, used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
 
 #### Transaction lock invalidation {#tli}
 

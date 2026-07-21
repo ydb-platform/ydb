@@ -101,7 +101,7 @@ Additional table creation parameters. See more in the [{#T}](with.md) section.
 * [Row](../../../../concepts/datamodel/table.md#row-oriented-tables).
 * [Columnar](../../../../concepts/datamodel/table.md#column-oriented-tables).
 
-The table type at creation is set by the `STORE` parameter in the `WITH` block, where `ROW` denotes a [row table](../../../../concepts/datamodel/table.md#row-oriented-tables), and `COLUMN` denotes a [columnar](../../../../concepts/datamodel/table.md#column-oriented-tables) one:
+The table type at creation is set by the `STORE` parameter in the `WITH` block, where `ROW` denotes a [row table](../../../../concepts/datamodel/table.md#row-oriented-tables), and `COLUMN` denotes a [columnar table](../../../../concepts/datamodel/table.md#column-oriented-tables):
 
 
 ```yql

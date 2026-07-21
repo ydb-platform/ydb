@@ -738,6 +738,58 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             comparisonExpression["right"]["column"].GetStringSafe(),
             "a.y");
+
+        TExportTestContext mixedWidth;
+        const auto& mixedTable = AddTable(mixedWidth, "/Root/Mixed", {
+            {"x", "Int64", false},
+        });
+        auto mixedRead = MakeRead(mixedWidth, mixedTable, "a", {"x"});
+        const auto* int64Type = ScalarType(mixedWidth, NUdf::EDataSlot::Int64, true);
+        const auto* int32Type = ScalarType(mixedWidth, NUdf::EDataSlot::Int32);
+        const auto* mixedBoolType = ScalarType(mixedWidth, NUdf::EDataSlot::Bool, true);
+        auto mixedMap = MakeIntrusive<TOpMap>(
+            mixedRead,
+            TPositionHandle(),
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TExpression(
+                    TypedCallable(
+                        mixedWidth,
+                        ">=",
+                        {
+                            TypedMember(mixedWidth, "a.x", int64Type),
+                            TypedLiteral(mixedWidth, "Int32", "30", int32Type),
+                        },
+                        mixedBoolType),
+                    &mixedWidth.ExprCtx,
+                    &mixedWidth.ExpressionProps))});
+        TOpRoot mixedRoot(mixedMap, TPositionHandle(), {"result"});
+        const auto mixedSnapshot = ParseSupported(
+            ExportSemanticSnapshotV1(mixedRoot, mixedWidth.RboCtx));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(mixedSnapshot, "project")["columns"].GetArraySafe().back()
+                ["expression"]["kind"].GetStringSafe(),
+            "gte");
+
+        TExportTestContext lossy;
+        const auto* int8Type = ScalarType(lossy, NUdf::EDataSlot::Int8);
+        const auto* uint8Type = ScalarType(lossy, NUdf::EDataSlot::Uint8);
+        const auto* lossyBoolType = ScalarType(lossy, NUdf::EDataSlot::Bool);
+        const auto lossyResult = ExportMapExpressionResult(
+            lossy,
+            "a",
+            TypedCallable(
+                lossy,
+                "==",
+                {
+                    TypedMember(lossy, "a.x", int8Type),
+                    TypedLiteral(lossy, "Uint8", "30", uint8Type),
+                },
+                lossyBoolType));
+        UNIT_ASSERT(!lossyResult.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            lossyResult.UnsupportedReason,
+            "comparison operand types differ");
     }
 
     Y_UNIT_TEST(UnsafeOrUnauditedOpaqueExpressionsFailClosed) {

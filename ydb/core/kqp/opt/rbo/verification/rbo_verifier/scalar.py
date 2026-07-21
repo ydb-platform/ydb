@@ -63,7 +63,18 @@ class Encoder:
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
             if expression.kind == "eq" and expression.null_safe:
-                return Value(BOOL, smt.FALSE, self.not_distinct(left, right))
+                return Value(
+                    BOOL,
+                    smt.FALSE,
+                    smt.or_(
+                        smt.and_(left.is_null, right.is_null),
+                        smt.and_(
+                            smt.not_(left.is_null),
+                            smt.not_(right.is_null),
+                            smt.eq(left.value, right.value),
+                        ),
+                    ),
+                )
             if expression.kind == "eq":
                 comparison = smt.eq(left.value, right.value)
             elif expression.kind == "lt":

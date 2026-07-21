@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeAlias
 
-from .types import BOOL, SCALAR_TYPES, family
+from .types import BOOL, SCALAR_TYPES, family, integer_comparison_compatible
 
 
 FORMAT = "ydb-rbo-semantic-snapshot"
@@ -846,10 +846,15 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
     if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
-        if left.name != right.name:
+        compatible_integers = integer_comparison_compatible(left.name, right.name)
+        if left.name != right.name and not compatible_integers:
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
-        if expr.kind != "eq" and family(left.name) != "int":
+        if expr.kind != "eq" and not (
+            family(left.name) == "int"
+            and family(right.name) == "int"
+            and compatible_integers
+        ):
             _fail(path, f"{expr.kind} requires integer arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 

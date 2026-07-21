@@ -114,7 +114,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Sessions
 
-Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/index.md#sessions).
+Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/execution_process.md#sessions).
 
 ### Client-side timeout {#client-timeout}
 

@@ -1,10 +1,12 @@
 #pragma once
 
-#include <yt/yt/client/formats/public.h>
+#include "public.h"
 
 #include <yt/yt/core/yson/public.h>
 
-namespace NYT::NFormats {
+#include <util/stream/fwd.h>
+
+namespace NYT::NYaml {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,4 +19,4 @@ void ParseYaml(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml

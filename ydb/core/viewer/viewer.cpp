@@ -1,4 +1,5 @@
 #include "viewer.h"
+#include "viewer_utils.h"
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -694,6 +695,8 @@ private:
     EDatabaseScopedRequestValidationResult ValidateDatabaseScopedRequest(
         const TString& path,
         const TCgiParameters& params,
+        const TStringBuf& method,
+        const TStringBuf& body,
         const TString& serializedToken,
         TString& error) const
     {
@@ -707,9 +710,11 @@ private:
             return EDatabaseScopedRequestValidationResult::Ok;
         }
         const auto itAccess = EndpointAccess.find(path);
-        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam && params.Get("database").empty()) {
-            error = TStringBuilder() << "`database` is required for " << path;
-            return EDatabaseScopedRequestValidationResult::DatabaseRequired;
+        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
+            if (GetDatabaseParam(params, method, body).empty()) {
+                error = TStringBuilder() << "`database` is required for " << path;
+                return EDatabaseScopedRequestValidationResult::DatabaseRequired;
+            }
         }
         return EDatabaseScopedRequestValidationResult::Ok;
     }
@@ -939,7 +944,13 @@ private:
                 return;
             }
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), msg->UserToken, scopeError)) {
+            switch (ValidateDatabaseScopedRequest(
+                path,
+                msg->Request.GetParams(),
+                msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
+                msg->Request.GetPostContent(),
+                msg->UserToken,
+                scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                     return;
@@ -1035,7 +1046,13 @@ private:
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, proxyParams, ev->Get()->UserToken, scopeError)) {
+            switch (ValidateDatabaseScopedRequest(
+                path,
+                proxyParams,
+                ev->Get()->Request->Method,
+                ev->Get()->Request->Body,
+                ev->Get()->UserToken,
+                scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
                         ev->Get()->Request->CreateResponseString(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError))));

@@ -34,6 +34,27 @@ def _assert_status(base_url, path, token, status, method=EndpointMethod.GET):
     assert response.status_code == status
 
 
+def _assert_viewer_query_post(mon_base_url, token, status=200, database=DATABASE):
+    headers = {
+        'Authorization': token,
+        'Content-Type': 'application/json',
+    }
+    body = {
+        'query': 'SELECT 1;',
+        'schema': 'multi',
+    }
+    if database is not None:
+        body['database'] = database
+    response = requests.post(
+        mon_base_url + '/viewer/query',
+        headers=headers,
+        json=body,
+        verify=False,
+        timeout=5,
+    )
+    assert response.status_code == status, response.text
+
+
 def _build_endpoint_path(endpoint, with_database_cgi, extra_params=None):
     params = dict(extra_params or {})
     if with_database_cgi:
@@ -194,6 +215,15 @@ def test_database_scoped_endpoints_access_controls(mon_base_url, describe_schema
             200,
             method,
         )
+
+
+def test_viewer_query_database_in_post_body(mon_base_url, describe_schema_grants):
+    _assert_viewer_query_post(mon_base_url, 'database@builtin', status=400, database=None)
+    _assert_viewer_query_post(mon_base_url, 'database@builtin', status=200, database=DATABASE)
+
+    for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+        _assert_viewer_query_post(mon_base_url, token, database=None)
+        _assert_viewer_query_post(mon_base_url, token, database=DATABASE)
 
 
 def test_topic_data_access_controls(mon_base_url, topic_created):

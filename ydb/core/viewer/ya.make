@@ -103,6 +103,8 @@ SRCS(
     viewer_tenantinfo.h
     viewer_tenants.h
     viewer_topicinfo.h
+    viewer_utils.cpp
+    viewer_utils.h
     viewer_vdiskinfo.h
     viewer_whoami.h
     viewer.h
@@ -847,6 +849,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     library/cpp/archive
+    library/cpp/json
     library/cpp/mime/types
     library/cpp/protobuf/json
     ydb/core/base

@@ -925,7 +925,7 @@ TEST(TSolomonRegistryTest, ExtensionTag)
 
 TEST_P(TRenameTest, RenameTag)
 {
-    bool recreate_sensor = GetParam();
+    bool recreateSensor = GetParam();
 
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -955,7 +955,7 @@ TEST_P(TRenameTest, RenameTag)
 
     r.RenameDynamicTag(mediumTag, "medium", "default");
 
-    if (recreate_sensor) {
+    if (recreateSensor) {
         c0 = r.Counter("/bytes_read");
     }
 
@@ -973,8 +973,7 @@ TEST_P(TRenameTest, RenameTag)
 INSTANTIATE_TEST_SUITE_P(
     TRenameTest,
     TRenameTest,
-    ::testing::Values(false, true)
-);
+    ::testing::Values(false, true));
 
 struct TBlinkingProducer
     : ISensorProducer

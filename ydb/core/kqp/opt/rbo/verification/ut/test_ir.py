@@ -222,6 +222,53 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "equality type mismatch"):
             parse_snapshot(value)
 
+    def test_integer_arithmetic_schema_and_inference_are_strict(self):
+        value = minimal_snapshot()
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "eq",
+            "left": {
+                "kind": "add",
+                "left": {"kind": "column", "column": "a.k"},
+                "right": {"kind": "literal", "type": "Int64", "value": 1},
+                "type": "Int64",
+                "nullable": False,
+            },
+            "right": {"kind": "literal", "type": "Int64", "value": 2},
+        }
+        snapshot = parse_snapshot(value)
+        expression = snapshot.plan.nodes[1].predicate.args[0]
+        self.assertEqual((expression.kind, expression.result_type, expression.nullable), (
+            "add", "Int64", False
+        ))
+
+        unknown = copy.deepcopy(value)
+        unknown["plan"]["nodes"][1]["predicate"]["left"]["args"] = []
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: args"):
+            parse_snapshot(unknown)
+
+        missing = copy.deepcopy(value)
+        del missing["plan"]["nodes"][1]["predicate"]["left"]["nullable"]
+        with self.assertRaisesRegex(SnapshotError, "missing fields: nullable"):
+            parse_snapshot(missing)
+
+        mismatched = copy.deepcopy(value)
+        mismatched["plan"]["nodes"][1]["predicate"]["left"]["right"]["type"] = "Int32"
+        with self.assertRaisesRegex(SnapshotError, "operands and result must have exactly the same type"):
+            parse_snapshot(mismatched)
+
+        non_integer = copy.deepcopy(value)
+        arithmetic = non_integer["plan"]["nodes"][1]["predicate"]["left"]
+        arithmetic["left"] = {"kind": "literal", "type": "Bool", "value": True}
+        arithmetic["right"] = {"kind": "literal", "type": "Bool", "value": False}
+        arithmetic["type"] = "Bool"
+        with self.assertRaisesRegex(SnapshotError, "add requires an integer result"):
+            parse_snapshot(non_integer)
+
+        nullable = copy.deepcopy(value)
+        nullable["schema"]["tables"][0]["columns"][0]["nullable"] = True
+        with self.assertRaisesRegex(SnapshotError, "nullability must equal the OR"):
+            parse_snapshot(nullable)
+
     def test_abstract_scalar_names_are_rejected(self):
         value = minimal_snapshot()
         value["schema"]["tables"][0]["columns"][0]["type"] = "int"

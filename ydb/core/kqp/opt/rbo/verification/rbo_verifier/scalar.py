@@ -7,7 +7,7 @@ from typing import Mapping
 
 from . import smt
 from .ir import Expr
-from .types import BOOL, VOID, family
+from .types import BOOL, VOID, family, integer_width
 
 
 def smt_sort(scalar_type: str) -> str:
@@ -90,6 +90,22 @@ class Encoder:
                 BOOL,
                 smt.or_(left.is_null, right.is_null),
                 comparison,
+            )
+
+        if expression.kind in {"add", "sub", "mul"}:
+            assert expression.result_type is not None
+            left = self.evaluate(expression.args[0], row)
+            right = self.evaluate(expression.args[1], row)
+            if expression.kind == "add":
+                raw = smt.add(left.value, right.value)
+            elif expression.kind == "sub":
+                raw = smt.sub(left.value, right.value)
+            else:
+                raw = smt.mul(left.value, right.value)
+            return Value(
+                expression.result_type,
+                smt.or_(left.is_null, right.is_null),
+                _wrap_integer(raw, expression.result_type),
             )
 
         if expression.kind == "opaque":
@@ -211,3 +227,18 @@ def _default(scalar_type: str) -> smt.Term:
     if scalar_family == "unit":
         return smt.FALSE
     raise AssertionError(f"unknown scalar type {scalar_type!r}")
+
+
+def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:
+    """Return the canonical value after fixed-width two's-complement wrap."""
+
+    width = integer_width(scalar_type)
+    assert width is not None
+    modulus = 1 << width
+    if scalar_type.startswith("Uint"):
+        return smt.mod(value, modulus)
+    sign = 1 << (width - 1)
+    return smt.sub(
+        smt.mod(smt.add(value, smt.int_value(sign)), modulus),
+        smt.int_value(sign),
+    )

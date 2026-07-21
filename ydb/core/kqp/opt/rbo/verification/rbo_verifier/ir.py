@@ -389,6 +389,18 @@ def _parse_expr(value: Any, path: str) -> Expr:
             null_safe=_bool(obj.get("null_safe", False), f"{path}.null_safe"),
         )
 
+    if kind in {"add", "sub", "mul"}:
+        _keys(obj, {"kind", "left", "right", "type", "nullable"}, path)
+        return Expr(
+            kind=kind,
+            args=(
+                _parse_expr(obj["left"], f"{path}.left"),
+                _parse_expr(obj["right"], f"{path}.right"),
+            ),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
     if kind == "opaque":
         _keys(obj, {"kind", "fingerprint", "type", "nullable", "args"}, path)
         raw_args = _array(obj["args"], f"{path}.args")
@@ -867,6 +879,26 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         ):
             _fail(path, f"{expr.kind} requires integer arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
+
+    if expr.kind in {"add", "sub", "mul"}:
+        assert expr.result_type is not None and expr.nullable is not None
+        left = _infer_expr(expr.args[0], columns, f"{path}.left")
+        right = _infer_expr(expr.args[1], columns, f"{path}.right")
+        if family(expr.result_type) != "int":
+            _fail(path, f"{expr.kind} requires an integer result")
+        if left.name != expr.result_type or right.name != expr.result_type:
+            _fail(
+                path,
+                f"{expr.kind} operands and result must have exactly the same type: "
+                f"{left.name!r}, {right.name!r}, and {expr.result_type!r}",
+            )
+        nullable = left.nullable or right.nullable
+        if expr.nullable != nullable:
+            _fail(
+                path,
+                f"{expr.kind} nullability must equal the OR of operand nullability",
+            )
+        return ValueType(expr.result_type, nullable)
 
     raise AssertionError(f"parser admitted unknown expression kind {expr.kind!r}")
 

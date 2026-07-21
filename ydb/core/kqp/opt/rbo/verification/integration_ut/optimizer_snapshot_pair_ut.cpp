@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
-    Y_UNIT_TEST(RealHostVerifiesCanonicalOpaqueArithmetic) {
+    Y_UNIT_TEST(RealHostVerifiesExplicitIntegerArithmetic) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);
 
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         const TString query = R"(--!syntax_v1
-                SELECT A + 1 AS Adjusted
+                SELECT A + 1l AS Adjusted
                 FROM `/Root/RboOrdered`;
             )";
         IKqpHost::TPrepareSettings settings;
@@ -485,12 +485,12 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto initial = ParseSnapshot(results[0]);
         const auto final = ParseSnapshot(results[1]);
 
-        const auto opaqueExpressions = [](const NJson::TJsonValue& snapshot) {
+        const auto additions = [](const NJson::TJsonValue& snapshot) {
             TVector<const NJson::TJsonValue*> result;
             for (const auto* project : PlanNodes(snapshot, "project")) {
                 for (const auto& column : (*project)["columns"].GetArraySafe()) {
                     const auto& expression = column["expression"];
-                    if (expression["kind"].GetStringSafe() == "opaque") {
+                    if (expression["kind"].GetStringSafe() == "add") {
                         result.push_back(&expression);
                     }
                 }
@@ -498,16 +498,20 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             return result;
         };
 
-        const auto initialOpaque = opaqueExpressions(initial);
-        const auto finalOpaque = opaqueExpressions(final);
-        UNIT_ASSERT_VALUES_EQUAL(initialOpaque.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(finalOpaque.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(
-            (*initialOpaque[0])["fingerprint"].GetStringSafe(),
-            (*finalOpaque[0])["fingerprint"].GetStringSafe());
-        UNIT_ASSERT_VALUES_EQUAL((*initialOpaque[0])["type"].GetStringSafe(), "Int64");
-        UNIT_ASSERT((*initialOpaque[0])["nullable"].GetBooleanSafe());
-        UNIT_ASSERT_VALUES_EQUAL((*initialOpaque[0])["args"].GetArraySafe().size(), 1);
+        const auto initialAdditions = additions(initial);
+        const auto finalAdditions = additions(final);
+        UNIT_ASSERT_VALUES_EQUAL(initialAdditions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalAdditions.size(), 1);
+        const auto assertAddition = [](const NJson::TJsonValue& expression) {
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Int64");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Int64");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"].GetIntegerSafe(), 1);
+        };
+        assertAddition(*initialAdditions[0]);
+        assertAddition(*finalAdditions[0]);
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

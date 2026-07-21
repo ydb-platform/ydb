@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 from . import smt
 from .ir import Snapshot
-from .relation import Database, Evaluator, RelationError, WitnessRow, bag_equal
+from .relation import Database, Evaluator, RelationError, WitnessRow, family_equal
 from .scalar import Encoder as ScalarEncoder
 from .stages import TASKS, Evaluator as StageEvaluator, Router, StageError
 from .types import family
@@ -119,19 +119,20 @@ def _build_problem(
     scalar = ScalarEncoder(script)
     router = Router(script)
     try:
-        before_relation = (
-            Evaluator(before, database, scalar).root()
+        before_family = (
+            Evaluator(before, database, scalar, choice_scope="before:logical").root()
             if before.stage_graph is None
             else StageEvaluator(before, database, scalar, router).root()
         )
-        after_relation = (
-            Evaluator(after, database, scalar).root()
+        after_family = (
+            Evaluator(after, database, scalar, choice_scope="after:logical").root()
             if after.stage_graph is None
             else StageEvaluator(after, database, scalar, router).root()
         )
+        equivalent = family_equal(before_family, after_family, scalar)
     except (RelationError, StageError) as error:
         raise VerificationError(str(error)) from error
-    script.assert_(smt.not_(bag_equal(before_relation, after_relation, scalar)))
+    script.assert_(smt.not_(equivalent))
     return Problem(script, database.witness)
 
 

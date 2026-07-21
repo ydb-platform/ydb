@@ -32,7 +32,7 @@ JOIN_KINDS = frozenset(
 )
 STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_all", "merge"})
 HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
-AGGREGATE_PHASES = frozenset({"undefined", "intermediate", "final"})
+OPERATOR_PHASES = frozenset({"undefined", "intermediate", "final"})
 
 
 class SnapshotError(ValueError):
@@ -95,6 +95,7 @@ class Scan:
     id: str
     table: str
     columns: tuple[ScanColumn, ...]
+    pushed_limit: Expr | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +121,15 @@ class Filter:
     id: str
     input: str
     predicate: Expr
+
+
+@dataclass(frozen=True, slots=True)
+class Limit:
+    id: str
+    input: str
+    count: Expr
+    offset: Expr | None
+    phase: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +175,7 @@ class UnionAll:
     output: tuple[str, ...]
 
 
-PlanNode: TypeAlias = EmptySource | Scan | Project | Filter | Aggregate | Join | UnionAll
+PlanNode: TypeAlias = EmptySource | Scan | Project | Filter | Limit | Aggregate | Join | UnionAll
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +384,18 @@ def _parse_expr(value: Any, path: str) -> Expr:
     _fail(f"{path}.kind", f"unsupported expression kind {kind!r}")
 
 
+def _parse_uint64_literal(value: Any, path: str) -> Expr:
+    """Decode the deliberately narrow v1 limit-count expression subset."""
+
+    expression = _parse_expr(value, path)
+    if expression.kind != "literal" or expression.result_type != "Uint64":
+        _fail(path, "expected a non-null Uint64 literal")
+    assert type(expression.value) is int
+    if not 0 <= expression.value < 1 << 64:
+        _fail(path, "Uint64 literal is outside [0, 2^64 - 1]")
+    return expression
+
+
 def _parse_table(value: Any, path: str) -> Table:
     obj = _object(value, path)
     _keys(obj, {"name", "columns", "unique_keys"}, path)
@@ -422,7 +444,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         return EmptySource(node_id)
 
     if operation == "scan":
-        _keys(obj, {"id", "op", "table", "columns"}, path)
+        _keys(obj, {"id", "op", "table", "columns"}, path, {"pushed_limit"})
         columns: list[ScanColumn] = []
         for index, raw_column in enumerate(_array(obj["columns"], f"{path}.columns")):
             column_path = f"{path}.columns[{index}]"
@@ -436,7 +458,14 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             )
         if not columns:
             _fail(f"{path}.columns", "must not be empty")
-        return Scan(node_id, _string(obj["table"], f"{path}.table"), tuple(columns))
+        return Scan(
+            node_id,
+            _string(obj["table"], f"{path}.table"),
+            tuple(columns),
+            None
+            if obj.get("pushed_limit") is None
+            else _parse_uint64_literal(obj["pushed_limit"], f"{path}.pushed_limit"),
+        )
 
     if operation == "project":
         _keys(obj, {"id", "op", "input", "columns"}, path)
@@ -461,6 +490,23 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             node_id,
             _string(obj["input"], f"{path}.input"),
             _parse_expr(obj["predicate"], f"{path}.predicate"),
+        )
+
+    if operation == "limit":
+        _keys(obj, {"id", "op", "input", "count", "offset", "phase"}, path)
+        phase = _string(obj["phase"], f"{path}.phase")
+        if phase not in OPERATOR_PHASES:
+            _fail(f"{path}.phase", f"unsupported limit phase {phase!r}")
+        return Limit(
+            id=node_id,
+            input=_string(obj["input"], f"{path}.input"),
+            count=_parse_uint64_literal(obj["count"], f"{path}.count"),
+            offset=(
+                None
+                if obj["offset"] is None
+                else _parse_uint64_literal(obj["offset"], f"{path}.offset")
+            ),
+            phase=phase,
         )
 
     if operation == "aggregate":
@@ -496,7 +542,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         if not aggregates:
             _fail(f"{path}.aggregates", "must not be empty")
         phase = _string(obj["phase"], f"{path}.phase")
-        if phase not in AGGREGATE_PHASES:
+        if phase not in OPERATOR_PHASES:
             _fail(f"{path}.phase", f"unsupported aggregate phase {phase!r}")
         return Aggregate(
             id=node_id,
@@ -778,7 +824,7 @@ def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_na
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
-    if isinstance(node, (Project, Filter, Aggregate)):
+    if isinstance(node, (Project, Filter, Limit, Aggregate)):
         return (node.input,)
     if isinstance(node, Join):
         return (node.left, node.right)
@@ -806,6 +852,14 @@ def _validate_stage_graph(
 ) -> None:
     graph = snapshot.stage_graph
     if graph is None:
+        if any(
+            isinstance(node, Scan) and node.pushed_limit is not None
+            for node in snapshot.plan.nodes
+        ):
+            _fail(
+                "snapshot.stage_graph",
+                "a pushed scan limit requires a column-storage source stage",
+            )
         return
     path = "snapshot.stage_graph"
     if not graph.stages:
@@ -872,6 +926,11 @@ def _validate_stage_graph(
                 _fail(stage_path, "a source stage must contain one scan and have no inputs")
             if stage.source_storage == "row" and len(stage.nodes) != 1:
                 _fail(stage_path, "a row-storage source stage must contain only its scan")
+        if scans and scans[0].pushed_limit is not None and stage.source_storage != "column":
+            _fail(
+                f"{stage_path}.source_storage",
+                "a pushed scan limit requires column storage",
+            )
 
     missing = plan_nodes.keys() - owner.keys()
     if missing:
@@ -1144,6 +1203,9 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             predicate_type = _infer_expr(node.predicate, result, f"node {node.id!r}.predicate")
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
+
+        elif isinstance(node, Limit):
+            result = dict(schema_for(node.input))
 
         elif isinstance(node, Aggregate):
             input_schema = schema_for(node.input)

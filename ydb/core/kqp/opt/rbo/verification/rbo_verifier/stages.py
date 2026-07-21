@@ -14,7 +14,17 @@ from .ir import (
     stage_task_counts,
     validate_snapshot,
 )
-from .relation import Database, Evaluator as RelationEvaluator, Relation, Row
+from .relation import (
+    Database,
+    Evaluator as RelationEvaluator,
+    Relation,
+    RelationFamily,
+    Row,
+    combine_families,
+    limit_family,
+    map_family,
+    single,
+)
 from .scalar import Encoder as ScalarEncoder, Value
 
 
@@ -27,7 +37,7 @@ class StageError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Partitions:
-    relations: tuple[Relation, ...]
+    relations: tuple[RelationFamily, ...]
 
 
 class Router:
@@ -95,14 +105,20 @@ class Evaluator:
         self.outputs: dict[tuple[str, int], Partitions] = {}
         self.complete: set[str] = set()
 
-    def root(self) -> Relation:
+    def root(self) -> RelationFamily:
         self._evaluate_stage(self.graph.root_stage)
-        relation = _gather(self.outputs[(self.graph.root_stage, 0)].relations)
-        columns = {column.name: column for column in relation.columns}
+        family = _gather(self.outputs[(self.graph.root_stage, 0)].relations)
+        columns = {column.name: column for column in family.columns}
         output = self.snapshot.plan.output
-        return Relation(
-            tuple(columns[name] for name in output),
-            tuple(Row(row.present, {name: row.values[name] for name in output}) for row in relation.rows),
+        return map_family(
+            family,
+            lambda relation: Relation(
+                tuple(columns[name] for name in output),
+                tuple(
+                    Row(row.present, {name: row.values[name] for name in output})
+                    for row in relation.rows
+                ),
+            ),
         )
 
     def _evaluate_stage(self, stage_id: str) -> None:
@@ -134,6 +150,7 @@ class Evaluator:
                         (parent, child): inputs[ordinal].relations[task]
                         for ordinal, (parent, child, _) in enumerate(slots)
                     },
+                    choice_scope=f"stage:{stage.id}:task:{task}",
                 )
                 for task in range(task_count)
             ]
@@ -147,7 +164,13 @@ class Evaluator:
         self.complete.add(stage_id)
 
     def _source(self, stage: Stage) -> dict[int, Partitions]:
-        evaluator = RelationEvaluator(self.snapshot, self.database, self.scalar)
+        evaluator = RelationEvaluator(
+            self.snapshot,
+            self.database,
+            self.scalar,
+            choice_scope=f"stage:{stage.id}:task:0",
+            defer_pushed_limits=True,
+        )
         if stage.source_storage is None:
             return {
                 output.index: Partitions((evaluator.node(output.node),))
@@ -158,23 +181,43 @@ class Evaluator:
         if len(scans) != 1:
             raise StageError(f"source stage {stage.id!r} does not contain exactly one scan")
         scan = scans[0]
-        relation = evaluator.node(scan.id)
-        rows = [[], []]
-        for slot, row in enumerate(relation.rows):
-            task = self.router.source_task(scan.table, slot)
-            rows[0].append(Row(smt.and_(row.present, smt.not_(task)), row.values))
-            rows[1].append(Row(smt.and_(row.present, task), row.values))
+        raw_scan = evaluator.node(scan.id)
+
+        def source_partition(relation: Relation, task_index: int) -> Relation:
+            rows = []
+            for slot, row in enumerate(relation.rows):
+                task = self.router.source_task(scan.table, slot)
+                belongs = smt.not_(task) if task_index == 0 else task
+                rows.append(Row(smt.and_(row.present, belongs), row.values))
+            return Relation(relation.columns, tuple(rows))
+
         scan_partitions = tuple(
-            Relation(relation.columns, tuple(task_rows)) for task_rows in rows
+            map_family(
+                raw_scan,
+                lambda relation, task=task: source_partition(relation, task),
+            )
+            for task in range(TASKS)
         )
+        if scan.pushed_limit is not None:
+            scan_partitions = tuple(
+                limit_family(
+                    partition,
+                    scan.pushed_limit,
+                    None,
+                    f"stage:{stage.id}:task:{task}:scan:{scan.id}:pushed_limit",
+                )
+                for task, partition in enumerate(scan_partitions)
+            )
         evaluators = tuple(
             RelationEvaluator(
                 self.snapshot,
                 self.database,
                 self.scalar,
                 node_overrides={scan.id: partition},
+                choice_scope=f"stage:{stage.id}:task:{task}",
+                defer_pushed_limits=True,
             )
-            for partition in scan_partitions
+            for task, partition in enumerate(scan_partitions)
         )
         return {
             output.index: Partitions(
@@ -195,21 +238,31 @@ class Evaluator:
                 raise StageError("map connection cannot change task count")
             return source
         if edge.kind == "broadcast":
-            relation = _gather(source.relations)
-            return Partitions(tuple(relation for _ in range(tasks)))
+            family = _gather(source.relations)
+            return Partitions(tuple(family for _ in range(tasks)))
         if edge.kind == "hash_shuffle":
-            relation = _gather(source.relations)
+            family = _gather(source.relations)
             if tasks == 1:
-                return Partitions((relation,))
+                return Partitions((family,))
             if tasks != TASKS:
                 raise StageError("hash shuffle exceeds the two-task bound")
-            rows = [[] for _ in range(tasks)]
-            for row in relation.rows:
-                task = self.router.hash_task(edge, row)
-                rows[0].append(Row(smt.and_(row.present, smt.not_(task)), row.values))
-                rows[1].append(Row(smt.and_(row.present, task), row.values))
+
+            def hash_partition(relation: Relation, task_index: int) -> Relation:
+                rows = []
+                for row in relation.rows:
+                    task = self.router.hash_task(edge, row)
+                    belongs = smt.not_(task) if task_index == 0 else task
+                    rows.append(Row(smt.and_(row.present, belongs), row.values))
+                return Relation(relation.columns, tuple(rows))
+
             return Partitions(
-                tuple(Relation(relation.columns, tuple(task_rows)) for task_rows in rows)
+                tuple(
+                    map_family(
+                        family,
+                        lambda relation, task=task: hash_partition(relation, task),
+                    )
+                    for task in range(tasks)
+                )
             )
         if edge.kind == "union_all" and not edge.parallel:
             if tasks != 1:
@@ -219,12 +272,13 @@ class Evaluator:
             if tasks not in {1, TASKS}:
                 raise StageError("parallel union-all exceeds the two-task bound")
             columns = source.relations[0].columns
-            rows = [[] for _ in range(tasks)]
-            for producer_task, relation in enumerate(source.relations):
-                if relation.columns != columns:
+            partitions = [single(Relation(columns, ())) for _ in range(tasks)]
+            for producer_task, family in enumerate(source.relations):
+                if family.columns != columns:
                     raise StageError("connection input schemas differ")
-                rows[(parallel_offset + producer_task) % tasks].extend(relation.rows)
-            return Partitions(tuple(Relation(columns, tuple(item)) for item in rows))
+                target = (parallel_offset + producer_task) % tasks
+                partitions[target] = _gather((partitions[target], family))
+            return Partitions(tuple(partitions))
         if edge.kind == "merge":
             if tasks != 1:
                 raise StageError("merge connection requires one consumer task")
@@ -237,10 +291,16 @@ def _canonical(value: Value) -> smt.Term:
     return smt.ite(value.is_null, default, value.value)
 
 
-def _gather(relations: tuple[Relation, ...]) -> Relation:
-    if not relations:
+def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
+    if not families:
         raise StageError("connection has no producer tasks")
-    columns = relations[0].columns
-    if any(relation.columns != columns for relation in relations[1:]):
+    columns = families[0].columns
+    if any(family.columns != columns for family in families[1:]):
         raise StageError("connection input schemas differ")
-    return Relation(columns, tuple(row for relation in relations for row in relation.rows))
+    return combine_families(
+        families,
+        lambda relations: Relation(
+            columns,
+            tuple(row for relation in relations for row in relation.rows),
+        ),
+    )

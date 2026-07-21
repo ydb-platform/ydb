@@ -30,6 +30,7 @@ def minimal_snapshot():
                         {"source": "k", "output": "a.k"},
                         {"source": "flag", "output": "a.flag"},
                     ],
+                    "pushed_limit": None,
                 },
                 {
                     "id": "filter",
@@ -51,6 +52,12 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual([(column.name, column.type, column.nullable) for column in snapshot.output_schema()], [
             ("a.k", "Int64", False)
         ])
+
+    def test_legacy_v1_scan_without_pushed_limit_defaults_to_none(self):
+        value = minimal_snapshot()
+        del value["plan"]["nodes"][0]["pushed_limit"]
+        snapshot = parse_snapshot(value)
+        self.assertIsNone(snapshot.plan.nodes[0].pushed_limit)
 
     def test_unknown_field_is_rejected(self):
         value = minimal_snapshot()
@@ -348,6 +355,7 @@ class SnapshotTest(unittest.TestCase):
                 "op": "scan",
                 "table": "A",
                 "columns": [{"source": "k", "output": "unused.k"}],
+                "pushed_limit": None,
             }
         )
         with self.assertRaisesRegex(SnapshotError, "not reachable from the root: unused"):

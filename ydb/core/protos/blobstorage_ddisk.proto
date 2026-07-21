@@ -267,8 +267,11 @@ message TEvReadPersistentBufferResult {
     uint64 VChunkIndex = 4;
     uint32 OffsetInBytes = 5;
     uint32 SizeInBytes = 6;
-    // Reserved for checksum piggybacking: same raw XXH3_64(data) per MinSectorSize block of ReadResult
-    // payload as TEvWritePersistentBuffer.Checksums, no identity/salt mixed in; not filled yet.
+    // Same raw XXH3_64(data) per MinSectorSize block of ReadResult payload as
+    // TEvWritePersistentBuffer.Checksums, no identity/salt mixed in. Opt-in: populated only when the
+    // persisted record itself carries sender-supplied checksums (empty for legacy/checksum-less
+    // records). Forwarded verbatim by TWritePersistentBuffersRequestActor when re-replicating a
+    // record via TEvReadThenWritePersistentBuffers.
     repeated fixed64 Checksums = 7;
 }
 

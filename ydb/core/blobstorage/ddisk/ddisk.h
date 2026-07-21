@@ -639,7 +639,7 @@ struct TPersistentBufferFormat {
         TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
                 ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 sizeInBytes = 0,
-                TRope data = {}) {
+                TRope data = {}, const std::vector<ui64>& checksums = {}) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
@@ -649,6 +649,12 @@ struct TPersistentBufferFormat {
                 Record.SetOffsetInBytes(offsetInBytes);
                 Record.SetSizeInBytes(sizeInBytes);
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
+                // Opt-in, mirrors TEvWritePersistentBuffer.Checksums: only attached when the persisted
+                // record actually carries sender-supplied payload checksums (see
+                // TPersistentBuffer::TRecord::PayloadChecksums).
+                for (ui64 checksum : checksums) {
+                    Record.AddChecksums(checksum);
+                }
             }
         }
     };

@@ -23,6 +23,7 @@ from .relation import (
     combine_families,
     limit_family,
     map_family,
+    merge_family,
     single,
 )
 from .scalar import Encoder as ScalarEncoder, Value
@@ -118,6 +119,13 @@ class Evaluator:
                     Row(row.present, {name: row.values[name] for name in output})
                     for row in relation.rows
                 ),
+                sequence=relation.sequence,
+                order=(
+                    relation.order
+                    if relation.order is not None
+                    and all(item.column in output for item in relation.order)
+                    else None
+                ),
             ),
         )
 
@@ -189,7 +197,12 @@ class Evaluator:
                 task = self.router.source_task(scan.table, slot)
                 belongs = smt.not_(task) if task_index == 0 else task
                 rows.append(Row(smt.and_(row.present, belongs), row.values))
-            return Relation(relation.columns, tuple(rows))
+            return Relation(
+                relation.columns,
+                tuple(rows),
+                sequence=relation.sequence,
+                order=relation.order,
+            )
 
         scan_partitions = tuple(
             map_family(
@@ -253,7 +266,12 @@ class Evaluator:
                     task = self.router.hash_task(edge, row)
                     belongs = smt.not_(task) if task_index == 0 else task
                     rows.append(Row(smt.and_(row.present, belongs), row.values))
-                return Relation(relation.columns, tuple(rows))
+                return Relation(
+                    relation.columns,
+                    tuple(rows),
+                    sequence=relation.sequence,
+                    order=relation.order,
+                )
 
             return Partitions(
                 tuple(
@@ -272,17 +290,47 @@ class Evaluator:
             if tasks not in {1, TASKS}:
                 raise StageError("parallel union-all exceeds the two-task bound")
             columns = source.relations[0].columns
-            partitions = [single(Relation(columns, ())) for _ in range(tasks)]
+            partitions: list[RelationFamily | None] = [None] * tasks
             for producer_task, family in enumerate(source.relations):
                 if family.columns != columns:
                     raise StageError("connection input schemas differ")
                 target = (parallel_offset + producer_task) % tasks
-                partitions[target] = _gather((partitions[target], family))
-            return Partitions(tuple(partitions))
+                current = partitions[target]
+                partitions[target] = (
+                    family if current is None else _gather((current, family))
+                )
+            return Partitions(tuple(
+                family if family is not None else single(Relation(columns, ()))
+                for family in partitions
+            ))
         if edge.kind == "merge":
             if tasks != 1:
                 raise StageError("merge connection requires one consumer task")
-            raise StageError("Merge ordering and sequence semantics are not modeled")
+            columns = source.relations[0].columns
+
+            def merge_inputs(relations: tuple[Relation, ...]) -> Relation:
+                for relation in relations:
+                    _require_merge_order(relation, edge)
+                return Relation(
+                    columns,
+                    tuple(row for relation in relations for row in relation.rows),
+                )
+
+            groups = []
+            next_index = 0
+            for family in source.relations:
+                size = len(family.outcomes[0].relation.rows)
+                groups.append(tuple(range(next_index, next_index + size)))
+                next_index += size
+            gathered = combine_families(source.relations, merge_inputs)
+            return Partitions((
+                merge_family(
+                    gathered,
+                    edge.order,
+                    tuple(groups),
+                    f"merge:{edge.id}",
+                ),
+            ))
         raise AssertionError(f"unknown connection kind {edge.kind!r}")
 
 
@@ -302,5 +350,32 @@ def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
         lambda relations: Relation(
             columns,
             tuple(row for relation in relations for row in relation.rows),
+            sequence=len(relations) == 1 and relations[0].sequence,
+            order=relations[0].order if len(relations) == 1 else None,
         ),
     )
+
+
+def _require_merge_order(relation: Relation, edge: StageEdge) -> None:
+    if not relation.sequence or relation.order is None:
+        raise StageError(f"merge edge {edge.id!r} input is not ordered")
+    if len(relation.order) != len(edge.order):
+        raise StageError(f"merge edge {edge.id!r} input order arity differs")
+    for actual, expected in zip(relation.order, edge.order):
+        if (
+            actual.ascending != expected.ascending
+            or actual.nulls_first != expected.nulls_first
+        ):
+            raise StageError(f"merge edge {edge.id!r} input order differs")
+        if actual.column == expected.column:
+            continue
+        if any(
+            actual.column not in row.values or expected.column not in row.values
+            for row in relation.rows
+        ):
+            raise StageError(f"merge edge {edge.id!r} input order columns differ")
+        if any(
+            row.values[actual.column] != row.values[expected.column]
+            for row in relation.rows
+        ):
+            raise StageError(f"merge edge {edge.id!r} input order columns differ")

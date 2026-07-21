@@ -2,11 +2,12 @@
 
 This directory contains the standalone bounded-equivalence checker described in
 [PLAN.md](PLAN.md). It compares two versioned semantic snapshots and asks Z3 for
-a bounded input database on which their result bags differ.
+a bounded input database on which their result bags or ordered sequences differ.
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
-hooks, the M3 StageGraph routing slice, and the aggregate and unordered-Limit
-parts of M4.
+hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit, and
+ordered Sort/TopSort/Merge parts of M4. Hermetic solver packaging, broad
+TPCH/TPCDS coverage, replay, and rule bisection remain future milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -15,9 +16,7 @@ first RBO stage and the final snapshot immediately before physical generation.
 `CreateKqpHost` accepts the same sink as immutable instrumentation configuration
 and copies it into every per-query transform context created by the host.
 Supported final plans include exact stage membership and Map, HashShuffle,
-Broadcast, and serial or parallel UnionAll connections. Merge fields are
-captured and decoded, but execution remains fail-closed until ordered Sort
-semantics are modeled.
+Broadcast, serial or parallel UnionAll, and ordered Merge connections.
 
 Stage execution uses at most two bounded source/shuffle tasks. Source-row task
 placement and hash routing are shared symbolic functions, so a two-task source
@@ -25,8 +24,10 @@ covers both partitions instead of fixing rows to one convenient task. Map
 preserves the producer count, serial UnionAll requires one consumer task,
 parallel UnionAll uses the runtime's cross-input round-robin offset, and a
 broadcast-only stage uses one task just as KQP task construction does. Invalid
-connection combinations are rejected. The final stage is gathered before root
-column projection.
+connection combinations are rejected. Merge has one consumer task, validates
+that every producer stream has an order compatible with the edge order, and
+enumerates the sorted interleavings that preserve every producer sequence. The
+final stage is gathered before root column projection.
 
 The exporter and decoder both validate the StageGraph independently: plan nodes
 partition into stages, each stage has one logical sink, every cross-stage child
@@ -44,13 +45,30 @@ counterexample into `VERIFIED_BOUNDED`.
 The chosen final boundary is immediately before `ConvertToPhysical`. Therefore
 the verifier does not prove physical lowering, task construction, or execution.
 In particular, the current lowering does not visibly preserve
-`TSortElement::NullsFirst`; explicit NULL ordering must remain a replay case
-until that contract is clarified.
+`TSortElement::NullsFirst`; explicit NULL ordering remains a replay case until
+that contract is clarified.
 
-Merge order, including `nulls_first`, is preserved in the semantic snapshot.
-The current root contract compares bags, so verification returns `UNSUPPORTED`
-for Merge rather than discard order. Ordered result comparison is added together
-with Sort in M4.
+Sort order is an exact, non-empty sequence of `(column, ascending,
+nulls_first)` entries. The bounded evaluator enumerates every permutation of the
+input row slots and enables exactly the lexicographically sorted ones, retaining
+all legal tie orders. A non-null Sort `limit` is TopSort and applies an exact
+ordered prefix after sorting. Sort and Limit phases (`undefined`,
+`intermediate`, and `final`) are preserved but are not otherwise semantic.
+Project nodes carry the exact `TOpMap::Ordered` Boolean. Both `ordered: true`
+and `ordered: false` currently preserve an input sequence and compatible order
+metadata. This matches RBO's streaming WideMap lowering; retaining the exact
+flag makes a future semantic distinction an explicit verifier change.
+
+Limit on an ordered input takes the exact `offset:offset+count` slice of the
+compressed present-row sequence. If the initial root is ordered, equivalence is
+sequence equality; an unordered initial root retains bag equality. The Merge
+encoding is exact within the declared row/task/family bounds: it rejects an
+unordered or differently ordered producer and enumerates all sorted,
+producer-order-preserving interleavings.
+
+`String` and `Utf8` remain equality-only uninterpreted atoms. Their YDB ordering
+is not modeled, so using either type in Sort or Merge order metadata returns
+`UNSUPPORTED` during strict validation instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
@@ -72,9 +90,9 @@ stage-task instances choose independently. Count and offset are restricted to
 non-null `Uint64` literals in v1; parameterized or otherwise computed limits
 fail closed. Phase is preserved as `undefined`, `intermediate`, or `final`, but
 does not itself change runtime semantics. Distinct Limit observers downstream
-of one order-preserving plan stream fan-out fail closed until their latent
-order correlation is modeled; Aggregate, Join, and UnionAll start new unordered
-streams.
+of one shared unordered plan stream fail closed until their latent-order
+correlation is modeled. Ordered Limit is deterministic; Aggregate, Join, and
+UnionAll start new unordered streams.
 
 ```json
 {
@@ -93,9 +111,11 @@ because the earlier v1 exporter rejected every pushed read limit. A non-null
 pushed limit is valid only on a column-storage source and executes independently
 on each source task after symbolic row partitioning.
 
-The explicit outcome family is capped at 256 alternatives, including Cartesian
-products and gathers, and cross-plan equality is capped at 4096 outcome pairs;
-exceeding either audit bound returns `UNSUPPORTED` rather than approximating.
+Every explicit outcome family is capped at 256 alternatives, including
+unordered-Limit choices, Sort permutations, Merge interleavings, latent
+sequence expansion, Cartesian products, and gathers. Cross-plan bag or sequence
+equality is capped at 4096 outcome pairs. Exceeding either audit bound returns
+`UNSUPPORTED` rather than approximating.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:
@@ -177,12 +197,14 @@ Run its tests with:
 Solver integration tests are enabled when an explicit solver binary is
 available. Formula construction and parsing tests do not depend on Z3.
 
-The medium integration test constructs a real new-RBO `IKqpHost`, compiles an
-explicit `LIMIT 1` query, checks its initial and split intermediate/final Limit
-shapes, and invokes the normal CLI on the captured pair. It always requires
-successful strict decoding and SMT construction. Set `RBO_Z3` to additionally
-require a `VERIFIED_BOUNDED` verdict; M2b will replace that opt-in path with a
-hermetic solver dependency.
+The real-host integration tests construct a new-RBO `IKqpHost` and send each
+captured initial/final pair through the normal CLI. One test covers an explicit
+`LIMIT 1` and its split intermediate/final form. The ordered test covers
+`ORDER BY A DESC, B ASC LIMIT 1`: it checks the initial Sort+Limit, final
+per-task intermediate TopSort, exact Merge metadata (including NULL placement),
+and final Limit. Both always require strict decoding and SMT construction. Set
+`RBO_Z3` to additionally require `VERIFIED_BOUNDED`; M2b will replace that
+opt-in path with a hermetic solver dependency.
 
 ```bash
 RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \

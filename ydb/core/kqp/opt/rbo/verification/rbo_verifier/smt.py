@@ -156,6 +156,17 @@ def eq(left: Term, right: Term) -> Term:
     return Term(BOOL, "=", (left, right))
 
 
+def lt(left: Term, right: Term) -> Term:
+    _require(left, INT)
+    _require(right, INT)
+    if left == right:
+        return FALSE
+    if left.operation == "int" and right.operation == "int":
+        assert isinstance(left.atom, int) and isinstance(right.atom, int)
+        return bool_value(left.atom < right.atom)
+    return Term(BOOL, "<", (left, right))
+
+
 def ite(condition: Term, when_true: Term, when_false: Term) -> Term:
     _require(condition, BOOL)
     if when_true.sort != when_false.sort:

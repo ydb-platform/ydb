@@ -19,9 +19,10 @@ and bounded symbolic input tables
 and Eval(initial RBO plan) != Eval(final StageGraph program)
 ```
 
-Unordered Limit makes evaluation a finite set of enabled bags. In that case
-equality is mutual inclusion of the two outcome sets, with shared-DAG choices
-correlated and distinct stage-task executions independent.
+Unordered Limit, Sort ties, and Merge interleavings make evaluation a finite
+family of enabled bags or sequences. Equality is mutual inclusion of the two
+families. Shared-DAG choices remain correlated, while distinct stage-task
+executions are independent.
 
 Results have five distinct meanings:
 
@@ -112,7 +113,8 @@ Version-one strings have equality-only uninterpreted-atom semantics. Literals
 receive deterministic integer atom IDs, while other integer IDs decode to
 collision-checked placeholder strings for replay. This avoids placing Z3's
 version-dependent SMT string parser in the trusted path; string operations stay
-opaque until explicitly modeled.
+opaque until explicitly modeled. Because those atoms have no YDB ordering,
+`Sort` and `Merge` on `String` or `Utf8` fail closed during snapshot validation.
 
 ## Relational semantics
 
@@ -127,28 +129,44 @@ Implementation sequence:
 3. M1: logical bag `UnionAll`;
 4. M1: root projection and column order;
 5. M4: common aggregates and unordered literal Limit;
-6. later: sort/top-sort and ordered Merge;
+6. M4: Sort/TopSort, ordered literal Limit, and ordered Merge;
 7. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
-The C++ exporter will lower an RBO map mechanically to an exact projection:
+The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
 IUs pass through, and map targets are appended in operator order. Exporter tests
-must cover that normalization before it enters the trusted path.
+cover that normalization before it enters the trusted path. The projection also
+records `TOpMap::Ordered`. Both values currently have the same sequence-preserving
+runtime semantics because RBO lowers Map through its streaming WideMap builder;
+the field remains explicit so that contract cannot change silently.
 
 Unordered results are compared by symbolic tuple multiplicity. Ordered results
 are compared as sequences where order is observable. Root output names and
 their order are an external schema contract and must match exactly; the exporter
 may add a mechanical final projection when internal IU IDs differ.
 
-Limit count/offset and pushed scan limits are exact non-null `Uint64` literals
-in v1. An unordered Limit enumerates every row mask of the required result
-cardinality instead of selecting a fixed prefix. The kernel compares enabled
-bag families, carries choices through shared DAG nodes, and fails closed above
-256 alternatives or 4096 cross-plan outcome pairs. A pushed column-scan limit
-runs after source partitioning and therefore applies once per task. Exact reuse
-of one Limit node remains correlated. Distinct Limit observers downstream of an
-order-preserving stream fan-out remain unsupported until a common latent-order
-model is added; Aggregate, Join, and UnionAll establish new unordered streams.
+Limit count/offset, TopSort limit, and pushed scan limits are exact non-null
+`Uint64` literals in v1. An unordered Limit enumerates every row mask of the
+required result cardinality. On an ordered stream, Limit takes the exact
+`offset:offset+count` slice of the compressed present-row sequence. A pushed
+column-scan limit runs after source partitioning and therefore applies once per
+task. Exact reuse of one unordered Limit node remains correlated. Distinct
+Limit observers of one shared unordered stream remain unsupported until a
+common latent-order model is added. Ordered Limit is deterministic, while
+Aggregate, Join, and UnionAll establish new unordered streams.
+
+Sort enumerates every permutation of the bounded row slots and enables exactly
+those satisfying the lexicographic `(column, ascending, nulls-first)` order.
+This preserves every legal tie ordering. A non-null Sort limit is TopSort and
+applies the same ordered prefix semantics after sorting. Sort and Limit phases
+are preserved but do not independently change the modeled runtime semantics.
+If the initial root is ordered, results are compared as compressed sequences;
+otherwise they are compared as bags.
+
+All explicit families fail closed above 256 alternatives. This cap includes
+unordered-Limit choices, Sort permutations, Merge interleavings, latent
+sequence expansion, and family products/gathers. Cross-plan equality fails
+closed above 4096 outcome pairs. Neither cap is approximated.
 
 ## StageGraph semantics
 
@@ -163,11 +181,15 @@ HashShuffle:  route each row once into the consumer task count
 Broadcast:    copy all source rows to every task of the consumer stage
 UnionAll:     gather all producer partitions into one consumer task
 Parallel UA:  route producer-task streams round-robin to consumer tasks
-Merge:        one consumer task; ordered merge by (IU, asc, nulls-first)
+Merge:        one consumer task; exact bounded merge by (IU, asc, nulls-first)
 ```
 
 Stage-local operators execute independently on each task. The final collection
 then projects `TOpRoot::ColumnOrder`.
+
+Merge requires every producer task to carry an order compatible with the edge
+order. It enumerates exactly the sorted interleavings that preserve each
+producer sequence; incompatible metadata and unordered inputs fail closed.
 
 Logical `TOpUnionAll` and a `TUnionAllConnection` are different IR nodes and
 receive different semantics.
@@ -195,8 +217,8 @@ Before treating optimizer findings as credible:
    evaluator on exhaustively enumerated tiny databases.
 2. Mutation-test the checker by deleting a filter, changing a join kind/key,
    dropping a UnionAll branch, changing a shuffle key/hash, corrupting an
-   aggregate phase, moving Limit across Filter, and dropping/corrupting split
-   Limit phases.
+   aggregate phase, moving Limit across Filter, changing Sort direction, NULL
+   placement, key order, or TopSort limit, and corrupting split Limit phases.
 3. Preserve and replay every solver witness.
 4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage dashboard;
    report unsupported features separately from failures.
@@ -206,7 +228,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
 ## Milestones
 
-### M1: executable logical kernel
+### M1: executable logical kernel — implemented
 
 - Strict v1 snapshot decoder.
 - Empty source, scan, project, filter, joins, and logical UnionAll.
@@ -216,41 +238,45 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Bag-equivalence formula, deterministic SMT-LIB, witness decoding, CLI, and
   mutation tests.
 
-### M2: semantic C++ snapshots
+### M2: semantic C++ snapshots — implemented for the supported subset
 
 - Initial/final exporter hooks.
 - Stable operator, IU, expression, stage, and edge IDs.
 - C++ unit tests proving semantically relevant fields survive export.
-- First end-to-end new-RBO comparison. The integration test drives a real
-  `IKqpHost`, captures both boundaries, and passes them through the normal CLI;
-  solving is explicit until M2b supplies the hermetic Z3 target.
+- End-to-end new-RBO comparisons. Integration tests drive a real `IKqpHost`,
+  capture both boundaries, and pass them through the normal CLI; solving is
+  explicit until M2b supplies the hermetic Z3 target.
 
-### M2b: hermetic solver packaging
+### M2b: hermetic solver packaging — pending
 
 - Vendor a reviewed, pinned MIT-licensed Z3 release in `contrib`.
 - Build a command-line solver target without linking it into `ydbd`.
 - Make integration tests locate that binary explicitly through `ya`.
 
-### M3: StageGraph routing
+### M3: StageGraph routing — implemented for the supported subset
 
 - Two-producer-task Map, HashShuffle, Broadcast, and UnionAll with
   connection-derived consumer counts.
 - Local join execution and final gather.
 - Wrong-shuffle and wrong-broadcast mutation tests.
-- Preserve and validate Merge metadata, but fail closed on execution until M4
-  supplies ordered Sort and Merge semantics.
+- Exact bounded Merge execution with input-order validation, tie-preserving
+  sorted interleavings, and wrong-order mutation tests.
 
-### M4: benchmark coverage
+### M4: benchmark coverage — in progress
 
 - Grouped/scalar count and integer sum, including split intermediate/final
   execution, NULLs, and exact 64-bit numeric behavior; distinct variants remain.
 - Unordered literal Limit/offset, split per-task execution, and column-source
   pushed limits, with exhaustive and mutation tests.
-- Order, Merge, top-sort, and required scalar refinements remain.
+- Sort/TopSort, ordered Limit, and Merge, with exhaustive concrete differential
+  tests, family-cap tests, and order/limit/phase mutation tests.
+- A real-host ordered test captures logical Sort+Limit and the transformed
+  per-task TopSort+Merge+final-Limit program, then constructs or solves the
+  normal equivalence obligation.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 
-### M5: confirmation and localization
+### M5: confirmation and localization — pending
 
 - Real-YDB replay tool.
 - Rule-application snapshot hook and separate bisection driver.

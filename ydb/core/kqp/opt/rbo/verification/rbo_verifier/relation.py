@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
-from typing import Callable, Mapping
+from itertools import combinations, permutations
+from typing import Callable, Iterator, Mapping
 
 from . import smt
 from .ir import (
@@ -20,6 +20,8 @@ from .ir import (
     Project,
     Scan,
     Snapshot,
+    Sort,
+    SortOrder,
     UnionAll,
     plan_node_inputs,
     validate_snapshot,
@@ -38,6 +40,8 @@ class Row:
 class Relation:
     columns: tuple[Column, ...]
     rows: tuple[Row, ...]
+    sequence: bool = False
+    order: tuple[SortOrder, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +67,15 @@ class RelationFamily:
         if any(outcome.relation.columns != columns for outcome in self.outcomes[1:]):
             raise RelationError("relation-family outcome schemas differ")
         return columns
+
+    @property
+    def sequence(self) -> bool:
+        if not self.outcomes:
+            raise RelationError("relation family has no outcomes")
+        sequence = self.outcomes[0].relation.sequence
+        if any(outcome.relation.sequence != sequence for outcome in self.outcomes[1:]):
+            raise RelationError("relation-family outcomes disagree on sequence semantics")
+        return sequence
 
     def certain(self) -> Relation:
         """Return the sole unconditional relation, primarily for diagnostics/tests."""
@@ -93,7 +106,7 @@ class RelationError(ValueError):
     """A valid snapshot uses relational semantics not modeled by this evaluator."""
 
 
-MAX_LIMIT_ALTERNATIVES = 256
+MAX_OUTCOME_ALTERNATIVES = 256
 MAX_OUTCOME_COMPARISONS = 4096
 
 
@@ -195,6 +208,8 @@ class Evaluator:
                     Row(row.present, {name: row.values[name] for name in output})
                     for row in relation.rows
                 ),
+                sequence=relation.sequence,
+                order=_retained_order(relation.order, output),
             ),
         )
 
@@ -250,6 +265,8 @@ class Evaluator:
                         )
                         for row in relation.rows
                     ),
+                    sequence=relation.sequence,
+                    order=_projected_order(relation.order, node),
                 ),
             )
 
@@ -271,6 +288,8 @@ class Evaluator:
                         )
                         for row in relation.rows
                     ),
+                    sequence=relation.sequence,
+                    order=relation.order,
                 ),
             )
 
@@ -281,6 +300,21 @@ class Evaluator:
                 node.offset,
                 f"{self.choice_scope}:limit:{node.id}",
             )
+
+        if isinstance(node, Sort):
+            family = sort_family(
+                self._input(node.id, 0, node.input),
+                node.order,
+                f"{self.choice_scope}:sort:{node.id}",
+            )
+            if node.limit is not None:
+                family = limit_family(
+                    family,
+                    node.limit,
+                    None,
+                    f"{self.choice_scope}:topsort:{node.id}",
+                )
+            return family
 
         if isinstance(node, Aggregate):
             return map_family(
@@ -542,6 +576,38 @@ def _unwrap_sum(value: Value) -> smt.Term:
     return raw if shift == sign else term
 
 
+def _retained_order(
+    order: tuple[SortOrder, ...] | None,
+    output: tuple[str, ...],
+) -> tuple[SortOrder, ...] | None:
+    if order is None:
+        return None
+    available = set(output)
+    return order if all(item.column in available for item in order) else None
+
+
+def _projected_order(
+    order: tuple[SortOrder, ...] | None,
+    project: Project,
+) -> tuple[SortOrder, ...] | None:
+    if order is None:
+        return None
+    aliases: dict[str, list[str]] = {}
+    for projection in project.columns:
+        expression = projection.expression
+        if expression.kind == "column" and expression.column is not None:
+            aliases.setdefault(expression.column, []).append(projection.output)
+
+    result: list[SortOrder] = []
+    for item in order:
+        outputs = aliases.get(item.column, ())
+        if not outputs:
+            return None
+        column = item.column if item.column in outputs else outputs[0]
+        result.append(SortOrder(column, item.ascending, item.nulls_first))
+    return tuple(result)
+
+
 def single(relation: Relation) -> RelationFamily:
     return RelationFamily((Outcome(smt.TRUE, relation),))
 
@@ -556,17 +622,32 @@ def _reject_correlated_limit_fanout(snapshot: Snapshot) -> None:
             parents[child].add(parent.id)
 
     cache: dict[str, frozenset[str]] = {}
+    ordered: dict[str, bool] = {}
+
+    def has_sequence(node_id: str) -> bool:
+        if node_id not in ordered:
+            node = nodes[node_id]
+            if isinstance(node, Sort):
+                result = True
+            elif isinstance(node, (Project, Filter, Limit)):
+                result = has_sequence(node.input)
+            else:
+                result = False
+            ordered[node_id] = result
+        return ordered[node_id]
 
     def reachable_limits(node_id: str) -> frozenset[str]:
         if node_id not in cache:
             limits = {node_id} if isinstance(nodes[node_id], Limit) else set()
-            if not isinstance(nodes[node_id], (Aggregate, Join, UnionAll)):
+            if not isinstance(nodes[node_id], (Sort, Aggregate, Join, UnionAll)):
                 for parent in parents[node_id]:
                     limits.update(reachable_limits(parent))
             cache[node_id] = frozenset(limits)
         return cache[node_id]
 
     for child, consumers in parents.items():
+        if snapshot.stage_graph is None and has_sequence(child):
+            continue
         for left, right in combinations(sorted(consumers), 2):
             left_limits = reachable_limits(left)
             right_limits = reachable_limits(right)
@@ -616,10 +697,10 @@ def combine_families(
                         merged,
                     )
                 )
-                if len(expanded) > MAX_LIMIT_ALTERNATIVES:
+                if len(expanded) > MAX_OUTCOME_ALTERNATIVES:
                     raise RelationError(
-                        "unordered-limit outcome product exceeds "
-                        f"the {MAX_LIMIT_ALTERNATIVES} alternative audit bound"
+                        "outcome product exceeds "
+                        f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
                     )
         partials = expanded
     if not partials:
@@ -632,7 +713,240 @@ def combine_families(
     )
 
 
+def sort_family(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+    decision: str,
+) -> RelationFamily:
+    """Enumerate every tie-respecting sequence produced by a bounded Sort."""
+
+    if not order:
+        raise RelationError("sort order must not be empty")
+    alternatives = 0
+    outcomes: list[Outcome] = []
+    for source_outcome in source.outcomes:
+        relation = source_outcome.relation
+        columns = {column.name for column in relation.columns}
+        missing = [item.column for item in order if item.column not in columns]
+        if missing:
+            raise RelationError(f"sort columns are absent: {', '.join(missing)}")
+        if decision in dict(source_outcome.decisions):
+            raise RelationError(f"duplicate sort decision {decision!r}")
+
+        for choice, permutation in enumerate(permutations(range(len(relation.rows)))):
+            alternatives += 1
+            if alternatives > MAX_OUTCOME_ALTERNATIVES:
+                raise RelationError(
+                    "sort permutations exceed "
+                    f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
+                )
+            rows = tuple(relation.rows[index] for index in permutation)
+            enabled = smt.and_(source_outcome.enabled, _rows_sorted(rows, order))
+            decisions = tuple(
+                sorted(source_outcome.decisions + ((decision, choice),))
+            )
+            outcomes.append(
+                Outcome(
+                    enabled,
+                    Relation(relation.columns, rows, sequence=True, order=order),
+                    decisions,
+                )
+            )
+    if not outcomes:
+        raise RelationError("sort produced no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
+def merge_family(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+    groups: tuple[tuple[int, ...], ...],
+    decision: str,
+) -> RelationFamily:
+    """Enumerate sorted interleavings while preserving each producer sequence."""
+
+    indices = tuple(index for group in groups for index in group)
+    row_count = len(source.outcomes[0].relation.rows) if source.outcomes else 0
+    if sorted(indices) != list(range(row_count)):
+        raise RelationError("merge producer groups do not partition the input rows")
+
+    alternatives = 0
+    outcomes: list[Outcome] = []
+    for source_outcome in source.outcomes:
+        relation = source_outcome.relation
+        if len(relation.rows) != row_count:
+            raise RelationError("merge outcomes have different row shapes")
+        if decision in dict(source_outcome.decisions):
+            raise RelationError(f"duplicate merge decision {decision!r}")
+
+        for choice, permutation in enumerate(_interleavings(groups)):
+            alternatives += 1
+            if alternatives > MAX_OUTCOME_ALTERNATIVES:
+                raise RelationError(
+                    "merge interleavings exceed "
+                    f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
+                )
+            rows = tuple(relation.rows[index] for index in permutation)
+            enabled = smt.and_(
+                source_outcome.enabled,
+                _rows_sorted(rows, order),
+            )
+            decisions = tuple(
+                sorted(source_outcome.decisions + ((decision, choice),))
+            )
+            outcomes.append(
+                Outcome(
+                    enabled,
+                    Relation(relation.columns, rows, sequence=True, order=order),
+                    decisions,
+                )
+            )
+    if not outcomes:
+        raise RelationError("merge produced no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
+def _interleavings(
+    groups: tuple[tuple[int, ...], ...],
+) -> Iterator[tuple[int, ...]]:
+    def visit(
+        prefix: tuple[int, ...],
+        cursors: tuple[int, ...],
+    ) -> Iterator[tuple[int, ...]]:
+        if all(cursor == len(group) for cursor, group in zip(cursors, groups)):
+            yield prefix
+            return
+        for index, group in enumerate(groups):
+            cursor = cursors[index]
+            if cursor == len(group):
+                continue
+            next_cursors = list(cursors)
+            next_cursors[index] += 1
+            yield from visit(prefix + (group[cursor],), tuple(next_cursors))
+
+    yield from visit((), tuple(0 for _ in groups))
+
+
+def _rows_sorted(rows: tuple[Row, ...], order: tuple[SortOrder, ...]) -> smt.Term:
+    return smt.and_(
+        *(
+            smt.or_(
+                smt.not_(smt.and_(left.present, right.present)),
+                _row_leq(left, right, order),
+            )
+            for index, left in enumerate(rows)
+            for right in rows[index + 1 :]
+        )
+    )
+
+
+def _row_leq(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
+    prefix_equal = smt.TRUE
+    less = smt.FALSE
+    for item in order:
+        left_value = left.values[item.column]
+        right_value = right.values[item.column]
+        less = smt.or_(
+            less,
+            smt.and_(
+                prefix_equal,
+                _ordered_value_less(left_value, right_value, item),
+            ),
+        )
+        prefix_equal = smt.and_(
+            prefix_equal,
+            ScalarEncoder.not_distinct(left_value, right_value),
+        )
+    return smt.or_(less, prefix_equal)
+
+
+def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term:
+    if left.type != right.type:
+        raise RelationError("sort comparison type mismatch")
+    null_before = (
+        smt.and_(left.is_null, smt.not_(right.is_null))
+        if order.nulls_first
+        else smt.and_(smt.not_(left.is_null), right.is_null)
+    )
+    if left.value.sort == smt.BOOL:
+        ascending = smt.and_(smt.not_(left.value), right.value)
+        descending = smt.and_(left.value, smt.not_(right.value))
+    else:
+        ascending = smt.lt(left.value, right.value)
+        descending = smt.lt(right.value, left.value)
+    value_before = ascending if order.ascending else descending
+    return smt.or_(
+        null_before,
+        smt.and_(
+            smt.not_(left.is_null),
+            smt.not_(right.is_null),
+            value_before,
+        ),
+    )
+
+
 def limit_family(
+    source: RelationFamily,
+    count_expression: Expr,
+    offset_expression: Expr | None,
+    decision: str,
+) -> RelationFamily:
+    if source.sequence:
+        return _ordered_limit_family(source, count_expression, offset_expression)
+    return _unordered_limit_family(
+        source,
+        count_expression,
+        offset_expression,
+        decision,
+    )
+
+
+def _ordered_limit_family(
+    source: RelationFamily,
+    count_expression: Expr,
+    offset_expression: Expr | None,
+) -> RelationFamily:
+    """Take an exact prefix slice while ignoring false-guarded row slots."""
+
+    count = _uint64_literal(count_expression, "limit count")
+    offset = (
+        0
+        if offset_expression is None
+        else _uint64_literal(offset_expression, "limit offset")
+    )
+
+    def take(relation: Relation) -> Relation:
+        rows: list[Row] = []
+        for index, row in enumerate(relation.rows):
+            if count == 0 or offset >= len(relation.rows):
+                selected = smt.FALSE
+            else:
+                prefix = smt.add(
+                    *(smt.ite(previous.present, smt.ONE, smt.ZERO)
+                      for previous in relation.rows[:index])
+                )
+                lower = smt.TRUE if offset == 0 else smt.not_(
+                    smt.lt(prefix, smt.int_value(offset))
+                )
+                upper_bound = offset + count
+                upper = (
+                    smt.TRUE
+                    if upper_bound >= len(relation.rows)
+                    else smt.lt(prefix, smt.int_value(upper_bound))
+                )
+                selected = smt.and_(row.present, lower, upper)
+            rows.append(Row(selected, row.values))
+        return Relation(
+            relation.columns,
+            tuple(rows),
+            sequence=True,
+            order=relation.order,
+        )
+
+    return map_family(source, take)
+
+
+def _unordered_limit_family(
     source: RelationFamily,
     count_expression: Expr,
     offset_expression: Expr | None,
@@ -669,10 +983,10 @@ def limit_family(
         for size, valid_totals in totals_by_size.items():
             for indices in combinations(range(len(rows)), size):
                 alternatives += 1
-                if alternatives > MAX_LIMIT_ALTERNATIVES:
+                if alternatives > MAX_OUTCOME_ALTERNATIVES:
                     raise RelationError(
                         "unordered limit exceeds "
-                        f"the {MAX_LIMIT_ALTERNATIVES} alternative audit bound"
+                        f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
                     )
                 mask = sum(1 << index for index in indices)
                 selected = tuple(rows[index].present for index in indices)
@@ -784,18 +1098,110 @@ def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Ter
     return smt.and_(*equalities)
 
 
+def sequence_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Term:
+    """Compare compressed present-row sequences, ignoring guarded-out slots."""
+
+    if not left.sequence or not right.sequence:
+        return smt.FALSE
+    if len(left.columns) != len(right.columns):
+        return smt.FALSE
+    if any(a.type != b.type for a, b in zip(left.columns, right.columns)):
+        return smt.FALSE
+
+    left_names = tuple(column.name for column in left.columns)
+    right_names = tuple(column.name for column in right.columns)
+
+    def values_equal(left_row: Row, right_row: Row) -> smt.Term:
+        return smt.and_(
+            *(
+                scalar.not_distinct(
+                    left_row.values[left_name],
+                    right_row.values[right_name],
+                )
+                for left_name, right_name in zip(left_names, right_names)
+            )
+        )
+
+    left_ranks = tuple(
+        smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in left.rows[:index + 1]))
+        for index in range(len(left.rows))
+    )
+    right_ranks = tuple(
+        smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in right.rows[:index + 1]))
+        for index in range(len(right.rows))
+    )
+    left_count = smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in left.rows))
+    right_count = smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in right.rows))
+    return smt.and_(
+        smt.eq(left_count, right_count),
+        *(
+            smt.or_(
+                smt.not_(
+                    smt.and_(
+                        left_row.present,
+                        right_row.present,
+                        smt.eq(left_ranks[left_index], right_ranks[right_index]),
+                    )
+                ),
+                values_equal(left_row, right_row),
+            )
+            for left_index, left_row in enumerate(left.rows)
+            for right_index, right_row in enumerate(right.rows)
+        ),
+    )
+
+
+def _as_sequence_family(family: RelationFamily) -> RelationFamily:
+    alternatives = 0
+    outcomes: list[Outcome] = []
+    for source_outcome in family.outcomes:
+        relation = source_outcome.relation
+        for permutation in permutations(range(len(relation.rows))):
+            alternatives += 1
+            if alternatives > MAX_OUTCOME_ALTERNATIVES:
+                raise RelationError(
+                    "latent unordered sequences exceed "
+                    f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
+                )
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        tuple(relation.rows[index] for index in permutation),
+                        sequence=True,
+                    ),
+                    source_outcome.decisions,
+                )
+            )
+    if not outcomes:
+        raise RelationError("latent unordered sequence family has no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
 def family_equal(
     left: RelationFamily,
     right: RelationFamily,
     scalar: ScalarEncoder,
 ) -> smt.Term:
-    """Mutual inclusion of all enabled unordered execution outcomes."""
+    """Mutual inclusion of enabled bags or initial-query result sequences."""
+
+    ordered = left.sequence
+    if ordered and not right.sequence:
+        right = _as_sequence_family(right)
 
     comparisons = len(left.outcomes) * len(right.outcomes)
     if comparisons > MAX_OUTCOME_COMPARISONS:
         raise RelationError(
-            f"unordered outcome comparison requires {comparisons} pairs, exceeding "
+            f"outcome comparison requires {comparisons} pairs, exceeding "
             f"the {MAX_OUTCOME_COMPARISONS} pair audit bound"
+        )
+
+    def relations_equal(left_relation: Relation, right_relation: Relation) -> smt.Term:
+        return (
+            sequence_equal(left_relation, right_relation, scalar)
+            if ordered
+            else bag_equal(left_relation, right_relation, scalar)
         )
 
     def included(source: RelationFamily, target: RelationFamily) -> smt.Term:
@@ -807,10 +1213,9 @@ def family_equal(
                         *(
                             smt.and_(
                                 target_outcome.enabled,
-                                bag_equal(
+                                relations_equal(
                                     source_outcome.relation,
                                     target_outcome.relation,
-                                    scalar,
                                 ),
                             )
                             for target_outcome in target.outcomes

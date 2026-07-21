@@ -58,6 +58,7 @@ def pass_project(node_id, output):
         "id": node_id,
         "op": "project",
         "input": "scan",
+        "ordered": False,
         "columns": [
             {
                 "output": output,
@@ -195,6 +196,10 @@ def _ground(term, constants):
         return any(_ground(argument, constants) for argument in term.arguments)
     if term.operation == "=":
         return _ground(term.arguments[0], constants) == _ground(
+            term.arguments[1], constants
+        )
+    if term.operation == "<":
+        return _ground(term.arguments[0], constants) < _ground(
             term.arguments[1], constants
         )
     if term.operation == "ite":
@@ -581,6 +586,7 @@ class LimitOutcomeTest(unittest.TestCase):
             "id": "project",
             "op": "project",
             "input": "unused",
+            "ordered": False,
             "columns": [
                 {
                     "output": "a.value",

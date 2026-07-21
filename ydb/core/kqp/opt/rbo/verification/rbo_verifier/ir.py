@@ -114,6 +114,7 @@ class Project:
     id: str
     input: str
     columns: tuple[Projection, ...]
+    ordered: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +130,22 @@ class Limit:
     input: str
     count: Expr
     offset: Expr | None
+    phase: str
+
+
+@dataclass(frozen=True, slots=True)
+class SortOrder:
+    column: str
+    ascending: bool
+    nulls_first: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Sort:
+    id: str
+    input: str
+    order: tuple[SortOrder, ...]
+    limit: Expr | None
     phase: str
 
 
@@ -175,7 +192,9 @@ class UnionAll:
     output: tuple[str, ...]
 
 
-PlanNode: TypeAlias = EmptySource | Scan | Project | Filter | Limit | Aggregate | Join | UnionAll
+PlanNode: TypeAlias = (
+    EmptySource | Scan | Project | Filter | Limit | Sort | Aggregate | Join | UnionAll
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,13 +223,6 @@ class Stage:
 
 
 @dataclass(frozen=True, slots=True)
-class MergeOrder:
-    column: str
-    ascending: bool
-    nulls_first: bool
-
-
-@dataclass(frozen=True, slots=True)
 class StageEdge:
     id: str
     producer: str
@@ -223,7 +235,7 @@ class StageEdge:
     hash_function: str | None = None
     use_spilling: bool | None = None
     parallel: bool | None = None
-    order: tuple[MergeOrder, ...] = ()
+    order: tuple[SortOrder, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,6 +408,24 @@ def _parse_uint64_literal(value: Any, path: str) -> Expr:
     return expression
 
 
+def _parse_sort_order(value: Any, path: str) -> tuple[SortOrder, ...]:
+    order: list[SortOrder] = []
+    for index, raw_item in enumerate(_array(value, path)):
+        item_path = f"{path}[{index}]"
+        item = _object(raw_item, item_path)
+        _keys(item, {"column", "ascending", "nulls_first"}, item_path)
+        order.append(
+            SortOrder(
+                _string(item["column"], f"{item_path}.column"),
+                _bool(item["ascending"], f"{item_path}.ascending"),
+                _bool(item["nulls_first"], f"{item_path}.nulls_first"),
+            )
+        )
+    if not order:
+        _fail(path, "must not be empty")
+    return tuple(order)
+
+
 def _parse_table(value: Any, path: str) -> Table:
     obj = _object(value, path)
     _keys(obj, {"name", "columns", "unique_keys"}, path)
@@ -468,7 +498,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         )
 
     if operation == "project":
-        _keys(obj, {"id", "op", "input", "columns"}, path)
+        _keys(obj, {"id", "op", "input", "columns", "ordered"}, path)
         columns: list[Projection] = []
         for index, raw_column in enumerate(_array(obj["columns"], f"{path}.columns")):
             column_path = f"{path}.columns[{index}]"
@@ -482,7 +512,12 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             )
         if not columns:
             _fail(f"{path}.columns", "must not be empty")
-        return Project(node_id, _string(obj["input"], f"{path}.input"), tuple(columns))
+        return Project(
+            id=node_id,
+            input=_string(obj["input"], f"{path}.input"),
+            columns=tuple(columns),
+            ordered=_bool(obj["ordered"], f"{path}.ordered"),
+        )
 
     if operation == "filter":
         _keys(obj, {"id", "op", "input", "predicate"}, path)
@@ -505,6 +540,23 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 None
                 if obj["offset"] is None
                 else _parse_uint64_literal(obj["offset"], f"{path}.offset")
+            ),
+            phase=phase,
+        )
+
+    if operation == "sort":
+        _keys(obj, {"id", "op", "input", "order", "limit", "phase"}, path)
+        phase = _string(obj["phase"], f"{path}.phase")
+        if phase not in OPERATOR_PHASES:
+            _fail(f"{path}.phase", f"unsupported sort phase {phase!r}")
+        return Sort(
+            id=node_id,
+            input=_string(obj["input"], f"{path}.input"),
+            order=_parse_sort_order(obj["order"], f"{path}.order"),
+            limit=(
+                None
+                if obj["limit"] is None
+                else _parse_uint64_literal(obj["limit"], f"{path}.limit")
             ),
             phase=phase,
         )
@@ -677,21 +729,10 @@ def _parse_stage_edge(value: Any, path: str) -> StageEdge:
     if kind == "union_all":
         return StageEdge(**fields, parallel=_bool(obj["parallel"], f"{path}.parallel"))
     if kind == "merge":
-        order: list[MergeOrder] = []
-        for index, raw_order in enumerate(_array(obj["order"], f"{path}.order")):
-            order_path = f"{path}.order[{index}]"
-            item = _object(raw_order, order_path)
-            _keys(item, {"column", "ascending", "nulls_first"}, order_path)
-            order.append(
-                MergeOrder(
-                    _string(item["column"], f"{order_path}.column"),
-                    _bool(item["ascending"], f"{order_path}.ascending"),
-                    _bool(item["nulls_first"], f"{order_path}.nulls_first"),
-                )
-            )
-        if not order:
-            _fail(f"{path}.order", "must not be empty")
-        return StageEdge(**fields, order=tuple(order))
+        return StageEdge(
+            **fields,
+            order=_parse_sort_order(obj["order"], f"{path}.order"),
+        )
     return StageEdge(**fields)
 
 
@@ -824,7 +865,7 @@ def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_na
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
-    if isinstance(node, (Project, Filter, Limit, Aggregate)):
+    if isinstance(node, (Project, Filter, Limit, Sort, Aggregate)):
         return (node.input,)
     if isinstance(node, Join):
         return (node.left, node.right)
@@ -980,6 +1021,11 @@ def _validate_stage_graph(
         for item in edge.order:
             if item.column not in columns:
                 _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
+            if family(columns[item.column].type) == "string":
+                _fail(
+                    f"{edge_path}.order",
+                    "String and Utf8 ordering is not modeled",
+                )
 
     for stage in graph.stages:
         declared_outputs = {(stage.id, output.index) for output in stage.outputs}
@@ -1206,6 +1252,20 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
 
         elif isinstance(node, Limit):
             result = dict(schema_for(node.input))
+
+        elif isinstance(node, Sort):
+            result = dict(schema_for(node.input))
+            for index, item in enumerate(node.order):
+                if item.column not in result:
+                    _fail(
+                        f"node {node.id!r}.order[{index}]",
+                        f"column {item.column!r} is not available",
+                    )
+                if family(result[item.column].type) == "string":
+                    _fail(
+                        f"node {node.id!r}.order[{index}]",
+                        "String and Utf8 ordering is not modeled",
+                    )
 
         elif isinstance(node, Aggregate):
             input_schema = schema_for(node.input)

@@ -6163,19 +6163,19 @@ private:
 
         const auto& data = PendingResult->Data;
         while (PendingBatchIndex < data.size()) {
-            const auto rows = GetRows(data[PendingBatchIndex]);
-            while (PendingRowIndex < rows.size()) {
+            const auto rows = GetRows(data[PendingBatchIndex], PendingRowIndex);
+            for (size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
                 if (TransformOutput->GetFillLevel() != NYql::NDq::EDqFillLevel::NoLimit) {
                     CA_LOG_D("TKqpForwardWriteActor TransformOutput is full, waiting for drain");
                     Callbacks->ResumeExecution();
                     return;
                 }
-                const auto& row = rows[PendingRowIndex];
+                const auto& row = rows[rowIndex];
                 AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
                 NUdf::TUnboxedValue* outputRowItems = nullptr;
                 auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
-                for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
-                    outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
+                for (size_t colIndex = 0; colIndex < ReturningColumnsTypes.size(); ++colIndex) {
+                    outputRowItems[colIndex] = NMiniKQL::GetCellValue(row[colIndex], ReturningColumnsTypes[colIndex]);
                 }
                 TransformOutput->Consume(std::move(outputRow));
                 ++PendingRowIndex;

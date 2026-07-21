@@ -248,11 +248,16 @@ contains enough source-distribution information to verify them.
   a trusted baseline. It uses BulkUpsert for setup so candidate writes do not
   pass through the optimizer under test, rejects observably nondeterministic
   traces, and retains every created namespace for diagnosis.
-- `tools/bisect.py` reruns the optimizer with a stop-after-application debug hook
-  and invokes the unchanged verifier on each prefix.
+- `tools/bisect.py` reruns the optimizer with a true stop-after-application
+  debug hook and invokes the same formula kernel under an explicit diagnostic
+  rule-prefix boundary contract. Every such verdict is labeled
+  `comparison_scope: RULE_APPLICATION_PREFIX` so it cannot be confused with a
+  whole-optimizer result.
 
 The bisection unit is a dynamic rule-application ordinal, not merely a rule name,
-because stages may iterate to a fixpoint.
+because stages may iterate to a fixpoint. Prefixes are inspected sequentially:
+equivalence is not monotonic across rule applications, so binary search would
+not soundly identify the first bad transformation.
 
 ## Validation strategy
 
@@ -353,7 +358,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Separate real-YDB replay tool for deterministic, range-valid inspector
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
   multi-result TPC-DS q14, q23, and q39 remain an explicit replay extension.
-- Rule-application snapshot hook and separate bisection driver.
+- Explicit diagnostic rule-prefix verifier boundary; rule-application snapshot
+  hook and separate sequential localization driver remain in progress.
 - CI policy for confirmed counterexamples and bounded verification coverage.
 
 ## Non-goals

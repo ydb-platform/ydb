@@ -299,6 +299,24 @@ either bound. Use `--emit-smt formula.smt2` without `--solver` to inspect the
 exact proof obligation. If satisfiability succeeds but model extraction returns
 unknown, the result remains `COUNTEREXAMPLE` with a reason and no witness.
 
+Normal verification requires a logical initial snapshot and a final snapshot
+with a complete StageGraph. The separate localization path may compare that
+same logical initial snapshot with a captured logical or complete staged rule
+prefix:
+
+```bash
+PYTHONPATH=ydb/core/kqp/opt/rbo/verification \
+python3 -m rbo_verifier initial.json prefix.json \
+  --diagnostic-rule-prefix --rows 2 --solver /path/to/z3
+```
+
+This mode uses the same formula kernel but an explicitly different boundary
+contract. Every result, including errors, carries
+`"comparison_scope":"RULE_APPLICATION_PREFIX"`; it is evidence about one
+optimizer prefix, not a whole start-to-finish verdict. A standalone sequential
+localizer drives this mode because equivalence is not monotonic across rule
+applications and therefore cannot be bisected soundly with binary search.
+
 ## Plan and counterexample inspection
 
 The separate `kqp_rbo_inspect` executable renders every modeled snapshot field

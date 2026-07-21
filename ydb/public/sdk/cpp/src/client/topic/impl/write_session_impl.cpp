@@ -743,7 +743,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
     TWriteContext writeContext = std::monostate{};
     // After ValidateDeferredPublicationMessage: neither Tx nor DeferredPublication is set, or exactly one of them.
     if (message.DeferredPublication_) {
-        writeContext = *message.DeferredPublication_;
+        writeContext = std::move(*message.DeferredPublication_);
     } else if (auto tx = MakeTransactionId(message.GetTxPtr())) {
         writeContext = std::move(*tx);
     }

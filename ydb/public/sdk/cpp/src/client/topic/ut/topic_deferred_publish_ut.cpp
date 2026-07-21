@@ -20,6 +20,42 @@ NKikimr::Tests::TServerSettings MakeDeferredPublishEnabledSettings() {
     return settings;
 }
 
+NTopic::TContinuationToken WaitForWriteToken(NTopic::IWriteSession& session) {
+    std::optional<NTopic::TContinuationToken> token;
+    while (!token.has_value()) {
+        UNIT_ASSERT_C(
+            session.WaitEvent().Wait(TDuration::Seconds(30)),
+            "timeout waiting write continuation token");
+        for (auto& event : session.GetEvents()) {
+            if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                token = std::move(ready->ContinuationToken);
+            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+    return std::move(*token);
+}
+
+void WaitForWriteAck(NTopic::IWriteSession& session, std::optional<NTopic::TContinuationToken>& token) {
+    bool acked = false;
+    while (!acked) {
+        UNIT_ASSERT_C(
+            session.WaitEvent().Wait(TDuration::Seconds(30)),
+            "timeout waiting write ack");
+        for (auto& event : session.GetEvents()) {
+            if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                token = std::move(ready->ContinuationToken);
+            } else if (auto* acks = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                UNIT_ASSERT(!acks->Acks.empty());
+                acked = true;
+            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+}
+
 class TDeferredWriteHelper {
 public:
     explicit TDeferredWriteHelper(NTopic::TTopicClient& client, const std::string& topicPath)
@@ -41,7 +77,7 @@ public:
         uint64_t intPublicationId,
         std::optional<std::string> extPublicationId = std::nullopt)
     {
-        WaitForToken();
+        Token_ = WaitForWriteToken(*Session_);
         NTopic::TWriteMessage message(payload);
         NTopic::TDeferredPublication deferred{
             .IntPublicationId = intPublicationId,
@@ -52,40 +88,10 @@ public:
         message.DeferredPublication(std::move(deferred));
         Session_->Write(std::move(*Token_), std::move(message));
         Token_.reset();
-        WaitForAck();
+        WaitForWriteAck(*Session_, Token_);
     }
 
 private:
-    void WaitForToken() {
-        while (!Token_.has_value()) {
-            Session_->WaitEvent().Wait(TDuration::Seconds(30));
-            for (auto& event : Session_->GetEvents()) {
-                if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                    Token_ = std::move(ready->ContinuationToken);
-                } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                    UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
-                }
-            }
-        }
-    }
-
-    void WaitForAck() {
-        bool acked = false;
-        while (!acked) {
-            Session_->WaitEvent().Wait(TDuration::Seconds(30));
-            for (auto& event : Session_->GetEvents()) {
-                if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                    Token_ = std::move(ready->ContinuationToken);
-                } else if (auto* acks = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                    UNIT_ASSERT(!acks->Acks.empty());
-                    acked = true;
-                } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                    UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
-                }
-            }
-        }
-    }
-
     NTopic::TTopicClient& Client_;
     NTopic::TWriteSessionSettings Settings_;
     std::shared_ptr<NTopic::IWriteSession> Session_;
@@ -319,15 +325,7 @@ Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
     settings.ProducerId("deferred-tx-producer");
     auto session = topicClient.CreateWriteSession(settings);
 
-    std::optional<NTopic::TContinuationToken> token;
-    while (!token.has_value()) {
-        session->WaitEvent().Wait(TDuration::Seconds(30));
-        for (auto& event : session->GetEvents()) {
-            if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                token = std::move(ready->ContinuationToken);
-            }
-        }
-    }
+    auto token = WaitForWriteToken(*session);
 
     NTopic::TWriteMessage message("payload");
     NTopic::TDeferredPublication deferred{
@@ -354,10 +352,12 @@ Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
     } fakeTx;
     message.Tx(fakeTx);
 
-    session->Write(std::move(*token), std::move(message));
+    session->Write(std::move(token), std::move(message));
 
     bool closedWithBadRequest = false;
-    session->WaitEvent().Wait(TDuration::Seconds(30));
+    UNIT_ASSERT_C(
+        session->WaitEvent().Wait(TDuration::Seconds(30)),
+        "timeout waiting write session close");
     for (auto& event : session->GetEvents()) {
         if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
             closedWithBadRequest = closed->GetStatus() == EStatus::BAD_REQUEST;

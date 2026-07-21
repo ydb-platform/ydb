@@ -95,6 +95,7 @@ class Scan:
     id: str
     table: str
     columns: tuple[ScanColumn, ...]
+    predicate: Expr | None
     pushed_limit: Expr | None
 
 
@@ -371,8 +372,10 @@ def _parse_expr(value: Any, path: str) -> Expr:
         _keys(obj, {"kind", "arg"}, path)
         return Expr(kind=kind, args=(_parse_expr(obj["arg"], f"{path}.arg"),))
 
-    if kind == "eq":
+    if kind in {"eq", "lt", "lte", "gt", "gte"}:
         _keys(obj, {"kind", "left", "right"}, path, {"null_safe"})
+        if kind != "eq" and "null_safe" in obj:
+            _fail(f"{path}.null_safe", "is valid only for equality")
         return Expr(
             kind=kind,
             args=(
@@ -474,7 +477,12 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         return EmptySource(node_id)
 
     if operation == "scan":
-        _keys(obj, {"id", "op", "table", "columns"}, path, {"pushed_limit"})
+        _keys(
+            obj,
+            {"id", "op", "table", "columns"},
+            path,
+            {"predicate", "pushed_limit"},
+        )
         columns: list[ScanColumn] = []
         for index, raw_column in enumerate(_array(obj["columns"], f"{path}.columns")):
             column_path = f"{path}.columns[{index}]"
@@ -489,12 +497,19 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         if not columns:
             _fail(f"{path}.columns", "must not be empty")
         return Scan(
-            node_id,
-            _string(obj["table"], f"{path}.table"),
-            tuple(columns),
-            None
-            if obj.get("pushed_limit") is None
-            else _parse_uint64_literal(obj["pushed_limit"], f"{path}.pushed_limit"),
+            id=node_id,
+            table=_string(obj["table"], f"{path}.table"),
+            columns=tuple(columns),
+            predicate=(
+                None
+                if obj.get("predicate") is None
+                else _parse_expr(obj["predicate"], f"{path}.predicate")
+            ),
+            pushed_limit=(
+                None
+                if obj.get("pushed_limit") is None
+                else _parse_uint64_literal(obj["pushed_limit"], f"{path}.pushed_limit")
+            ),
         )
 
     if operation == "project":
@@ -828,11 +843,14 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
             _fail(path, f"{expr.kind} requires Boolean arguments")
         return ValueType(BOOL, any(argument.nullable for argument in argument_types))
 
-    if expr.kind == "eq":
+    if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
         if left.name != right.name:
-            _fail(path, f"equality type mismatch: {left.name!r} and {right.name!r}")
+            label = "equality" if expr.kind == "eq" else "comparison"
+            _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
+        if expr.kind != "eq" and family(left.name) != "int":
+            _fail(path, f"{expr.kind} requires integer arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
     raise AssertionError(f"parser admitted unknown expression kind {expr.kind!r}")
@@ -894,12 +912,13 @@ def _validate_stage_graph(
     graph = snapshot.stage_graph
     if graph is None:
         if any(
-            isinstance(node, Scan) and node.pushed_limit is not None
+            isinstance(node, Scan)
+            and (node.predicate is not None or node.pushed_limit is not None)
             for node in snapshot.plan.nodes
         ):
             _fail(
                 "snapshot.stage_graph",
-                "a pushed scan limit requires a column-storage source stage",
+                "a pushed scan predicate or limit requires a column-storage source stage",
             )
         return
     path = "snapshot.stage_graph"
@@ -967,10 +986,14 @@ def _validate_stage_graph(
                 _fail(stage_path, "a source stage must contain one scan and have no inputs")
             if stage.source_storage == "row" and len(stage.nodes) != 1:
                 _fail(stage_path, "a row-storage source stage must contain only its scan")
-        if scans and scans[0].pushed_limit is not None and stage.source_storage != "column":
+        if (
+            scans
+            and (scans[0].predicate is not None or scans[0].pushed_limit is not None)
+            and stage.source_storage != "column"
+        ):
             _fail(
                 f"{stage_path}.source_storage",
-                "a pushed scan limit requires column storage",
+                "a pushed scan predicate or limit requires column storage",
             )
 
     missing = plan_nodes.keys() - owner.keys()
@@ -1235,6 +1258,17 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if source is None:
                     _fail(f"node {node.id!r}", f"unknown source column {column.source!r}")
                 result[column.output] = Column(column.output, source.type, source.nullable)
+            if node.predicate is not None:
+                predicate_type = _infer_expr(
+                    node.predicate,
+                    result,
+                    f"node {node.id!r}.predicate",
+                )
+                if predicate_type.name != BOOL:
+                    _fail(
+                        f"node {node.id!r}.predicate",
+                        "scan predicate must be Boolean",
+                    )
 
         elif isinstance(node, Project):
             input_schema = schema_for(node.input)

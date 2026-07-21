@@ -30,6 +30,7 @@ def minimal_snapshot():
                         {"source": "k", "output": "a.k"},
                         {"source": "flag", "output": "a.flag"},
                     ],
+                    "predicate": None,
                     "pushed_limit": None,
                 },
                 {
@@ -53,11 +54,88 @@ class SnapshotTest(unittest.TestCase):
             ("a.k", "Int64", False)
         ])
 
-    def test_legacy_v1_scan_without_pushed_limit_defaults_to_none(self):
+    def test_legacy_v1_scan_without_pushdowns_defaults_to_none(self):
         value = minimal_snapshot()
+        del value["plan"]["nodes"][0]["predicate"]
         del value["plan"]["nodes"][0]["pushed_limit"]
         snapshot = parse_snapshot(value)
+        self.assertIsNone(snapshot.plan.nodes[0].predicate)
         self.assertIsNone(snapshot.plan.nodes[0].pushed_limit)
+
+    def test_pushed_scan_predicate_is_strict_typed_and_column_only(self):
+        value = minimal_snapshot()
+        value["plan"]["nodes"][0]["predicate"] = {
+            "kind": "gte",
+            "left": {"kind": "column", "column": "a.k"},
+            "right": {"kind": "literal", "type": "Int64", "value": 30},
+        }
+        value["stage_graph"] = {
+            "root_stage": "source",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan", "filter"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "filter"}],
+                    "source_storage": "column",
+                }
+            ],
+            "edges": [],
+            "assumptions": [],
+        }
+        snapshot = parse_snapshot(value)
+        self.assertEqual(snapshot.plan.nodes[0].predicate.kind, "gte")
+
+        row_source = copy.deepcopy(value)
+        row_source["plan"]["nodes"] = [row_source["plan"]["nodes"][0]]
+        row_source["plan"]["root"] = "scan"
+        row_source["stage_graph"]["stages"][0]["nodes"] = ["scan"]
+        row_source["stage_graph"]["stages"][0]["outputs"][0]["node"] = "scan"
+        row_source["stage_graph"]["stages"][0]["source_storage"] = "row"
+        with self.assertRaisesRegex(SnapshotError, "pushed scan predicate or limit"):
+            parse_snapshot(row_source)
+
+        unavailable = copy.deepcopy(value)
+        unavailable["plan"]["nodes"][0]["predicate"]["left"]["column"] = "missing"
+        with self.assertRaisesRegex(SnapshotError, "column 'missing' is not available"):
+            parse_snapshot(unavailable)
+
+        non_boolean = copy.deepcopy(value)
+        non_boolean["plan"]["nodes"][0]["predicate"] = {
+            "kind": "column",
+            "column": "a.k",
+        }
+        with self.assertRaisesRegex(SnapshotError, "scan predicate must be Boolean"):
+            parse_snapshot(non_boolean)
+
+    def test_ordered_comparison_requires_matching_integer_types(self):
+        value = minimal_snapshot()
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "lt",
+            "left": {"kind": "column", "column": "a.k"},
+            "right": {"kind": "literal", "type": "Uint64", "value": 1},
+        }
+        with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
+            parse_snapshot(value)
+
+        value["schema"]["tables"][0]["columns"][0]["type"] = "String"
+        value["plan"]["nodes"][1]["predicate"]["right"] = {
+            "kind": "literal",
+            "type": "String",
+            "value": "1",
+        }
+        with self.assertRaisesRegex(SnapshotError, "lt requires integer arguments"):
+            parse_snapshot(value)
+
+        value = minimal_snapshot()
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "gte",
+            "left": {"kind": "column", "column": "a.k"},
+            "right": {"kind": "literal", "type": "Int64", "value": 1},
+            "null_safe": True,
+        }
+        with self.assertRaisesRegex(SnapshotError, "valid only for equality"):
+            parse_snapshot(value)
 
     def test_unknown_field_is_rejected(self):
         value = minimal_snapshot()

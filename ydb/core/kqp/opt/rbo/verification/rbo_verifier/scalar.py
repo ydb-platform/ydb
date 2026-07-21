@@ -59,15 +59,25 @@ class Encoder:
             arguments = tuple(self.evaluate(argument, row) for argument in expression.args)
             return self._and(arguments) if expression.kind == "and" else self._or(arguments)
 
-        if expression.kind == "eq":
+        if expression.kind in {"eq", "lt", "lte", "gt", "gte"}:
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
-            if expression.null_safe:
+            if expression.kind == "eq" and expression.null_safe:
                 return Value(BOOL, smt.FALSE, self.not_distinct(left, right))
+            if expression.kind == "eq":
+                comparison = smt.eq(left.value, right.value)
+            elif expression.kind == "lt":
+                comparison = smt.lt(left.value, right.value)
+            elif expression.kind == "lte":
+                comparison = smt.not_(smt.lt(right.value, left.value))
+            elif expression.kind == "gt":
+                comparison = smt.lt(right.value, left.value)
+            else:
+                comparison = smt.not_(smt.lt(left.value, right.value))
             return Value(
                 BOOL,
                 smt.or_(left.is_null, right.is_null),
-                smt.eq(left.value, right.value),
+                comparison,
             )
 
         if expression.kind == "opaque":

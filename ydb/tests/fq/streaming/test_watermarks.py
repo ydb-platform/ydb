@@ -123,9 +123,11 @@ class TestWatermarksInYdb(StreamingTestBase):
     def _read_topic(self, ydb_client: YdbClient, messages_count: int) -> list[str]:
         return ydb_client.topic_read(self.output_topic, self.consumer_name, messages_count)
 
-    def _read_topic_check_row(self, ydb_client: YdbClient, expected: list[str]) -> None:
-        actual = self._read_topic(ydb_client, 1)
-        assert sorted(json.loads(actual[0])) == sorted(expected)
+    def _read_topic_check_rows(self, ydb_client: YdbClient, expected: list[str]) -> None:
+        actual = []
+        while len(actual) < len(expected):
+            actual.extend(json.loads(self._read_topic(ydb_client, 1)[0]))
+        assert sorted(actual) == sorted(expected)
 
     def _read_topic_check(self, ydb_client: YdbClient, expected: list[str]) -> None:
         actual = self._read_topic(ydb_client, len(expected))
@@ -220,14 +222,14 @@ class TestWatermarksInYdb(StreamingTestBase):
             time.sleep(self.idle_timeout_seconds + 1)
 
             expected = ["fast-0", "slow-0"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
 
             self._write_topic(ydb_client, [self._event(10, "slow-10")], partition_id=1)
             self._write_topic(ydb_client, [self._event(20, "fast-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
 
             expected = ["fast-10", "slow-10"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
 
@@ -255,9 +257,10 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
 
             expected = ["fast-0", "slow-0"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
+
             expected = ["fast-10", "slow-10"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
 
@@ -285,9 +288,10 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(20, "second-20")], partition_id=1)
 
             expected = ["first-0", "second-0"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
+
             expected = ["first-10", "second-10"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
 
@@ -311,14 +315,14 @@ class TestWatermarksInYdb(StreamingTestBase):
             time.sleep(self.idle_timeout_seconds + 1)
 
             expected = ["active-0"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
 
             self._write_topic(ydb_client, [self._event(10, "new-10")], partition_id=1)
             self._write_topic(ydb_client, [self._event(20, "active-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "new-20")], partition_id=1)
 
             expected = ["active-10", "new-10"]
-            self._read_topic_check_row(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
 

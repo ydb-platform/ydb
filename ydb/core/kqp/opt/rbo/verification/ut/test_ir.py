@@ -13,8 +13,8 @@ def minimal_snapshot():
                 {
                     "name": "A",
                     "columns": [
-                        {"name": "k", "type": "int", "nullable": False},
-                        {"name": "flag", "type": "bool", "nullable": True},
+                        {"name": "k", "type": "Int64", "nullable": False},
+                        {"name": "flag", "type": "Bool", "nullable": True},
                     ],
                     "unique_keys": [],
                 }
@@ -49,7 +49,7 @@ class SnapshotTest(unittest.TestCase):
     def test_valid_snapshot_has_inferred_root_schema(self):
         snapshot = parse_snapshot(minimal_snapshot())
         self.assertEqual([(column.name, column.type, column.nullable) for column in snapshot.output_schema()], [
-            ("a.k", "int", False)
+            ("a.k", "Int64", False)
         ])
 
     def test_unknown_field_is_rejected(self):
@@ -69,9 +69,15 @@ class SnapshotTest(unittest.TestCase):
         value["plan"]["nodes"][1]["predicate"] = {
             "kind": "eq",
             "left": {"kind": "column", "column": "a.k"},
-            "right": {"kind": "literal", "type": "string", "value": "1"},
+            "right": {"kind": "literal", "type": "String", "value": "1"},
         }
         with self.assertRaisesRegex(SnapshotError, "equality type mismatch"):
+            parse_snapshot(value)
+
+    def test_abstract_scalar_names_are_rejected(self):
+        value = minimal_snapshot()
+        value["schema"]["tables"][0]["columns"][0]["type"] = "int"
+        with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
     def test_non_null_stage_graph_is_rejected_in_version_one(self):

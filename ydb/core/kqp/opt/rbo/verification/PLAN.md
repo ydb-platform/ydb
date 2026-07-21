@@ -194,7 +194,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
 - Strict v1 snapshot decoder.
 - Empty source, scan, project, filter, joins, and logical UnionAll.
-- Nullable Int/Bool/String values and structurally identified scalar UFs.
+- Nullable exact YQL Bool, integer-width, String, and Utf8 identities with
+  structurally identified scalar UFs. Solver domains may be shared, but snapshot
+  type identity is never collapsed.
 - Bag-equivalence formula, deterministic SMT-LIB, witness decoding, CLI, and
   mutation tests.
 

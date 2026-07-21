@@ -75,6 +75,8 @@ struct TDescribeTopicActorSettings {
 class TDescribeTopicActorImpl
 {
 protected:
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
+
     struct TTabletInfo {
         ui64 TabletId = 0;
         std::vector<ui32> Partitions;
@@ -101,6 +103,7 @@ public:
     void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     bool ProcessTablets(const NKikimrSchemeOp::TPersQueueGroupDescription& description, const TActorContext& ctx);
 

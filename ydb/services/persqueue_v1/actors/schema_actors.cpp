@@ -277,6 +277,7 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
         HFuncCtx(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
         HFuncCtx(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle, ctx);
         HFuncCtx(TEvPQProxy::TEvRequestTablet, Handle, ctx);
+        HFuncCtx(TEvents::TEvWakeup, Handle, ctx);
         default: return false;
     }
     return true;
@@ -310,6 +311,9 @@ void TDescribeTopicActorImpl::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 }
 
 void TDescribeTopicActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+    if (TBase::IsDead) {
+        return;
+    }
     this->Request_->RaiseIssue(FillIssue(error, errorCode));
     TBase::Reply(status, ctx);
 }
@@ -361,6 +365,17 @@ void TDescribeTopicActorImpl::Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, con
     }
 
     RequestTablet(tabletInfo, ctx);
+}
+
+void TDescribeTopicActorImpl::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Request timed out",
+        {"selfId", ctx.SelfID});
+    RaiseError(
+        "Describe topic request timed out",
+        Ydb::PersQueue::ErrorCode::ERROR,
+        Ydb::StatusIds::TIMEOUT,
+        ctx
+    );
 }
 
 void TDescribeTopicActorImpl::RequestTablet(ui64 tabletId, const TActorContext& ctx) {
@@ -805,6 +820,7 @@ bool TDescribeTopicActorImpl::ProcessTablets(
         return false;
     }
 
+    ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
     return true;
 }
 
@@ -899,6 +915,9 @@ void TPartitionsLocationActor::Finalize() {
 }
 
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
+    if (TBase::IsDead) {
+        return;
+    }
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
 }

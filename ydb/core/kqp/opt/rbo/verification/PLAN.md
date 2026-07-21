@@ -280,9 +280,11 @@ Before treating optimizer findings as credible:
 Independent exhaustive concrete references now cover EmptySource,
 scan/project/filter, logical UnionAll, root projection, and every admitted join
 kind, including NULL/absence payload independence and duplicate multiplicity.
-Separate concrete references cover aggregate, Limit, Sort/Merge, and pushed OLAP
-filter semantics. StageGraph connection combinations remain the largest
-independent-reference gap.
+Separate concrete references cover aggregate, Limit, Sort/Merge, pushed OLAP
+filters, and two-task StageGraph Map, HashShuffle, Broadcast, serial/parallel
+UnionAll, and local-join routing combinations. The StageGraph reference checks
+also distinguish wrong hash functions, shuffle keys, broadcasts, and UnionAll
+modes.
 
 The first useful bound is two row slots per referenced table and two tasks.
 Larger bounds are query-specific because multiway joins grow rapidly.
@@ -323,6 +325,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Wrong-shuffle and wrong-broadcast mutation tests.
 - Exact bounded Merge execution with input-order validation, tie-preserving
   sorted interleavings, and wrong-order mutation tests.
+- Independent exhaustive concrete routing references for every admitted
+  non-Merge connection and representative local-join combinations.
 
 ### M4: benchmark coverage — in progress
 

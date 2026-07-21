@@ -15,6 +15,7 @@ SRCS(
     kqp_rbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    verification/semantic_snapshot.cpp
     analysis/logical_aliases.cpp
     analysis/logical_liveness.cpp
     analysis/logical_name_constraints.cpp
@@ -52,3 +53,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    verification/cpp_ut
+)

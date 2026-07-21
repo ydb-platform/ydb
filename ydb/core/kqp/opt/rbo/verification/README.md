@@ -4,9 +4,12 @@ This directory contains the standalone bounded-equivalence checker described in
 [PLAN.md](PLAN.md). It compares two versioned semantic snapshots and asks Z3 for
 a bounded input database on which their result bags differ.
 
-The current implementation is the M1 logical kernel. StageGraph execution and
-the C++ snapshot exporter are intentionally subsequent milestones; snapshots
-that contain unsupported physical semantics fail closed.
+The current implementation contains the M1 logical kernel and the first M2 C++
+export seam. `CaptureSemanticSnapshotCatalogV1` records the initial query-level
+catalog once, and `ExportSemanticSnapshotV1` deterministically lowers supported
+logical RBO operators without doing file I/O. StageGraph execution and the
+initial/final optimizer capture hooks remain subsequent work; snapshots that
+contain unsupported physical semantics fail closed.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, and `Utf8`) even when several identities use

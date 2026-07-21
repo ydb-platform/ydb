@@ -8,7 +8,6 @@
 #include <ydb/public/api/protos/ydb_debug.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/executor_thread.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -281,7 +280,7 @@ private:
                 RegisterWithSameMailbox(nextChainActor);
             } else {
                 // same mailbox + tail
-                TlsActivationContext->ExecutorThread.RegisterActor<ESendingType::Tail>(
+                TlsActivationContext->RegisterActor<ESendingType::Tail>(
                     nextChainActor,
                     &TlsActivationContext->Mailbox,
                     this->SelfId());
@@ -380,7 +379,7 @@ private:
             nextChainActorId = RegisterWithSameMailbox(nextChainActor);
         } else {
             // same mailbox + tail
-            nextChainActorId = TlsActivationContext->ExecutorThread.RegisterActor<ESendingType::Tail>(
+            nextChainActorId = TlsActivationContext->RegisterActor<ESendingType::Tail>(
                 nextChainActor,
                 &TlsActivationContext->Mailbox,
                 this->SelfId());

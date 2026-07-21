@@ -35,6 +35,14 @@ _COUNTER_ENDPOINT_QUERIES = [
     {'max_counter': '1', 'period': '1', 'database': TENANT_DATABASE},
 ]
 
+_PDISK_INFO_QUERIES = _DEFAULT_QUERIES + [
+    {'node_id': '1', 'pdisk_id': '1'},
+]
+
+_VDISK_VDISKSTAT_QUERIES = _DEFAULT_QUERIES + [
+    {'node_id': '1', 'pdisk_id': '1', 'vslot_id': '1000'},
+]
+
 ENDPOINT_SPECS = [
     {'path': '/actors/'},
     {'path': '/actors/blobstorageproxies'},
@@ -106,7 +114,7 @@ ENDPOINT_SPECS = [
     {'path': '/operation/get'},
     {'path': '/operation/list'},
     {'path': '/pdisk'},
-    {'path': '/pdisk/info'},
+    {'path': '/pdisk/info', 'queries': _PDISK_INFO_QUERIES},
     {'path': '/pdisk/restart'},
     {'path': '/pdisk/status'},
     {'path': '/ping'},
@@ -132,7 +140,7 @@ ENDPOINT_SPECS = [
     {'path': '/vdisk/blobindexstat'},
     {'path': '/vdisk/evict'},
     {'path': '/vdisk/getblob'},
-    {'path': '/vdisk/vdiskstat'},
+    {'path': '/vdisk/vdiskstat', 'queries': _VDISK_VDISKSTAT_QUERIES},
     {'path': '/ver'},
     {'path': '/viewer'},
     {'path': '/viewer/acl'},

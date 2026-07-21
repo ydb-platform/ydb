@@ -1556,6 +1556,14 @@
         "viewer@builtin": 403,
         "monitoring@builtin": 403,
         "root@builtin": 403
+      },
+      "?node_id=1&pdisk_id=1": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
       }
     },
     "/pdisk/restart": {
@@ -2232,6 +2240,14 @@
         "viewer@builtin": 403,
         "monitoring@builtin": 403,
         "root@builtin": 403
+      },
+      "?node_id=1&pdisk_id=1&vslot_id=1000": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
       }
     },
     "/ver": {
@@ -5482,6 +5498,14 @@
         "viewer@builtin": 403,
         "monitoring@builtin": 403,
         "root@builtin": 403
+      },
+      "?node_id=1&pdisk_id=1": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
       }
     },
     "/pdisk/restart": {
@@ -6158,6 +6182,14 @@
         "viewer@builtin": 403,
         "monitoring@builtin": 403,
         "root@builtin": 403
+      },
+      "?node_id=1&pdisk_id=1&vslot_id=1000": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
       }
     },
     "/ver": {

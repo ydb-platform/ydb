@@ -40,4 +40,9 @@ Y_UNIT_TEST(QueryParamHasPriorityOverPostBody) {
         "db1");
 }
 
+Y_UNIT_TEST(PostWithBodyWithEmptyDatabaseField) {
+    TCgiParameters params;
+    UNIT_ASSERT(GetDatabaseParam(params, "POST", R"({"database":"","query":"SELECT 1"})").empty());
+}
+
 } // Y_UNIT_TEST_SUITE(GetDatabaseParam)

@@ -238,6 +238,15 @@ public:
             if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
                 applyAccessRules({
                     // Viewer-level endpoints.
+                    // non "/viewer" prefix endpoints.
+                    {"/pdisk/info", {EViewerEndpointAccessType::Viewer}},
+                    {"/pdisk/restart", {EViewerEndpointAccessType::Viewer}},
+                    {"/pdisk/status", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/vdiskstat", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/getblob", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/blobindexstat", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/evict", {EViewerEndpointAccessType::Viewer}},
+                    // "/viewer" prefix endpoints.
                     {"/viewer/hiveinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/hiveinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/hivestats", {EViewerEndpointAccessType::Viewer}},
@@ -296,15 +305,6 @@ public:
                     // Administration-level endpoints.
                     {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
                     {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
-
-                    // TODO: pdisk/vdisk endpoints need further review (database param requirement, etc.).
-                    {"/pdisk/info", {EViewerEndpointAccessType::Database}},
-                    {"/pdisk/restart", {EViewerEndpointAccessType::Database}},
-                    {"/pdisk/status", {EViewerEndpointAccessType::Database}},
-                    {"/vdisk/vdiskstat", {EViewerEndpointAccessType::Database}},
-                    {"/vdisk/getblob", {EViewerEndpointAccessType::Database}},
-                    {"/vdisk/blobindexstat", {EViewerEndpointAccessType::Database}},
-                    {"/vdisk/evict", {EViewerEndpointAccessType::Database}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
                     // non "/viewer" prefix endpoints.

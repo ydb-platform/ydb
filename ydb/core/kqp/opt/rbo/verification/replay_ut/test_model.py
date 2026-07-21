@@ -1,14 +1,18 @@
 import base64
 import copy
 import hashlib
+import io
 import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import snapshot_digest
+from ydb.core.kqp.opt.rbo.verification.replay import cli as replay_cli
 from ydb.core.kqp.opt.rbo.verification.replay.case import (
     load_json,
     prepare_case,
@@ -539,6 +543,81 @@ class RunnerTest(unittest.TestCase):
                 invoke=fail_after_baseline_creation,
                 namespace=namespace,
             )
+
+
+class ReplayCliExitTest(unittest.TestCase):
+    def arguments(self, root):
+        query = root / "query.yql"
+        query.write_text("SELECT 1;", encoding="utf-8")
+        return [
+            str(root / "initial.json"),
+            str(root / "final.json"),
+            str(root / "trace.json"),
+            str(query),
+            "--ydb",
+            "/bin/ydb",
+            "--baseline-endpoint",
+            "grpc://baseline",
+            "--baseline-database",
+            "/Root/base",
+            "--candidate-endpoint",
+            "grpc://candidate",
+            "--candidate-database",
+            "/Root/new",
+        ]
+
+    def run_cli(self, root, result=None, error=None):
+        output = io.StringIO()
+        errors = io.StringIO()
+        with (
+            mock.patch.object(
+                replay_cli, "load_snapshot", side_effect=[object(), object()]
+            ),
+            mock.patch.object(replay_cli, "load_json", return_value=object()),
+            mock.patch.object(replay_cli, "prepare_case", return_value=object()),
+            mock.patch.object(
+                replay_cli, "run_replay", return_value=result, side_effect=error
+            ),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            exit_code = replay_cli.main(self.arguments(root))
+        return exit_code, output.getvalue(), errors.getvalue()
+
+    def test_real_divergence_is_a_failing_invocation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            exit_code, output, errors = self.run_cli(
+                Path(temporary), {"status": "REAL_RESULT_DIVERGENCE"}
+            )
+        self.assertEqual(exit_code, 1)
+        self.assertIn('"status": "REAL_RESULT_DIVERGENCE"', output)
+        self.assertEqual(errors, "")
+
+    def test_not_reproduced_is_a_successful_invocation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            exit_code, output, errors = self.run_cli(
+                Path(temporary), {"status": "NOT_REPRODUCED"}
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn('"status": "NOT_REPRODUCED"', output)
+        self.assertEqual(errors, "")
+
+    def test_inconclusive_and_setup_errors_are_distinct_failures(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            exit_code, output, errors = self.run_cli(
+                Path(temporary), error=InconclusiveReplay("multiple outcomes")
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertIn('"status": "INCONCLUSIVE_NONDETERMINISM"', output)
+        self.assertEqual(errors, "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            exit_code, output, errors = self.run_cli(
+                Path(temporary), error=ReplayError("invalid replay")
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(output, "")
+        self.assertIn('"status": "SETUP_ERROR"', errors)
 
 
 if __name__ == "__main__":

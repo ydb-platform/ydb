@@ -1,0 +1,16 @@
+{
+  "format": "ydb-rbo-benchmark-coverage-policy",
+  "version": 1,
+  "row_bound": 2,
+  "task_bound": 2,
+  "suites": {
+    "TPCH_YQL": {
+      "query_count": 22,
+      "required_formula_queries": []
+    },
+    "TPCDS_YQL": {
+      "query_count": 99,
+      "required_formula_queries": [88, 96]
+    }
+  }
+}

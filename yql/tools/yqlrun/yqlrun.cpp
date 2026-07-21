@@ -224,8 +224,14 @@ int RunUI(int argc, const char* argv[])
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/true,
+        /*isAmbiguityDebugging=*/false,
+        /*maxParseTreeDepth=*/NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH);
 
     NSQLTranslation::TTranslators translators(
         nullptr,

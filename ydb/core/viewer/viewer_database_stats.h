@@ -12,6 +12,36 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
+struct TDatabaseStorageStats {
+    ui64 Total = 0;
+    bool UnknownSlotSize = false;
+
+    void AddVDisk(
+            const NKikimrWhiteboard::TVDiskStateInfo& vdisk,
+            const NKikimrWhiteboard::TPDiskStateInfo& pdisk,
+            ui32 groupSizeInUnits) {
+        ui64 slotSize = pdisk.GetExpectedSlotSize();
+        if (!slotSize) {
+            slotSize = pdisk.GetEnforcedDynamicSlotSize();
+        }
+        if (!slotSize) {
+            const ui32 slotCount = pdisk.GetExpectedSlotCount();
+            if (!slotCount) {
+                UnknownSlotSize = true;
+                Total += vdisk.GetAvailableSize();
+                return;
+            }
+            slotSize = pdisk.GetTotalSize() / slotCount;
+        }
+
+        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
+            groupSizeInUnits,
+            pdisk.GetSlotSizeInUnits(),
+            pdisk.GetExpectedSlotSize());
+        Total += slotSize * ownerWeight;
+    }
+};
+
 // Simple database/storage stats endpoint modeled after viewer_nodes
 class TJsonDatabaseStats : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
@@ -301,7 +331,6 @@ public:
         bool absentDatabaseNodeInfo = false;
         bool incompleteDatabaseStats = false;
         bool incompleteStorageStats = false;
-        bool unknownSlotSize = false;
         bool unknownPDisk = false;
         ui64 grpcRequestBytes = 0;
         ui64 grpcResponseBytes = 0;
@@ -319,8 +348,8 @@ public:
         ui64 storageNetworkBytes = 0;
         ui64 diskReadBytes = 0;
         ui64 diskWriteBytes = 0;
-        ui64 storageTotal = 0;
         ui64 storageConsumed = 0;
+        TDatabaseStorageStats storageStats;
         std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo&> pDisksIdx;
 
         Result.ClearProblems();
@@ -414,24 +443,10 @@ public:
                         storageConsumed += record.GetAllocatedSize();
                         auto itPDisk = pDisksIdx.find(std::make_pair(nodeId, record.GetPDiskId()));
                         if (itPDisk != pDisksIdx.end()) {
-                            auto slotSize = itPDisk->second.GetExpectedSlotSize();
-                            if (!slotSize) {
-                                slotSize = itPDisk->second.GetEnforcedDynamicSlotSize();
-                            }
-                            if (!slotSize) {
-                                auto slotCount = itPDisk->second.GetExpectedSlotCount();
-                                if (!slotCount) {
-                                    unknownSlotSize = true;
-                                    storageTotal += record.GetAvailableSize();
-                                    continue;
-                                }
-                                slotSize = itPDisk->second.GetTotalSize() / slotCount;
-                            }
-                            const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
-                                itGroup->second.GetInfo().GetGroupSizeInUnits(),
-                                itPDisk->second.GetSlotSizeInUnits(),
-                                itPDisk->second.GetExpectedSlotSize());
-                            storageTotal += slotSize * ownerWeight;
+                            storageStats.AddVDisk(
+                                record,
+                                itPDisk->second,
+                                itGroup->second.GetInfo().GetGroupSizeInUnits());
                         } else {
                             unknownPDisk = true;
                         }
@@ -485,7 +500,7 @@ public:
         if (incompleteStorageStats) {
             Result.AddProblems("incomplete-storage-stats");
         }
-        if (unknownSlotSize) {
+        if (storageStats.UnknownSlotSize) {
             Result.AddProblems("unknown-slot-size");
         }
         if (unknownPDisk) {
@@ -511,7 +526,7 @@ public:
         Result.SetStorageNetworkWrite(databaseToStorageBytes);
         Result.SetDiskRead(diskReadBytes);
         Result.SetDiskWrite(diskWriteBytes);
-        Result.SetStorageTotal(storageTotal);
+        Result.SetStorageTotal(storageStats.Total);
         Result.SetStorageConsumed(storageConsumed);
     }
 

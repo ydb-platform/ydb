@@ -16,6 +16,7 @@
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
+#include "viewer_database_stats.h"
 #include "viewer_groups.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -723,6 +724,68 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Yellow, 10, 100, true, "Yellow");
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Orange, 10, 100, true, "Orange");
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetExpectedSlotSize(100);
+        pdisk.SetEnforcedDynamicSlotSize(1000);
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(10000);
+        pdisk.SetSlotSizeInUnits(1);
+
+        stats.AddVDisk(vdisk, pdisk, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 100);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithDynamicSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetEnforcedDynamicSlotSize(100);
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(10000);
+        pdisk.SetSlotSizeInUnits(2);
+
+        stats.AddVDisk(vdisk, pdisk, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 200);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotCount)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(1000);
+        pdisk.SetSlotSizeInUnits(3);
+
+        stats.AddVDisk(vdisk, pdisk, 5);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 200);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithUnknownSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        vdisk.SetAvailableSize(75);
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetTotalSize(1000);
+
+        stats.AddVDisk(vdisk, pdisk, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 75);
+        UNIT_ASSERT(stats.UnknownSlotSize);
     }
 
     Y_UNIT_TEST(StorageGroupDiskSpaceDoesNotDependOnUsage)

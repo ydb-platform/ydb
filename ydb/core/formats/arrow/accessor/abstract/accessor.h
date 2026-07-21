@@ -32,15 +32,6 @@ namespace NKikimr::NArrow::NAccessor {
 class TColumnLoader;
 class IChunkedArray;
 
-class TChunkedArraySerialized {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, Array);
-    YDB_READONLY_DEF(TString, SerializedData);
-
-public:
-    TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
-};
-
 class IChunkedArray {
 public:
     // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
@@ -447,20 +438,6 @@ public:
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {
         AFL_VERIFY(index < GetRecordsCount());
         return DoGetScalar(index);
-    }
-
-    template <class TSerializer>
-    std::vector<TChunkedArraySerialized> SplitBySizes(
-        const TSerializer& serialize, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-        const std::vector<ui32> recordsCount = NSplitter::TSimilarPacker::SizesToRecordsCount(GetRecordsCount(), fullSerializedData, splitSizes);
-        std::vector<TChunkedArraySerialized> result;
-        ui32 currentStartIndex = 0;
-        for (auto&& i : recordsCount) {
-            std::shared_ptr<IChunkedArray> slice = ISlice(currentStartIndex, i);
-            result.emplace_back(slice, serialize(slice));
-            currentStartIndex += i;
-        }
-        return result;
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {

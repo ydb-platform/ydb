@@ -1,3 +1,4 @@
+#include "chunked_array_serialized.h"
 #include "column.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
@@ -19,20 +20,17 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     auto additionalData = Record.GetMeta().GetAdditionalAccessorData();
     auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, std::move(additionalData));
 
-    std::vector<NArrow::NAccessor::TBlobWithAdditionalAccessorData> blobsAndMeta;
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
-        blobsAndMeta.push_back(ColumnInfo.GetLoader()->GetAccessorConstructor().SerializeToBlobAndMeta(
-            arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())));
-        return blobsAndMeta.back().Blob;
+        return ColumnInfo.GetLoader()->GetAccessorConstructor().SerializeToBlobAndMeta(
+            arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount()));
     };
-    std::vector<NArrow::NAccessor::TChunkedArraySerialized> chunks = accessor->SplitBySizes(predSaver, Data, splitSizes);
+    std::vector<TChunkedArraySerialized> chunks = SplitBySizes(*accessor, predSaver, Data, splitSizes);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
     const ui16 baseChunkIdx = GetChunkIdxOptional().value_or(0);
     for (size_t i = 0; i < chunks.size(); ++i) {
-        AFL_VERIFY(i < blobsAndMeta.size());
         newChunks.emplace_back(std::make_shared<TChunkPreparation>(chunks[i].GetSerializedData(), chunks[i].GetArray(),
-            TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo, std::move(blobsAndMeta[i].Meta)));
+            TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo, chunks[i].GetMeta()));
     }
 
     return newChunks;

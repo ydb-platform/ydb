@@ -15,7 +15,9 @@ struct TResolvedParamBindings {
 };
 
 TResolvedParamBindings ResolveParamBindings(const TSupportLinkEntryConfig& config, const TResolvedParamBindings& defaultParamBindings);
+TResolvedParamBindings ResolveTemplateParamBindings(const TSupportLinkEntryConfig& config);
 void ValidateParamsAreUnique(const TResolvedParamBindings& paramBindings, const TSupportLinkEntryConfig& config);
+void ValidateTemplateParamsAreUnique(const TResolvedParamBindings& paramBindings, const TSupportLinkEntryConfig& config);
 TVector<std::pair<TString, TString>> BuildRequestParamValues(
     const TCgiParameters& requestParameters,
     const TVector<std::pair<TString, TString>>& requestMappings);

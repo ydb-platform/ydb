@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/verification/semantic_snapshot.h>
@@ -23,6 +24,7 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
+using namespace NYql::NNodes;
 
 struct TColumnSpec {
     TString Name;
@@ -280,6 +282,45 @@ TExprNode::TPtr DataTypeDescriptor(
         {ctx.ExprCtx.NewAtom(TPositionHandle(), typeName)});
     result->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
     return result;
+}
+
+TExprNode::TPtr MakeOlapComparisonProcess(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf column,
+    TStringBuf literal,
+    bool coalesceFalse = false)
+{
+    const auto pos = TPositionHandle();
+    const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    auto comparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value(operation).Build()
+        .Left<TCoAtom>().Value(column).Build()
+        .Right(TypedLiteral(ctx, "Int32", literal, intType))
+        .Done();
+
+    TExprNode::TPtr condition = comparison.Ptr();
+    if (coalesceFalse) {
+        condition = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+            .Operator().Value("??").Build()
+            .Left(comparison)
+            .Right(TypedLiteral(
+                ctx,
+                "Bool",
+                "false",
+                ScalarType(ctx, NUdf::EDataSlot::Bool)))
+            .Done().Ptr();
+    }
+
+    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+    const auto filter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+        .Input(TExprBase(argument))
+        .Condition(TExprBase(condition))
+        .Done();
+    return ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {argument}),
+        filter.Ptr());
 }
 
 TSemanticSnapshotExportResult ExportMapExpressionResult(
@@ -690,8 +731,13 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 },
                 comparisonBool),
             true);
-        UNIT_ASSERT_VALUES_EQUAL(comparisonExpression["type"].GetStringSafe(), "Bool");
-        UNIT_ASSERT(comparisonExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(comparisonExpression["kind"].GetStringSafe(), "gte");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparisonExpression["left"]["column"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparisonExpression["right"]["column"].GetStringSafe(),
+            "a.y");
     }
 
     Y_UNIT_TEST(UnsafeOrUnauditedOpaqueExpressionsFailClosed) {
@@ -1357,6 +1403,102 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsActualOlapFilterDialectAtAStageBoundary) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k"},
+            NYql::EStorageType::ColumnStorage);
+        SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+        read->OlapFilterLambda = MakeOlapComparisonProcess(
+            ctx,
+            "gte",
+            "k",
+            "30",
+            true);
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "gte");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["left"]["column"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"].GetIntegerSafe(), 30);
+    }
+
+    Y_UNIT_TEST(UnsupportedOlapFilterFormsFailClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto makeRead = [&]() {
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            return read;
+        };
+
+        auto unsupported = makeRead();
+        unsupported->OlapFilterLambda = MakeOlapComparisonProcess(ctx, "/", "k", "1");
+        TOpRoot unsupportedRoot(unsupported, TPositionHandle(), {"a.k"});
+        unsupported->Props.StageId = unsupportedRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        auto result = ExportSemanticSnapshotV1(unsupportedRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported OLAP binary operation /");
+
+        auto missingColumn = makeRead();
+        missingColumn->OlapFilterLambda = MakeOlapComparisonProcess(
+            ctx,
+            "eq",
+            "missing",
+            "1");
+        TOpRoot missingColumnRoot(missingColumn, TPositionHandle(), {"a.k"});
+        missingColumn->Props.StageId = missingColumnRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(missingColumnRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable physical column missing");
+
+        auto identity = makeRead();
+        const auto pos = TPositionHandle();
+        const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+        auto body = argument;
+        identity->OlapFilterLambda = ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {argument}),
+            std::move(body));
+        TOpRoot identityRoot(identity, pos, {"a.k"});
+        identity->Props.StageId = identityRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(identityRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "contains no filter operation");
+
+        auto noStage = makeRead();
+        noStage->OlapFilterLambda = MakeOlapComparisonProcess(ctx, "eq", "k", "1");
+        TOpRoot noStageRoot(noStage, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(noStageRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "StageGraph source boundary");
+
+        auto rowRead = MakeRead(ctx, table, "a", {"k"});
+        SetOutputType(ctx, *rowRead, {{"a.k", NUdf::EDataSlot::Int32}});
+        rowRead->OlapFilterLambda = MakeOlapComparisonProcess(ctx, "eq", "k", "1");
+        TOpRoot rowRoot(rowRead, pos, {"a.k"});
+        result = ExportSemanticSnapshotV1(rowRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "only for column storage");
+    }
+
     Y_UNIT_TEST(ExportsColumnReadPushdownAtAStageBoundary) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
@@ -1490,7 +1632,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         columnRead->SortDir = ESortDir::Asc;
         result = ExportSemanticSnapshotV1(columnRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "pushdown or ordering semantics");
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "range or ordering semantics");
     }
 
     Y_UNIT_TEST(InitialCatalogSurvivesAPlanThatRemovesItsTable) {

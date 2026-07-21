@@ -232,14 +232,22 @@ class Evaluator:
                 Column(mapping.output, source_columns[mapping.source].type, source_columns[mapping.source].nullable)
                 for mapping in node.columns
             )
-            rows = tuple(
-                Row(
-                    row.present,
-                    {mapping.output: row.values[mapping.source] for mapping in node.columns},
-                )
-                for row in source.rows
-            )
-            family = single(Relation(columns, rows))
+            rows = []
+            for row in source.rows:
+                values = {
+                    mapping.output: row.values[mapping.source]
+                    for mapping in node.columns
+                }
+                present = row.present
+                if node.predicate is not None:
+                    present = smt.and_(
+                        present,
+                        self.scalar.is_true(
+                            self.scalar.evaluate(node.predicate, values)
+                        ),
+                    )
+                rows.append(Row(present, values))
+            family = single(Relation(columns, tuple(rows)))
             if node.pushed_limit is not None and not self.defer_pushed_limits:
                 raise RelationError(
                     "pushed scan limits must be evaluated per column-source task"

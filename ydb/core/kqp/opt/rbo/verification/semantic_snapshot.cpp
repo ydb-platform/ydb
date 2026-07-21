@@ -152,6 +152,25 @@ NJson::TJsonValue ColumnExpr(TStringBuf name) {
     return value;
 }
 
+NJson::TJsonValue BinaryExpr(
+    TStringBuf kind,
+    NJson::TJsonValue left,
+    NJson::TJsonValue right)
+{
+    auto result = JsonMap();
+    result["kind"] = TString(kind);
+    result["left"] = std::move(left);
+    result["right"] = std::move(right);
+    return result;
+}
+
+NJson::TJsonValue NotExpr(NJson::TJsonValue argument) {
+    auto result = JsonMap();
+    result["kind"] = "not";
+    result["arg"] = std::move(argument);
+    return result;
+}
+
 TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr) {
     if (!annotation) {
         Unsupported("Scalar expression has no type annotation");
@@ -661,18 +680,44 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
-    if (node.IsCallable("==") || node.IsCallable("IsNotDistinctFrom")) {
+    if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "IsNotDistinctFrom"})) {
         if (node.ChildrenSize() != 2) {
             Unsupported(TStringBuilder() << node.Content() << " must have exactly two arguments");
         }
-        auto result = JsonMap();
-        result["kind"] = "eq";
-        result["left"] = ExportExprNode(*node.Child(0), rowArgument, visibleColumns);
-        result["right"] = ExportExprNode(*node.Child(1), rowArgument, visibleColumns);
+        const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
+        if (node.GetTypeAnn() && node.Child(0)->GetTypeAnn() &&
+            node.Child(1)->GetTypeAnn())
+        {
+            if (ScalarTypeName(node) != "Bool") {
+                Unsupported(TStringBuilder() << node.Content() << " comparison result is not Bool");
+            }
+            const TString leftType = ScalarTypeName(*node.Child(0));
+            const TString rightType = ScalarTypeName(*node.Child(1));
+            if (leftType != rightType) {
+                Unsupported(TStringBuilder()
+                    << node.Content() << " comparison operand types differ: "
+                    << leftType << " and " << rightType);
+            }
+            if (!equality && !IsIntegerType(leftType)) {
+                Unsupported(TStringBuilder()
+                    << node.Content() << " ordering is modeled only for integers");
+            }
+        }
+
+        static const THashMap<TString, TString> Kinds = {
+            {"<", "lt"},
+            {"<=", "lte"},
+            {">", "gt"},
+            {">=", "gte"},
+        };
+        auto result = BinaryExpr(
+            equality ? TStringBuf("eq") : TStringBuf(Kinds.at(TString(node.Content()))),
+            ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
+            ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
         if (node.IsCallable("IsNotDistinctFrom")) {
             result["null_safe"] = true;
         }
-        return result;
+        return node.IsCallable("!=") ? NotExpr(std::move(result)) : std::move(result);
     }
 
     return TOpaqueExpressionEncoder(rowArgument, visibleColumns).Export(node);
@@ -695,6 +740,189 @@ NJson::TJsonValue ExportExpr(
         *expression.GetExpressionBody(),
         arguments->Child(0),
         visibleColumns);
+}
+
+using TOlapColumnMap = THashMap<TString, TString>;
+
+NJson::TJsonValue ExportOlapScalar(
+    const TExprNode::TPtr& node,
+    const TOlapColumnMap& columns);
+
+NJson::TJsonValue OlapColumnExpr(
+    TStringBuf physicalName,
+    const TOlapColumnMap& columns)
+{
+    const auto* output = columns.FindPtr(TString(physicalName));
+    if (!output) {
+        Unsupported(TStringBuilder()
+            << "OLAP predicate references unavailable physical column "
+            << physicalName);
+    }
+    return ColumnExpr(*output);
+}
+
+void CheckOlapBoolOpType(const TExprNode& node) {
+    if (node.ChildrenSize() != 4) {
+        return;
+    }
+    const auto annotation = node.Child(3)->GetTypeAnn();
+    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Type ||
+        TypeName(annotation->Cast<TTypeExprType>()->GetType()) != "Bool")
+    {
+        Unsupported("OLAP Boolean operation has an invalid result type descriptor");
+    }
+}
+
+NJson::TJsonValue ExportOlapBinary(
+    const TKqpOlapFilterBinaryOp& operation,
+    const TOlapColumnMap& columns)
+{
+    const auto& node = operation.Ref();
+    if (node.ChildrenSize() != 3 && node.ChildrenSize() != 4) {
+        Unsupported("Malformed OLAP binary operation");
+    }
+    const TString op(operation.Operator().StringValue());
+    CheckOlapBoolOpType(node);
+
+    if (op == "??") {
+        const auto& fallback = operation.Right().Ref();
+        if (!fallback.IsCallable("Bool") || fallback.ChildrenSize() != 1 ||
+            !fallback.Child(0)->IsAtom("false"))
+        {
+            Unsupported("OLAP filter coalesce is supported only with false fallback");
+        }
+        // At a filter boundary, IsTrue(Coalesce(predicate, false)) is exactly
+        // IsTrue(predicate).  Keeping that normalization here avoids adding a
+        // general-purpose scalar simplifier to the verifier kernel.
+        return ExportOlapScalar(operation.Left().Ptr(), columns);
+    }
+
+    TStringBuf kind;
+    if (op == "eq" || op == "neq") {
+        kind = "eq";
+    } else if (op == "lt" || op == "lte" || op == "gt" || op == "gte") {
+        kind = op;
+    } else {
+        Unsupported(TStringBuilder() << "Unsupported OLAP binary operation " << op);
+    }
+
+    auto result = BinaryExpr(
+        kind,
+        ExportOlapScalar(operation.Left().Ptr(), columns),
+        ExportOlapScalar(operation.Right().Ptr(), columns));
+    return op == "neq" ? NotExpr(std::move(result)) : std::move(result);
+}
+
+NJson::TJsonValue ExportOlapScalar(
+    const TExprNode::TPtr& node,
+    const TOlapColumnMap& columns)
+{
+    if (!node) {
+        Unsupported("OLAP predicate contains a null expression node");
+    }
+
+    if (node->IsAtom()) {
+        return OlapColumnExpr(node->Content(), columns);
+    }
+
+    if (node->IsCallable() && IsSupportedType(node->Content())) {
+        return LiteralExpr(*node);
+    }
+
+    if (const auto maybeBinary = TMaybeNode<TKqpOlapFilterBinaryOp>(node)) {
+        return ExportOlapBinary(maybeBinary.Cast(), columns);
+    }
+
+    if (const auto maybeAnd = TMaybeNode<TKqpOlapAnd>(node)) {
+        if (maybeAnd.Ref().ChildrenSize() == 0) {
+            Unsupported("KqpOlapAnd has no arguments");
+        }
+        auto result = JsonMap();
+        result["kind"] = "and";
+        auto args = JsonArray();
+        for (const auto& child : maybeAnd.Ref().Children()) {
+            args.AppendValue(ExportOlapScalar(child, columns));
+        }
+        result["args"] = std::move(args);
+        return result;
+    }
+
+    if (const auto maybeOr = TMaybeNode<TKqpOlapOr>(node)) {
+        if (maybeOr.Ref().ChildrenSize() == 0) {
+            Unsupported("KqpOlapOr has no arguments");
+        }
+        auto result = JsonMap();
+        result["kind"] = "or";
+        auto args = JsonArray();
+        for (const auto& child : maybeOr.Ref().Children()) {
+            args.AppendValue(ExportOlapScalar(child, columns));
+        }
+        result["args"] = std::move(args);
+        return result;
+    }
+
+    if (const auto maybeNot = TMaybeNode<TKqpOlapNot>(node)) {
+        if (maybeNot.Ref().ChildrenSize() != 1) {
+            Unsupported("Malformed KqpOlapNot");
+        }
+        return NotExpr(ExportOlapScalar(maybeNot.Cast().Value().Ptr(), columns));
+    }
+
+    Unsupported(TStringBuilder()
+        << "Unsupported OLAP predicate node "
+        << (node->IsCallable() ? node->Content() : TStringBuf("<non-callable>")));
+}
+
+NJson::TJsonValue ExportOlapPredicate(
+    const TExprNode::TPtr& lambda,
+    const TOlapColumnMap& columns)
+{
+    if (!lambda || !lambda->IsLambda() || lambda->ChildrenSize() != 2) {
+        Unsupported("OLAP process is not a one-body lambda");
+    }
+    const auto* arguments = lambda->Child(0);
+    if (!arguments->IsArguments() || arguments->ChildrenSize() != 1 ||
+        !arguments->Child(0)->IsArgument())
+    {
+        Unsupported("OLAP process does not have exactly one flow argument");
+    }
+    const auto* rowArgument = arguments->Child(0);
+    TVector<NJson::TJsonValue> predicates;
+
+    std::function<void(const TExprNode::TPtr&)> visit = [&](const TExprNode::TPtr& node) {
+        if (!node) {
+            Unsupported("OLAP process contains a null operation");
+        }
+        if (node.Get() == rowArgument) {
+            return;
+        }
+        if (const auto maybeFilter = TMaybeNode<TKqpOlapFilter>(node)) {
+            const auto filter = maybeFilter.Cast();
+            visit(filter.Input().Ptr());
+            predicates.push_back(ExportOlapScalar(filter.Condition().Ptr(), columns));
+            return;
+        }
+        Unsupported(TStringBuilder()
+            << "Unsupported OLAP process operation "
+            << (node->IsCallable() ? node->Content() : TStringBuf("<non-callable>")));
+    };
+    visit(lambda->ChildPtr(1));
+
+    if (predicates.empty()) {
+        Unsupported("OLAP process contains no filter operation");
+    }
+    if (predicates.size() == 1) {
+        return std::move(predicates.front());
+    }
+
+    auto result = JsonMap();
+    result["kind"] = "and";
+    auto args = JsonArray();
+    for (auto& predicate : predicates) {
+        args.AppendValue(std::move(predicate));
+    }
+    result["args"] = std::move(args);
+    return result;
 }
 
 NJson::TJsonValue TrueExpr() {
@@ -872,8 +1100,16 @@ private:
                     Unsupported("Read unexpectedly has children");
                 }
                 auto& read = static_cast<TOpRead&>(base);
-                if (read.RangeInfo || read.OlapFilterLambda || read.SortDir != ESortDir::None) {
-                    Unsupported("Read has pushdown or ordering semantics absent from logical snapshot v1");
+                if (read.RangeInfo || read.SortDir != ESortDir::None) {
+                    Unsupported("Read has range or ordering semantics absent from logical snapshot v1");
+                }
+                if (read.OlapFilterLambda &&
+                    read.StorageType != NYql::EStorageType::ColumnStorage)
+                {
+                    Unsupported("Read pushed predicate is supported only for column storage");
+                }
+                if (read.OlapFilterLambda && !StageGraphPresent) {
+                    Unsupported("Read pushed predicate requires a StageGraph source boundary");
                 }
                 if (read.Limit && read.StorageType != NYql::EStorageType::ColumnStorage) {
                     Unsupported("Read pushed limit is supported only for column storage");
@@ -897,6 +1133,7 @@ private:
                 }
                 THashSet<TString> sources;
                 THashSet<TString> outputs;
+                TOlapColumnMap olapColumns;
                 auto columns = JsonArray();
                 for (size_t index = 0; index < read.Columns.size(); ++index) {
                     const TString output = read.OutputIUs[index].GetFullName();
@@ -906,6 +1143,10 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Read column mapping for " << table.Path);
                     }
+                    if (!olapColumns.emplace(read.Columns[index], output).second) {
+                        Unsupported(TStringBuilder()
+                            << "Ambiguous OLAP physical column " << read.Columns[index]);
+                    }
                     auto column = JsonMap();
                     column["source"] = read.Columns[index];
                     column["output"] = output;
@@ -914,6 +1155,9 @@ private:
                 node["op"] = "scan";
                 node["table"] = table.Identity;
                 node["columns"] = std::move(columns);
+                node["predicate"] = read.OlapFilterLambda
+                    ? ExportOlapPredicate(read.OlapFilterLambda, olapColumns)
+                    : NJson::TJsonValue(NJson::JSON_NULL);
                 node["pushed_limit"] = read.Limit
                     ? Uint64LiteralExpr(*read.Limit, "Read pushed limit")
                     : NJson::TJsonValue(NJson::JSON_NULL);

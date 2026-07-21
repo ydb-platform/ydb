@@ -271,7 +271,7 @@ def simulate_week(
     asan: list[float],
     reg: dict[str, dict[str, float]],
     pool: int,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     events: list[tuple[float, float, int]] = []
     for dow in range(7):
         n_runs = int(round(pr_runs_by_dow[dow] * HEAVY_RUN_FRAC))
@@ -318,24 +318,281 @@ def simulate_week(
     cur = peak = 0
     prev_t = 0.0
     queued = over = 0.0
+    peak_by_hour: dict[int, int] = defaultdict(int)
     for t, _kind, delta in pts:
         dt = t - prev_t
-        if dt > 0 and cur > pool:
-            queued += (cur - pool) * dt
-            over += dt
+        if dt > 0:
+            if cur > pool:
+                queued += (cur - pool) * dt
+                over += dt
+            h0 = int(prev_t // 60)
+            h1 = int((t - 1e-9) // 60)
+            for h in range(h0, h1 + 1):
+                peak_by_hour[h] = max(peak_by_hour[h], cur)
         cur += delta
         peak = max(peak, cur)
         prev_t = t
+
+    # Collapse synthetic week to average hour-of-day profile.
+    hour_profile = []
+    for hour in range(24):
+        vals = [peak_by_hour.get(day * 24 + hour, 0) for day in range(7)]
+        hour_profile.append(statistics.mean(vals) if vals else 0.0)
+
     return {
         "peak_concurrency": float(peak),
         "queued_runner_hours": queued / 60.0,
         "saturation_pct_time": over / (7 * 24 * 60) * 100,
+        "hour_profile": hour_profile,
     }
 
 
-def avg_sims(**kwargs: Any) -> dict[str, float]:
+def avg_sims(**kwargs: Any) -> dict[str, Any]:
     rows = [simulate_week(**kwargs) for _ in range(MC_WEEKS)]
-    return {k: statistics.mean([r[k] for r in rows]) for k in rows[0]}
+    out: dict[str, Any] = {
+        k: statistics.mean([r[k] for r in rows])
+        for k in ("peak_concurrency", "queued_runner_hours", "saturation_pct_time")
+    }
+    out["hour_profile"] = [
+        statistics.mean([r["hour_profile"][h] for r in rows]) for h in range(24)
+    ]
+    return out
+
+
+def write_html_report(result: dict[str, Any], path: Path) -> None:
+    """Self-contained HTML dashboard with Chart.js graphs."""
+    payload = json.dumps(result, ensure_ascii=False)
+    html = f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PR-check sharding forecast</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {{
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #e8eaed;
+      --muted: #9aa0a6;
+      --line: #2a2f3a;
+      --ok: #3dd68c;
+      --warn: #f5a524;
+      --info: #6aa7ff;
+      --bad: #f07178;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }}
+    main {{ max-width: 1100px; margin: 0 auto; padding: 28px 20px 64px; }}
+    h1 {{ font-size: 28px; margin: 0 0 8px; font-weight: 650; }}
+    h2 {{ font-size: 18px; margin: 28px 0 12px; font-weight: 600; }}
+    .sub {{ color: var(--muted); margin-bottom: 20px; }}
+    .grid {{ display: grid; gap: 12px; }}
+    .grid.stats {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
+    .grid.cards {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .grid.charts {{ grid-template-columns: 1fr 1fr; }}
+    @media (max-width: 900px) {{
+      .grid.stats, .grid.cards, .grid.charts {{ grid-template-columns: 1fr; }}
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }}
+    .stat .value {{ font-size: 26px; font-weight: 700; }}
+    .stat .label {{ color: var(--muted); margin-top: 4px; font-size: 12px; }}
+    .ok {{ color: var(--ok); }} .warn {{ color: var(--warn); }} .info {{ color: var(--info); }}
+    .pill {{
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }}
+    .pill.ENABLE {{ background: rgba(61,214,140,.12); color: var(--ok); border-color: rgba(61,214,140,.35); }}
+    .pill.NOT.YET, .pill.NOT_YET {{ background: rgba(245,165,36,.12); color: var(--warn); border-color: rgba(245,165,36,.35); }}
+    .pill.N\\/A, .pill.DO {{ background: rgba(154,160,166,.12); color: var(--muted); }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }}
+    th {{ color: var(--muted); font-size: 12px; font-weight: 600; }}
+    .chart-wrap {{ position: relative; height: 300px; }}
+    .callout {{
+      border: 1px solid var(--line);
+      background: #141821;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 16px 0;
+      color: var(--muted);
+    }}
+    code {{ background: #11151c; padding: 1px 6px; border-radius: 4px; }}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Шардирование PR-check: прогноз</h1>
+  <div class="sub" id="subtitle"></div>
+  <div class="callout" id="headline"></div>
+
+  <h2>1. Что включать</h2>
+  <div class="grid cards" id="decisionCards"></div>
+  <div class="card" style="margin-top:12px; overflow:auto">
+    <table>
+      <thead><tr><th>Workflow</th><th>Решение</th><th>Почему</th></tr></thead>
+      <tbody id="decisionRows"></tbody>
+    </table>
+  </div>
+
+  <h2>2. Длительность PR-check (rwdi)</h2>
+  <div class="grid stats" id="durationStats"></div>
+  <div class="card" style="margin-top:12px">
+    <div class="chart-wrap"><canvas id="durationChart"></canvas></div>
+  </div>
+
+  <h2>3. Нагрузка на пул (синтетическая неделя)</h2>
+  <div class="grid stats" id="poolStats"></div>
+  <div class="grid charts" style="margin-top:12px">
+    <div class="card"><div class="chart-wrap"><canvas id="poolChart"></canvas></div></div>
+    <div class="card"><div class="chart-wrap"><canvas id="hourChart"></canvas></div></div>
+  </div>
+
+  <h2>4. Квоты из конфига</h2>
+  <div class="card"><pre id="quotaBox" style="margin:0; white-space:pre-wrap; color:var(--muted)"></pre></div>
+
+  <h2>5. Как пересчитать</h2>
+  <div class="card">
+    <code>python3 .github/scripts/tests/sharding/forecast_pool_impact.py --days 30 --out /tmp/sharding_forecast.json</code>
+    <div class="sub" style="margin-top:8px">Рядом появится HTML: <code id="htmlPathHint"></code></div>
+  </div>
+</main>
+<script>
+const DATA = {payload};
+
+function fmt(n, d=0) {{
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString("en-US", {{ maximumFractionDigits: d, minimumFractionDigits: d }});
+}}
+function pillClass(decision) {{
+  if (decision === "ENABLE") return "ENABLE";
+  if (decision === "NOT YET") return "NOT_YET";
+  return "DO";
+}}
+function meaning(decision) {{
+  if (decision === "ENABLE") return "Включать шардирование";
+  if (decision === "NOT YET") return "Пока не включать";
+  return "Не объект этого шардирования";
+}}
+
+const emp = DATA.empirical_pr_check_rwdi;
+const base = DATA.week_baseline;
+const shard = DATA.week_sharded_rwdi;
+const both = DATA.week_sharded_rwdi_asan;
+const dRwdi = DATA.delta_sharded_rwdi;
+const pool = DATA.pool_budget_runners;
+
+document.getElementById("subtitle").textContent =
+  `Период ${{DATA.period.start}} → ${{DATA.period.end}} · бюджет пула ${{pool}} runners · снимок ${{DATA.generated_at}}`;
+
+document.getElementById("headline").textContent =
+  `Вывод: ENABLE для PR-check/relwithdebinfo (p90 ${{fmt(emp.baseline_p90)}}m → ${{fmt(emp.sharded_offpeak_p90)}}m). ` +
+  `ASAN пока NOT YET. Regression/Nightly — N/A (только следить за очередью).`;
+
+document.getElementById("decisionCards").innerHTML = DATA.decisions.map(d => `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+      <strong>${{d.workflow}}</strong>
+      <span class="pill ${{pillClass(d.decision)}}">${{d.decision}}</span>
+    </div>
+    <div style="margin-top:8px;font-weight:600">${{meaning(d.decision)}}</div>
+    <div class="sub" style="margin:8px 0 0">${{d.why}}</div>
+  </div>`).join("");
+
+document.getElementById("decisionRows").innerHTML = DATA.decisions.map(d => `
+  <tr>
+    <td>${{d.workflow}}</td>
+    <td><span class="pill ${{pillClass(d.decision)}}">${{d.decision}}</span></td>
+    <td>${{d.why}}</td>
+  </tr>`).join("");
+
+document.getElementById("durationStats").innerHTML = `
+  <div class="card stat"><div class="value ok">${{fmt(emp.sharded_offpeak_p90)}}m</div><div class="label">p90 после шардов (off-peak)</div></div>
+  <div class="card stat"><div class="value">${{fmt(emp.baseline_p90)}}m</div><div class="label">p90 baseline</div></div>
+  <div class="card stat"><div class="value">${{fmt(emp.baseline_p50)}}m</div><div class="label">p50 (почти не меняется)</div></div>
+  <div class="card stat"><div class="value info">${{fmt(emp.frac_ge_60*100,1)}}%</div><div class="label">jobs ≥ 60m (будут шардиться)</div></div>`;
+
+document.getElementById("poolStats").innerHTML = `
+  <div class="card stat"><div class="value warn">${{fmt(dRwdi.peak_pct,0)}}%</div><div class="label">peak concurrency (rwdi shard)</div></div>
+  <div class="card stat"><div class="value warn">${{fmt(dRwdi.queued_pct,0)}}%</div><div class="label">queued runner-hours / week</div></div>
+  <div class="card stat"><div class="value">${{fmt(base.peak_concurrency,0)}} → ${{fmt(shard.peak_concurrency,0)}}</div><div class="label">peak runners baseline → shard</div></div>
+  <div class="card stat"><div class="value">${{fmt(base.queued_runner_hours,0)}} → ${{fmt(shard.queued_runner_hours,0)}}</div><div class="label">queued runner-hours / week</div></div>`;
+
+const pb = DATA.pool_budget;
+document.getElementById("quotaBox").textContent =
+  `config: ${{DATA.capacity_config_path}}\\n` +
+  `quotas: instances=${{pb.quotas.instances}}, vcpu=${{pb.quotas.vcpu}}, ram_gb=${{pb.quotas.ram_gb}}, ssd=${{pb.quotas.nrd_ssd_gb}}\\n` +
+  `budget: ${{pb.pool_budget_runners}} runners (limited by ${{pb.limiting_resource}})`;
+
+document.getElementById("htmlPathHint").textContent = location.pathname.split("/").pop();
+
+const commonOpts = {{
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {{ legend: {{ labels: {{ color: "#c4c7ce" }} }} }},
+  scales: {{
+    x: {{ ticks: {{ color: "#9aa0a6" }}, grid: {{ color: "#242936" }} }},
+    y: {{ ticks: {{ color: "#9aa0a6" }}, grid: {{ color: "#242936" }}, beginAtZero: true }}
+  }}
+}};
+
+new Chart(document.getElementById("durationChart"), {{
+  type: "bar",
+  data: {{
+    labels: ["p50", "p90"],
+    datasets: [
+      {{ label: "Baseline", data: [emp.baseline_p50, emp.baseline_p90], backgroundColor: "#6b7280" }},
+      {{ label: "Sharded off-peak", data: [emp.sharded_offpeak_p50, emp.sharded_offpeak_p90], backgroundColor: "#3dd68c" }},
+      {{ label: "Sharded peak hours", data: [emp.sharded_offpeak_p50, emp.sharded_peak_p90], backgroundColor: "#6aa7ff" }}
+    ]
+  }},
+  options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, title: {{ display: true, text: "PR-check relwithdebinfo wall time (min)", color: "#e8eaed" }} }} }}
+}});
+
+new Chart(document.getElementById("poolChart"), {{
+  type: "bar",
+  data: {{
+    labels: ["Baseline", "Shard rwdi", "Shard rwdi+asan"],
+    datasets: [
+      {{ label: "Peak concurrency", data: [base.peak_concurrency, shard.peak_concurrency, both.peak_concurrency], backgroundColor: "#6aa7ff" }},
+      {{ label: "Queued runner-hours / week", data: [base.queued_runner_hours, shard.queued_runner_hours, both.queued_runner_hours], backgroundColor: "#f5a524" }}
+    ]
+  }},
+  options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, title: {{ display: true, text: "Pool pressure by scenario", color: "#e8eaed" }} }} }}
+}});
+
+new Chart(document.getElementById("hourChart"), {{
+  type: "line",
+  data: {{
+    labels: [...Array(24).keys()].map(String),
+    datasets: [
+      {{ label: "Baseline", data: base.hour_profile, borderColor: "#9aa0a6", tension: 0.25, fill: false }},
+      {{ label: "Shard rwdi", data: shard.hour_profile, borderColor: "#6aa7ff", tension: 0.25, fill: false }},
+      {{ label: "Pool budget", data: Array(24).fill(pool), borderColor: "#f07178", borderDash: [6,4], pointRadius: 0, fill: false }}
+    ]
+  }},
+  options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, title: {{ display: true, text: "Avg runner demand by hour UTC", color: "#e8eaed" }} }} }}
+}});
+</script>
+</body>
+</html>
+"""
+    path.write_text(html, encoding="utf-8")
 
 
 def decision_table(emp: dict[str, Any], delta_rwdi: dict[str, float], delta_both: dict[str, float]) -> list[dict[str, str]]:
@@ -386,7 +643,13 @@ def main() -> int:
         default="build-preset-relwithdebinfo",
         help="Runner footprint used for pool budget (default: rwdi)",
     )
-    parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--out", type=Path, default=None, help="Write JSON result")
+    parser.add_argument(
+        "--html",
+        type=Path,
+        default=None,
+        help="Write HTML dashboard (default: alongside --out as .html)",
+    )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -542,11 +805,21 @@ def main() -> int:
         f"{sharded['queued_runner_hours']:.0f} ({d_rwdi['queued_pct']:+.0f}%)"
     )
 
+    html_path = args.html
+    if html_path is None and args.out is not None:
+        html_path = args.out.with_suffix(".html")
+    if html_path is None:
+        html_path = Path("/tmp/sharding_forecast.html")
+
     if args.out:
         args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {args.out}", file=sys.stderr)
     else:
         print(json.dumps(result, indent=2))
+
+    write_html_report(result, html_path)
+    print(f"Wrote HTML dashboard: {html_path}", file=sys.stderr)
+    print(f"Open: {html_path.resolve()}", file=sys.stderr)
     return 0
 
 

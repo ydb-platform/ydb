@@ -316,9 +316,17 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
+<<<<<<< HEAD
         DEBUG("SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
               " WriteId: " << WriteId);
+=======
+        YDB_LOG_DEBUG("",
+            {"logPrefix", LOG_PREFIX},
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId},
+            {"writeId", WriteId});
+>>>>>>> e560084e95c ([YDB_LOG] Migrate ydb/core/persqueue/prqb (#45807))
 
         GetOwnership();
     }

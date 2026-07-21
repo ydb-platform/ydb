@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -76,7 +78,8 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         }
         logMessage << ".";
     }
-    PQ_LOG_D( logMessage);
+    YDB_LOG_DEBUG(logMessage,
+        {"logPrefix", LogPrefix()});
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -124,7 +127,9 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        PQ_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
+        YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split",
+            {"logPrefix", LogPrefix()},
+            {"request", issues});
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

@@ -645,19 +645,17 @@ public:
     {
     }
 
+    void Validate(const TExprNode& node) {
+        TStringBuilder fingerprint;
+        EncodeRoot(node, fingerprint);
+    }
+
     NJson::TJsonValue Export(const TExprNode& node) {
-        if (!node.IsCallable()) {
-            Unsupported("Opaque scalar root is not a callable");
-        }
         bool nullable = false;
         const TString resultType = ScalarTypeName(node, &nullable);
 
         TStringBuilder fingerprint;
-        AppendIdentityField(fingerprint, "format", "yql-opaque-v1");
-        Encode(node, fingerprint, 0);
-        if (fingerprint.size() > MaxFingerprintBytes) {
-            Unsupported("Opaque scalar fingerprint exceeds the audit limit");
-        }
+        EncodeRoot(node, fingerprint);
 
         auto args = JsonArray();
         for (const auto& column : Columns) {
@@ -677,6 +675,17 @@ private:
     static constexpr size_t MaxNodes = 256;
     static constexpr size_t MaxDepth = 64;
     static constexpr size_t MaxFingerprintBytes = 64 * 1024;
+
+    void EncodeRoot(const TExprNode& node, TStringBuilder& fingerprint) {
+        if (!node.IsCallable()) {
+            Unsupported("Opaque scalar root is not a callable");
+        }
+        AppendIdentityField(fingerprint, "format", "yql-opaque-v1");
+        Encode(node, fingerprint, 0);
+        if (fingerprint.size() > MaxFingerprintBytes) {
+            Unsupported("Opaque scalar fingerprint exceeds the audit limit");
+        }
+    }
 
     TString TypeFingerprint(const TExprNode& node) const {
         return node.GetTypeAnn() ? FormatType(node.GetTypeAnn()) : TString("<none>");
@@ -882,6 +891,40 @@ NJson::TJsonValue ExportExprNode(
             result["null_safe"] = true;
         }
         return node.IsCallable("!=") ? NotExpr(std::move(result)) : std::move(result);
+    }
+
+    if (node.IsCallable({"+", "-", "*"}) && node.ChildrenSize() == 2) {
+        bool resultNullable = false;
+        bool leftNullable = false;
+        bool rightNullable = false;
+        const TString resultType = ScalarTypeName(node, &resultNullable);
+        const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
+        const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
+        if (IsIntegerType(resultType) &&
+            leftType == resultType &&
+            rightType == resultType &&
+            resultNullable == (leftNullable || rightNullable))
+        {
+            // Keep the old closed-world and safety checks even though the result
+            // now has a concrete verifier meaning instead of an opaque identity.
+            TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+
+            TStringBuf kind;
+            if (node.IsCallable("+")) {
+                kind = "add";
+            } else if (node.IsCallable("-")) {
+                kind = "sub";
+            } else {
+                kind = "mul";
+            }
+            auto result = BinaryExpr(
+                kind,
+                ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
+                ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
+            result["type"] = resultType;
+            result["nullable"] = resultNullable;
+            return result;
+        }
     }
 
     return TOpaqueExpressionEncoder(rowArgument, visibleColumns).Export(node);

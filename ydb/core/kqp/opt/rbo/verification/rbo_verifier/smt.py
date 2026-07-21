@@ -187,7 +187,41 @@ def add(*terms: Term) -> Term:
         return ZERO
     if len(terms) == 1:
         return terms[0]
+    if all(term.operation == "int" for term in terms):
+        values = []
+        for term in terms:
+            assert isinstance(term.atom, int)
+            values.append(term.atom)
+        return int_value(sum(values))
     return Term(INT, "+", tuple(terms))
+
+
+def sub(left: Term, right: Term) -> Term:
+    _require(left, INT)
+    _require(right, INT)
+    if left == right:
+        return ZERO
+    if right == ZERO:
+        return left
+    if left.operation == "int" and right.operation == "int":
+        assert isinstance(left.atom, int) and isinstance(right.atom, int)
+        return int_value(left.atom - right.atom)
+    return Term(INT, "-", (left, right))
+
+
+def mul(left: Term, right: Term) -> Term:
+    _require(left, INT)
+    _require(right, INT)
+    if left == ZERO or right == ZERO:
+        return ZERO
+    if left == ONE:
+        return right
+    if right == ONE:
+        return left
+    if left.operation == "int" and right.operation == "int":
+        assert isinstance(left.atom, int) and isinstance(right.atom, int)
+        return int_value(left.atom * right.atom)
+    return Term(INT, "*", (left, right))
 
 
 def mod(term: Term, modulus: int) -> Term:

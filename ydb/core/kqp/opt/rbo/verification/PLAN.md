@@ -92,6 +92,8 @@ The explicit scalar core initially contains:
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
 - ordinary nullable equality, null-safe equality, and integer ordering when
   YQL's common integer type preserves both operands exactly;
+- same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
+  propagation and exact fixed-width modular/two's-complement overflow;
 - filter truth conversion.
 
 Every other deterministic, total scalar subtree is represented as a typed
@@ -110,13 +112,19 @@ Volatile, stateful, observably failing, evaluation-count-sensitive, or otherwise
 unsupported expressions produce `UNSUPPORTED`. New concrete scalar semantics are
 added only in response to real optimizer transformations or spurious witnesses.
 
+The arithmetic node is deliberately narrow: both operands and the result must
+have exactly the same integer identity, and result nullability must be the OR of
+operand nullability. Mixed-width arithmetic remains opaque instead of asking
+the verifier to reproduce YQL's promotion rules.
+
 YQL does not expose a complete determinism-and-totality annotation. The v1 C++
-exporter therefore uses a reviewed positive list: supported integer `+`, `-`,
-and `*`; scalar comparisons; `Just`, `Exists`, `Coalesce`, and `If`; `SafeCast`;
-and `Convert` only when YQL's cast analysis says it cannot fail. Unknown
-callables, UDF/PG calls, division, strict casts, `Unwrap`, free variables,
-position-aware or unordered nodes, and side-effecting/CSE-unsafe nodes fail
-closed. Expanding this list requires an explicit totality review and tests.
+exporter therefore uses a reviewed positive list for opaque subtrees: integer
+`+`, `-`, and `*` forms that do not meet the structural gate; scalar
+comparisons; `Just`, `Exists`, `Coalesce`, and `If`; `SafeCast`; and `Convert`
+only when YQL's cast analysis says it cannot fail. Unknown callables, UDF/PG
+calls, division, strict casts, `Unwrap`, free variables, position-aware or
+unordered nodes, and side-effecting/CSE-unsafe nodes fail closed. Expanding this
+list requires an explicit totality review and tests.
 
 The persisted fingerprint is collision-free canonical text rather than a
 machine hash. It length-prefixes node kind, callable and atom bytes, normalized
@@ -302,9 +310,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
-  independence, nullability, and fail-closed safety gates. A real-host integer
-  arithmetic query shares the fingerprint across both boundaries and verifies
-  through the normal obligation.
+  independence, nullability, and fail-closed safety gates.
+- Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
+  evaluated with exact strict-NULL and modular overflow semantics. Synthetic
+  exporter and Python tests cover all widths, malformed schemas, and overflow;
+  a real-host typed-`Int64` query verifies through the normal obligation.
+- TPC-DS q88 exposed why that concrete extension was needed: opaque source
+  additions did not constrain optimizer-folded literals. Its regenerated
+  obligation has no opaque scalar functions and no longer returns the spurious
+  counterexample; Z3 currently returns `UNKNOWN` at the 60-second bound.
 - Actual pushed column-store filters are decoded from `OlapFilterLambda`, not
   optimizer statistics metadata. The supported Boolean/comparison subset is
   evaluated before per-task pushed limits, rejects projections and unknown

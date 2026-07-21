@@ -54,6 +54,22 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.mod(value, 0)
 
+    def test_integer_arithmetic_is_typed_and_constant_folded(self):
+        left = smt.symbol("left", smt.INT)
+        right = smt.symbol("right", smt.INT)
+        self.assertEqual(smt.add(left, right).render(), "(+ left right)")
+        self.assertEqual(smt.sub(left, right).render(), "(- left right)")
+        self.assertEqual(smt.mul(left, right).render(), "(* left right)")
+        self.assertEqual(smt.add(smt.int_value(3), smt.int_value(5)), smt.int_value(8))
+        self.assertEqual(smt.sub(smt.int_value(3), smt.int_value(5)), smt.int_value(-2))
+        self.assertEqual(smt.mul(smt.int_value(-3), smt.int_value(5)), smt.int_value(-15))
+        with self.assertRaises(smt.SmtError):
+            smt.add(smt.TRUE, right)
+        with self.assertRaises(smt.SmtError):
+            smt.sub(smt.TRUE, right)
+        with self.assertRaises(smt.SmtError):
+            smt.mul(left, smt.TRUE)
+
     def test_integer_less_than_is_typed_and_constant_folded(self):
         left = smt.symbol("left", smt.INT)
         right = smt.symbol("right", smt.INT)

@@ -5,9 +5,9 @@ This directory contains the standalone bounded-equivalence checker described in
 a bounded input database on which their result bags or ordered sequences differ.
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
-hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit, and
-ordered Sort/TopSort/Merge and pushed OLAP-filter parts of M4. Hermetic solver
-packaging, broad TPCH/TPCDS coverage, replay, and rule bisection remain future
+hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
+ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
+M4. Hermetic solver packaging, replay, and rule bisection remain future
 milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
@@ -45,14 +45,23 @@ than source-domain range constraints. This may produce an out-of-range or
 symbolic-atom `COUNTEREXAMPLE`, which replay can reject, but cannot turn a real
 bounded counterexample into `VERIFIED_BOUNDED`.
 
-Scalar syntax outside the explicit Boolean/equality core is represented by a
-shared typed uninterpreted function when the C++ exporter can positively audit
-it as deterministic and total. The current reviewed families are integer
-`+`, `-`, and `*`; scalar comparisons; `Just`, `Exists`, `Coalesce`, and `If`;
-`SafeCast`; and non-failing `Convert`. YQL has no complete generic totality or
-determinism flag, so all other callables fail closed rather than relying on a
-denylist. This includes UDF and PG calls, division, strict casts, `Unwrap`,
-runtime-dependent generators, free variables, and unsafe AST metadata.
+Same-type integer `+`, `-`, and `*` are structural scalar nodes. Both operands
+and the result must have exactly the same signed or unsigned width, and result
+nullability must be the OR of operand nullability; otherwise the expression
+remains opaque. Evaluation is strict on NULL and wraps modulo the result width,
+using the signed two's-complement representative for `Int8` through `Int64`.
+This narrow rule was added when TPC-DS q88 exposed a spurious witness between
+source arithmetic constants and optimizer-folded literals.
+
+Scalar syntax outside the explicit Boolean, equality, ordering, and integer
+arithmetic core is represented by a shared typed uninterpreted function when
+the C++ exporter can positively audit it as deterministic and total. The
+current reviewed opaque families are scalar comparisons; `Just`, `Exists`,
+`Coalesce`, and `If`; `SafeCast`; and non-failing `Convert`. YQL has no complete
+generic totality or determinism flag, so all other callables fail closed rather
+than relying on a denylist. This includes UDF and PG calls, division, strict
+casts, `Unwrap`, runtime-dependent generators, free variables, and unsafe AST
+metadata.
 
 The explicit comparison core accepts unequal integer widths only when YQL's
 common integer type represents both operands without wrapping: equal signedness,

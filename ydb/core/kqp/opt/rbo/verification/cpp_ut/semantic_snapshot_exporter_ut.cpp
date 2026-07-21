@@ -793,9 +793,96 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsExactSameTypeIntegerArithmetic) {
+        for (const auto [callable, kind] : {
+                 std::pair<TStringBuf, TStringBuf>{"+", "add"},
+                 std::pair<TStringBuf, TStringBuf>{"-", "sub"},
+                 std::pair<TStringBuf, TStringBuf>{"*", "mul"},
+             })
+        {
+            TExportTestContext ctx;
+            const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedMember(ctx, "a.x", type),
+                        TypedLiteral(ctx, "Int32", "2", type),
+                    },
+                    type));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), kind);
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Int32");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["column"].GetStringSafe(), "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Int32");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"].GetIntegerSafe(), 2);
+        }
+
+        TExportTestContext nullable;
+        const auto* optionalInt = ScalarType(nullable, NUdf::EDataSlot::Int32, true);
+        const auto* intType = ScalarType(nullable, NUdf::EDataSlot::Int32);
+        const auto nullableExpression = ExportMapExpression(
+            nullable,
+            "a",
+            TypedCallable(
+                nullable,
+                "+",
+                {
+                    TypedMember(nullable, "a.x", optionalInt),
+                    TypedLiteral(nullable, "Int32", "2", intType),
+                },
+                optionalInt),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(nullableExpression["kind"].GetStringSafe(), "add");
+        UNIT_ASSERT_VALUES_EQUAL(nullableExpression["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT(nullableExpression["nullable"].GetBooleanSafe());
+
+        TExportTestContext mismatchedNullability;
+        const auto* mismatchInt = ScalarType(mismatchedNullability, NUdf::EDataSlot::Int32);
+        const auto* mismatchOptional = ScalarType(
+            mismatchedNullability,
+            NUdf::EDataSlot::Int32,
+            true);
+        const auto nullabilityFallback = ExportMapExpression(
+            mismatchedNullability,
+            "a",
+            TypedCallable(
+                mismatchedNullability,
+                "+",
+                {
+                    TypedMember(mismatchedNullability, "a.x", mismatchInt),
+                    TypedLiteral(mismatchedNullability, "Int32", "2", mismatchInt),
+                },
+                mismatchOptional));
+        UNIT_ASSERT_VALUES_EQUAL(nullabilityFallback["kind"].GetStringSafe(), "opaque");
+
+        TExportTestContext mixedTypes;
+        const auto* int32Type = ScalarType(mixedTypes, NUdf::EDataSlot::Int32);
+        const auto* int64Type = ScalarType(mixedTypes, NUdf::EDataSlot::Int64);
+        const auto typeFallback = ExportMapExpression(
+            mixedTypes,
+            "a",
+            TypedCallable(
+                mixedTypes,
+                "+",
+                {
+                    TypedMember(mixedTypes, "a.x", int32Type),
+                    TypedLiteral(mixedTypes, "Int64", "2", int64Type),
+                },
+                int64Type));
+        UNIT_ASSERT_VALUES_EQUAL(typeFallback["kind"].GetStringSafe(), "opaque");
+    }
+
     Y_UNIT_TEST(OpaqueExpressionFingerprintIsAlphaStableAndKeepsOrderedUses) {
         TExportTestContext first;
         const auto* firstInt = ScalarType(first, NUdf::EDataSlot::Int32);
+        const auto* firstResult = ScalarType(first, NUdf::EDataSlot::Int64);
         const auto firstExpression = ExportMapExpression(
             first,
             "a",
@@ -806,10 +893,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     TypedMember(first, "a.x", firstInt),
                     TypedMember(first, "a.y", firstInt),
                 },
-                firstInt));
+                firstResult));
 
         TExportTestContext renamed;
         const auto* renamedInt = ScalarType(renamed, NUdf::EDataSlot::Int32);
+        const auto* renamedResult = ScalarType(renamed, NUdf::EDataSlot::Int64);
         const auto renamedExpression = ExportMapExpression(
             renamed,
             "renamed",
@@ -820,10 +908,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     TypedMember(renamed, "renamed.x", renamedInt),
                     TypedMember(renamed, "renamed.y", renamedInt),
                 },
-                renamedInt));
+                renamedResult));
 
         UNIT_ASSERT_VALUES_EQUAL(firstExpression["kind"].GetStringSafe(), "opaque");
-        UNIT_ASSERT_VALUES_EQUAL(firstExpression["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(firstExpression["type"].GetStringSafe(), "Int64");
         UNIT_ASSERT(!firstExpression["nullable"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             firstExpression["fingerprint"].GetStringSafe(),
@@ -851,6 +939,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         {
             TExportTestContext ctx;
             const auto* type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* resultType = ScalarType(ctx, NUdf::EDataSlot::Int64);
             auto left = TypedMember(ctx, "a.x", type);
             auto right = literal
                 ? TypedLiteral(ctx, "Int32", *literal, type)
@@ -861,7 +950,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             return ExportMapExpression(
                 ctx,
                 "a",
-                TypedCallable(ctx, callable, {left, right}, type));
+                TypedCallable(ctx, callable, {left, right}, resultType));
         };
 
         const auto distinct = exportBinary("+", "a.y");
@@ -892,6 +981,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         TExportTestContext shared;
         const auto* sharedType = ScalarType(shared, NUdf::EDataSlot::Int32);
+        const auto* sharedResult = ScalarType(shared, NUdf::EDataSlot::Int64);
         auto sharedChild = TypedCallable(
             shared,
             "*",
@@ -903,10 +993,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto sharedExpression = ExportMapExpression(
             shared,
             "a",
-            TypedCallable(shared, "+", {sharedChild, sharedChild}, sharedType));
+            TypedCallable(shared, "+", {sharedChild, sharedChild}, sharedResult));
 
         TExportTestContext duplicated;
         const auto* duplicatedType = ScalarType(duplicated, NUdf::EDataSlot::Int32);
+        const auto* duplicatedResult = ScalarType(duplicated, NUdf::EDataSlot::Int64);
         const auto makeChild = [&]() {
             return TypedCallable(
                 duplicated,
@@ -920,7 +1011,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto duplicatedExpression = ExportMapExpression(
             duplicated,
             "a",
-            TypedCallable(duplicated, "+", {makeChild(), makeChild()}, duplicatedType));
+            TypedCallable(duplicated, "+", {makeChild(), makeChild()}, duplicatedResult));
         UNIT_ASSERT_VALUES_EQUAL(
             sharedExpression["fingerprint"].GetStringSafe(),
             duplicatedExpression["fingerprint"].GetStringSafe());

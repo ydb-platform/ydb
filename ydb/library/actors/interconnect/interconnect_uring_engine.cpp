@@ -133,6 +133,7 @@ namespace NActors {
             bool Terminated = false;
             bool ReadPending = false;
             bool WritePending = false;
+            bool UnregisterRequested = false;
             TRcBuf WriteBuffer;
             std::deque<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
@@ -415,9 +416,12 @@ namespace NActors {
             }
 
             ~TShard() {
-                Stop();
+                Stop(); // joins the worker thread, so no completion will be dispatched after this point
+                io_uring_queue_exit(&Ring); // cancels any still-armed read/write without dispatching them
+                DrainQueue(); // free commands that were enqueued after the worker stopped (teardown races)
                 close(ReadPipe);
                 close(WritePipe);
+                // remaining registered sessions are freed as the Sessions container is destroyed
             }
 
             void Register(std::unique_ptr<TRegisteredSession> session) {
@@ -442,11 +446,35 @@ namespace NActors {
             }
 
             void Stop() {
-                SendInternal(0, static_cast<ui32>(ENetwork::EvStop), {}, nullptr);
-                Worker.join();
+                if (Worker.joinable()) {
+                    SendInternal(0, static_cast<ui32>(ENetwork::EvStop), {}, nullptr);
+                    Worker.join();
+                    // The worker is stopped, so it is now safe to touch the sessions directly. Shut every
+                    // socket down so the peer observes the disconnect promptly instead of only when this shard
+                    // (and thus the sockets it still references) is finally destroyed. The session objects
+                    // themselves stay alive until the shard is destroyed.
+                    for (const auto& session : Sessions) {
+                        if (session->Socket) {
+                            session->Socket->Shutdown(SHUT_RDWR);
+                        }
+                    }
+                }
             }
 
         private:
+            // Pops and frees any commands still sitting in the queue after the worker has stopped. Mirrors
+            // the ownership handling of the worker loop: destroys the embedded TEventPayload and reclaims a
+            // TRegisteredSession handed off via an unprocessed EvRegisterSession.
+            void DrainQueue() {
+                while (std::unique_ptr<IEventHandle> ev{IncomingEventQueue.Pop()}) {
+                    auto& payload = reinterpret_cast<TEventPayload&>(const_cast<TActorId&>(ev->InterconnectSession));
+                    if (ev->Type == static_cast<ui32>(ENetwork::EvRegisterSession)) {
+                        std::unique_ptr<TRegisteredSession> reclaim(reinterpret_cast<TRegisteredSession*>(payload.Conn));
+                    }
+                    payload.~TEventPayload();
+                }
+            }
+
             void SendImpl(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
                 new(const_cast<TActorId*>(&ev->InterconnectSession)) TEventPayload{
                     .Conn = conn,
@@ -605,9 +633,15 @@ namespace NActors {
 
                             case static_cast<ui32>(ENetwork::EvUnregisterSession): {
                                 TRegisteredSession& session = GetSession(conn);
-                                auto it = Sessions.find(&session);
-                                Y_ABORT_UNLESS(it != Sessions.end());
-                                Sessions.erase(it);
+                                // Do NOT free the session while it still has an armed recv or an in-flight
+                                // writev: their io_uring completions carry a raw pointer to this object and
+                                // would dereference freed memory. Mark it terminated (so no new ops are armed)
+                                // and erase only once both are drained. The session actor has already shut the
+                                // socket down before requesting unregistration, so the pending ops complete
+                                // promptly (EOF/EPIPE).
+                                session.Terminated = true;
+                                session.UnregisterRequested = true;
+                                MaybeEraseSession(session);
                                 break;
                             }
 
@@ -669,7 +703,10 @@ namespace NActors {
                 Y_DEBUG_ABORT_UNLESS(session.ReadPending);
                 session.ReadPending = false;
 
-                if (res == -EAGAIN) {
+                if (session.Terminated) {
+                    // teardown in progress: don't process further data or re-arm; just let the session drain
+                    // toward erasure below
+                } else if (res == -EAGAIN) {
                     ++*ReadUnavail;
                     IssueReadForSession(session);
                 } else if (res < 0) {
@@ -685,6 +722,8 @@ namespace NActors {
                     }
                     IssueReadForSession(session);
                 }
+
+                MaybeEraseSession(session); // NB: may free `session`; must be the last use
             }
 
             void IssueReadForSession(TRegisteredSession& session) {
@@ -703,7 +742,10 @@ namespace NActors {
                 Y_ABORT_UNLESS(session.WritePending);
                 session.WritePending = false;
 
-                if (res == -EAGAIN) {
+                if (session.Terminated) {
+                    // teardown in progress: don't retry the write or re-arm; just let the session drain
+                    // toward erasure below
+                } else if (res == -EAGAIN) {
                     ++*WriteUnavail;
                     SubmitIovec(session);
                 } else if (res < 0) {
@@ -719,6 +761,8 @@ namespace NActors {
                     }
                     IssueWritesForSession(session);
                 }
+
+                MaybeEraseSession(session); // NB: may free `session`; must be the last use
             }
 
             void IssueWritesForSession(TRegisteredSession& session) {
@@ -754,6 +798,16 @@ namespace NActors {
                 Y_ABORT_UNLESS(Sessions.find(ptr) != Sessions.end());
                 return *ptr;
             }
+
+            // Frees an unregistered session once it has no io_uring operation in flight. It is unsafe to
+            // erase earlier because any pending read/write completion references the session by raw pointer.
+            void MaybeEraseSession(TRegisteredSession& session) {
+                if (session.UnregisterRequested && !session.ReadPending && !session.WritePending) {
+                    auto it = Sessions.find(&session);
+                    Y_ABORT_UNLESS(it != Sessions.end());
+                    Sessions.erase(it);
+                }
+            }
         };
 
         std::vector<std::unique_ptr<TShard>> Shards;
@@ -778,7 +832,9 @@ namespace NActors {
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
                 bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback) override {
-            Y_ABORT_UNLESS(!Stopping);
+            if (Stopping) {
+                return 0; // engine is shutting down; caller treats 0 as a failed registration and terminates
+            }
             const ui32 shardIdx = NextShardIdx++ % Shards.size();
             auto session = std::make_unique<TRegisteredSession>(shardIdx, std::move(socket), sessionActorId,
                 checksumming, peerScopeId, std::move(onDisconnectCallback), ActorSystem);
@@ -792,23 +848,38 @@ namespace NActors {
         }
 
         void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) override {
-            Y_ABORT_UNLESS(!Stopping);
+            // Sessions may still forward events during actor-system teardown (DeferPreStop runs Stop() before
+            // executor threads are joined), so drop rather than abort. Checking Stopping before touching the
+            // shard/conn keeps this safe: Stop() only joins workers, it never frees shards or sessions.
+            if (Stopping) {
+                return;
+            }
             GetShard(conn).Send(conn, std::move(ev), std::move(replyCallback));
         }
 
         void Unregister(ui64 conn) override {
-            Y_ABORT_UNLESS(!Stopping);
+            if (Stopping) {
+                return;
+            }
             GetShard(conn).Unregister(conn);
         }
 
         void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) override {
-            Y_ABORT_UNLESS(!Stopping);
+            if (Stopping) {
+                return;
+            }
             GetShard(conn).RegisterReceiveCallback(conn, localActorId, std::move(callback));
         }
 
         void Stop() override {
+            // Quiesce the reaper/worker threads (so no completion is posted to a torn-down actor system) but
+            // keep shards and their registered sessions alive: executor threads may still be running and may
+            // call in with live conn pointers. The memory is released later in the destructor, once the actor
+            // system is fully stopped and no more calls can arrive.
             if (!Stopping.exchange(true)) {
-                Shards.clear();
+                for (auto& shard : Shards) {
+                    shard->Stop();
+                }
             }
         }
     };

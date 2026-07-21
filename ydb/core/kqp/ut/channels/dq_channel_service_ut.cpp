@@ -105,7 +105,7 @@ public:
         RunnerId = ev->Sender;
         PeerId = ev->Get()->PeerId;
         YDB_LOG_DEBUG("TEST START",
-            {"selfId", SelfId()},
+            {"selfId", this->SelfId()},
             {"channelId", ChannelId},
             {"peerId", PeerId});
         if (Settings.StartDelayMs) {
@@ -117,7 +117,7 @@ public:
 
     virtual void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
         YDB_LOG_DEBUG("Test worker received abort execution",
-            {"selfId", SelfId()},
+            {"selfId", this->SelfId()},
             {"channelId", ChannelId},
             {"issues", ev->Get()->GetIssues().ToOneLineString()});
         this->Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Producer, true));

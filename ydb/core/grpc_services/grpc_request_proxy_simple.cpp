@@ -8,6 +8,8 @@
 
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -157,7 +159,8 @@ private:
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
     auto nodeID = SelfId().NodeId();
 
-    LOG_NOTICE(ctx, NKikimrServices::GRPC_SERVER, "Grpc simple request proxy started, nodeid# %d", nodeID);
+    YDB_LOG_NOTICE_CTX(ctx, "Grpc simple request proxy started",
+        {"nodeid", nodeID});
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
@@ -168,8 +171,8 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
         default:
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
+            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source",
+                {"type", ev->Get()->SourceType});
             break;
     }
 }
@@ -214,10 +217,12 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        YDB_LOG_INFO_CTX(*TlsActivationContext, "",
+            {"#_getDebugString().c_str", getDebugString()});
     }
     else {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump #_getDebugString().c_str",
+            {"#_getDebugString().c_str", getDebugString()});
     }
 }
 

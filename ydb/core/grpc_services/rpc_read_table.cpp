@@ -26,6 +26,8 @@
 
 #include <ydb/core/protos/stream.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::READ_TABLE_API
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -113,7 +115,7 @@ public:
         auto actorId = SelfId();
         const TActorSystem* const as = ctx.ActorSystem();
         auto clientLostCb = [actorId, as]() {
-            LOG_WARN(*as, NKikimrServices::READ_TABLE_API, "ForgetAction occurred, send TEvPoisonPill");
+            YDB_LOG_WARN_CTX(*as, "ForgetAction occurred, send TEvPoisonPill");
             as->Send(actorId, new TEvents::TEvPoisonPill());
         };
         Request_->SetFinishAction(std::move(clientLostCb));
@@ -176,8 +178,8 @@ private:
                     if (msg->Record.HasReadTableResponseVersion()) {
                         str << " , got: " << msg->Record.GetReadTableResponseVersion();
                     }
-                    LOG_ERROR(ctx, NKikimrServices::READ_TABLE_API,
-                              "%s", str.Str().data());
+                    YDB_LOG_ERROR_CTX(ctx, "",
+                        {"#_str.Str().data", str.Str().data()});
                     const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
                     auto tmp = issueMessage.Add();
                     NYql::IssueToMessage(issue, tmp);
@@ -261,10 +263,10 @@ private:
     }
 
     void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Adding quota request to queue ShardId: "
-                    << ev->Get()->Record.GetShardId() << ", TxId: "
-                    << ev->Get()->Record.GetTxId());
+        YDB_LOG_DEBUG_CTX(ctx, "Adding quota request to queue",
+            {"selfId", SelfId()},
+            {"shardId", ev->Get()->Record.GetShardId()},
+            {"txId", ev->Get()->Record.GetTxId()});
 
         QuotaRequestQueue_.push_back(ev);
         TryToAllocateQuota();
@@ -274,9 +276,10 @@ private:
         ui64 shardId = ev->Get()->Record.GetShardId();
         ui64 txId = ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Release quota for ShardId: " << shardId
-                    << ", TxId: " << txId);
+        YDB_LOG_DEBUG_CTX(ctx, "Release quota",
+            {"selfId", SelfId()},
+            {"shardId", shardId},
+            {"txId", txId});
 
         ReleasedShards_.insert(shardId);
 
@@ -310,8 +313,9 @@ private:
     }
 
     void Handle(TEvents::TEvSubscribe::TPtr& ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Add stream subscriber " << ev->Sender);
+        YDB_LOG_DEBUG_CTX(ctx, "Add stream subscriber",
+            {"selfId", SelfId()},
+            {"#_ev->Sender", ev->Sender});
 
         StreamSubscribers_.insert(ev->Sender);
     }
@@ -334,10 +338,10 @@ private:
     }
 
     void ProcessRlSendAllowed(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Success rate limiter response, we got "
-                    << SendBuffer_.size() << " pending messages,"
-                    " pending success# " << HasPendingSuccess);
+        YDB_LOG_DEBUG_CTX(ctx, "Success rate limiter response, we got",
+            {"selfId", SelfId()},
+            {"#_SendBuffer_.size", SendBuffer_.size()},
+            {"success", HasPendingSuccess});
         TBuffEntry& entry = SendBuffer_.front();
 
         DoSendStreamResult(std::move(entry.Buf), entry.ShardId, entry.TxId, entry.StartTime, ctx);
@@ -353,11 +357,10 @@ private:
     void ProcessRlNoResource(const TActorContext& ctx) {
         const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
             "Throughput limit exceeded for read table request");
-        LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Throughput limit exceeded, we got "
-                    << SendBuffer_.size() << " pending messages,"
-                    " pending success# " << HasPendingSuccess
-                    << " stream will be terminated");
+        YDB_LOG_NOTICE_CTX(ctx, "Throughput limit exceeded, we got stream will be terminated",
+            {"selfId", SelfId()},
+            {"#_SendBuffer_.size", SendBuffer_.size()},
+            {"success", HasPendingSuccess});
 
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
         NYql::IssueToMessage(issue, message.Add());
@@ -378,7 +381,8 @@ private:
             TStringStream ss;
             ss << SelfId() << " Client cannot process data in " << processTime
                 << " which exceeds client timeout " << InactiveClientTimeout_;
-            LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API, ss.Str());
+            YDB_LOG_NOTICE_CTX(ctx, "",
+                {"#_ss.Str", ss.Str()});
             return HandleStreamTimeout(ctx, ss.Str());
         }
 
@@ -404,7 +408,8 @@ private:
                 << " QuotaLimit: " << QuotaLimit_
                 << " QuotaReserved: " << QuotaReserved_
                 << " QuotaByShard: " << QuotaByShard_.size() << ")";
-            LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API, ss.Str());
+            YDB_LOG_NOTICE_CTX(ctx, "",
+                {"#_ss.Str", ss.Str()});
             return HandleStreamTimeout(ctx, ss.Str());
         } else {
             timeout = InactiveServerTimeout_ - processTime;
@@ -527,8 +532,9 @@ private:
             Request_->SendSerializedResult(std::move(out), status);
         }
         Request_->FinishStream(status);
-        LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
-            SelfId() << " Finish grpc stream, status: " << (int)status);
+        YDB_LOG_NOTICE_CTX(ctx, "Finish grpc stream",
+            {"selfId", SelfId()},
+            {"status", (int)status});
 
         // Answer all pending quota requests.
         while (!QuotaRequestQueue_.empty()) {
@@ -543,15 +549,17 @@ private:
             response->Record.SetMessageRowsLimit(MessageRowsLimit);
             response->Record.SetReservedMessages(0);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                        SelfId() << " Send zero quota to Shard " << rec.GetShardId()
-                        << ", TxId " << rec.GetTxId());
+            YDB_LOG_DEBUG_CTX(ctx, "Send zero quota to Shard TxId",
+                {"selfId", SelfId()},
+                {"#_rec.GetShardId", rec.GetShardId()},
+                {"#_rec.GetTxId", rec.GetTxId()});
             ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
         }
 
         for (const auto& id : StreamSubscribers_) {
-            LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                        SelfId() << " Send dead stream notification to subscriber " << id);
+            YDB_LOG_DEBUG_CTX(ctx, "Send dead stream notification to subscriber",
+                {"selfId", SelfId()},
+                {"id", id});
             ctx.Send(id, new TEvTxProcessing::TEvStreamIsDead);
         }
 
@@ -559,8 +567,10 @@ private:
     }
 
     void StartInactivityTimer(TActorId& timer, TDuration timeout, EWakeupTag tag, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Starting inactivity timer for " << timeout << " with tag " << int(tag));
+        YDB_LOG_DEBUG_CTX(ctx, "Starting inactivity timer for with tag",
+            {"selfId", SelfId()},
+            {"timeout", timeout},
+            {"#_int(tag)", int(tag)});
 
         if (timer) {
             ctx.Send(timer, new TEvents::TEvPoison);
@@ -605,8 +615,8 @@ private:
         QuotaRequestQueue_.pop_front();
 
         if (ReleasedShards_.contains(rec.GetShardId())) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
-                        "Quota request from released shard " << rec.GetShardId());
+            YDB_LOG_ERROR("Quota request from released shard",
+                {"#_rec.GetShardId", rec.GetShardId()});
             return TryToAllocateQuota();
         }
 
@@ -622,11 +632,14 @@ private:
         response->Record.SetMessageRowsLimit(MessageRowsLimit);
         response->Record.SetReservedMessages(quotaSize);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Assign stream quota to Shard " << rec.GetShardId()
-                    << ", Quota " << quotaSize << ", TxId "  << rec.GetTxId()
-                    << " Reserved: " << QuotaReserved_ << " of " << QuotaLimit_
-                    << ", Queued: " << LeftInGRpcAdaptorQueue_);
+        YDB_LOG_DEBUG("Assign stream quota to Shard Quota TxId of",
+            {"selfId", SelfId()},
+            {"#_rec.GetShardId", rec.GetShardId()},
+            {"quotaSize", quotaSize},
+            {"#_rec.GetTxId", rec.GetTxId()},
+            {"reserved", QuotaReserved_},
+            {"quotaLimit", QuotaLimit_},
+            {"queued", LeftInGRpcAdaptorQueue_});
 
         Send(request->Sender, response.Release(), 0, request->Cookie);
     }
@@ -642,9 +655,11 @@ private:
                 return TString("rate limiter absent");
             }
         };
-        LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " got stream part, size: " << data.size()
-                    << ", RU required: " << ru << " " << getRlPAth());
+        YDB_LOG_DEBUG_CTX(ctx, "Got stream part, RU",
+            {"selfId", SelfId()},
+            {"size", data.size()},
+            {"required", ru},
+            {"getRlPAth", getRlPAth()});
 
         TString out;
         NullSerializeReadTableResponse(data, StatusIds::SUCCESS, PlanStep, TxId, &out);
@@ -667,9 +682,9 @@ private:
                 *Request_.get(), ru, RlMaxDuration,
                 std::move(onSendAllowed), std::move(onSendTimeout), ctx);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
-                        SelfId() << " Launch rate limiter actor: "
-                        << rlActor);
+            YDB_LOG_DEBUG_CTX(ctx, "Launch rate limiter",
+                {"selfId", SelfId()},
+                {"actor", rlActor});
         } else {
             DoSendStreamResult(std::move(out), shardId, txId, TInstant(), ctx);
         }
@@ -683,15 +698,17 @@ private:
                 QuotaByShard_.erase(it);
             --QuotaReserved_;
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
-                        SelfId() << " Response out of quota from Shard " << shardId
-                        << ", TxId " << txId);
+            YDB_LOG_ERROR("Response out of quota from Shard TxId",
+                {"selfId", SelfId()},
+                {"shardId", shardId},
+                {"txId", txId});
         }
 
         if (startTime) {
             auto delay = ctx.Now() - startTime;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
-                    SelfId() << " Data response has been delayed for " << delay << " seconds");
+            YDB_LOG_DEBUG("Data response has been delayed for seconds",
+                {"selfId", SelfId()},
+                {"delay", delay});
         }
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
@@ -706,8 +723,8 @@ private:
 
         LeftInGRpcAdaptorQueue_++;
         if (LeftInGRpcAdaptorQueue_ > QuotaLimit_) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
-                        SelfId() << " TMessageBusServerRequest: response queue limit is exceeded.");
+            YDB_LOG_ERROR("TMessageBusServerRequest: response queue limit is exceeded",
+                {"selfId", SelfId()});
         }
 
         TryToAllocateQuota();

@@ -15,6 +15,8 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace {
 
 TString DescribeConfigIdentity(const Ydb::DynamicConfig::ConfigIdentity& id)
@@ -124,9 +126,8 @@ bool ConvertGetConfigToFetchConfigResult(
             default:
                 // Any other value that comes from a newer Console is skipped with a warning
                 // so we don't fail on forward-compatible additions
-                ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
-                    "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "
-                    << "skipped unknown config identity '" << DescribeConfigIdentity(srcIdentity) << "'" );
+                YDB_LOG_NOTICE("Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: skipped unknown config identity",
+                    {"#_DescribeConfigIdentity(srcIdentity)", DescribeConfigIdentity(srcIdentity)});
                 break;
         }
     }

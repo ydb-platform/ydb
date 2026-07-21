@@ -6,6 +6,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/public/api/protos/draft/ydb_nbs.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NKikimr::NGRpcService {
 
 
@@ -52,9 +54,8 @@ public:
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
 
-        LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: sent WriteBlocksRequest to partition: %s",
-            diskIdStr.data());
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent WriteBlocksRequest",
+            {"partition", diskIdStr.data()});
     }
 
 private:
@@ -65,9 +66,8 @@ private:
     }
 
     void Handle(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse::TPtr& ev) {
-        LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: received WriteBlocksResponse from partition: %s",
-            ev->Sender.ToString().data());
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received WriteBlocksResponse",
+            {"partition", ev->Sender});
         ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record, ActorContext());
     }
 };
@@ -101,9 +101,8 @@ public:
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
 
-        LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: sent ReadBlocksRequest to partition: %s",
-            diskIdStr.data());
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: sent ReadBlocksRequest",
+            {"partition", diskIdStr.data()});
     }
 
 private:
@@ -114,9 +113,8 @@ private:
     }
 
     void Handle(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev) {
-        LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: received ReadBlocksResponse from partition: %s",
-            ev->Sender.ToString().data());
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received ReadBlocksResponse",
+            {"partition", ev->Sender});
 
         // Convert from NYdb::NBS::NProto::TReadBlocksResponse to Ydb::Nbs::ReadBlocksResult
         Ydb::Nbs::ReadBlocksResult result;

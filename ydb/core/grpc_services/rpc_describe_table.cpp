@@ -11,6 +11,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -171,7 +173,8 @@ private:
                 StatusIds::StatusCode code = StatusIds::SUCCESS;
                 TString error;
                 if (!FillSequenceDescription(describeTableResult, tableDescription, code, error)) {
-                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Unable to fill sequence description: %s", error.c_str());
+                    YDB_LOG_ERROR_CTX(ctx, "Unable to fill sequence",
+                        {"description", error});
                     Request_->RaiseIssue(NYql::TIssue(error));
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
@@ -296,7 +299,9 @@ private:
 
     void ReplyOnException(const std::exception& ex, const char* logPrefix) noexcept {
         auto& ctx = TlsActivationContext->AsActorContext();
-        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "%s: %s", logPrefix, ex.what());
+        YDB_LOG_ERROR_CTX(ctx, "",
+            {"logPrefix", logPrefix},
+            {"#_ex.what", ex.what()});
         Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
         return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
     }

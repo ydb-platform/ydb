@@ -25,6 +25,8 @@
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
@@ -338,7 +340,7 @@ public:
         TimeoutTimerActorId = CreateLongTimer(ctx, std::min(clientTimeout, DEFAULT_TIMEOUT), new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
         Become(&TThis::MainState);
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC bootstraped ");
+        YDB_LOG_DEBUG("TReadRowsRPC bootstraped");
 
         auto selfId = ctx.SelfID;
         auto* actorSystem = ctx.ActorSystem();
@@ -372,7 +374,9 @@ public:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const auto& entry = request.ResultSet.front();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TEvNavigateKeySetResult, " << " OwnerId: " << OwnerId << " TableId: " << TableId);
+        YDB_LOG_DEBUG("TEvNavigateKeySetResult",
+            {"ownerId", OwnerId},
+            {"tableId", TableId});
         switch (entry.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 break;
@@ -402,8 +406,8 @@ public:
 
         auto& resolveNamesResult = ev->Get()->Request;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST,
-            "TReadRowsRPC going to create keys to read from proto: " << GetProto()->DebugString());
+        YDB_LOG_DEBUG("TReadRowsRPC going to create keys to read",
+            {"proto", GetProto()->DebugString()});
 
         TString errorMessage;
         if (!CheckAccess(resolveNamesResult.Get(), errorMessage)) {
@@ -503,7 +507,9 @@ public:
             request->Keys.emplace_back(TSerializedCellVec::Serialize(keys[i]));
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC send TEvRead shardId : " << shardId << " keys.size(): " << keys.size());
+        YDB_LOG_DEBUG("TReadRowsRPC send TEvRead shardId",
+            {"shardId", shardId},
+            {"#_keys.size", keys.size()});
         Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         ++ReadsInFlight;
     }
@@ -578,7 +584,8 @@ public:
                 it->second.Status = statusCode;
             }
         }
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());
+        YDB_LOG_DEBUG("TReadRowsRPC TEvReadResult",
+            {"rowsCount", msg->GetRowsCount()});
 
         EvReadResults.emplace_back(ev->Release().Release());
 
@@ -638,16 +645,16 @@ public:
                 for (size_t i = 0; i < RequestedColumnsMeta.size(); ++i) {
                     const auto& colMeta = RequestedColumnsMeta[i];
                     const auto type = getTypeFromColMeta(colMeta);
-                    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC "
-                        << " name: " << colMeta.Name
-                    );
+                    YDB_LOG_DEBUG("TReadRowsRPC",
+                        {"name", colMeta.Name});
                     const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
                     switch (colMeta.Type.GetTypeId()) {
                     case NScheme::NTypeIds::Pg: {
                         const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
-                            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
+                            YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
+                                {"#_*pgResult.Error", *pgResult.Error});
                         }
                         const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
@@ -704,7 +711,8 @@ public:
         }
 
         RuCost = NKqp::NRuCalc::CalcRequestUnit(stats);
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC created ReadRowsResponse " << response->DebugString());
+        YDB_LOG_DEBUG("TReadRowsRPC created ReadRowsResponse",
+            {"#_response->DebugString", response->DebugString()});
     }
 
     void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
@@ -729,7 +737,7 @@ public:
             FillResultRows(resp);
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC sent result");
+        YDB_LOG_DEBUG("TReadRowsRPC sent result");
         Request->Reply(resp, status);
         PassAway();
     }
@@ -756,7 +764,8 @@ public:
         ss << "]";
 
         if (hasActiveReads) {
-            LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, ss.Str());
+            YDB_LOG_WARN("",
+                {"#_ss.Str", ss.Str()});
         }
     }
 
@@ -810,7 +819,8 @@ public:
         if (logAppendix) {
             message << *logAppendix;
         }
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, message);
+        YDB_LOG_ERROR("",
+            {"message", message});
         SendResult(status, errorMsg, issues);
     }
 
@@ -832,7 +842,8 @@ public:
     }
 
     STFUNC(MainState) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC got: " << ev->GetTypeName());
+        YDB_LOG_DEBUG("TReadRowsRPC",
+            {"got", ev->GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);

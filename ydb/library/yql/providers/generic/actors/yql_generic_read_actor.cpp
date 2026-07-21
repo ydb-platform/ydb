@@ -71,24 +71,22 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            TokenProvider_->Subscribe([
+            TokenProvider_->AsyncCredentials().Subscribe([
+                computeActorId = ComputeActorId_,
+                inputIndex = InputIndex_,
                 actorSystem = TActivationContext::ActorSystem(),
                 selfId = SelfId()
-            ]() {
-                actorSystem->Send(selfId, new NActors::TEvents::TEvWakeup());
+            ](const NThreading::TFuture<TGenericCredentials>& future) {
+                try {
+                    actorSystem->Send(selfId, new TEvGotCredentials(ExtractFromConstFuture(future)));
+                } catch (std::exception& ex) {
+                    // TODO consider retry (we can retry before first data was returned)
+                    NConnector::NApi::TError error;
+                    error.set_status(Ydb::StatusIds::UNAUTHORIZED);
+                    error.set_message(ex.what());
+                    NotifyComputeActorWithError(actorSystem, computeActorId, inputIndex, error);
+                }
             });
-        }
-
-        void Startup() {
-            Y_ENSURE(TokenProvider_->IsReady());
-            auto issue = InitSplitsReading();
-            if (issue) {
-                return NotifyComputeActorWithIssue(
-                    TActivationContext::ActorSystem(),
-                    ComputeActorId_,
-                    InputIndex_,
-                    std::move(*issue));
-            };
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
@@ -99,20 +97,21 @@ namespace NYql::NDq {
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
-                      sFunc(NActors::TEvents::TEvWakeup, Startup);
+                      hFunc(TEvGotCredentials, Handle);
                       , ExceptionFunc(std::exception, HandleException)
         )
         // clang-format on
 
-        // ReadSplits
-        TMaybe<TIssue> InitSplitsReading() {
+        void Handle(TEvGotCredentials::TPtr& ev) {
+            const auto& credentials = std::move(ev->Get()->Credentials);
+
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
             if (Partitions_.empty()) {
                 YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
                 ReadSplitsFinished_ = true;
                 NotifyComputeActorWithData();
-                return Nothing();
+                return;
             }
 
             // Prepare ReadSplits request. For the sake of simplicity,
@@ -135,10 +134,7 @@ namespace NYql::NDq {
                     dstSplit->set_description(srcSplit.description());
 
                     // Assign actual IAM token to a split
-                    auto error = TokenProvider_->FillCredentials(*dstSplit->mutable_select()->mutable_data_source_instance());
-                    if (error) {
-                        return TIssue(std::move(error));
-                    }
+                    *dstSplit->mutable_select()->mutable_data_source_instance()->mutable_credentials() = credentials;
                 }
             }
 
@@ -154,8 +150,6 @@ namespace NYql::NDq {
                         TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
-
-            return Nothing();
         }
 
         void Handle(TEvReadSplitsIterator::TPtr& ev) {

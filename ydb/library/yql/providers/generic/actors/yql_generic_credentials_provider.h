@@ -23,6 +23,8 @@ namespace NYql::NDq {
         // Requires IsReady().
         TString FillCredentials(NYql::TGenericDataSourceInstance& dsi) const;
 
+        NThreading::TFuture<TGenericCredentials> AsyncCredentials() const;
+
         // Return true when provider is ready to serve requests
         bool IsReady() const;
 

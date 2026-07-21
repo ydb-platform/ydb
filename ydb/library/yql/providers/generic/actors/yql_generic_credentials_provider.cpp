@@ -50,6 +50,31 @@ namespace NYql::NDq {
         }
     }
 
+    NThreading::TFuture<TGenericCredentials> TGenericCredentialsProvider::AsyncCredentials() const {
+        // 1. If basic auth creds have been provided, use it
+        if (BasicAuthCredentials_) {
+            TGenericCredentials credentials;
+            auto basic = credentials.mutable_basic();
+            *basic->mutable_username() = BasicAuthCredentials_->Username;
+            *basic->mutable_password() = BasicAuthCredentials_->Password;
+            return NThreading::MakeFuture(credentials);
+        }
+        // 2. Otherwise use credentials provider to get token from Token Accessor
+        return AsyncCredentialsProvider_.Apply([](const NThreading::TFuture<NYdb::TCredentialsProviderPtr>& future) {
+            auto provider = future.GetValue();
+            Y_ENSURE(provider);
+            return provider->GetAuthInfoAsync();
+        }).Apply([](const NThreading::TFuture<std::string>& f1) {
+            NThreading::TFuture<std::string> f2 = f1;
+            auto iamToken = f2.ExtractValueSync();
+            TGenericCredentials credentials;
+            auto& token = *credentials.mutable_token();
+            *token.mutable_type() = "IAM";
+            *token.mutable_value() = std::move(iamToken);
+            return credentials;
+        });
+    }
+
     bool TGenericCredentialsProvider::IsReady() const {
         if (BasicAuthCredentials_) {
             return true;

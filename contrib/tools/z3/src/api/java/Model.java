@@ -1,0 +1,315 @@
+/**
+Copyright (c) 2012-2014 Microsoft Corporation
+   
+Module Name:
+
+    Model.java
+
+Abstract:
+
+Author:
+
+    @author Christoph Wintersteiger (cwinter) 2012-03-15
+
+Notes:
+    
+**/ 
+
+package com.microsoft.z3;
+
+import com.microsoft.z3.enumerations.Z3_sort_kind;
+
+import java.lang.ref.ReferenceQueue;
+
+/**
+ * A Model contains interpretations (assignments) of constants and functions.
+ **/
+@SuppressWarnings("unchecked")
+public class Model extends Z3Object {
+    /**
+     * Retrieves the interpretation (the assignment) of {@code a} in
+     * the model. 
+     * @param a A Constant
+     *
+     * @return An expression if the constant has an interpretation in the model,
+     *         null otherwise.
+     * @throws Z3Exception
+     **/
+    public <R extends Sort> Expr<R> getConstInterp(Expr<R> a)
+    {
+        getContext().checkContextMatch(a);
+        return getConstInterp(a.getFuncDecl());
+    }
+
+    /**
+     * Retrieves the interpretation (the assignment) of {@code f} in
+     * the model. 
+     * @param f A function declaration of zero arity
+     * 
+     * @return An expression if the function has an interpretation in the model,
+     *         null otherwise.
+     * @throws Z3Exception
+     **/
+    public <R extends Sort> Expr<R> getConstInterp(FuncDecl<R> f)
+    {
+        getContext().checkContextMatch(f);
+        if (f.getArity() != 0)
+            throw new Z3Exception(
+                    "Non-zero arity functions have FunctionInterpretations as a model. Use getFuncInterp.");
+
+        long n = Native.modelGetConstInterp(getContext().nCtx(), getNativeObject(),
+                f.getNativeObject());
+        if (n == 0)
+            return null;
+        else
+            return (Expr<R>) Expr.create(getContext(), n);
+    }
+
+    /**
+     * Retrieves the interpretation (the assignment) of a non-constant {@code f} in the model. 
+     * @param f A function declaration of non-zero arity
+     * 
+     * @return A FunctionInterpretation if the function has an interpretation in
+     *         the model, null otherwise.
+     * @throws Z3Exception
+     **/
+    public <R extends Sort> FuncInterp<R> getFuncInterp(FuncDecl<R> f)
+    {
+        getContext().checkContextMatch(f);
+
+        Z3_sort_kind sk = Z3_sort_kind.fromInt(Native.getSortKind(getContext()
+                .nCtx(), Native.getRange(getContext().nCtx(), f.getNativeObject())));
+
+        if (f.getArity() == 0)
+        {
+            long n = Native.modelGetConstInterp(getContext().nCtx(),
+                    getNativeObject(), f.getNativeObject());
+
+            if (sk == Z3_sort_kind.Z3_ARRAY_SORT)
+            {
+                if (n == 0)
+                    return null;
+                else
+                {
+                    if (Native.isAsArray(getContext().nCtx(), n)) {
+                      long fd = Native.getAsArrayFuncDecl(getContext().nCtx(), n);
+                      return getFuncInterp(new FuncDecl<>(getContext(), fd));
+                    }
+		    return null;
+                }
+            } else
+            {
+                throw new Z3Exception(
+                        "Constant functions do not have a function interpretation; use getConstInterp");
+            }
+        } else
+        {
+            long n = Native.modelGetFuncInterp(getContext().nCtx(),
+                    getNativeObject(), f.getNativeObject());
+            if (n == 0)
+                return null;
+            else
+                return new FuncInterp<>(getContext(), n);
+        }
+    }
+
+    /**
+     * The number of constants that have an interpretation in the model.
+     **/
+    public int getNumConsts()
+    {
+        return Native.modelGetNumConsts(getContext().nCtx(), getNativeObject());
+    }
+
+    /**
+     * The function declarations of the constants in the model.
+     * 
+     * @throws Z3Exception
+     **/
+    public FuncDecl<?>[] getConstDecls()
+    {
+        int n = getNumConsts();
+        FuncDecl<?>[] res = new FuncDecl[n];
+        for (int i = 0; i < n; i++)
+            res[i] = new FuncDecl<>(getContext(), Native.modelGetConstDecl(getContext()
+                    .nCtx(), getNativeObject(), i));
+        return res;
+    }
+
+    /**
+     * The number of function interpretations in the model.
+     **/
+    public int getNumFuncs()
+    {
+        return Native.modelGetNumFuncs(getContext().nCtx(), getNativeObject());
+    }
+
+    /**
+     * The function declarations of the function interpretations in the model.
+     * 
+     * @throws Z3Exception
+     **/
+    public FuncDecl<?>[] getFuncDecls()
+    {
+        int n = getNumFuncs();
+        FuncDecl<?>[] res = new FuncDecl[n];
+        for (int i = 0; i < n; i++)
+            res[i] = new FuncDecl<>(getContext(), Native.modelGetFuncDecl(getContext()
+                    .nCtx(), getNativeObject(), i));
+        return res;
+    }
+
+    /**
+     * All symbols that have an interpretation in the model.
+     * 
+     * @throws Z3Exception
+     **/
+    public FuncDecl<?>[] getDecls()
+    {
+        int nFuncs = getNumFuncs();
+        int nConsts = getNumConsts();
+        int n = nFuncs + nConsts;
+        FuncDecl<?>[] res = new FuncDecl[n];
+        for (int i = 0; i < nConsts; i++)
+            res[i] = new FuncDecl<>(getContext(), Native.modelGetConstDecl(getContext()
+                    .nCtx(), getNativeObject(), i));
+        for (int i = 0; i < nFuncs; i++)
+            res[nConsts + i] = new FuncDecl<>(getContext(), Native.modelGetFuncDecl(
+                    getContext().nCtx(), getNativeObject(), i));
+        return res;
+    }
+
+    /**
+     * A ModelEvaluationFailedException is thrown when an expression cannot be
+     * evaluated by the model.
+     **/
+    @SuppressWarnings("serial")
+    public class ModelEvaluationFailedException extends Z3Exception
+    {
+        /**
+         * An exception that is thrown when model evaluation fails.
+         **/
+        public ModelEvaluationFailedException()
+        {
+            super();
+        }
+    }
+
+    /**
+     * Evaluates the expression {@code t} in the current model.
+     * Remarks:  This function may fail if {@code t} contains
+     * quantifiers, is partial (MODEL_PARTIAL enabled), or if {@code t} is not well-sorted. In this case a
+     * {@code ModelEvaluationFailedException} is thrown.  
+     * @param t the expression to evaluate
+     * @param completion An expression {@code completion} When this flag
+     * is enabled, a model value will be assigned to any constant or function
+     * that does not have an interpretation in the model.
+
+     * @return The evaluation of {@code t} in the model.
+     * @throws Z3Exception
+     **/
+    public <R extends Sort> Expr<R> eval(Expr<R> t, boolean completion)
+    {
+        Native.LongPtr v = new Native.LongPtr();
+        if (!Native.modelEval(getContext().nCtx(), getNativeObject(),
+            t.getNativeObject(), (completion), v))
+            throw new ModelEvaluationFailedException();
+        else
+            return (Expr<R>) Expr.create(getContext(), v.value);
+    }
+
+    /**
+     * Alias for {@code Eval}.
+     * 
+     * @throws Z3Exception
+     **/
+    public <R extends Sort> Expr<R> evaluate(Expr<R> t, boolean completion)
+    {
+        return eval(t, completion);
+    }
+
+    /**
+     * The number of uninterpreted sorts that the model has an interpretation
+     * for.
+     **/
+    public int getNumSorts()
+    {
+        return Native.modelGetNumSorts(getContext().nCtx(), getNativeObject());
+    }
+
+    /**
+     * The uninterpreted sorts that the model has an interpretation for.
+     * Remarks:  Z3 also provides an interpretation for uninterpreted sorts used
+     * in a formula. The interpretation for a sort is a finite set of distinct
+     * values. We say this finite set is the "universe" of the sort. 
+     * 
+     * @see #getNumSorts
+     * @see #getSortUniverse(R s)
+     * 
+     * @throws Z3Exception
+     **/
+    public Sort[] getSorts()
+    {
+
+        int n = getNumSorts();
+        Sort[] res = new Sort[n];
+        for (int i = 0; i < n; i++)
+            res[i] = Sort.create(getContext(),
+                    Native.modelGetSort(getContext().nCtx(), getNativeObject(), i));
+        return res;
+    }
+
+    /**
+     * The finite set of distinct values that represent the interpretation for
+     * sort {@code s}. 
+     * @param s An uninterpreted sort
+     * 
+     * @return An array of expressions, where each is an element of the universe
+     *         of {@code s}
+     * @throws Z3Exception
+     **/
+    public <R extends Sort>  Expr<R>[] getSortUniverse(R s)
+    {
+
+        ASTVector nUniv = new ASTVector(getContext(), Native.modelGetSortUniverse(
+                getContext().nCtx(), getNativeObject(), s.getNativeObject()));
+        return (Expr<R>[]) nUniv.ToExprArray();
+    }
+
+    /**
+     * Conversion of models to strings.
+     * 
+     * @return A string representation of the model.
+     **/
+    @Override
+    public String toString() {
+        return Native.modelToString(getContext().nCtx(), getNativeObject());
+    }
+
+    Model(Context ctx, long obj)
+    {
+        super(ctx, obj);
+    }
+
+    @Override
+    void incRef() {
+        Native.modelIncRef(getContext().nCtx(), getNativeObject());
+    }
+
+    @Override
+    void addToReferenceQueue() {
+        getContext().getReferenceQueue().storeReference(this, ModelRef::new);
+    }
+
+    private static class ModelRef extends Z3ReferenceQueue.Reference<Model> {
+
+        private ModelRef(Model referent, ReferenceQueue<Z3Object> q) {
+            super(referent, q);
+        }
+
+        @Override
+        void decRef(Context ctx, long z3Obj) {
+            Native.modelDecRef(ctx.nCtx(), z3Obj);
+        }
+    }
+}

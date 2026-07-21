@@ -1,0 +1,294 @@
+############################################
+# Copyright (c) 2013 Microsoft Corporation
+#
+# Scripts for automatically generating
+# Linux/OSX/BSD distribution zip files.
+#
+# Author: Leonardo de Moura (leonardo)
+############################################
+import os
+import glob
+import re
+import getopt
+import sys
+import shutil
+import subprocess
+import zipfile
+from mk_exception import *
+from mk_project import *
+import mk_util
+
+BUILD_DIR='build-dist'
+VERBOSE=True
+DIST_DIR='dist'
+FORCE_MK=False
+DOTNET_CORE_ENABLED=True
+DOTNET_KEY_FILE=None
+JAVA_ENABLED=True
+GIT_HASH=False
+PYTHON_ENABLED=True
+MAKEJOBS=getenv("MAKEJOBS", '8')
+OS_NAME=None
+LINUX_X64=mk_util.LINUX_X64
+HOST_IS_ARM64=mk_util.IS_ARCH_ARM64  # Save the original host architecture
+
+def set_verbose(flag):
+    global VERBOSE
+    VERBOSE = flag
+
+def is_verbose():
+    return VERBOSE
+
+def mk_dir(d):
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+def set_build_dir(path):
+    global BUILD_DIR
+    BUILD_DIR = mk_util.norm_path(path)
+    mk_dir(BUILD_DIR)
+
+def display_help():
+    print("mk_unix_dist.py: Z3 Linux/OSX/BSD distribution generator\n")
+    print("This script generates the zip files containing executables, shared objects, header files for Linux/OSX/BSD.")
+    print("It must be executed from the Z3 root directory.")
+    print("\nOptions:")
+    print("  -h, --help                    display this message.")
+    print("  -s, --silent                  do not print verbose messages.")
+    print("  -b <sudir>, --build=<subdir>  subdirectory where x86 and x64 Z3 versions will be built (default: build-dist).")
+    print("  -f, --force                   force script to regenerate Makefiles.")
+    print("  --nodotnet                    do not include .NET bindings in the binary distribution files.")
+    print("  --dotnet-key=<file>           sign the .NET assembly with the private key in <file>.")
+    print("  --arch=<arch>                 set architecture (arm64 or x64) to force cross-compilation")
+    print("  --nojava                      do not include Java bindings in the binary distribution files.")
+    print("  --os=<os>                     set OS version.")
+    print("  --nopython                    do not include Python bindings in the binary distribution files.")
+    print("  --githash                     include git hash in the Zip file.")
+    exit(0)
+
+# Parse configuration option for mk_make script
+def parse_options():
+    global FORCE_MK, JAVA_ENABLED, GIT_HASH, DOTNET_CORE_ENABLED, DOTNET_KEY_FILE, PYTHON_ENABLED, OS_NAME, LINUX_X64
+    path = BUILD_DIR
+    options, remainder = getopt.gnu_getopt(sys.argv[1:], 'b:hsf', ['build=',
+                                                                   'help',
+                                                                   'silent',
+                                                                   'force',
+                                                                   'nojava',
+                                                                   'nodotnet',
+                                                                   'dotnet-key=',
+                                                                   'arch=',
+                                                                   'os=',
+                                                                   'githash',
+                                                                   'nopython'
+                                                                   ])
+    for opt, arg in options:
+        if opt in ('-b', '--build'):
+            if arg == 'src':
+                raise MKException('The src directory should not be used to host the Makefile')
+            path = arg
+        elif opt in ('-s', '--silent'):
+            set_verbose(False)
+        elif opt in ('-h', '--help'):
+            display_help()
+        elif opt in ('-f', '--force'):
+            FORCE_MK = True
+        elif opt == '--nodotnet':
+            DOTNET_CORE_ENABLED = False
+        elif opt == '--nopython':
+            PYTHON_ENABLED = False
+        elif opt == '--dotnet-key':
+            DOTNET_KEY_FILE = arg
+        elif opt == '--nojava':
+            JAVA_ENABLED = False
+        elif opt == '--githash':
+            GIT_HASH = True
+        elif opt == '--arch':
+            if arg == "arm64":
+                mk_util.IS_ARCH_ARM64 = True
+            elif arg == "x64":
+                mk_util.IS_ARCH_ARM64 = False
+                LINUX_X64 = True
+            else:
+                raise MKException("Invalid architecture directive '%s'. Legal directives: arm64, x64" % arg)
+        elif opt == '--os':
+            OS_NAME = arg
+        else:
+            raise MKException("Invalid command line option '%s'" % opt)
+    set_build_dir(path)
+
+# Check whether build directory already exists or not
+def check_build_dir(path):
+    return os.path.exists(path) and os.path.exists(os.path.join(path, 'Makefile'))
+
+# Create a build directory using mk_make.py
+def mk_build_dir(path):
+    global LINUX_X64, HOST_IS_ARM64
+    if not check_build_dir(path) or FORCE_MK:
+        env = os.environ
+        opts = [sys.executable, os.path.join('scripts', 'mk_make.py'), "-b", path, "--staticlib"]
+        if DOTNET_CORE_ENABLED:
+            opts.append('--dotnet')
+            if not DOTNET_KEY_FILE is None:
+                opts.append('--dotnet-key=' + DOTNET_KEY_FILE)            
+        if JAVA_ENABLED:
+            opts.append('--java')
+        if GIT_HASH:
+            opts.append('--githash=%s' % mk_util.git_hash())
+            opts.append('--git-describe')
+        if PYTHON_ENABLED:
+            opts.append('--python')
+        if mk_util.IS_ARCH_ARM64:
+            opts.append('--arm64=true')
+        if mk_util.IS_ARCH_ARM64 and LINUX_X64:
+            # we are on x64 machine but build for arm64
+            # so we have to do cross compiling on Linux
+            # the cross compiler is downloaded from ARM GNU toolchain
+            myvar = {
+                "CC":  "aarch64-none-linux-gnu-gcc",
+                "CXX": "aarch64-none-linux-gnu-g++"
+            }
+            env.update(myvar)
+        elif HOST_IS_ARM64 and not mk_util.IS_ARCH_ARM64:
+            # we are on arm64 machine but build for x64
+            # handle cross compilation on macOS (or other Unix systems)
+            import platform
+            if platform.system() == 'Darwin':
+                # On macOS, we can cross-compile using -arch flag
+                target_arch_flag = ' -arch x86_64'
+                myvar = {
+                    "CXXFLAGS": (os.environ.get("CXXFLAGS", "").strip() + target_arch_flag).strip(),
+                    "CFLAGS": (os.environ.get("CFLAGS", "").strip() + target_arch_flag).strip(),
+                    "LDFLAGS": (os.environ.get("LDFLAGS", "").strip() + target_arch_flag).strip()
+                }
+                env.update(myvar)
+        if subprocess.call(opts, env=env) != 0:
+            raise MKException("Failed to generate build directory at '%s'" % path)
+
+# Create build directories
+def mk_build_dirs():
+    mk_build_dir(BUILD_DIR)
+
+class cd:
+    def __init__(self, newPath):
+        self.newPath = newPath
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
+def mk_z3():
+    with cd(BUILD_DIR):
+        try:
+            return subprocess.call(['make', '-j', MAKEJOBS])
+        except:
+            return 1
+
+def get_os_name():
+    global LINUX_X64
+    if OS_NAME is not None:
+        return OS_NAME
+    import platform
+    basic = os.uname()[0].lower()
+    if basic == 'linux':
+        if mk_util.IS_ARCH_ARM64 and LINUX_X64:
+            # handle cross compiling
+            # example: 'ldd (GNU) 2.34'
+            lines = subprocess.check_output(["ldd", "--version"]).decode('ascii')
+            first_line = lines.split("\n")[0]
+            ldd_version = first_line.split()[-1]
+            # coerce the format to platform.libc_ver() return type
+            dist = ('glibc', ldd_version)
+        else:
+            dist = platform.libc_ver()
+        if len(dist) == 2 and len(dist[0]) > 0 and len(dist[1]) > 0:
+            return '%s-%s' % (dist[0].lower(), dist[1].lower())
+        else:
+            return basic
+    elif basic == 'darwin':
+        ver = platform.mac_ver()
+        if len(ver) == 3 and len(ver[0]) > 0:
+            return 'osx-%s' % ver[0]
+        else:
+            return 'osx'
+    elif basic == 'freebsd':
+        ver = platform.version()
+        idx1 = ver.find(' ')
+        idx2 = ver.find('-')
+        if idx1 < 0 or idx2 < 0 or idx1 >= idx2:
+            return basic
+        else:
+            return 'freebsd-%s' % ver[(idx1+1):idx2]
+    else:
+        return basic
+
+def get_z3_name():
+    import platform as platform_module
+    # Note that the platform name this function return
+    # has to work together with setup.py
+    # It's not the typical output from platform.machine()
+    major, minor, build, revision = get_version()
+    if mk_util.IS_ARCH_ARM64 or platform_module.machine() == "aarch64":
+        # the second case handle native build on aarch64
+        # TODO: we don't handle cross compile on host aarch64 to target x64
+        platform = "arm64"    
+    elif sys.maxsize >= 2**32:
+        platform = "x64"
+    else:
+        platform = "x86"
+    osname = get_os_name()
+    if GIT_HASH:
+        return 'z3-%s.%s.%s.%s-%s-%s' % (major, minor, build, mk_util.git_hash(), platform, osname)
+    else:
+        return 'z3-%s.%s.%s-%s-%s' % (major, minor, build, platform, osname)
+
+def mk_dist_dir():
+    build_path = BUILD_DIR
+    dist_path = os.path.join(DIST_DIR, get_z3_name())
+    mk_dir(dist_path)
+    mk_util.DOTNET_CORE_ENABLED = DOTNET_CORE_ENABLED
+    mk_util.DOTNET_ENABLED = False
+    mk_util.DOTNET_KEY_FILE = DOTNET_KEY_FILE
+    mk_util.JAVA_ENABLED = JAVA_ENABLED
+    mk_util.PYTHON_ENABLED = PYTHON_ENABLED
+    mk_unix_dist(build_path, dist_path)
+    if is_verbose():
+        print("Generated distribution folder at '%s'" % dist_path)
+
+def get_dist_path():
+    return get_z3_name()
+
+def mk_zip():
+    dist_path = get_dist_path()
+    old = os.getcwd()
+    try:
+        os.chdir(DIST_DIR)
+        zfname = '%s.zip' % dist_path
+        zipout = zipfile.ZipFile(zfname, 'w', zipfile.ZIP_DEFLATED)
+        for root, dirs, files in os.walk(dist_path):
+            for f in files:
+                zipout.write(os.path.join(root, f))
+        if is_verbose():
+            print("Generated '%s'" % zfname)
+    except:
+        pass
+    os.chdir(old)
+
+def cp_license():
+    shutil.copy("LICENSE.txt", os.path.join(DIST_DIR, get_dist_path()))
+
+# Entry point
+def main():
+    parse_options()
+    mk_build_dirs()
+    mk_z3()
+    init_project_def()
+    mk_dist_dir()
+    cp_license()
+    mk_zip()
+
+main()
+

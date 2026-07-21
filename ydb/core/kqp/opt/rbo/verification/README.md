@@ -14,7 +14,8 @@ concrete-counterexample inspection, and isolated real-YDB replay tools are also
 implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
 Committed rule applications and mutating non-rule stages share one explicit
-transformation-event stream. Hermetic solver packaging remains a future milestone.
+transformation-event stream. Solver-backed tests use the pinned, standalone Z3
+target under `contrib/tools/z3`; it is not linked into `ydbd`.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -281,10 +282,10 @@ Map and Broadcast add no variant fields. UnionAll adds `parallel`. Merge adds
 
 ## Development setup
 
-The Python code has no package dependencies. Pass an explicit Z3-compatible
-solver executable when asking it to solve a formula. During local development,
-that can be a system or isolated-development Z3 installation; hermetic `ya`
-integration will use a separately vendored binary.
+The Python kernel has no package dependencies. Its CLI accepts an explicit
+Z3-compatible executable when solving a formula. Tests run through `ya` instead
+resolve the pinned Z3 4.16.0 target under `contrib/tools/z3`; no ambient solver
+installation or `RBO_Z3` setting can affect those hermetic test runs.
 
 ```bash
 python3 -m unittest discover -s ydb/core/kqp/opt/rbo/verification/ut
@@ -297,8 +298,10 @@ Run its tests with:
   ydb/core/kqp/opt/rbo/verification/ut 2>&1 | tail
 ```
 
-Solver integration tests are enabled when an explicit solver binary is
-available. Formula construction and parsing tests do not depend on Z3.
+The `ya` test target always builds and runs the solver integration tests. The
+raw `unittest` command above still supports lightweight development outside the
+`ya` environment: it skips solver cases unless `RBO_Z3` names an external
+compatible executable.
 
 The real-host integration tests construct a new-RBO `IKqpHost` and send each
 captured initial/final pair through the normal CLI. One test covers an explicit
@@ -312,15 +315,14 @@ checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
 solver budget. Nullable `String IN ('first', 'second')` and
 `Int64 IN (Int32...)` expressions exercise both static-membership type gates
-through the real host and construct one normal obligation. A native Decimal
+through the real host and prove the normal obligation. A native Decimal
 column filter likewise checks exact tagged literals and comparison predicates
-at both real-host boundaries; its normal two-row/two-task obligation is green.
-All tests always require strict decoding and SMT construction. Set `RBO_Z3` to
-additionally require `VERIFIED_BOUNDED`; M2b will replace that opt-in path with
-a hermetic solver dependency.
+at both real-host boundaries and proves its normal two-row/two-task obligation.
+All equivalent real-host fixtures require `VERIFIED_BOUNDED` from the hermetic
+solver.
 
 ```bash
-RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \
+./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/integration_ut 2>&1 | tail
 ```
 
@@ -330,6 +332,7 @@ Build the Ya-owned CLI with:
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/bin
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/inspect_bin
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/prefix_capture/bin
+./ya make --build relwithdebinfo contrib/tools/z3
 ```
 
 ## CLI

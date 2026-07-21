@@ -1,0 +1,62 @@
+/*++
+Copyright (c) 2007 Microsoft Corporation
+
+Module Name:
+
+    rewriter_types.h
+
+Abstract:
+
+    Lean and mean rewriter
+
+Author:
+
+    Leonardo (leonardo) 2011-04-10
+
+Notes:
+
+--*/
+#pragma once
+
+#include "util/z3_exception.h"
+#include "util/common_msgs.h"
+
+/**
+   \brief Builtin rewrite result status
+*/
+enum br_status {
+    BR_REWRITE1,               // rewrite the result (bounded by depth 1)
+    BR_REWRITE2,               // rewrite the result (bounded by depth 2)
+    BR_REWRITE3,               // rewrite the result (bounded by depth 3)
+    BR_REWRITE_FULL,           // rewrite the result unbounded
+    BR_DONE,                   // done, the result is simplified
+    BR_FAILED                  // no builtin rewrite is available
+};
+
+inline std::ostream& operator<<(std::ostream& out, br_status st) {
+    switch (st) {
+    case BR_REWRITE1: return out << "rewrite1";
+    case BR_REWRITE2: return out << "rewrite2";
+    case BR_REWRITE3: return out << "rewrite3";
+    case BR_REWRITE_FULL: return out << "rewrite_full";
+    case BR_DONE: return out << "done";
+    case BR_FAILED: return out << "failed";
+    default: return out << "unknown";
+    }
+}
+
+#define RW_UNBOUNDED_DEPTH 3
+inline br_status unsigned2br_status(unsigned u) {
+    br_status r = u >= RW_UNBOUNDED_DEPTH ? BR_REWRITE_FULL : static_cast<br_status>(u);
+    SASSERT((u == 0) == (r == BR_REWRITE1));
+    SASSERT((u == 1) == (r == BR_REWRITE2));
+    SASSERT((u == 2) == (r == BR_REWRITE3));
+    SASSERT((u >= 3) == (r == BR_REWRITE_FULL));
+    return r;
+}
+
+class rewriter_exception : public default_exception {
+public:                                                
+    rewriter_exception(std::string && msg) : default_exception(std::move(msg)) {}
+};
+

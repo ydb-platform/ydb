@@ -85,8 +85,8 @@ rbo_verifier/verify.py      one counterexample formula and verdict decoding
 The kernel has no YDB client, optimizer tracing, benchmark discovery, or
 transformation-prefix localization logic. The kernel emits inspectable SMT-LIB and invokes an
 explicit Z3-compatible solver executable; it does not import ambient Python
-packages. A pinned Z3 binary will be vendored as a separate build-integration
-step.
+packages. Hermetic tests resolve the separately built, pinned Z3 executable;
+the solver is not linked into `ydbd`.
 
 ## Scalar expressions
 
@@ -342,14 +342,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Stable operator, IU, expression, stage, and edge IDs.
 - C++ unit tests proving semantically relevant fields survive export.
 - End-to-end new-RBO comparisons. Integration tests drive a real `IKqpHost`,
-  capture both boundaries, and pass them through the normal CLI; solving is
-  explicit until M2b supplies the hermetic Z3 target.
+  capture both boundaries, and pass them through the normal CLI and hermetic
+  solver.
 
-### M2b: hermetic solver packaging — pending
+### M2b: hermetic solver packaging — implemented
 
-- Vendor a reviewed, pinned MIT-licensed Z3 release in `contrib`.
-- Build a command-line solver target without linking it into `ydbd`.
-- Make integration tests locate that binary explicitly through `ya`.
+- Reviewed Z3 4.16.0 sources and deterministic generated files are pinned in
+  `contrib/tools/z3`, with exact archive, source-list, and generated-tree hashes.
+- A standalone command-line-only `PROGRAM(z3)` target has no library target or
+  YDB `PEERDIR`, so it cannot add a solver link dependency to `ydbd`.
+- Python, inspector, benchmark, and real-host integration tests declare the
+  binary through `DEPENDS` and resolve its exact build output through `ya`.
 
 ### M3: StageGraph routing — implemented for the supported subset
 
@@ -386,7 +389,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   same-type references, representative lossless mixed-integer cases,
   dictionary-path heterogeneity rejection, mutation and boundary tests, and a
   real-host query with nullable String and `Int64` lookups cover the gate and
-  construct the normal obligation (or solve it when `RBO_Z3` is supplied).
+  prove the normal obligation with the hermetic solver.
 - Decimal literals are tagged as finite, negative infinity, positive infinity,
   or NaN; source and opaque values use the exact legal typed domain. Ordinary
   equality/order, exact-type null-safe equality, Decimal/Decimal and
@@ -430,8 +433,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula-construction coverage has a checked-in regression floor. Hermetic
-  solver-backed proof policy and replay-confirmed counterexample policy remain.
+- Formula-construction coverage has a checked-in regression floor. A
+  corpus-level solver-backed proof floor and replay-confirmed counterexample
+  policy remain.
 
 ## Non-goals
 

@@ -49,13 +49,13 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*TPCDS*' 2>&1 | tail -n 100
 ```
 
-Set an explicit Z3-compatible executable to solve supported obligations. The
-focused queries currently need a 60-second budget:
+Set explicit solver mode to solve supported obligations with the pinned
+Z3 4.16.0 target declared by the benchmark test. The focused queries currently
+need a 60-second budget:
 
 ```bash
 set -o pipefail
 RBO_COVERAGE_USE_SOLVER=1 \
-RBO_Z3=/path/to/z3 \
 RBO_COVERAGE_TIMEOUT_MS=60000 \
 RBO_COVERAGE_QUERIES=96 \
 ./ya make --build relwithdebinfo -tA \
@@ -67,9 +67,8 @@ RBO_COVERAGE_QUERIES=96 \
 example `1,4-7,96`; omitted or empty selects the whole suite.
 `RBO_COVERAGE_TIMEOUT_MS` is the positive per-query solver timeout and defaults
 to 10000. Solver use is deliberately explicit: absent, empty, or zero
-`RBO_COVERAGE_USE_SOLVER` always selects formula-only mode, even if an ambient
-`RBO_Z3` exists. The value `1` requires a non-empty `RBO_Z3`; every other value
-fails closed.
+`RBO_COVERAGE_USE_SOLVER` selects formula-only mode. The value `1` selects the
+hermetic `contrib/tools/z3/z3` build output; every other value fails closed.
 
 Each suite writes the stable report names `tpch_coverage.json` or
 `tpcds_coverage.json` into the test output directory. The version-two report

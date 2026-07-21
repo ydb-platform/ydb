@@ -16,7 +16,6 @@
 
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
-#include <util/system/env.h>
 #include <util/system/shellcommand.h>
 
 #include <mutex>
@@ -26,6 +25,11 @@ namespace NKikimr::NKqp {
 namespace {
 
 constexpr const char* TestCluster = "local_ut";
+constexpr const char* HermeticSolverTarget = "contrib/tools/z3/z3";
+
+TString HermeticSolver() {
+    return BinaryPath(HermeticSolverTarget);
+}
 
 class TRecordingSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
 public:
@@ -297,11 +301,7 @@ NJson::TJsonValue BuildVerificationProblem(
     if (diagnosticTransformationPrefix) {
         command << "--diagnostic-transformation-prefix";
     }
-
-    const auto solver = TryGetEnv("RBO_Z3");
-    if (solver) {
-        command << "--solver" << *solver;
-    }
+    command << "--solver" << HermeticSolver();
     command.Run();
     UNIT_ASSERT_C(
         command.GetExitCode().Defined() && command.GetExitCode().GetRef() == 0,
@@ -318,6 +318,16 @@ NJson::TJsonValue BuildVerificationProblem(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
+    Y_UNIT_TEST(HermeticSolverIsPinned) {
+        TShellCommand command(HermeticSolver());
+        command << "--version";
+        command.Run();
+        UNIT_ASSERT_C(
+            command.GetExitCode().Defined() && command.GetExitCode().GetRef() == 0,
+            command.GetError() << command.GetOutput());
+        UNIT_ASSERT_STRING_CONTAINS(command.GetOutput(), "Z3 version 4.16.0");
+    }
+
     Y_UNIT_TEST(RealHostStopsAtNoOpConstantFoldingAtomicCheckpoint) {
         TKikimrRunner kikimr;
 
@@ -365,7 +375,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             true);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["comparison_scope"].GetStringSafe(),
             "OPTIMIZER_TRANSFORMATION_PREFIX");
@@ -470,7 +480,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -641,7 +651,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -701,7 +711,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -765,7 +775,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -841,7 +851,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -921,7 +931,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
@@ -1046,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto verdict = BuildVerificationProblem(results[0], results[1], 60'000);
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["status"].GetStringSafe(),
-            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+            "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }

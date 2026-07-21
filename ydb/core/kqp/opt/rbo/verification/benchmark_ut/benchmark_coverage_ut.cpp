@@ -404,12 +404,7 @@ TMaybe<TString> CoverageSolver() {
         ythrow yexception()
             << "RBO_COVERAGE_USE_SOLVER must be 0 or 1; got " << *enabled;
     }
-    const auto solver = TryGetEnv("RBO_Z3");
-    if (!solver || solver->empty()) {
-        ythrow yexception()
-            << "RBO_COVERAGE_USE_SOLVER=1 requires a non-empty RBO_Z3";
-    }
-    return solver;
+    return BinaryPath("contrib/tools/z3/z3");
 }
 
 ui64 TimeoutMs() {
@@ -1067,7 +1062,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(solver.Violations.empty());
     }
 
-    Y_UNIT_TEST(PolicySolverRequiresExplicitOptIn) {
+    Y_UNIT_TEST(PolicySolverUsesHermeticBinaryAfterExplicitOptIn) {
         {
             NTesting::TScopedEnvironment environment{{
                 {"RBO_COVERAGE_USE_SOLVER", ""},
@@ -1077,22 +1072,22 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         {
             NTesting::TScopedEnvironment environment{{
-                {"RBO_COVERAGE_USE_SOLVER", "1"},
-                {"RBO_Z3", ""},
+                {"RBO_COVERAGE_USE_SOLVER", "2"},
             }};
             UNIT_ASSERT_EXCEPTION_CONTAINS(
                 CoverageSolver(),
                 yexception,
-                "requires a non-empty RBO_Z3");
+                "must be 0 or 1");
         }
         {
             NTesting::TScopedEnvironment environment{{
                 {"RBO_COVERAGE_USE_SOLVER", "1"},
-                {"RBO_Z3", "/explicit/z3"},
+                {"RBO_Z3", "/ambient/z3"},
             }};
             const auto solver = CoverageSolver();
             UNIT_ASSERT(solver);
-            UNIT_ASSERT_VALUES_EQUAL(*solver, "/explicit/z3");
+            UNIT_ASSERT_STRING_CONTAINS(*solver, "contrib/tools/z3/z3");
+            UNIT_ASSERT_VALUES_UNEQUAL(*solver, "/ambient/z3");
         }
     }
 

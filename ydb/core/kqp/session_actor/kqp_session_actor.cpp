@@ -1584,7 +1584,7 @@ public:
             return false;
         }
 
-        if (txCtx.TxManager->BrokenLocks()) {
+        if (txCtx.TxManager && txCtx.TxManager->BrokenLocks()) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,

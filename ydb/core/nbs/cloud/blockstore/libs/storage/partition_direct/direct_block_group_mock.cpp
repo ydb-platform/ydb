@@ -38,7 +38,7 @@ void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
     Y_UNUSED(hostIndex, now);
 }
 
-TDuration TOracleMock::GetDDiskReconnectDelay(THostIndex hostIndex)
+TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
 {
     Y_UNUSED(hostIndex);
     return TDuration::MilliSeconds(1);

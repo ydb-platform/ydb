@@ -376,9 +376,12 @@ class TestKiKiMRDistConfSelfHealMixedAutomaticManagement(KiKiMRDistConfSelfHealT
             unchanged_config = get_ring_group(self.do_request_config(), configName)
             assert_eq(unchanged_config, bad_config)
         else:
+            disabled_before = get_ring_group(self.do_request_config(), self.disabled_config_name)
             logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
             time.sleep(10)
 
+            disabled_after = get_ring_group(self.do_request_config(), self.disabled_config_name)
+            assert_eq(disabled_after, disabled_before)
             rg = get_ring_group(self.do_request_config(), configName)
             assert_eq(rg["NToSelect"], 9)
             assert_eq(len(rg["Ring"]), 9)

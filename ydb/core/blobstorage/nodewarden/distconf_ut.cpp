@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
         std::unordered_set<ui32> usedNodes;
         bool goodConfig = false;
-        auto ss = GenerateSimpleStateStorage(8, usedNodes, 0, 0, 200, {}, &goodConfig, oldSS,
+        GenerateSimpleStateStorage(8, usedNodes, 0, 0, 200, {}, &goodConfig, oldSS,
             /*automaticManagement=*/false);
         UNIT_ASSERT(goodConfig);
 

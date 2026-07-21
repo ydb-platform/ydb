@@ -28,16 +28,16 @@ def schema():
             {
                 "name": "A",
                 "columns": [
-                    {"name": "k", "type": "int", "nullable": False},
-                    {"name": "x", "type": "int", "nullable": False},
+                    {"name": "k", "type": "Int64", "nullable": False},
+                    {"name": "x", "type": "Int64", "nullable": False},
                 ],
                 "unique_keys": [],
             },
             {
                 "name": "B",
                 "columns": [
-                    {"name": "k", "type": "int", "nullable": False},
-                    {"name": "x", "type": "int", "nullable": False},
+                    {"name": "k", "type": "Int64", "nullable": False},
+                    {"name": "x", "type": "Int64", "nullable": False},
                 ],
                 "unique_keys": [],
             },
@@ -71,7 +71,7 @@ KEY_EQUALITY = {
 RESIDUAL = {
     "kind": "opaque",
     "fingerprint": "greater_than($0,$1)",
-    "type": "bool",
+    "type": "Bool",
     "nullable": False,
     "args": [
         {"kind": "column", "column": "a.x"},
@@ -154,7 +154,7 @@ def filtered_snapshot(predicate):
                 "tables": [
                     {
                         "name": "T",
-                        "columns": [{"name": "flag", "type": "bool", "nullable": True}],
+                        "columns": [{"name": "flag", "type": "Bool", "nullable": True}],
                         "unique_keys": [],
                     }
                 ]
@@ -217,8 +217,8 @@ def left_join_elimination_snapshot(with_join, right_key_is_unique):
     )
 
 
-def constant_snapshot(value, output="result"):
-    scalar_type = "string" if isinstance(value, str) else "int"
+def constant_snapshot(value, output="result", scalar_type=None):
+    scalar_type = scalar_type or ("String" if isinstance(value, str) else "Int64")
     return parse_snapshot(
         {
             "format": "ydb-rbo-semantic-snapshot",
@@ -310,7 +310,7 @@ class SolverProtocolTest(unittest.TestCase):
                                     "expression": {
                                         "kind": "opaque",
                                         "fingerprint": "nullable_constant",
-                                        "type": "int",
+                                        "type": "Int64",
                                         "nullable": True,
                                         "args": [],
                                     },
@@ -330,6 +330,14 @@ class SolverProtocolTest(unittest.TestCase):
     def test_root_output_name_is_part_of_the_contract(self):
         with self.assertRaisesRegex(SchemaMismatch, "root output names or order differ"):
             build_problem(constant_snapshot(1, "before_name"), constant_snapshot(1, "after_name"), 0)
+
+    def test_exact_integer_width_is_part_of_the_contract(self):
+        with self.assertRaisesRegex(SchemaMismatch, "root output type differs"):
+            build_problem(
+                constant_snapshot(1, scalar_type="Int32"),
+                constant_snapshot(1, scalar_type="Int64"),
+                0,
+            )
 
 
 class _MissingFunction(Exception):
@@ -425,8 +433,8 @@ class RestrictedModelSmokeTest(unittest.TestCase):
         )
 
     def test_null_and_false_filters_have_no_restricted_model(self):
-        before = filtered_snapshot({"kind": "null", "type": "bool"})
-        after = filtered_snapshot({"kind": "literal", "type": "bool", "value": False})
+        before = filtered_snapshot({"kind": "null", "type": "Bool"})
+        after = filtered_snapshot({"kind": "literal", "type": "Bool", "value": False})
         self.assertFalse(_restricted_domain_has_model(build_problem(before, after, 1).script))
 
     def test_catalog_key_controls_left_join_elimination(self):
@@ -471,8 +479,8 @@ class VerificationTest(unittest.TestCase):
         self.assertEqual(len(result.witness["A"]), 1)
 
     def test_null_and_false_filters_are_equivalent(self):
-        null_filter = filtered_snapshot({"kind": "null", "type": "bool"})
-        false_filter = filtered_snapshot({"kind": "literal", "type": "bool", "value": False})
+        null_filter = filtered_snapshot({"kind": "null", "type": "Bool"})
+        false_filter = filtered_snapshot({"kind": "literal", "type": "Bool", "value": False})
         result = solve(build_problem(null_filter, false_filter, 1, 10_000), SOLVER, 1, 10_000)
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 

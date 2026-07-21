@@ -7,9 +7,13 @@ from typing import Mapping
 
 from . import smt
 from .ir import Expr
+from .types import BOOL, SCALAR_TYPES, family
 
 
-SMT_SORT = {"bool": smt.BOOL, "int": smt.INT, "string": smt.INT}
+SMT_SORT = {
+    scalar_type: smt.BOOL if family(scalar_type) == "bool" else smt.INT
+    for scalar_type in SCALAR_TYPES
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +53,7 @@ class Encoder:
 
         if expression.kind == "not":
             argument = self.evaluate(expression.args[0], row)
-            return Value("bool", argument.is_null, smt.not_(argument.value))
+            return Value(BOOL, argument.is_null, smt.not_(argument.value))
 
         if expression.kind in {"and", "or"}:
             arguments = tuple(self.evaluate(argument, row) for argument in expression.args)
@@ -59,9 +63,9 @@ class Encoder:
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
             if expression.null_safe:
-                return Value("bool", smt.FALSE, self.not_distinct(left, right))
+                return Value(BOOL, smt.FALSE, self.not_distinct(left, right))
             return Value(
-                "bool",
+                BOOL,
                 smt.or_(left.is_null, right.is_null),
                 smt.eq(left.value, right.value),
             )
@@ -76,7 +80,7 @@ class Encoder:
 
     @staticmethod
     def is_true(value: Value) -> smt.Term:
-        assert value.type == "bool"
+        assert value.type == BOOL
         return smt.and_(smt.not_(value.is_null), value.value)
 
     @staticmethod
@@ -137,7 +141,7 @@ class Encoder:
         )
 
     def _literal(self, scalar_type: str, value: bool | int | str | None) -> smt.Term:
-        if scalar_type == "string":
+        if family(scalar_type) == "string":
             assert isinstance(value, str)
             return self.script.string_atom(value)
         return _literal(scalar_type, value)
@@ -150,7 +154,7 @@ class Encoder:
         true = smt.and_(
             *(smt.and_(smt.not_(argument.is_null), argument.value) for argument in arguments)
         )
-        return Value("bool", smt.not_(smt.or_(false, true)), true)
+        return Value(BOOL, smt.not_(smt.or_(false, true)), true)
 
     @staticmethod
     def _or(arguments: tuple[Value, ...]) -> Value:
@@ -160,24 +164,26 @@ class Encoder:
         false = smt.and_(
             *(smt.and_(smt.not_(argument.is_null), smt.not_(argument.value)) for argument in arguments)
         )
-        return Value("bool", smt.not_(smt.or_(true, false)), true)
+        return Value(BOOL, smt.not_(smt.or_(true, false)), true)
 
 
 def _literal(scalar_type: str, value: bool | int | str | None) -> smt.Term:
-    if scalar_type == "bool":
+    scalar_family = family(scalar_type)
+    if scalar_family == "bool":
         assert isinstance(value, bool)
         return smt.bool_value(value)
-    if scalar_type == "int":
+    if scalar_family == "int":
         assert isinstance(value, int) and not isinstance(value, bool)
         return smt.int_value(value)
     raise AssertionError(f"unknown scalar type {scalar_type!r}")
 
 
 def _default(scalar_type: str) -> smt.Term:
-    if scalar_type == "bool":
+    scalar_family = family(scalar_type)
+    if scalar_family == "bool":
         return smt.FALSE
-    if scalar_type == "int":
+    if scalar_family == "int":
         return smt.ZERO
-    if scalar_type == "string":
+    if scalar_family == "string":
         return smt.ZERO
     raise AssertionError(f"unknown scalar type {scalar_type!r}")

@@ -8,6 +8,10 @@ The current implementation is the M1 logical kernel. StageGraph execution and
 the C++ snapshot exporter are intentionally subsequent milestones; snapshots
 that contain unsupported physical semantics fail closed.
 
+Version one preserves exact supported YQL scalar identities (`Bool`, signed and
+unsigned integer widths, `String`, and `Utf8`) even when several identities use
+the same SMT domain.
+
 The chosen final boundary is immediately before `ConvertToPhysical`. Therefore
 the verifier does not prove physical lowering, task construction, or execution.
 In particular, the current lowering does not visibly preserve

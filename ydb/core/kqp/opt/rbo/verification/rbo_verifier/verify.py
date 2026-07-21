@@ -11,6 +11,7 @@ from . import smt
 from .ir import Snapshot
 from .relation import Database, Evaluator, WitnessCell, WitnessRow, bag_equal
 from .scalar import Encoder as ScalarEncoder
+from .types import family
 
 
 class VerificationError(ValueError):
@@ -210,7 +211,7 @@ def _decode_witness(
                     raw_value = _term_value(cell.value, values)
                     decoded[name] = (
                         _string_witness(raw_value, string_literals)
-                        if cell.type == "string"
+                        if family(cell.type) == "string"
                         else raw_value
                     )
             present_rows.append(decoded)

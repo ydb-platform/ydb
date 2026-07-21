@@ -11,10 +11,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeAlias
 
+from .types import BOOL, SCALAR_TYPES, family
+
 
 FORMAT = "ydb-rbo-semantic-snapshot"
 VERSION = 1
-SCALAR_TYPES = frozenset({"bool", "int", "string"})
 JOIN_KINDS = frozenset(
     {
         "cross",
@@ -221,10 +222,11 @@ def _scalar_type(value: Any, path: str) -> str:
 
 
 def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str:
+    scalar_family = family(scalar_type)
     valid = (
-        (scalar_type == "bool" and isinstance(value, bool))
-        or (scalar_type == "int" and isinstance(value, int) and not isinstance(value, bool))
-        or (scalar_type == "string" and isinstance(value, str))
+        (scalar_family == "bool" and isinstance(value, bool))
+        or (scalar_family == "int" and isinstance(value, int) and not isinstance(value, bool))
+        or (scalar_family == "string" and isinstance(value, str))
     )
     if not valid:
         _fail(path, f"value does not have type {scalar_type!r}")
@@ -496,16 +498,16 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         argument_types = [
             _infer_expr(arg, columns, f"{path}.args[{index}]") for index, arg in enumerate(expr.args)
         ]
-        if any(argument.name != "bool" for argument in argument_types):
+        if any(argument.name != BOOL for argument in argument_types):
             _fail(path, f"{expr.kind} requires Boolean arguments")
-        return ValueType("bool", any(argument.nullable for argument in argument_types))
+        return ValueType(BOOL, any(argument.nullable for argument in argument_types))
 
     if expr.kind == "eq":
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
         if left.name != right.name:
             _fail(path, f"equality type mismatch: {left.name!r} and {right.name!r}")
-        return ValueType("bool", False if expr.null_safe else left.nullable or right.nullable)
+        return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
     raise AssertionError(f"parser admitted unknown expression kind {expr.kind!r}")
 
@@ -578,7 +580,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         elif isinstance(node, Filter):
             result = dict(schema_for(node.input))
             predicate_type = _infer_expr(node.predicate, result, f"node {node.id!r}.predicate")
-            if predicate_type.name != "bool":
+            if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
 
         elif isinstance(node, Join):
@@ -588,7 +590,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             if overlap:
                 _fail(f"node {node.id!r}", f"join inputs share columns: {', '.join(sorted(overlap))}")
             predicate_type = _infer_expr(node.predicate, left | right, f"node {node.id!r}.predicate")
-            if predicate_type.name != "bool":
+            if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "join predicate must be Boolean")
 
             if node.kind in {"left_semi", "left_anti"}:

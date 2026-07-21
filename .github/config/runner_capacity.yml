@@ -2,16 +2,16 @@
 # shard-count capacity calculator (estimate_runner_capacity.py).
 #
 # Numbers come from the Yandex Cloud folder quotas page and the observed
-# VM specs of auto-provisioned ghrun-* runners (snapshot 2026-06-13).
+# VM specs of auto-provisioned ghrun-* runners (snapshot 2026-07-21).
 # Update here when quotas or VM presets change - nothing is hardcoded
 # in the scripts.
 
 # Total folder quotas (Compute Cloud).
 quotas:
-  vcpu: 5400
-  ram_gb: 23000
-  instances: 110
-  nrd_ssd_gb: 200000
+  vcpu: 8000
+  ram_gb: 33000
+  instances: 140
+  nrd_ssd_gb: 300000
 
 # Static consumption outside auto-provisioned runners (cache servers,
 # tiny workers, long-lived infra). Derived as quota usage minus the sum

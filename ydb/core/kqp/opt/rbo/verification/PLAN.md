@@ -93,8 +93,9 @@ The explicit scalar core initially contains:
 
 - column access, typed literal, and typed NULL;
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
-- ordinary nullable equality, null-safe equality, and integer ordering when
-  YQL's common integer type preserves both operands exactly;
+- ordinary nullable equality, null-safe equality, integer ordering when YQL's
+  common integer type preserves both operands exactly, and same-type `Date`
+  ordering;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
   propagation and exact fixed-width modular/two's-complement overflow;
 - filter truth conversion.
@@ -144,12 +145,14 @@ version-dependent SMT string parser in the trusted path; string operations stay
 opaque until explicitly modeled. Because those atoms have no YDB ordering,
 `Sort` and `Merge` on `String` or `Utf8` fail closed during snapshot validation.
 
-Version-one `Date` and canonical parameterized `Decimal(p,s)` are also
-equality-only atoms, initially for benchmark columns that are carried but not
-actively transformed. Exact type identity and NULLs are preserved, while
-literals and ordering fail closed. Their unbounded carrier is an over-approximate
-domain: it can make a witness spurious, but cannot make an inequivalent bounded
-plan verify.
+Version-one `Date` is the exact unsigned day-since-epoch domain
+`[0, NUdf::MAX_DATE)`. Numeric literals are range-checked, source slots and
+non-null opaque Date results receive explicit domain constraints, and same-type
+comparison, Sort, and Merge use integer day ordering. Canonical parameterized
+`Decimal(p,s)` remains an equality-only atom for columns that are carried but
+not actively transformed. Its unbounded carrier is an over-approximate domain:
+it can make a witness spurious, but cannot make an inequivalent bounded plan
+verify.
 
 ## Relational semantics
 
@@ -283,9 +286,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Strict v1 snapshot decoder.
 - Empty source, scan, project, filter, joins, and logical UnionAll.
 - Nullable exact YQL Bool, integer-width, String, and Utf8 identities with
-  structurally identified scalar UFs, plus equality-only passive Date and exact
-  parameterized Decimal identities. Solver domains may be shared, but snapshot
-  type identity is never collapsed.
+  structurally identified scalar UFs, exact bounded and ordered Date, plus exact
+  parameterized Decimal identity with equality-only atom semantics. Solver
+  domains may be shared, but snapshot type identity is never collapsed.
 - Bag-equivalence formula, deterministic SMT-LIB, witness decoding, CLI, and
   mutation tests.
 
@@ -342,7 +345,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   process operations, and is covered by a real-host bounded proof.
 - The exact new-RBO `TPCDS_YQL` q96 schema and query pass strict initial/final
   export and produce `VERIFIED_BOUNDED` at two rows per table and two tasks. This
-  covers passive Date/Decimal catalog columns, canonical `Void` for `COUNT(*)`,
+  covers exact Date and passive Decimal catalog columns, canonical `Void` for
+  `COUNT(*)`,
   four scans, three joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,

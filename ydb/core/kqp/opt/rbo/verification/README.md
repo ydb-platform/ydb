@@ -45,10 +45,12 @@ Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
 `Decimal(p,s)`) even when several identities use the same SMT domain. Decimal
 identity requires `1 <= p <= 35` and `0 <= s <= p`, with no alternate spelling.
-Integer, Date, and Decimal slots currently use unbounded SMT carriers rather
-than source-domain range constraints. This may produce an out-of-range or
+Integer and Decimal slots currently use unbounded SMT carriers rather than
+source-domain range constraints. This may produce an out-of-range or
 symbolic-atom `COUNTEREXAMPLE`, which replay can reject, but cannot turn a real
-bounded counterexample into `VERIFIED_BOUNDED`.
+bounded counterexample into `VERIFIED_BOUNDED`. Date is exact: numeric literals,
+source cells, and non-null opaque results are constrained to unsigned day values
+in `[0, 49673)`.
 
 Same-type integer `+`, `-`, and `*` are structural scalar nodes. Both operands
 and the result must have exactly the same signed or unsigned width, and result
@@ -72,7 +74,7 @@ The explicit comparison core accepts unequal integer widths only when YQL's
 common integer type represents both operands without wrapping: equal signedness,
 or a signed type wider than the unsigned type. This covers the canonical
 `Int64`-column/`Int32`-literal benchmark form while mixed-width cases that would
-bitcast or wrap still fail closed.
+bitcast or wrap still fail closed. Date comparison requires Date on both sides.
 
 Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
 It preserves exact callable/atom bytes, normalized atom flags, formatted types,
@@ -107,12 +109,11 @@ encoding is exact within the declared row/task/family bounds: it rejects an
 unordered or differently ordered producer and enumerates all sorted,
 producer-order-preserving interleavings.
 
-`String`, `Utf8`, `Date`, and Decimal remain equality-only uninterpreted atoms.
-Date and Decimal are admitted for catalog columns, exact NULLs, pass-through
-values, equality, grouping, and opaque-function boundaries; their literals are
-not modeled. None of these atom types has modeled YDB ordering, so using one in
-Sort or Merge order metadata returns `UNSUPPORTED` during strict validation
-instead of inventing an ordering.
+`String`, `Utf8`, and Decimal remain equality-only uninterpreted atoms. Date is
+an exact bounded integer-day type with literals, equality, ordinary ordering,
+Sort, and Merge. String, Utf8, and Decimal still have no modeled YDB ordering,
+so using one in Sort or Merge order metadata returns `UNSUPPORTED` during
+strict validation instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
@@ -166,7 +167,7 @@ The exporter also emits `predicate` on every scan, with legacy absence meaning
 rather than `OriginalPredicate` statistics metadata. Version one accepts only a
 one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
 its scalar subset is physical columns, supported literals, Boolean
-AND/OR/NOT, equality, lossless integer ordering, and filter-boundary
+AND/OR/NOT, equality, lossless integer or same-type Date ordering, and filter-boundary
 `Coalesce(predicate, false)`. Projection wrappers, range reads, malformed type
 descriptors, and unknown operations fail closed. The predicate filters raw scan
 rows before symbolic source partitioning and any per-task pushed limit.

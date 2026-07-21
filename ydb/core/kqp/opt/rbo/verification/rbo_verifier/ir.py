@@ -11,7 +11,16 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeAlias
 
-from .types import BOOL, VOID, family, integer_comparison_compatible, is_scalar_type
+from .types import (
+    BOOL,
+    DATE,
+    MAX_DATE,
+    VOID,
+    family,
+    integer_comparison_compatible,
+    is_ordered_type,
+    is_scalar_type,
+)
 
 
 FORMAT = "ydb-rbo-semantic-snapshot"
@@ -325,6 +334,11 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str:
     valid = (
         (scalar_family == "bool" and isinstance(value, bool))
         or (scalar_family == "int" and isinstance(value, int) and not isinstance(value, bool))
+        or (
+            scalar_family == "date"
+            and type(value) is int
+            and 0 <= value < MAX_DATE
+        )
         or (scalar_family == "string" and isinstance(value, str))
     )
     if not valid:
@@ -869,15 +883,12 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
         compatible_integers = integer_comparison_compatible(left.name, right.name)
+        compatible_dates = left.name == DATE and right.name == DATE
         if left.name != right.name and not compatible_integers:
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
-        if expr.kind != "eq" and not (
-            family(left.name) == "int"
-            and family(right.name) == "int"
-            and compatible_integers
-        ):
-            _fail(path, f"{expr.kind} requires integer arguments")
+        if expr.kind != "eq" and not (compatible_integers or compatible_dates):
+            _fail(path, f"{expr.kind} requires integer or Date arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
     if expr.kind in {"add", "sub", "mul"}:
@@ -1168,10 +1179,10 @@ def _validate_stage_graph(
         for item in edge.order:
             if item.column not in columns:
                 _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
-            if family(columns[item.column].type) != "int":
+            if not is_ordered_type(columns[item.column].type):
                 _fail(
                     f"{edge_path}.order",
-                    "only integer ordering is modeled",
+                    "only integer and Date ordering is modeled",
                 )
 
     for stage in graph.stages:
@@ -1429,10 +1440,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"node {node.id!r}.order[{index}]",
                         f"column {item.column!r} is not available",
                     )
-                if family(result[item.column].type) != "int":
+                if not is_ordered_type(result[item.column].type):
                     _fail(
                         f"node {node.id!r}.order[{index}]",
-                        "only integer ordering is modeled",
+                        "only integer and Date ordering is modeled",
                     )
 
         elif isinstance(node, Aggregate):

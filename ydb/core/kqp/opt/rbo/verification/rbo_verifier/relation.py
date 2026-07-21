@@ -27,7 +27,8 @@ from .ir import (
     validate_snapshot,
 )
 from .scalar import Encoder as ScalarEncoder
-from .scalar import Value, smt_sort
+from .scalar import Value, date_domain, smt_sort
+from .types import DATE, family
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +150,8 @@ class Database:
                         f"{table.name}_{slot}_{column.name}_value",
                         smt_sort(column.type),
                     )
+                    if column.type == DATE:
+                        script.assert_(date_domain(value))
                     values[column.name] = Value(column.type, is_null, value)
                     cells[column.name] = WitnessCell(column.type, is_null, value)
                 rows.append(Row(present, values))
@@ -890,6 +893,8 @@ def _row_leq(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
 def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term:
     if left.type != right.type:
         raise RelationError("sort comparison type mismatch")
+    if family(left.type) not in {"int", "date"}:
+        raise RelationError("sort comparison requires integer or Date values")
     null_before = (
         smt.and_(left.is_null, smt.not_(right.is_null))
         if order.nulls_first

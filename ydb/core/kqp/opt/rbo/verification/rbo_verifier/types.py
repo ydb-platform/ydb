@@ -6,6 +6,10 @@ BOOL = "Bool"
 DATE = "Date"
 VOID = "Void"
 
+# Mirrors NYql::NUdf::MAX_DATE.  Date is an unsigned day-since-epoch value and
+# this upper bound is non-inclusive.
+MAX_DATE = 49_673
+
 INTEGER_TYPES = frozenset(
     {
         "Int8",
@@ -72,6 +76,12 @@ def family(scalar_type: str) -> str:
         return "int"
     if scalar_type in STRING_TYPES:
         return "string"
-    if scalar_type == DATE or is_decimal_type(scalar_type):
+    if scalar_type == DATE:
+        return "date"
+    if is_decimal_type(scalar_type):
         return "atom"
     raise ValueError(f"unsupported scalar type {scalar_type!r}")
+
+
+def is_ordered_type(scalar_type: str) -> bool:
+    return scalar_type in INTEGER_TYPES or scalar_type == DATE

@@ -7,11 +7,18 @@ from typing import Mapping
 
 from . import smt
 from .ir import Expr
-from .types import BOOL, VOID, family, integer_width
+from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_width
 
 
 def smt_sort(scalar_type: str) -> str:
     return smt.BOOL if family(scalar_type) in {"bool", "unit"} else smt.INT
+
+
+def date_domain(value: smt.Term) -> smt.Term:
+    return smt.and_(
+        smt.not_(smt.lt(value, smt.ZERO)),
+        smt.lt(value, smt.int_value(MAX_DATE)),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,11 +179,14 @@ class Encoder:
                 smt.ite(argument.is_null, _default(argument.type), argument.value),
             )
         )
-        return Value(
+        result = Value(
             expression.result_type,
             functions.is_null(*flat_arguments) if functions.is_null is not None else smt.FALSE,
             functions.value(*flat_arguments),
         )
+        if result.type == DATE:
+            self.script.assert_(smt.or_(result.is_null, date_domain(result.value)))
+        return result
 
     def _literal(self, scalar_type: str, value: bool | int | str | None) -> smt.Term:
         if family(scalar_type) == "string":
@@ -210,7 +220,7 @@ def _literal(scalar_type: str, value: bool | int | str | None) -> smt.Term:
     if scalar_family == "bool":
         assert isinstance(value, bool)
         return smt.bool_value(value)
-    if scalar_family == "int":
+    if scalar_family in {"int", "date"}:
         assert isinstance(value, int) and not isinstance(value, bool)
         return smt.int_value(value)
     raise AssertionError(f"unknown scalar type {scalar_type!r}")
@@ -220,7 +230,7 @@ def _default(scalar_type: str) -> smt.Term:
     scalar_family = family(scalar_type)
     if scalar_family == "bool":
         return smt.FALSE
-    if scalar_family == "int":
+    if scalar_family in {"int", "date"}:
         return smt.ZERO
     if scalar_family in {"string", "atom"}:
         return smt.ZERO

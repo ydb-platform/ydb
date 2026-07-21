@@ -30,7 +30,9 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     VerificationError,
     build_logical_kernel_problem_for_tests,
     build_problem,
+    decode_witness,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import DATE, MAX_DATE
 
 
 ABSENT = object()
@@ -127,7 +129,7 @@ def union_node(node_id, left, right):
     }
 
 
-def snapshot(nodes, root, stage_graph=None):
+def snapshot(nodes, root, stage_graph=None, key1_type="Int64"):
     return {
         "format": "ydb-rbo-semantic-snapshot",
         "version": 1,
@@ -136,7 +138,7 @@ def snapshot(nodes, root, stage_graph=None):
                 {
                     "name": "A",
                     "columns": [
-                        {"name": "k1", "type": "Int64", "nullable": True},
+                        {"name": "k1", "type": key1_type, "nullable": True},
                         {"name": "k2", "type": "Int64", "nullable": True},
                         {
                             "name": "payload",
@@ -157,11 +159,12 @@ def snapshot(nodes, root, stage_graph=None):
     }
 
 
-def logical_sort(order, top_limit=None, phase="undefined"):
+def logical_sort(order, top_limit=None, phase="undefined", key1_type="Int64"):
     return parse_snapshot(
         snapshot(
             [scan(), sort_node("sort", "scan", order, top_limit, phase)],
             "sort",
+            key1_type=key1_type,
         )
     )
 
@@ -173,6 +176,7 @@ def logical_ordered_limit(
     sort_limit=None,
     sort_phase="undefined",
     limit_phase="undefined",
+    key1_type="Int64",
 ):
     return parse_snapshot(
         snapshot(
@@ -182,6 +186,7 @@ def logical_ordered_limit(
                 limit_node("limit", "sort", count, offset, limit_phase),
             ],
             "limit",
+            key1_type=key1_type,
         )
     )
 
@@ -195,6 +200,7 @@ def staged_top_sort_merge(
     merge_order=None,
     partial_phase="intermediate",
     final_phase="final",
+    key1_type="Int64",
 ):
     partial_order = order if partial_order is None else partial_order
     merge_order = partial_order if merge_order is None else merge_order
@@ -247,7 +253,7 @@ def staged_top_sort_merge(
         ],
         "assumptions": [],
     }
-    return parse_snapshot(snapshot(nodes, "final", graph))
+    return parse_snapshot(snapshot(nodes, "final", graph, key1_type=key1_type))
 
 
 def staged_parallel_sort_merge(order):
@@ -442,6 +448,33 @@ def _counterexample_formula_holds(problem, rows):
     return all(_ground(assertion, constants) for assertion in problem.script.assertions)
 
 
+class DateDomainTest(unittest.TestCase):
+    def test_symbolic_source_days_have_the_exact_ydb_domain_and_integer_witness(self):
+        parsed = logical_sort(
+            [order_item("a.k1")],
+            key1_type=DATE,
+        )
+        script = smt.Script()
+        database = Database(parsed, 1, script)
+        date_cell = database.witness["A"][0].cells["k1"]
+        self.assertIn(
+            smt.and_(
+                smt.not_(smt.lt(date_cell.value, smt.ZERO)),
+                smt.lt(date_cell.value, smt.int_value(MAX_DATE)),
+            ),
+            script.assertions,
+        )
+
+        for day in (0, MAX_DATE - 1):
+            constants = _witness_constants(
+                database.witness,
+                ((day, 0, 7),),
+            )
+            witness = decode_witness(database.witness, constants, {})
+            self.assertEqual(witness["A"][0]["k1"], day)
+            self.assertIs(type(witness["A"][0]["k1"]), int)
+
+
 class SortIrTest(unittest.TestCase):
     def test_order_limit_and_every_phase_are_strictly_decoded(self):
         order = [
@@ -549,8 +582,8 @@ class SortIrTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, "Uint64 literal"):
                     parse_snapshot(value)
 
-    def test_string_and_utf8_ordering_fail_closed(self):
-        for scalar_type in ("String", "Utf8"):
+    def test_text_and_decimal_ordering_fail_closed(self):
+        for scalar_type in ("String", "Utf8", "Decimal(5,2)"):
             value = snapshot(
                 [scan(), sort_node("sort", "scan", [order_item("a.k1")])],
                 "sort",
@@ -559,7 +592,7 @@ class SortIrTest(unittest.TestCase):
             with self.subTest(scalar_type=scalar_type):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only integer ordering is modeled",
+                    "only integer and Date ordering is modeled",
                 ):
                     parse_snapshot(value)
 
@@ -582,6 +615,31 @@ class SortIrTest(unittest.TestCase):
 
 
 class SortConcreteDifferentialTest(unittest.TestCase):
+    def test_date_ordering_matches_reference_at_bounds_and_with_nulls(self):
+        for ascending, nulls_first in product((False, True), repeat=2):
+            order = [order_item("a.k1", ascending, nulls_first)]
+            parsed = logical_sort(order, key1_type=DATE)
+            database, family = _logical_family(parsed, 3)
+            slot_states = tuple(
+                (ABSENT,)
+                + tuple(
+                    (key, 0, slot)
+                    for key in (None, 0, MAX_DATE - 1)
+                )
+                for slot in range(3)
+            )
+            for rows in product(*slot_states):
+                with self.subTest(
+                    ascending=ascending,
+                    nulls_first=nulls_first,
+                    rows=rows,
+                ):
+                    constants = _database_constants(database, rows)
+                    self.assertEqual(
+                        _sequences(family, constants),
+                        _reference_sequences(rows, order),
+                    )
+
     def test_single_key_matches_exhaustive_tiny_reference(self):
         for ascending, nulls_first in product((False, True), repeat=2):
             order = [order_item("a.k1", ascending, nulls_first)]
@@ -908,11 +966,12 @@ class StageTopSortMergeTest(unittest.TestCase):
     ORDER = [order_item("a.k1", True, False)]
 
     @staticmethod
-    def _families(staged):
+    def _families(staged, key1_type="Int64"):
         logical = logical_ordered_limit(
             StageTopSortMergeTest.ORDER,
             count=1,
             offset=1,
+            key1_type=key1_type,
         )
         script = smt.Script()
         database = Database(logical, 2, script)
@@ -943,6 +1002,35 @@ class StageTopSortMergeTest(unittest.TestCase):
             with self.subTest(rows=rows, tasks=tasks):
                 constants = _database_constants(database, rows, router, tasks)
                 self.assertTrue(_ground(equality, constants))
+
+    def test_date_local_sort_and_merge_preserve_bounds_nulls_and_direction(self):
+        staged = staged_top_sort_merge(self.ORDER, key1_type=DATE)
+        database, router, equality = self._families(staged, DATE)
+        rows_and_tasks = (
+            (((None, 0, 0), (0, 0, 1)), (False, True)),
+            (((0, 0, 0), (MAX_DATE - 1, 0, 1)), (False, False)),
+            (((MAX_DATE - 1, 0, 0), (None, 0, 1)), (True, False)),
+        )
+        for rows, tasks in rows_and_tasks:
+            with self.subTest(rows=rows, tasks=tasks):
+                constants = _database_constants(database, rows, router, tasks)
+                self.assertTrue(_ground(equality, constants))
+
+        descending = [order_item("a.k1", False, False)]
+        mutated = staged_top_sort_merge(
+            self.ORDER,
+            partial_order=descending,
+            merge_order=descending,
+            key1_type=DATE,
+        )
+        database, router, equality = self._families(mutated, DATE)
+        constants = _database_constants(
+            database,
+            ((0, 0, 0), (MAX_DATE - 1, 0, 1)),
+            router,
+            (False, False),
+        )
+        self.assertFalse(_ground(equality, constants))
 
     def test_parallel_union_preserves_one_ordered_stream_per_target_for_merge(self):
         logical = logical_sort(self.ORDER)

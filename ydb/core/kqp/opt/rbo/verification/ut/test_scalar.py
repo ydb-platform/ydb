@@ -2,7 +2,12 @@ import unittest
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder, Value
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    Encoder,
+    Value,
+    date_domain,
+)
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import DATE, MAX_DATE
 
 
 def _literal(scalar_type, value):
@@ -80,6 +85,59 @@ class IntegerArithmeticTest(unittest.TestCase):
         )
         self.assertEqual(actual.is_null, smt.TRUE)
         self.assertEqual(_ground(actual.value), 21)
+
+
+class DateScalarTest(unittest.TestCase):
+    def test_every_non_null_opaque_date_result_is_range_constrained(self):
+        for nullable in (False, True):
+            script = smt.Script()
+            result = Encoder(script).evaluate(
+                Expr(
+                    kind="opaque",
+                    result_type=DATE,
+                    nullable=nullable,
+                    fingerprint="date-result",
+                ),
+                {},
+            )
+            expected = smt.or_(result.is_null, date_domain(result.value))
+            with self.subTest(nullable=nullable):
+                self.assertIn(expected, script.assertions)
+
+    def test_date_literals_and_every_ordering_operator_use_smt_integers(self):
+        cases = (
+            ("lt", 0, MAX_DATE - 1),
+            ("lte", MAX_DATE - 1, MAX_DATE - 1),
+            ("gt", MAX_DATE - 1, 0),
+            ("gte", MAX_DATE - 1, MAX_DATE - 1),
+        )
+        encoder = Encoder(smt.Script())
+        for kind, left, right in cases:
+            expression = Expr(
+                kind=kind,
+                args=(_literal(DATE, left), _literal(DATE, right)),
+            )
+            with self.subTest(kind=kind):
+                result = encoder.evaluate(expression, {})
+                self.assertEqual(result.type, "Bool")
+                self.assertEqual(result.is_null, smt.FALSE)
+                self.assertEqual(result.value, smt.TRUE)
+
+        literal = encoder.evaluate(_literal(DATE, MAX_DATE - 1), {})
+        self.assertEqual(literal.type, DATE)
+        self.assertEqual(literal.value, smt.int_value(MAX_DATE - 1))
+
+    def test_null_date_comparison_is_sql_unknown(self):
+        expression = Expr(
+            kind="lt",
+            args=(Expr(kind="column", column="d"), _literal(DATE, 1)),
+        )
+        result = Encoder(smt.Script()).evaluate(
+            expression,
+            {"d": Value(DATE, smt.TRUE, smt.ZERO)},
+        )
+        self.assertEqual(result.is_null, smt.TRUE)
+        self.assertEqual(Encoder.is_true(result), smt.FALSE)
 
 
 if __name__ == "__main__":

@@ -125,19 +125,21 @@ both an initial and final reason.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
-| `<` integer-only ordering | q3 | - |
-| `<=` integer-only ordering | q1 | - |
-| `>=` integer-only ordering | q5, q6, q7, q8, q10, q14 | - |
 | Catalog required for subplans | q2, q4, q11, q15, q17, q21, q22 | q2, q4, q11, q15, q17, q21, q22 |
 | `Apply` | q13 | - |
 | `SqlIn` | q12, q19 | - |
 | `StringContains` | q9 | - |
+| Type `Interval` | q1 | - |
+| Callable `DecimalMul` | q3 | q3, q5, q8, q10 |
+| Callable `Map` | q5, q6, q7, q8, q10, q14 | q7 |
 | OLAP `string_contains` | - | q9 |
-| Unsupported OLAP non-callable node | - | q1 |
+| Unsupported OLAP non-callable node | - | q1, q6, q12, q14 |
 | `KqpOlapApply` | - | q13 |
-| `Date` literal | - | q3, q6, q7, q12, q14 |
-| `DecimalMul` | - | q5, q8, q10 |
 | `IfPresent` | - | q19 |
+
+Exact Date literals and ordering removed the previous Date blockers without
+changing the 0/22 formula count: these deeper scalar and OLAP blockers were
+then exposed.
 
 ### TPC-DS inventory
 
@@ -152,20 +154,20 @@ are audited independently.
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | `== Decimal(5,2)` vs `Int32` | q43, q61 | q61, q91 |
-| `>` integer-only ordering | q31, q72 | q72 |
+| `>` outside integer/Date ordering | q31 | - |
 | `>= Decimal(7,2)` vs `Decimal(12,2)` | q13, q48, q85 | q13, q48 |
 | `>= Decimal(7,2)` vs `Decimal(35,2)` | q21 | q21 |
 | `>= Decimal(7,2)` vs `Int32` | q28, q37, q82 | - |
 | `>= Int64` vs `Decimal(12,2)` | q65 | q65 |
-| `>=` integer-only ordering | q5, q40, q77, q80, q91 | q40 |
+| `>=` outside integer/Date ordering | q40, q91 | q40 |
 | Catalog required for subplans | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
 | Unavailable physical column `year` | - | q66 |
 | Opaque arithmetic `+` | q64 | q64 |
 | Opaque arithmetic `-` | q11, q75 | q11, q75 |
+| Opaque comparison `Decimal(7,2)` vs `Int32` | - | q28 |
 | Opaque scalar with unordered children | q2, q59 | q2, q43, q59 |
-| Scalar type is not `Data` or `Optional<Data>` | - | q28 |
-| Non-integer sort | q3, q25, q42, q50, q52, q55, q71, q76 | q3, q25, q42, q50, q52, q55, q71 |
+| Sort outside integer/Date ordering | q3, q25, q42, q50, q52, q55, q71, q76 | q3, q25, q42, q50, q52, q55, q71 |
 | Unsupported OLAP non-callable node | - | q37, q76, q77, q82 |
 | Callable `/` | q73, q78 | q78 |
 | Callable `Concat` | q84 | q84 |
@@ -177,12 +179,13 @@ are audited independently.
 | Callable `Substring` | q19, q62, q99 | q19, q62, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
 | Type `Double` | q7, q22, q26, q34 | q7, q22, q26 |
+| Type `Interval` | q5, q72, q77, q80 | q72 |
 
 ## Solver-backed focused results
 
 - TPC-DS q96 is `VERIFIED_BOUNDED` with a 60000 ms solver budget, two rows per
   referenced table, and two tasks. Its obligation covers the exact benchmark
-  schema/query, passive Date/Decimal columns, `COUNT(*)`, four scans, three
+  schema/query, exact Date and passive Decimal columns, `COUNT(*)`, four scans, three
   joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
 - TPC-DS q88 initially returned `COUNTEREXAMPLE`, but inspection showed a

@@ -165,7 +165,7 @@ class SnapshotTest(unittest.TestCase):
             "type": "String",
             "value": "1",
         }
-        with self.assertRaisesRegex(SnapshotError, "lt requires integer arguments"):
+        with self.assertRaisesRegex(SnapshotError, "lt requires integer or Date arguments"):
             parse_snapshot(value)
 
         value = minimal_snapshot()
@@ -275,7 +275,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
-    def test_date_and_exact_decimal_types_are_equality_only_atoms(self):
+    def test_date_is_exact_ordered_days_while_decimal_is_equality_only(self):
         value = minimal_snapshot()
         value["schema"]["tables"][0]["columns"].extend([
             {"name": "date", "type": "Date", "nullable": True},
@@ -299,19 +299,60 @@ class SnapshotTest(unittest.TestCase):
         }
         parse_snapshot(value)
 
-        ordered = copy.deepcopy(value)
-        ordered["plan"]["nodes"][1]["predicate"]["kind"] = "lt"
-        with self.assertRaisesRegex(SnapshotError, "lt requires integer arguments"):
-            parse_snapshot(ordered)
+        for kind in ("lt", "lte", "gt", "gte"):
+            ordered = copy.deepcopy(value)
+            ordered["plan"]["nodes"][1]["predicate"] = {
+                "kind": kind,
+                "left": {"kind": "column", "column": "a.date"},
+                "right": {"kind": "literal", "type": "Date", "value": 49_672},
+            }
+            with self.subTest(kind=kind):
+                parse_snapshot(ordered)
 
-        literal = copy.deepcopy(value)
-        literal["plan"]["nodes"][1]["predicate"] = {
-            "kind": "eq",
+        for literal_value in (0, 49_672):
+            literal = copy.deepcopy(value)
+            literal["plan"]["nodes"][1]["predicate"] = {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "a.date"},
+                "right": {"kind": "literal", "type": "Date", "value": literal_value},
+            }
+            with self.subTest(literal_value=literal_value):
+                parse_snapshot(literal)
+
+        for literal_value in (-1, 49_673, True, "0", "2000-01-01"):
+            literal = copy.deepcopy(value)
+            literal["plan"]["nodes"][1]["predicate"] = {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "a.date"},
+                "right": {"kind": "literal", "type": "Date", "value": literal_value},
+            }
+            with self.subTest(invalid_literal=literal_value):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "value does not have type 'Date'",
+                ):
+                    parse_snapshot(literal)
+
+        wrong_type = copy.deepcopy(value)
+        wrong_type["plan"]["nodes"][1]["predicate"] = {
+            "kind": "lt",
             "left": {"kind": "column", "column": "a.date"},
-            "right": {"kind": "literal", "type": "Date", "value": "2000-01-01"},
+            "right": {"kind": "literal", "type": "Uint16", "value": 1},
         }
-        with self.assertRaisesRegex(SnapshotError, "value does not have type 'Date'"):
-            parse_snapshot(literal)
+        with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
+            parse_snapshot(wrong_type)
+
+        decimal_order = copy.deepcopy(value)
+        decimal_order["plan"]["nodes"][1]["predicate"] = {
+            "kind": "lt",
+            "left": {"kind": "column", "column": "a.amount"},
+            "right": {"kind": "column", "column": "a.amount"},
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "lt requires integer or Date arguments",
+        ):
+            parse_snapshot(decimal_order)
 
     def test_decimal_type_identity_is_canonical_and_validated(self):
         for scalar_type in (

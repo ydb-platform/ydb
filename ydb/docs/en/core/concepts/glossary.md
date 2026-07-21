@@ -156,11 +156,11 @@ Periodically saved state of a [streaming query](#streaming-query) required for a
 
 #### Pile {#pile}
 
-**Pile** is a set of nodes that can fail or be shut down simultaneously while preserving the operability of other parts of the cluster (pile). A pile can maintain functionality when other cluster nodes are disconnected. Piles are used in [bridge mode](#bridge) to split the cluster into several parts between which synchronous replication occurs. A pile can consist of nodes from one or multiple regions.
+**Pile** is a set of nodes that can fail or be shut down simultaneously while preserving the operability of other parts of the **cluster** (**pile**). **Pile** can maintain functionality when other **cluster** nodes are disconnected. **Piles** are used in [bridge mode](#bridge) to split the **cluster** into several parts between which synchronous replication occurs. **Pile** can consist of nodes from one or multiple regions.
 
 #### Bridge mode {#bridge}
 
-**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [piles](#pile). The mode's features are described in [{#T}](topology.md#bridge) and also in [{#T}](bridge.md).
+**Bridge mode** is a special **cluster** topology in which data is stored with synchronous replication between multiple [**piles**](#pile). The mode's features are described in [{#T}](topology.md#bridge) and also in [{#T}](bridge.md).
 
 ### Table {#table}
 
@@ -598,7 +598,7 @@ All data written to tables of the [local database](#local-database) are initiall
 
 ### Memory controller {#memory-controller}
 
-**memory controller**— is a [actor](#actor) that manages [memory limits](../reference/configuration/memory_controller_config.md) {{ ydb-short-name }}.
+**memory controller**— is an [actor](#actor) that manages [memory limits](../reference/configuration/memory_controller_config.md) {{ ydb-short-name }}.
 
 ### Spilling {#spilling}
 
@@ -612,17 +612,17 @@ For more details about spilling, see [{#T}](query_execution/spilling.md).
 
 #### SchemeShard {#scheme-shard}
 
-**SchemeShard**, **Scheme shard** — is a system tablet that stores the database schema, including metadata of user [tables](#table), [topics](#topic), etc.
+**SchemeShard** or **Scheme shard** — is a system tablet that stores the database schema, including metadata of user [tables](#table), [topics](#topic), etc.
 
 In addition, there is a **root SchemeShard** that stores information about databases created in the cluster.
 
 #### DataShard {#data-shard}
 
-**DataShard**, **Data shard** — is a tablet that manages a segment of a [row-oriented user table](datamodel/table.md#row-oriented-tables). A logical user table is divided into segments by continuous ranges of the table’s primary key. Each such range is handled by a separate DataShard tablet. The range itself is also called a [partition](#partition). The DataShard tablet stores data row‑by‑row, which is efficient for OLTP workloads.
+**DataShard** or **Data shard** — is a tablet that manages a segment of a [row-oriented user table](datamodel/table.md#row-oriented-tables). A logical user table is divided into segments by continuous ranges of the table’s primary key. Each such range is handled by a separate DataShard tablet. The range itself is also called a [partition](#partition). The DataShard tablet stores data row‑by‑row, which is efficient for OLTP workloads.
 
 #### ColumnShard {#column-shard}
 
-**ColumnShard**, **Column shard** — is a tablet that stores a data segment of a [columnar user table](datamodel/table.md#column-oriented-tables).
+**ColumnShard** or **Column shard** — is a tablet that stores a data segment of a [columnar user table](datamodel/table.md#column-oriented-tables).
 
 #### KeyValue Tablet {#kv-tablet}
 
@@ -828,7 +828,7 @@ Distributed transactions {{ ydb-short-name }} are inspired by the research paper
 
 #### Optimistic locking {#optimistic-locking}
 
-As in many other database management systems, queries {{ ydb-short-name }} can place locks on specific data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but at commit time. The first approach is called **pessimistic locking** or **perssimistic locking** (for example, used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
+As in many other database management systems, queries {{ ydb-short-name }} can place locks on specific data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but at commit time. The first approach is called **pessimistic locking** (for example, used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
 
 #### Transaction lock invalidation {#tli}
 

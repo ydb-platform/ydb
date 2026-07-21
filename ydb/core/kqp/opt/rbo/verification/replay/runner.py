@@ -9,18 +9,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .model import (
-    REPLAY_FORMAT,
-    REPLAY_VERSION,
-    ReplayCase,
-    ReplayError,
+from .materialize import (
     TargetBundle,
-    compare_results,
-    optimizer_mode,
-    parse_result,
     target_bundle,
     validate_database_path,
 )
+from .model import ReplayCase, ReplayError
+from .observation import compare_results, optimizer_mode, parse_result
+
+
+REPLAY_FORMAT = "ydb-rbo-real-replay"
+REPLAY_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)

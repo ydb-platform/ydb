@@ -445,13 +445,31 @@ def _parse_message(msg, desc, *expected_attr_sets):
     )
 
 
+ESCAPE_EQUALS = "=3D"
+ESCAPE_COMMA = "=2C"
+
+
+def _username_escape(username):
+    return username.replace("=", ESCAPE_EQUALS).replace(",", ESCAPE_COMMA)
+
+
+def _username_unescape(username):
+    for i in (i for i, c in enumerate(username) if c == "="):
+        if username[i : i + 3] not in (ESCAPE_EQUALS, ESCAPE_COMMA):
+            raise ScramException(
+                "An '=' in a username must be followed by '3D', or  '2C'",
+                SERVER_ERROR_INVALID_USERNAME_ENCODING,
+            )
+    return username.replace(ESCAPE_COMMA, ",").replace(ESCAPE_EQUALS, "=")
+
+
 def _get_client_first(username, c_nonce, channel_binding, use_binding):
     try:
         prepped_u = saslprep(username)
     except ScramException as e:
         raise ScramException(e.args[0], SERVER_ERROR_INVALID_USERNAME_ENCODING)
 
-    u = prepped_u.replace("=", "=3D").replace(",", "=2C")
+    u = _username_escape(prepped_u)
 
     bare = ",".join((f"n={u}", f"r={c_nonce}"))
     _, gs2_header = _make_gs2_header(channel_binding, use_binding)
@@ -538,7 +556,7 @@ def _set_client_first(client_first, s_nonce, channel_binding, use_binding):
 
     c_nonce = msg["r"]
     nonce = c_nonce + s_nonce
-    user = msg["n"].replace("=2C", ",").replace("=3D", "=")
+    user = _username_unescape(msg["n"])
 
     return nonce, user, client_first_bare, upgrade_mechanism
 

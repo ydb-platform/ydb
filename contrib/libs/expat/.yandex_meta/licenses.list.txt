@@ -76,6 +76,9 @@
    Copyright (c) 2026      Rosen Penev <rosenp@gmail.com>
    Copyright (c) 2026      Francesco Bertolaccini
    Copyright (c) 2026      Christian Ng <christianrng@berkeley.edu>
+   Copyright (c) 2026      Nick Begg <nick@stunttruck.net>
+   Copyright (c) 2026      Kartik Kenchi <netliomax25@gmail.com>
+   Copyright (c) 2026      Haris Hussain <hextheshadow0x@gmail.com>
    Licensed under the MIT license:
 
 
@@ -99,6 +102,7 @@
    Copyright (c) 2022      Sean McBride <sean@rogue-research.com>
    Copyright (c) 2023      Hanno Böck <hanno@gentoo.org>
    Copyright (c) 2025      Alfonso Gregory <gfunni234@gmail.com>
+   Copyright (c) 2026      Nick Begg <nick@stunttruck.net>
    Licensed under the MIT license:
 
 
@@ -124,6 +128,7 @@
    Copyright (c) 2019      David Loffredo <loffredo@steptools.com>
    Copyright (c) 2020      Boris Kolpackov <boris@codesynthesis.com>
    Copyright (c) 2022      Martin Ettl <ettl.martin78@googlemail.com>
+   Copyright (c) 2026      Nick Begg <nick@stunttruck.net>
    Licensed under the MIT license:
 
 
@@ -219,6 +224,16 @@
    Copyright (c) 2019      Ben Wagner <bungeman@chromium.org>
    Copyright (c) 2019      Vadim Zeitlin <vadim@zeitlins.org>
    Copyright (c) 2026      Matthew Fernandez <matthew.fernandez@gmail.com>
+   Licensed under the MIT license:
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2022 Sebastian Pipping <sebastian@pipping.org>
+   Licensed under the MIT license:
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2026 Nick Begg <nick@stunttruck.net>
    Licensed under the MIT license:
 
 

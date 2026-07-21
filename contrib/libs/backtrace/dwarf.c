@@ -2026,6 +2026,113 @@ read_abbrevs (struct backtrace_state *state, uint64_t abbrev_offset,
   return 0;
 }
 
+/* A cache of abbreviation tables, keyed by their offset in the
+   .debug_abbrev section.  Compilation units may share abbrev tables:
+   tools that rewrite debug info (e.g. dwz, llvm-bolt
+   --update-debug-sections) deduplicate identical tables, which can
+   leave many thousands of units referring to one table.  Without a
+   cache we would parse and allocate that table anew for every unit,
+   multiplying memory usage by orders of magnitude.  The cache owns
+   the parsed abbrevs; units hold shallow copies.  */
+
+struct abbrevs_cache_entry
+{
+  /* The offset of the table in the .debug_abbrev section.  */
+  uint64_t abbrev_offset;
+  /* The parsed table.  */
+  struct abbrevs abbrevs;
+};
+
+/* A growable vector of abbrevs_cache_entry, sorted by
+   abbrev_offset.  */
+
+struct abbrevs_cache
+{
+  /* Memory for the entries.  */
+  struct backtrace_vector vec;
+  /* The number of entries.  */
+  size_t count;
+};
+
+/* Read the abbreviations at ABBREV_OFFSET, using CACHE.  On a cache
+   miss read them with read_abbrevs and add them to the cache.  The
+   abbrevs stored in *ABBREVS are owned by the cache and may be shared
+   with other units; the caller must not free them.  They stay valid
+   until free_abbrevs_cache.  Returns 1 on success, 0 on failure.  */
+
+static int
+read_abbrevs_cached (struct backtrace_state *state, uint64_t abbrev_offset,
+		     const unsigned char *dwarf_abbrev,
+		     size_t dwarf_abbrev_size, int is_bigendian,
+		     backtrace_error_callback error_callback, void *data,
+		     struct abbrevs_cache *cache, struct abbrevs *abbrevs)
+{
+  struct abbrevs_cache_entry *entries;
+  size_t lo;
+  size_t hi;
+  struct abbrevs parsed;
+
+  /* Binary search for ABBREV_OFFSET; if it is not present, LO is the
+     insertion point.  */
+  entries = (struct abbrevs_cache_entry *) cache->vec.base;
+  lo = 0;
+  hi = cache->count;
+  while (lo < hi)
+    {
+      size_t mid;
+
+      mid = lo + (hi - lo) / 2;
+      if (entries[mid].abbrev_offset < abbrev_offset)
+	lo = mid + 1;
+      else if (entries[mid].abbrev_offset > abbrev_offset)
+	hi = mid;
+      else
+	{
+	  *abbrevs = entries[mid].abbrevs;
+	  return 1;
+	}
+    }
+
+  if (!read_abbrevs (state, abbrev_offset, dwarf_abbrev, dwarf_abbrev_size,
+		     is_bigendian, error_callback, data, &parsed))
+    return 0;
+
+  if (backtrace_vector_grow (state, sizeof (struct abbrevs_cache_entry),
+			     error_callback, data, &cache->vec) == NULL)
+    {
+      free_abbrevs (state, &parsed, error_callback, data);
+      return 0;
+    }
+
+  /* Growing the vector may have moved the entries.  */
+  entries = (struct abbrevs_cache_entry *) cache->vec.base;
+  memmove (entries + lo + 1, entries + lo,
+	   (cache->count - lo) * sizeof (struct abbrevs_cache_entry));
+  entries[lo].abbrev_offset = abbrev_offset;
+  entries[lo].abbrevs = parsed;
+  ++cache->count;
+
+  *abbrevs = parsed;
+  return 1;
+}
+
+/* Free the abbrevs held by CACHE.  */
+
+static void
+free_abbrevs_cache (struct backtrace_state *state,
+		    struct abbrevs_cache *cache,
+		    backtrace_error_callback error_callback, void *data)
+{
+  struct abbrevs_cache_entry *entries;
+  size_t i;
+
+  entries = (struct abbrevs_cache_entry *) cache->vec.base;
+  for (i = 0; i < cache->count; i++)
+    free_abbrevs (state, &entries[i].abbrevs, error_callback, data);
+  backtrace_vector_free (state, &cache->vec, error_callback, data);
+  cache->count = 0;
+}
+
 /* Return the abbrev information for an abbrev code.  */
 
 static const struct abbrev *
@@ -2645,6 +2752,7 @@ build_address_map (struct backtrace_state *state,
   struct unit **pu;
   size_t unit_offset = 0;
   struct unit_addrs *pa;
+  struct abbrevs_cache abbrevs_cache;
 
   memset (&addrs->vec, 0, sizeof addrs->vec);
   memset (&unit_vec->vec, 0, sizeof unit_vec->vec);
@@ -2666,6 +2774,7 @@ build_address_map (struct backtrace_state *state,
 
   memset (&units, 0, sizeof units);
   units_count = 0;
+  memset (&abbrevs_cache, 0, sizeof abbrevs_cache);
 
   while (info.left > 0)
     {
@@ -2732,10 +2841,11 @@ build_address_map (struct backtrace_state *state,
 
       memset (&u->abbrevs, 0, sizeof u->abbrevs);
       abbrev_offset = read_offset (&unit_buf, is_dwarf64);
-      if (!read_abbrevs (state, abbrev_offset,
-			 dwarf_sections->data[DEBUG_ABBREV],
-			 dwarf_sections->size[DEBUG_ABBREV],
-			 is_bigendian, error_callback, data, &u->abbrevs))
+      if (!read_abbrevs_cached (state, abbrev_offset,
+				dwarf_sections->data[DEBUG_ABBREV],
+				dwarf_sections->size[DEBUG_ABBREV],
+				is_bigendian, error_callback, data,
+				&abbrevs_cache, &u->abbrevs))
 	goto fail;
 
       if (version < 5)
@@ -2799,19 +2909,22 @@ build_address_map (struct backtrace_state *state,
   pa->high = pa->low;
   pa->u = NULL;
 
+  /* The units hold shallow copies of the cached abbrevs; the abbrevs
+     themselves are intentionally never freed after this point.
+     Release just the cache bookkeeping vector.  */
+  backtrace_vector_free (state, &abbrevs_cache.vec, error_callback, data);
+
   unit_vec->vec = units;
   unit_vec->count = units_count;
   return 1;
 
  fail:
+  free_abbrevs_cache (state, &abbrevs_cache, error_callback, data);
   if (units_count > 0)
     {
       pu = (struct unit **) units.base;
       for (i = 0; i < units_count; i++)
-	{
-	  free_abbrevs (state, &pu[i]->abbrevs, error_callback, data);
-	  backtrace_free (state, pu[i], sizeof **pu, error_callback, data);
-	}
+	backtrace_free (state, pu[i], sizeof **pu, error_callback, data);
       backtrace_vector_free (state, &units, error_callback, data);
     }
   if (addrs->count > 0)

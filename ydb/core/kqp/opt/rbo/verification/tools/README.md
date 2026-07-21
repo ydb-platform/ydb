@@ -93,9 +93,25 @@ kqp_rbo_bisect \
   --verifier /path/to/kqp_rbo_verify \
   --solver /path/to/z3 \
   --artifacts /tmp/q96-rule-prefixes \
-  -- /path/to/capture-harness --query /path/to/q96.sql
+  -- /path/to/kqp_rbo_prefix_capture \
+     --schema /path/to/tpcds.sql \
+     --query /path/to/q96.yql \
+     --benchmark-column-store
 ```
 
-The localizer and its protocol tests are executable now. A production capture
-command that maps the optimizer hook results to this manifest is still required
-before it can inspect real query prefixes from the command line.
+`kqp_rbo_prefix_capture` creates an isolated in-process YDB, executes the schema,
+and prepares the query exactly once with the new RBO enabled and fallback
+disabled. `--benchmark-column-store` applies the same column-store schema
+rewrite and query prelude as the TPCH/TPC-DS coverage dashboard. Input files
+must be nonempty regular files. The artifact directory must be new or empty;
+the command refuses to overwrite any artifact and writes `capture.json` last as
+the commit marker.
+
+The capture command currently numbers committed `TRuleBasedStage` applications.
+Constant folding and final hash-function propagation are mutating atomic stages,
+not rules, and are not yet represented in that sequence. A final failure after
+hash propagation is conservatively a global suffix failure. Constant folding
+can occur between numbered applications, so an apparent first failing rule
+prefix must currently be read as an interval that may include the preceding
+constant-fold stage. The next protocol revision will add explicit transformation
+event kinds and atomic-stage checkpoints before exact blame is claimed.

@@ -10,8 +10,10 @@ The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
 M4. Separate normalized-plan, concrete-counterexample inspection, and isolated
-real-YDB replay tools are also implemented. Hermetic solver packaging and rule
-bisection remain future milestones.
+real-YDB replay tools are also implemented. A real-host rule-prefix capture
+command and sequential localizer are implemented outside the verifier kernel.
+Hermetic solver packaging and complete localization of mutating non-rule stages
+remain future milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -279,6 +281,7 @@ Build the Ya-owned CLI with:
 ```bash
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/bin
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/inspect_bin
+./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/prefix_capture/bin
 ```
 
 ## CLI
@@ -316,6 +319,9 @@ contract. Every result, including errors, carries
 optimizer prefix, not a whole start-to-finish verdict. A standalone sequential
 localizer drives this mode because equivalence is not monotonic across rule
 applications and therefore cannot be bisected soundly with binary search.
+`kqp_rbo_prefix_capture` supplies the real-host capture side of that protocol;
+see [tools/README.md](tools/README.md) for its strict artifact contract and the
+complete localizer invocation.
 
 ## Plan and counterexample inspection
 

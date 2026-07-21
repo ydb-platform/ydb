@@ -21,6 +21,7 @@ RECURSE_FOR_TESTS(
     cpp_ut
     inspect_ut
     integration_ut
+    prefix_capture/ut
     replay_ut
     ut
 )
@@ -30,6 +31,8 @@ RECURSE(
     bisect_bin
     inspect_bin
     inspector
+    prefix_capture
+    prefix_capture/bin
     replay
     replay_bin
     tools

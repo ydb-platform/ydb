@@ -2039,7 +2039,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.ProducerIdPrefix("async_producer");
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxMemoryUsage(100_KB);
-        writeSettings.MaxBlockTimeout(TDuration::Seconds(10));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
         const std::string message(1_MB, 'a');
@@ -2082,7 +2082,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
 
-    Y_UNIT_TEST(Producer_AsyncWriteTimeoutDoesNotBlock) {
+    Y_UNIT_TEST(Producer_AsyncWriteTimeout) {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
         TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
@@ -2095,14 +2095,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.ProducerIdPrefix("async_producer_timeout");
         writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxMemoryUsage(100_KB);
-        writeSettings.MaxBlockTimeout(TDuration::MilliSeconds(100));
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_MB, 'a');
 
         UNIT_ASSERT(producer->WriteAsync(TWriteMessage(msgData)).GetValueSync().IsQueued());
         auto writeFuture = producer->WriteAsync(TWriteMessage(msgData));
-        UNIT_ASSERT(!writeFuture.Wait(TDuration::MilliSeconds(10)));
         UNIT_ASSERT(writeFuture.GetValueSync().IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }

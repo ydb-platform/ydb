@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable, TypeAlias
 
 from . import smt
 from .ir import (
@@ -17,6 +18,7 @@ from .ir import (
 from .relation import (
     Database,
     Evaluator as RelationEvaluator,
+    NodeObserver,
     Relation,
     RelationFamily,
     Row,
@@ -39,6 +41,9 @@ class StageError(ValueError):
 @dataclass(frozen=True, slots=True)
 class Partitions:
     relations: tuple[RelationFamily, ...]
+
+
+EdgeObserver: TypeAlias = Callable[[StageEdge, int, RelationFamily], None]
 
 
 class Router:
@@ -84,6 +89,8 @@ class Evaluator:
         database: Database,
         scalar: ScalarEncoder,
         router: Router,
+        node_observer: NodeObserver | None = None,
+        edge_observer: EdgeObserver | None = None,
     ) -> None:
         if snapshot.stage_graph is None:
             raise StageError("snapshot has no StageGraph")
@@ -92,6 +99,8 @@ class Evaluator:
         self.database = database
         self.scalar = scalar
         self.router = router
+        self.node_observer = node_observer
+        self.edge_observer = edge_observer
         self.schemas = validate_snapshot(snapshot)
         self.task_counts = stage_task_counts(snapshot)
         self.stages = self.graph.stage_map()
@@ -145,7 +154,11 @@ class Evaluator:
             parallel_offset = 0
             for edge in edges:
                 source = self.outputs[(edge.producer, edge.producer_output)]
-                inputs.append(self._connect(edge, source, task_count, parallel_offset))
+                connected = self._connect(edge, source, task_count, parallel_offset)
+                inputs.append(connected)
+                if self.edge_observer is not None:
+                    for task, family in enumerate(connected.relations):
+                        self.edge_observer(edge, task, family)
                 if edge.kind == "union_all" and edge.parallel:
                     parallel_offset = (parallel_offset + len(source.relations)) % task_count
             slots = stage_input_slots(self.snapshot.plan, stage)
@@ -159,6 +172,7 @@ class Evaluator:
                         for ordinal, (parent, child, _) in enumerate(slots)
                     },
                     choice_scope=f"stage:{stage.id}:task:{task}",
+                    node_observer=self.node_observer,
                 )
                 for task in range(task_count)
             ]
@@ -178,6 +192,7 @@ class Evaluator:
             self.scalar,
             choice_scope=f"stage:{stage.id}:task:0",
             defer_pushed_limits=True,
+            node_observer=self.node_observer if stage.source_storage is None else None,
         )
         if stage.source_storage is None:
             return {
@@ -229,6 +244,7 @@ class Evaluator:
                 node_overrides={scan.id: partition},
                 choice_scope=f"stage:{stage.id}:task:{task}",
                 defer_pushed_limits=True,
+                node_observer=self.node_observer,
             )
             for task, partition in enumerate(scan_partitions)
         )

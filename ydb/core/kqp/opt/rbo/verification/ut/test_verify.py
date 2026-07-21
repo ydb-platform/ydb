@@ -722,6 +722,39 @@ class SolverProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(SolverError, "SAT and one get-value response"):
             verifier._get_values("sat\n((v_0 true))\nsat\n")
 
+    def test_model_unknown_does_not_hide_solver_protocol_errors(self):
+        script = smt.Script()
+        requested = script.fresh_constant("requested", smt.BOOL)
+        first = subprocess.CompletedProcess(["z3"], 0, "sat\n", "")
+        malformed = (
+            subprocess.CompletedProcess(["z3"], 1, "unknown\n", "fatal\n"),
+            subprocess.CompletedProcess(["z3"], 0, "unknown\nsat\n", ""),
+        )
+        for second in malformed:
+            with self.subTest(second=second):
+                with mock.patch.object(verifier, "_run_solver", side_effect=[first, second]):
+                    with self.assertRaises(SolverError):
+                        verifier.query_solver(Problem(script, {}), "z3", (requested,))
+
+    def test_model_unknown_preserves_the_confirmed_counterexample(self):
+        script = smt.Script()
+        present = script.fresh_constant("present", smt.BOOL)
+        problem = Problem(script, {"A": (relation_model.WitnessRow(present, {}),)})
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+            subprocess.CompletedProcess(
+                ["z3"],
+                1,
+                'unknown\n(error "model is not available")\n',
+                "",
+            ),
+        ]
+        with mock.patch.object(verifier, "_run_solver", side_effect=responses):
+            result = solve(problem, "z3", 1)
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertIsNone(result.witness)
+        self.assertIn("model", result.reason)
+
     def test_schema_mismatch_is_a_correctness_verdict(self):
         output = io.StringIO()
         with (

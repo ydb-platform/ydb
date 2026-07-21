@@ -5,13 +5,29 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Iterable, Mapping, TypeAlias
 
 from . import smt
 from .ir import Snapshot
-from .relation import Database, Evaluator, RelationError, WitnessRow, family_equal
+from .relation import (
+    Database,
+    Evaluator,
+    FamilyComparison,
+    NodeObserver,
+    RelationError,
+    RelationFamily,
+    WitnessRow,
+    compare_families,
+    family_equal,
+)
 from .scalar import Encoder as ScalarEncoder
-from .stages import TASKS, Evaluator as StageEvaluator, Router, StageError
+from .stages import (
+    TASKS,
+    EdgeObserver,
+    Evaluator as StageEvaluator,
+    Router,
+    StageError,
+)
 from .types import family
 
 
@@ -27,21 +43,27 @@ class SolverError(RuntimeError):
     pass
 
 
+BoundaryObserver: TypeAlias = Callable[[str, RelationFamily], None]
+ComparisonObserver: TypeAlias = Callable[[FamilyComparison], None]
+
+
 @dataclass(frozen=True, slots=True)
 class Problem:
     script: smt.Script
     witness: Mapping[str, tuple[WitnessRow, ...]]
 
-    def formula(self, include_witness_values: bool = False) -> str:
+    def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
-        if include_witness_values:
-            for rows in self.witness.values():
-                for row in rows:
-                    values.append(row.present)
-                    for cell in row.cells.values():
-                        if cell.is_null.operation == "symbol":
-                            values.append(cell.is_null)
-                        values.append(cell.value)
+        for rows in self.witness.values():
+            for row in rows:
+                values.append(row.present)
+                for cell in row.cells.values():
+                    if cell.is_null.operation == "symbol":
+                        values.append(cell.is_null)
+                    values.append(cell.value)
+        return tuple(values)
+
+    def formula(self, values: Iterable[smt.Term] = ()) -> str:
         return self.script.render(values)
 
 
@@ -66,14 +88,38 @@ class Result:
         return result
 
 
+@dataclass(frozen=True, slots=True)
+class SolverQuery:
+    status: str
+    values: Mapping[str, bool | int | str]
+    reason: str | None = None
+    phase: str = "check"
+
+
 def build_problem(
     before: Snapshot,
     after: Snapshot,
     row_bound: int,
     timeout_ms: int | None = None,
+    *,
+    before_node_observer: NodeObserver | None = None,
+    after_node_observer: NodeObserver | None = None,
+    after_edge_observer: EdgeObserver | None = None,
+    boundary_observer: BoundaryObserver | None = None,
+    comparison_observer: ComparisonObserver | None = None,
 ) -> Problem:
     _check_boundary_roles(before, after)
-    return _build_problem(before, after, row_bound, timeout_ms)
+    return _build_problem(
+        before,
+        after,
+        row_bound,
+        timeout_ms,
+        before_node_observer,
+        after_node_observer,
+        after_edge_observer,
+        boundary_observer,
+        comparison_observer,
+    )
 
 
 def build_logical_kernel_problem_for_tests(
@@ -87,7 +133,17 @@ def build_logical_kernel_problem_for_tests(
         raise VerificationError(
             "logical-kernel test comparisons require stage_graph:null on both snapshots"
         )
-    return _build_problem(before, after, row_bound, timeout_ms)
+    return _build_problem(
+        before,
+        after,
+        row_bound,
+        timeout_ms,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
 
 
 def _build_problem(
@@ -95,6 +151,11 @@ def _build_problem(
     after: Snapshot,
     row_bound: int,
     timeout_ms: int | None,
+    before_node_observer: NodeObserver | None,
+    after_node_observer: NodeObserver | None,
+    after_edge_observer: EdgeObserver | None,
+    boundary_observer: BoundaryObserver | None,
+    comparison_observer: ComparisonObserver | None,
 ) -> Problem:
     _check_catalogs(before, after)
     if len(before.plan.output) != len(after.plan.output):
@@ -120,16 +181,49 @@ def _build_problem(
     router = Router(script)
     try:
         before_family = (
-            Evaluator(before, database, scalar, choice_scope="before:logical").root()
+            Evaluator(
+                before,
+                database,
+                scalar,
+                choice_scope="before:logical",
+                node_observer=before_node_observer,
+            ).root()
             if before.stage_graph is None
-            else StageEvaluator(before, database, scalar, router).root()
+            else StageEvaluator(
+                before,
+                database,
+                scalar,
+                router,
+                node_observer=before_node_observer,
+            ).root()
         )
         after_family = (
-            Evaluator(after, database, scalar, choice_scope="after:logical").root()
+            Evaluator(
+                after,
+                database,
+                scalar,
+                choice_scope="after:logical",
+                node_observer=after_node_observer,
+            ).root()
             if after.stage_graph is None
-            else StageEvaluator(after, database, scalar, router).root()
+            else StageEvaluator(
+                after,
+                database,
+                scalar,
+                router,
+                node_observer=after_node_observer,
+                edge_observer=after_edge_observer,
+            ).root()
         )
-        equivalent = family_equal(before_family, after_family, scalar)
+        if boundary_observer is not None:
+            boundary_observer("before", before_family)
+            boundary_observer("after", after_family)
+        if comparison_observer is None:
+            equivalent = family_equal(before_family, after_family, scalar)
+        else:
+            comparison = compare_families(before_family, after_family, scalar)
+            comparison_observer(comparison)
+            equivalent = comparison.equivalent
     except (RelationError, StageError) as error:
         raise VerificationError(str(error)) from error
     script.assert_(smt.not_(equivalent))
@@ -147,36 +241,74 @@ def _check_boundary_roles(before: Snapshot, after: Snapshot) -> None:
         )
 
 
-def solve(problem: Problem, solver: str | Path, row_bound: int, timeout_ms: int | None = None) -> Result:
+def query_solver(
+    problem: Problem,
+    solver: str | Path,
+    requested_values: Iterable[smt.Term] = (),
+    timeout_ms: int | None = None,
+) -> SolverQuery:
+    requested = tuple(requested_values)
     first = _run_solver(solver, problem.formula(), timeout_ms)
     _ensure_clean(first)
     status = _single_status(first)
-    if status == "unsat":
-        return Result("VERIFIED_BOUNDED", row_bound)
     if status == "unknown":
         reason = first.stderr.strip() or "solver returned unknown"
-        return Result("UNKNOWN", row_bound, reason=reason)
+        return SolverQuery(status, {}, reason)
+    if status == "unsat" or not requested:
+        return SolverQuery(status, {})
     if status != "sat":
         raise SolverError(_diagnostic(first))
 
+    second = _run_solver(solver, problem.formula(requested), timeout_ms)
+    responses = _responses(second.stdout)
+    if responses and responses[0] == "unknown":
+        return SolverQuery(
+            "unknown",
+            {},
+            _model_unknown_reason(second, responses),
+            "model",
+        )
+    _ensure_clean(second)
+    return SolverQuery("sat", _get_values(second.stdout))
+
+
+def solve(
+    problem: Problem,
+    solver: str | Path,
+    row_bound: int,
+    timeout_ms: int | None = None,
+) -> Result:
+    query = query_solver(problem, solver, problem.witness_values(), timeout_ms)
+    if query.status == "unsat":
+        return Result("VERIFIED_BOUNDED", row_bound)
+    if query.status == "unknown":
+        if query.phase == "model":
+            return Result("COUNTEREXAMPLE", row_bound, reason=query.reason)
+        return Result("UNKNOWN", row_bound, reason=query.reason)
+    if query.status != "sat":
+        raise SolverError(f"unexpected solver status {query.status!r}")
+
     if not any(problem.witness.values()):
         return Result("COUNTEREXAMPLE", row_bound, witness={})
-    second = _run_solver(solver, problem.formula(include_witness_values=True), timeout_ms)
-    _ensure_clean(second)
-    values = _get_values(second.stdout)
     return Result(
         "COUNTEREXAMPLE",
         row_bound,
-        witness=_decode_witness(problem.witness, values, problem.script.string_literals),
+        witness=decode_witness(problem.witness, query.values, problem.script.string_literals),
     )
 
 
 def _check_catalogs(before: Snapshot, after: Snapshot) -> None:
     if before.tables != after.tables:
-        raise VerificationError("before and after snapshots do not have the same ordered table schema")
+        raise VerificationError(
+            "before and after snapshots do not have the same ordered table schema"
+        )
 
 
-def _run_solver(solver: str | Path, formula: str, timeout_ms: int | None) -> subprocess.CompletedProcess[str]:
+def _run_solver(
+    solver: str | Path,
+    formula: str,
+    timeout_ms: int | None,
+) -> subprocess.CompletedProcess[str]:
     process_timeout = None if timeout_ms is None else timeout_ms / 1000.0 + 5.0
     try:
         return subprocess.run(
@@ -213,6 +345,36 @@ def _single_status(process: subprocess.CompletedProcess[str]) -> str:
     return responses[0]
 
 
+def _model_unknown_reason(
+    process: subprocess.CompletedProcess[str],
+    responses: list[smt.SExpr],
+) -> str:
+    """Accept only a clean UNKNOWN or the expected unavailable-model error."""
+
+    if process.stderr.strip():
+        raise SolverError(_diagnostic(process))
+    trailing = responses[1:]
+    clean_unknown = process.returncode == 0 and not trailing
+    unavailable_model = (
+        process.returncode in {0, 1}
+        and len(trailing) == 1
+        and isinstance(trailing[0], list)
+        and len(trailing[0]) == 2
+        and trailing[0][0] == "error"
+        and isinstance(trailing[0][1], str)
+        and "model" in trailing[0][1].lower()
+        and (
+            "not available" in trailing[0][1].lower()
+            or "unavailable" in trailing[0][1].lower()
+        )
+    )
+    if not clean_unknown and not unavailable_model:
+        raise SolverError(
+            "unexpected response while extracting a SAT model: " + _diagnostic(process)
+        )
+    return "counterexample found, but solver returned unknown while extracting its model"
+
+
 def _diagnostic(process: subprocess.CompletedProcess[str]) -> str:
     return (
         f"solver exited with code {process.returncode}; "
@@ -233,7 +395,7 @@ def _get_values(output: str) -> dict[str, bool | int | str]:
     return result
 
 
-def _term_value(term: smt.Term, values: Mapping[str, bool | int | str]) -> bool | int | str:
+def term_value(term: smt.Term, values: Mapping[str, bool | int | str]) -> bool | int | str:
     if term.operation == "symbol":
         assert isinstance(term.atom, str)
         try:
@@ -246,7 +408,7 @@ def _term_value(term: smt.Term, values: Mapping[str, bool | int | str]) -> bool 
     raise SolverError(f"cannot decode non-constant witness term {term.render()}")
 
 
-def _decode_witness(
+def decode_witness(
     witness: Mapping[str, tuple[WitnessRow, ...]],
     values: Mapping[str, bool | int | str],
     string_literals: Mapping[int, str],
@@ -255,16 +417,16 @@ def _decode_witness(
     for table, rows in witness.items():
         present_rows: list[dict[str, Any]] = []
         for row in rows:
-            if _term_value(row.present, values) is not True:
+            if term_value(row.present, values) is not True:
                 continue
             decoded: dict[str, Any] = {}
             for name, cell in row.cells.items():
-                if _term_value(cell.is_null, values) is True:
+                if term_value(cell.is_null, values) is True:
                     decoded[name] = None
                 else:
-                    raw_value = _term_value(cell.value, values)
+                    raw_value = term_value(cell.value, values)
                     decoded[name] = (
-                        _string_witness(raw_value, string_literals)
+                        decode_string_atom(raw_value, string_literals)
                         if family(cell.type) == "string"
                         else raw_value
                     )
@@ -273,7 +435,7 @@ def _decode_witness(
     return result
 
 
-def _string_witness(value: bool | int | str, literals: Mapping[int, str]) -> str:
+def decode_string_atom(value: bool | int | str, literals: Mapping[int, str]) -> str:
     if not isinstance(value, int) or isinstance(value, bool):
         raise SolverError(f"string atom is not an integer: {value!r}")
     if value in literals:

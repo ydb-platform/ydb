@@ -222,3 +222,15 @@ LIBTIFF_4.6.1 {
 LIBTIFF_4.7.1 {
     TIFFOpenOptionsSetWarnAboutUnknownTags;
 } LIBTIFF_4.6.1;
+
+LIBTIFF_4.7.2 {
+    _TIFFAdd64;
+    _TIFFAddSSize;
+    _TIFFCastUInt64ToSSize;
+    _TIFFCastUInt64ToUInt32;
+    _TIFFComputeBitOffset;
+    _TIFFComputeRowOffset;
+    _TIFFComputeRowSize64;
+    _TIFFMultiplySSize;
+    TIFFGetMaxCompressionRatio;
+} LIBTIFF_4.7.1;

@@ -490,6 +490,13 @@ INode::TPtr CreateEncodingsListSettings(const TVector<TEncoding>& columnEncoding
     return encodingsList;
 }
 
+INode::TPtr CreateGeneratedValue(const TGeneratedColumn& generated, TPosition pos, const INode& node) {
+    const ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
+    auto contextText = BuildQuotedAtom(pos, generated.ContextPrefix, flags);
+    auto exprText = BuildQuotedAtom(pos, generated.ExprBody, flags);
+    return node.Q(node.Y(contextText, exprText, node.Q(generated.Stored ? "stored" : "virtual")));
+}
+
 } // namespace
 
 class TPrepTableKeys: public ITableKeys {
@@ -1357,6 +1364,11 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
+                if (col.Generated) {
+                    auto generatedValue = CreateGeneratedValue(*col.Generated, Pos_, *this);
+                    columnConstraints = L(columnConstraints, Q(Y(Q("generated"), generatedValue)));
+                }
+
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
                 if (col.Compression) {
@@ -1713,6 +1725,11 @@ public:
                     }
 
                     columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                }
+
+                if (col.Generated) {
+                    auto generatedValue = CreateGeneratedValue(*col.Generated, Pos_, *this);
+                    columnConstraints = L(columnConstraints, Q(Y(Q("generated"), generatedValue)));
                 }
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));

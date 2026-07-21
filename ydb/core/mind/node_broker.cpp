@@ -151,6 +151,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << MaxStaticId << Endl
                 << "  MaxDynamicNodeId: " << MaxDynamicId << Endl
                 << "  EpochDuration: " << Committed.EpochDuration << Endl
+                << "  LeaseDuration: " << Committed.LeaseDuration << Endl
+                << "  EnableNodeBrokerLongLease: " << (EnableLongLease ? "true" : "false") << Endl
                 << "  StableNodeNamePrefix: " << Committed.StableNodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : Committed.BannedIds)
@@ -232,6 +234,7 @@ void TNodeBroker::TState::ClearState()
     Nodes.clear();
     ExpiredNodes.clear();
     RemovedNodes.clear();
+    DeadNodesCount = 0;
     Hosts.clear();
 
     RecomputeFreeIds();
@@ -295,6 +298,9 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
             }
             Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId);
             Nodes.emplace(info.NodeId, info);
+            if (info.Liveness == ENodeLiveness::Dead) {
+                ++DeadNodesCount;
+            }
             break;
         case ENodeState::Expired:
             YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNode: added expired node",
@@ -329,6 +335,9 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
     node.ExpireV2 = Epoch.NextEnd + LeaseDuration;
 
     node.AliveUntil = Epoch.NextEnd;
+    if (node.Liveness == ENodeLiveness::Dead) {
+        --DeadNodesCount;
+    }
     node.Liveness = ENodeLiveness::Alive;
 
     YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::ExtendLease: extended node lease",
@@ -348,6 +357,9 @@ void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
     node.ExpireV2 = TInstant::Max();
 
     node.AliveUntil = TInstant::Max();
+    if (node.Liveness == ENodeLiveness::Dead) {
+        --DeadNodesCount;
+    }
     node.Liveness = ENodeLiveness::Alive;
 
     YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::FixNodeId: fixed node ID",
@@ -506,7 +518,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     info.SetExpireV2(node.ExpireV2.GetValue());
-    info.SetLiveness(static_cast<ui32>(node.Liveness));
+    info.SetLiveness(static_cast<NKikimrNodeBroker::ELiveness>(node.Liveness));
     node.Location.Serialize(info.MutableLocation(), false);
     FillNodeName(node.SlotIndex, info);
 }
@@ -559,6 +571,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
             {"nodeId", it->second.IdString()});
 
         Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
+        if (it->second.Liveness == ENodeLiveness::Dead) {
+            --DeadNodesCount;
+        }
         it->second.State = ENodeState::Expired;
         it->second.Version = diff.NewEpoch.Version;
         ExpiredNodes.emplace(id, std::move(it->second));
@@ -572,6 +587,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     LogPrefix() << " Node " << it->second.IdString() << " is marked as dead");
 
+        if (it->second.Liveness != ENodeLiveness::Dead) {
+            ++DeadNodesCount;
+        }
         it->second.Liveness = ENodeLiveness::Dead;
         it->second.Version = diff.NewEpoch.Version;
     }
@@ -843,6 +861,7 @@ void TNodeBroker::UpdateCommittedStateCounters() {
     TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
     TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
     TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_DEAD_NODES].Set(Committed.DeadNodesCount);
     TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
 }
 
@@ -1954,7 +1973,7 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
     serialized.SetExpire(Expire.MicroSeconds());
     serialized.SetExpireV2(ExpireV2.MicroSeconds());
     serialized.SetAliveUntil(AliveUntil.MicroSeconds());
-    serialized.SetLiveness(static_cast<ui32>(Liveness));
+    serialized.SetLiveness(static_cast<NKikimrNodeBroker::ELiveness>(Liveness));
     Location.Serialize(serialized.MutableLocation(), false);
     serialized.MutableServicedSubDomain()->CopyFrom(ServicedSubDomain);
     if (SlotIndex.has_value()) {

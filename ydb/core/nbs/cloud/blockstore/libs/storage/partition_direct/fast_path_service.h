@@ -112,7 +112,7 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    void RequestAddHost(size_t directBlockGroupId) override;
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
     ui64 GenerateLsn() override;
 
@@ -142,5 +142,11 @@ private:
         std::optional<ui64> safeBarrier);
     void FinishPBufferCleanup();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

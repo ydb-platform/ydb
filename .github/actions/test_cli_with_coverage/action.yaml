@@ -132,12 +132,15 @@ runs:
         BASE_COVERAGE_JSON="$BASE_OUT/coverage_summary.json"
         PR_COVERAGE_JSON="$PR_OUT/coverage_summary.json"
 
+        # Run coverage on base while checked out there, but extract only after
+        # returning to MERGE_HEAD: aggregate_cli_coverage.py / compare_coverage.py
+        # live on the PR branch and are absent on main (same pattern as SDK).
         git fetch origin "$BASE_REF"
         git checkout "origin/$BASE_REF"
         run_cli_coverage "$BASE_OUT"
-        extract_cli_coverage "$BASE_OUT" "$BASE_COVERAGE_JSON"
 
         git checkout "$MERGE_HEAD"
+        extract_cli_coverage "$BASE_OUT" "$BASE_COVERAGE_JSON"
         run_cli_coverage "$PR_OUT"
         extract_cli_coverage "$PR_OUT" "$PR_COVERAGE_JSON"
 

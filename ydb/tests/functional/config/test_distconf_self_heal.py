@@ -271,11 +271,6 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
 # updated by dynamic ReplaceConfig calls. So both "allowed nodes" and "automatic management"
 # options below are configured via self_management_extra_options (baked into the initial YAML
 # config before cluster start), not via runtime config replacement.
-CONFIG_FIELD_MAP = {
-    "StateStorage": ("automatic_state_storage_management", "state_storage_self_heal_allowed_nodes"),
-    "StateStorageBoard": ("automatic_state_storage_board_management", "state_storage_board_self_heal_allowed_nodes"),
-    "SchemeBoard": ("automatic_scheme_board_management", "scheme_board_self_heal_allowed_nodes"),
-}
 
 
 class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):

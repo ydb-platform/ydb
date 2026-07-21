@@ -4,6 +4,7 @@ PY_SRCS(
     rbo_verifier/__init__.py
     rbo_verifier/__main__.py
     rbo_verifier/cli.py
+    rbo_verifier/decimal.py
     rbo_verifier/ir.py
     rbo_verifier/relation.py
     rbo_verifier/scalar.py

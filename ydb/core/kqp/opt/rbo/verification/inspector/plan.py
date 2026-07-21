@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable, Iterable
 from typing import TypeVar
 
-from ..rbo_verifier import ir
+from ..rbo_verifier import decimal, ir
 
 
 T = TypeVar("T")
@@ -61,6 +61,8 @@ def render_expression(expression: ir.Expr) -> str:
     if kind == "literal":
         scalar_type = str(_required(expression.result_type, "type"))
         value = _required(expression.value, "value")
+        if isinstance(value, decimal.Literal):
+            value = decimal.literal_json(value)
         return f"literal(type={_quote(scalar_type)}, value={json.dumps(value, ensure_ascii=True)})"
     if kind == "null":
         scalar_type = str(_required(expression.result_type, "type"))

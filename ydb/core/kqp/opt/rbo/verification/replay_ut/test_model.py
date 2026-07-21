@@ -6,10 +6,12 @@ import json
 import subprocess
 import tempfile
 import unittest
+
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import snapshot_digest
 from ydb.core.kqp.opt.rbo.verification.replay import cli as replay_cli
@@ -299,6 +301,49 @@ class ValueRenderingTest(unittest.TestCase):
         self.assertEqual(data["raw"], base64.b64encode("é".encode()).decode())
         self.assertEqual(data["day"], "1970-01-01")
         self.assertEqual(data["amount"], "-0.07")
+
+    def test_import_preserves_decimal_special_values(self):
+        columns = [
+            {"name": "id", "type": "Uint64", "nullable": False},
+            {"name": "amount", "type": "Decimal(5,2)", "nullable": False},
+        ]
+        before = snapshot(False, columns=columns)
+        after = snapshot(True, columns=columns)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+        for value, expected in (
+            (-decimal.INF, "-inf"),
+            (decimal.INF, "inf"),
+            (decimal.NAN, "nan"),
+        ):
+            with self.subTest(value=value):
+                case = prepared(
+                    before,
+                    after,
+                    trace(rows=[{"id": 1, "amount": value}], columns=columns),
+                    query,
+                )
+                rendered = json.loads(render_import(case.tables[0]))
+                self.assertEqual(rendered["amount"], expected)
+
+    def test_replay_rejects_decimal_error_codes(self):
+        columns = [
+            {"name": "id", "type": "Uint64", "nullable": False},
+            {"name": "amount", "type": "Decimal(5,2)", "nullable": False},
+        ]
+        before = snapshot(False, columns=columns)
+        after = snapshot(True, columns=columns)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+        for value in (-decimal.INF - 1, decimal.NAN + 1):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ReplayError,
+                "outside Decimal",
+            ):
+                prepared(
+                    before,
+                    after,
+                    trace(rows=[{"id": 1, "amount": value}], columns=columns),
+                    query,
+                )
 
 
 class ResultTest(unittest.TestCase):

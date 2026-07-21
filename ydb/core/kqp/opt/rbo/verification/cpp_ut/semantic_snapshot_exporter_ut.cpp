@@ -17,7 +17,9 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
+#include <algorithm>
 #include <initializer_list>
 #include <limits>
 #include <stdexcept>
@@ -410,6 +412,19 @@ const TTypeAnnotationNode* ScalarType(
     return nullable ? ctx.ExprCtx.MakeType<TOptionalExprType>(result) : result;
 }
 
+const TTypeAnnotationNode* DecimalType(
+    TExportTestContext& ctx,
+    TStringBuf precision,
+    TStringBuf scale,
+    bool nullable = false)
+{
+    const TTypeAnnotationNode* result = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+        NUdf::EDataSlot::Decimal,
+        precision,
+        scale);
+    return nullable ? ctx.ExprCtx.MakeType<TOptionalExprType>(result) : result;
+}
+
 TExprNode::TPtr TypedMember(
     TExportTestContext& ctx,
     TStringBuf name,
@@ -434,6 +449,25 @@ TExprNode::TPtr TypedLiteral(
         TPositionHandle(),
         callable,
         {ctx.ExprCtx.NewAtom(TPositionHandle(), value)});
+    literal->SetTypeAnn(type);
+    return literal;
+}
+
+TExprNode::TPtr TypedDecimalLiteral(
+    TExportTestContext& ctx,
+    TStringBuf value,
+    TStringBuf precision,
+    TStringBuf scale,
+    const TTypeAnnotationNode* type)
+{
+    auto literal = ctx.ExprCtx.NewCallable(
+        TPositionHandle(),
+        "Decimal",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), value),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), precision),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), scale),
+        });
     literal->SetTypeAnn(type);
     return literal;
 }
@@ -570,6 +604,99 @@ TExprNode::TPtr MakeOlapComparisonProcess(
         pos,
         ctx.ExprCtx.NewArguments(pos, {argument}),
         filter.Ptr());
+}
+
+TExprNode::TPtr MakeOlapDecimalComparisonProcess(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf column,
+    TStringBuf literal,
+    TStringBuf precision,
+    TStringBuf scale)
+{
+    const auto pos = TPositionHandle();
+    const auto* decimalType = DecimalType(ctx, precision, scale);
+    auto comparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value(operation).Build()
+        .Left<TCoAtom>().Value(column).Build()
+        .Right(TypedDecimalLiteral(
+            ctx,
+            literal,
+            precision,
+            scale,
+            decimalType))
+        .Done();
+
+    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+    const auto filter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+        .Input(TExprBase(argument))
+        .Condition(TExprBase(comparison.Ptr()))
+        .Done();
+    return ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {argument}),
+        filter.Ptr());
+}
+
+struct TDecimalOracleType {
+    ui8 Precision;
+    ui8 Scale;
+};
+
+NYql::NDecimal::TInt128 DecimalOracleCheckBounds(
+    NYql::NDecimal::TInt128 value,
+    ui8 precision)
+{
+    using namespace NYql::NDecimal;
+    if (IsNormal(value, precision)) {
+        return value;
+    }
+    if (IsNan(value)) {
+        return Nan();
+    }
+    return value > 0 ? Inf() : -Inf();
+}
+
+NYql::NDecimal::TInt128 DecimalOracleAlignScale(
+    NYql::NDecimal::TInt128 value,
+    TDecimalOracleType source,
+    ui8 targetScale)
+{
+    using namespace NYql::NDecimal;
+    UNIT_ASSERT_C(source.Scale <= targetScale, "comparison must only increase scale");
+    if (source.Scale == targetScale) {
+        return value;
+    }
+
+    const ui8 delta = targetScale - source.Scale;
+    const ui8 targetPrecision = std::min<ui8>(
+        MaxPrecision,
+        source.Precision + delta);
+    const ui8 targetIntegralDigits = targetPrecision - targetScale;
+    const ui8 sourceIntegralDigits = source.Precision - source.Scale;
+    if (targetIntegralDigits < sourceIntegralDigits) {
+        const ui8 intermediatePrecision = targetIntegralDigits + source.Scale;
+        UNIT_ASSERT_C(
+            intermediatePrecision > 0,
+            "Decimal(0,0) alignment is deliberately unsupported");
+        value = DecimalOracleCheckBounds(value, intermediatePrecision);
+    }
+    return Mul(value, static_cast<TInt128>(GetDivider(delta)));
+}
+
+std::pair<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>
+DecimalOracleAlign(
+    NYql::NDecimal::TInt128 left,
+    TDecimalOracleType leftType,
+    NYql::NDecimal::TInt128 right,
+    TDecimalOracleType rightType)
+{
+    if (leftType.Scale < rightType.Scale) {
+        left = DecimalOracleAlignScale(left, leftType, rightType.Scale);
+    } else if (rightType.Scale < leftType.Scale) {
+        right = DecimalOracleAlignScale(right, rightType, leftType.Scale);
+    }
+    return {left, right};
 }
 
 TSemanticSnapshotExportResult ExportMapExpressionResult(
@@ -929,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(ExportsDecimalNothingAndTypeDescriptor) {
+    Y_UNIT_TEST(ExportsDecimalNothingAndRejectsGeneralDecimalCast) {
         TExportTestContext ctx;
         const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
             NUdf::EDataSlot::Decimal,
@@ -959,7 +1086,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "5",
             "2");
         const auto* optionalCastDecimal = castContext.ExprCtx.MakeType<TOptionalExprType>(castDecimal);
-        const auto castExpression = ExportMapExpression(
+        const auto castResult = ExportMapExpressionResult(
             castContext,
             "a",
             TypedCallable(
@@ -970,9 +1097,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     DecimalDataTypeDescriptor(castContext, "5", "2", castDecimal),
                 },
                 optionalCastDecimal));
-        UNIT_ASSERT_VALUES_EQUAL(castExpression["kind"].GetStringSafe(), "opaque");
-        UNIT_ASSERT_VALUES_EQUAL(castExpression["type"].GetStringSafe(), "Decimal(5,2)");
-        UNIT_ASSERT(castExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT(!castResult.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            castResult.UnsupportedReason,
+            "constant Decimal cast must have a non-nullable Decimal result");
     }
 
     Y_UNIT_TEST(MalformedDecimalTypeDescriptorsFailClosed) {
@@ -1033,26 +1161,556 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(DecimalLiteralFailsClosed) {
-        TExportTestContext ctx;
-        const auto* decimalType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
-            NUdf::EDataSlot::Decimal,
-            "5",
-            "2");
-        const auto result = ExportMapExpressionResult(
-            ctx,
-            "a",
-            TypedCallable(
+    Y_UNIT_TEST(ExportsCanonicalDecimalLiteralsAgainstNDecimal) {
+        struct TCase {
+            TString Input;
+            TString Precision;
+            TString Scale;
+            TString Kind;
+            TString Scaled;
+        };
+        const TVector<TCase> cases = {
+            {"12.340", "5", "2", "finite", "1234"},
+            {"+000.005", "5", "2", "finite", "0"},
+            {"0.015", "5", "2", "finite", "2"},
+            {"-0.015", "5", "2", "finite", "-2"},
+            {"0.995", "2", "2", "pos_inf", ""},
+            {"-0.995", "2", "2", "neg_inf", ""},
+            {"nan", "5", "2", "nan", ""},
+            {"INF", "5", "2", "pos_inf", ""},
+            {"-inf", "5", "2", "neg_inf", ""},
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
                 ctx,
-                "Decimal",
-                {
-                    ctx.ExprCtx.NewAtom(TPositionHandle(), "12.34"),
-                    ctx.ExprCtx.NewAtom(TPositionHandle(), "5"),
-                    ctx.ExprCtx.NewAtom(TPositionHandle(), "2"),
-                },
-                decimalType));
-        UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar callable Decimal");
+                "a",
+                TypedDecimalLiteral(
+                    ctx,
+                    test.Input,
+                    test.Precision,
+                    test.Scale,
+                    DecimalType(ctx, test.Precision, test.Scale)));
+
+            const ui8 precision = FromString<ui8>(test.Precision);
+            const ui8 scale = FromString<ui8>(test.Scale);
+            const auto oracle = NYql::NDecimal::FromString(test.Input, precision, scale);
+            UNIT_ASSERT(!NYql::NDecimal::IsError(oracle));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                TStringBuilder() << "Decimal(" << test.Precision << "," << test.Scale << ")");
+            const auto& value = expression["value"];
+            UNIT_ASSERT_VALUES_EQUAL(value["kind"].GetStringSafe(), test.Kind);
+            if (test.Kind == "finite") {
+                UNIT_ASSERT(NYql::NDecimal::IsNormal(oracle, precision));
+                const TString oracleScaled(
+                    NYql::NDecimal::ToString(
+                        oracle,
+                        NYql::NDecimal::MaxPrecision,
+                        0));
+                UNIT_ASSERT_VALUES_EQUAL(oracleScaled, test.Scaled);
+                UNIT_ASSERT_VALUES_EQUAL(value["scaled"].GetStringSafe(), oracleScaled);
+                UNIT_ASSERT_VALUES_EQUAL(value.GetMapSafe().size(), 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(value.GetMapSafe().size(), 1);
+                if (test.Kind == "nan") {
+                    UNIT_ASSERT(NYql::NDecimal::IsNan(oracle));
+                } else if (test.Kind == "pos_inf") {
+                    UNIT_ASSERT(oracle == NYql::NDecimal::Inf());
+                } else {
+                    UNIT_ASSERT(oracle == -NYql::NDecimal::Inf());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MalformedDecimalLiteralsFailClosed) {
+        for (const TString value : {"", "12.2.3", "+-12", "not-a-decimal"}) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDecimalLiteral(
+                    ctx,
+                    value,
+                    "5",
+                    "2",
+                    DecimalType(ctx, "5", "2")));
+            UNIT_ASSERT_C(!result.IsSupported(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Invalid Decimal(5,2) literal");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDecimalLiteral(
+                    ctx,
+                    "1",
+                    "05",
+                    "2",
+                    DecimalType(ctx, "5", "2")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "invalid precision or scale");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDecimalLiteral(
+                    ctx,
+                    "1",
+                    "5",
+                    "2",
+                    DecimalType(ctx, "6", "2")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "type annotation does not match");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Decimal",
+                    {ctx.ExprCtx.NewAtom(TPositionHandle(), "1")},
+                    DecimalType(ctx, "5", "2")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported Decimal literal callable");
+        }
+    }
+
+    Y_UNIT_TEST(NormalizesCompleteIntegerConstantDecimalCasts) {
+        struct TCase {
+            TString Callable;
+            NUdf::EDataSlot SourceSlot;
+            TString SourceType;
+            TString Input;
+            TString Scaled;
+        };
+        const TVector<TCase> cases = {
+            {"SafeCast", NUdf::EDataSlot::Int32, "Int32", "100", "10000"},
+            {"SafeCast", NUdf::EDataSlot::Int32, "Int32", "-2147483648", "-214748364800"},
+            {"Convert", NUdf::EDataSlot::Uint32, "Uint32", "4000000000", "400000000000"},
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, test.SourceSlot);
+            const auto* decimalType = DecimalType(ctx, "12", "2");
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    test.Callable,
+                    {
+                        TypedLiteral(ctx, test.SourceType, test.Input, sourceType),
+                        DecimalDataTypeDescriptor(ctx, "12", "2", decimalType),
+                    },
+                    decimalType));
+
+            const auto oracle = NYql::NDecimal::FromString(test.Input, 12, 2);
+            UNIT_ASSERT(NYql::NDecimal::IsNormal(oracle, 12));
+            UNIT_ASSERT_VALUES_EQUAL(
+                TString(NYql::NDecimal::ToString(
+                    oracle,
+                    NYql::NDecimal::MaxPrecision,
+                    0)),
+                test.Scaled);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(12,2)");
+            UNIT_ASSERT_VALUES_EQUAL(expression["value"]["kind"].GetStringSafe(), "finite");
+            UNIT_ASSERT_VALUES_EQUAL(expression["value"]["scaled"].GetStringSafe(), test.Scaled);
+        }
+    }
+
+    Y_UNIT_TEST(UnauditedDecimalCastsFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* decimalType = DecimalType(ctx, "12", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        DecimalDataTypeDescriptor(ctx, "12", "2", decimalType),
+                    },
+                    decimalType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "source is not a non-nullable integer literal");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* decimalType = DecimalType(ctx, "11", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedLiteral(ctx, "Int32", "2147483647", sourceType),
+                        DecimalDataTypeDescriptor(ctx, "11", "2", decimalType),
+                    },
+                    decimalType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "cast is not complete");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* decimalType = DecimalType(ctx, "11", "2");
+            const auto* optionalDecimalType = DecimalType(ctx, "11", "2", true);
+            auto optionalDescriptor = TypedCallable(
+                ctx,
+                "OptionalType",
+                {DecimalDataTypeDescriptor(ctx, "11", "2", decimalType)},
+                ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimalType));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedLiteral(ctx, "Int32", "2147483647", sourceType),
+                        std::move(optionalDescriptor),
+                    },
+                    optionalDecimalType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "non-nullable Decimal result");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = DecimalType(ctx, "5", "2");
+            const auto* targetType = DecimalType(ctx, "12", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedDecimalLiteral(ctx, "1", "5", "2", sourceType),
+                        DecimalDataTypeDescriptor(ctx, "12", "2", targetType),
+                    },
+                    targetType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "source is not a non-nullable integer literal");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsQ48DecimalComparisonAndConstantCastShape) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DecimalComparison", {
+            {"d", "Decimal(7,2)", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"d"});
+        const auto* optionalColumnType = DecimalType(ctx, "7", "2", true);
+        const auto* constantType = DecimalType(ctx, "12", "2");
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalBool = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+        SetExactOutputType(ctx, *read, {{"a.d", optionalColumnType}});
+
+        auto cast = TypedCallable(
+            ctx,
+            "SafeCast",
+            {
+                TypedLiteral(ctx, "Int32", "100", intType),
+                DecimalDataTypeDescriptor(ctx, "12", "2", constantType),
+            },
+            constantType);
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TExpression(
+                    TypedCallable(
+                        ctx,
+                        ">=",
+                        {
+                            TypedMember(ctx, "a.d", optionalColumnType),
+                            std::move(cast),
+                        },
+                        optionalBool),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        TOpRoot root(map, TPositionHandle(), {"result"});
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& expression = FindNode(snapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "gte");
+        UNIT_ASSERT_VALUES_EQUAL(expression["left"]["column"].GetStringSafe(), "a.d");
+        UNIT_ASSERT_VALUES_EQUAL(expression["right"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Decimal(12,2)");
+        UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"]["kind"].GetStringSafe(), "finite");
+        UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"]["scaled"].GetStringSafe(), "10000");
+    }
+
+    Y_UNIT_TEST(ExportsAuditedDecimalComparisons) {
+        for (const auto& [callable, kind] : TVector<std::pair<TString, TString>>{
+            {"==", "eq"},
+            {"<", "lt"},
+            {"<=", "lte"},
+            {">", "gt"},
+            {">=", "gte"},
+        }) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1.20",
+                            "5",
+                            "2",
+                            DecimalType(ctx, "5", "2")),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1.201",
+                            "7",
+                            "3",
+                            DecimalType(ctx, "7", "3")),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), kind);
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["value"]["scaled"].GetStringSafe(), "120");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"]["scaled"].GetStringSafe(), "1201");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "!=",
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1",
+                            "5",
+                            "2",
+                            DecimalType(ctx, "5", "2")),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "2",
+                            "5",
+                            "2",
+                            DecimalType(ctx, "5", "2")),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "not");
+            UNIT_ASSERT_VALUES_EQUAL(expression["arg"]["kind"].GetStringSafe(), "eq");
+        }
+
+        for (const bool decimalOnLeft : {false, true}) {
+            TExportTestContext ctx;
+            auto decimal = TypedDecimalLiteral(
+                ctx,
+                "1.25",
+                "5",
+                "2",
+                DecimalType(ctx, "5", "2"));
+            auto integer = TypedLiteral(
+                ctx,
+                "Int32",
+                "2",
+                ScalarType(ctx, NUdf::EDataSlot::Int32));
+            TExprNode::TListType operands;
+            if (decimalOnLeft) {
+                operands = {std::move(decimal), std::move(integer)};
+            } else {
+                operands = {std::move(integer), std::move(decimal)};
+            }
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    ">",
+                    std::move(operands),
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "gt");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "IsNotDistinctFrom",
+                    {
+                        TypedMember(ctx, "a.x", optionalDecimal),
+                        TypedMember(ctx, "a.y", optionalDecimal),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                true);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "eq");
+            UNIT_ASSERT(expression["null_safe"].GetBooleanSafe());
+        }
+    }
+
+    Y_UNIT_TEST(DecimalComparisonTypeAndNullabilityMismatchesFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    ">=",
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1",
+                            "35",
+                            "0",
+                            DecimalType(ctx, "35", "0")),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "0.1",
+                            "35",
+                            "35",
+                            DecimalType(ctx, "35", "35")),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "comparison operand types differ");
+        }
+
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    ">=",
+                    {
+                        TypedLiteral(
+                            ctx,
+                            "Int32",
+                            "1",
+                            ScalarType(ctx, NUdf::EDataSlot::Int32)),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "0.1",
+                            "35",
+                            "35",
+                            DecimalType(ctx, "35", "35")),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "comparison operand types differ");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "==",
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1",
+                            "5",
+                            "2",
+                            DecimalType(ctx, "5", "2")),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1",
+                            "6",
+                            "2",
+                            DecimalType(ctx, "6", "2")),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool, true)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "inconsistent nullability");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "IsNotDistinctFrom",
+                    {
+                        TypedMember(ctx, "a.x", optionalDecimal),
+                        TypedMember(ctx, "a.y", DecimalType(ctx, "6", "2", true)),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "exactly the same type");
+        }
+    }
+
+    Y_UNIT_TEST(DecimalComparisonOracleCoversSpecialsAndScaleSaturation) {
+        using namespace NYql::NDecimal;
+
+        const auto [q48Left, q48Right] = DecimalOracleAlign(
+            FromString("100.00", 7, 2),
+            {7, 2},
+            FromString("100", 12, 2),
+            {12, 2});
+        UNIT_ASSERT(IsEqual(q48Left, q48Right));
+        UNIT_ASSERT(IsGreaterOrEqual(q48Left, q48Right));
+
+        const auto finite = DecimalOracleAlignScale(TInt128(9), {35, 0}, 34);
+        const auto saturated = DecimalOracleAlignScale(TInt128(10), {35, 0}, 34);
+        UNIT_ASSERT(IsNormal(finite, 35));
+        UNIT_ASSERT(finite == TInt128(9) * TInt128(GetDivider(34)));
+        UNIT_ASSERT(saturated == Inf());
+        UNIT_ASSERT(IsLess(finite, saturated));
+        UNIT_ASSERT(IsEqual(saturated, Inf()));
+
+        const auto maxInt64 = DecimalOracleAlignScale(
+            TInt128(std::numeric_limits<i64>::max()),
+            {NUdf::GetDataTypeInfo(NUdf::EDataSlot::Int64).DecimalDigits, 0},
+            18);
+        UNIT_ASSERT(maxInt64 == Inf());
+
+        UNIT_ASSERT(!IsEqual(Nan(), Nan()));
+        UNIT_ASSERT(IsNotEqual(Nan(), Nan()));
+        UNIT_ASSERT(!IsLess(Nan(), Inf()));
+        UNIT_ASSERT(!IsGreaterOrEqual(Inf(), Nan()));
+        UNIT_ASSERT(IsEqual(Inf(), Inf()));
+        UNIT_ASSERT(IsLess(-Inf(), Inf()));
     }
 
     Y_UNIT_TEST(ExportsCanonicalVoidCountStarExtractor) {
@@ -1202,6 +1860,32 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 expression["items"][0]["type"].GetStringSafe(),
                 "Int32");
         }
+    }
+
+    Y_UNIT_TEST(DecimalStaticSqlInFailsClosed) {
+        TExportTestContext ctx;
+        const auto* decimalType = DecimalType(ctx, "7", "2");
+        const auto* optionalDecimalType = DecimalType(ctx, "7", "2", true);
+        auto collection = TypedStaticTuple(
+            ctx,
+            {TypedDecimalLiteral(ctx, "1.25", "7", "2", decimalType)},
+            decimalType);
+
+        const auto result = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedSqlIn(
+                ctx,
+                std::move(collection),
+                TypedMember(ctx, "a.d", optionalDecimalType),
+                SqlInOptions(ctx, {}),
+                ScalarType(ctx, NUdf::EDataSlot::Bool, true)),
+            true);
+
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "not equality-compatible with its lookup");
     }
 
     Y_UNIT_TEST(HeterogeneousStaticSqlInTupleFailsClosed) {
@@ -2564,6 +3248,41 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["kind"].GetStringSafe(), "literal");
         UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["type"].GetStringSafe(), "Int32");
         UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"].GetIntegerSafe(), 30);
+    }
+
+    Y_UNIT_TEST(ExportsDecimalLiteralInActualOlapFilterDialect) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Decimal", {
+            {"d", "Decimal(7,2)", false},
+        });
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"d"},
+            NYql::EStorageType::ColumnStorage);
+        SetExactOutputType(ctx, *read, {
+            {"a.d", DecimalType(ctx, "7", "2", true)},
+        });
+        read->OlapFilterLambda = MakeOlapDecimalComparisonProcess(
+            ctx,
+            "gte",
+            "d",
+            "100",
+            "12",
+            "2");
+        TOpRoot root(read, TPositionHandle(), {"a.d"});
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "gte");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["left"]["column"].GetStringSafe(), "a.d");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["type"].GetStringSafe(), "Decimal(12,2)");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"]["kind"].GetStringSafe(), "finite");
+        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"]["scaled"].GetStringSafe(), "10000");
     }
 
     Y_UNIT_TEST(UnsupportedOlapFilterFormsFailClosed) {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from . import smt
+from . import decimal, smt
 from .ir import Expr
 from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_width
 
@@ -83,33 +83,11 @@ class Encoder:
         if expression.kind in {"eq", "lt", "lte", "gt", "gte"}:
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
-            if expression.kind == "eq" and expression.null_safe:
-                return Value(
-                    BOOL,
-                    smt.FALSE,
-                    smt.or_(
-                        smt.and_(left.is_null, right.is_null),
-                        smt.and_(
-                            smt.not_(left.is_null),
-                            smt.not_(right.is_null),
-                            smt.eq(left.value, right.value),
-                        ),
-                    ),
-                )
-            if expression.kind == "eq":
-                comparison = smt.eq(left.value, right.value)
-            elif expression.kind == "lt":
-                comparison = smt.lt(left.value, right.value)
-            elif expression.kind == "lte":
-                comparison = smt.not_(smt.lt(right.value, left.value))
-            elif expression.kind == "gt":
-                comparison = smt.lt(right.value, left.value)
-            else:
-                comparison = smt.not_(smt.lt(left.value, right.value))
-            return Value(
-                BOOL,
-                smt.or_(left.is_null, right.is_null),
-                comparison,
+            return self._comparison(
+                expression.kind,
+                left,
+                right,
+                null_safe=expression.kind == "eq" and expression.null_safe,
             )
 
         if expression.kind in {"add", "sub", "mul"}:
@@ -199,13 +177,60 @@ class Encoder:
         )
         if result.type == DATE:
             self.script.assert_(smt.or_(result.is_null, date_domain(result.value)))
+        elif decimal.is_type(result.type):
+            self.script.assert_(smt.or_(result.is_null, decimal.domain(result.value, result.type)))
         return result
 
-    def _literal(self, scalar_type: str, value: bool | int | str | None) -> smt.Term:
+    def _literal(
+        self,
+        scalar_type: str,
+        value: bool | int | str | decimal.Literal | None,
+    ) -> smt.Term:
         if family(scalar_type) == "string":
             assert isinstance(value, str)
             return self.script.string_atom(value)
+        if decimal.is_type(scalar_type):
+            assert isinstance(value, decimal.Literal)
+            return smt.int_value(decimal.literal_code(value, scalar_type))
         return _literal(scalar_type, value)
+
+    @staticmethod
+    def _comparison(kind: str, left: Value, right: Value, null_safe: bool) -> Value:
+        decimal_operands = decimal.is_type(left.type) or decimal.is_type(right.type)
+        left_value, right_value = (
+            decimal.align(left.value, left.type, right.value, right.type)
+            if decimal_operands
+            else (left.value, right.value)
+        )
+
+        if null_safe:
+            return Value(
+                BOOL,
+                smt.FALSE,
+                smt.or_(
+                    smt.and_(left.is_null, right.is_null),
+                    smt.and_(
+                        smt.not_(left.is_null),
+                        smt.not_(right.is_null),
+                        smt.eq(left_value, right_value),
+                    ),
+                ),
+            )
+
+        if decimal_operands:
+            comparison = decimal.compare(kind, left_value, right_value)
+        elif kind == "eq":
+            comparison = smt.eq(left_value, right_value)
+        elif kind == "lt":
+            comparison = smt.lt(left_value, right_value)
+        elif kind == "lte":
+            comparison = smt.not_(smt.lt(right_value, left_value))
+        elif kind == "gt":
+            comparison = smt.lt(right_value, left_value)
+        else:
+            assert kind == "gte"
+            comparison = smt.not_(smt.lt(left_value, right_value))
+        return Value(BOOL, smt.or_(left.is_null, right.is_null), comparison)
 
     @staticmethod
     def _and(arguments: tuple[Value, ...]) -> Value:

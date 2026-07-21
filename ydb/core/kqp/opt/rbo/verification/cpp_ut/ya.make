@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/parser/pg_wrapper
     yql/essentials/providers/common/provider
+    yql/essentials/public/decimal
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg
 )

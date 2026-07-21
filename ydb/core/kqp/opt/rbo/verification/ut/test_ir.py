@@ -165,7 +165,7 @@ class SnapshotTest(unittest.TestCase):
             "type": "String",
             "value": "1",
         }
-        with self.assertRaisesRegex(SnapshotError, "lt requires integer or Date arguments"):
+        with self.assertRaisesRegex(SnapshotError, "lt requires integer, Date, or Decimal arguments"):
             parse_snapshot(value)
 
         value = minimal_snapshot()
@@ -275,7 +275,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
-    def test_date_is_exact_ordered_days_while_decimal_is_equality_only(self):
+    def test_date_and_decimal_have_exact_ordering_semantics(self):
         value = minimal_snapshot()
         value["schema"]["tables"][0]["columns"].extend([
             {"name": "date", "type": "Date", "nullable": True},
@@ -348,11 +348,7 @@ class SnapshotTest(unittest.TestCase):
             "left": {"kind": "column", "column": "a.amount"},
             "right": {"kind": "column", "column": "a.amount"},
         }
-        with self.assertRaisesRegex(
-            SnapshotError,
-            "lt requires integer or Date arguments",
-        ):
-            parse_snapshot(decimal_order)
+        parse_snapshot(decimal_order)
 
     def test_decimal_type_identity_is_canonical_and_validated(self):
         for scalar_type in (

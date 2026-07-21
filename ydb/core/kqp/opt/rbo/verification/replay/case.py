@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ..inspector.plan import snapshot_digest
+from ..rbo_verifier import decimal
 from ..rbo_verifier.ir import (
     Aggregate,
     Column,
@@ -25,7 +26,6 @@ from ..rbo_verifier.ir import (
 )
 from ..rbo_verifier.types import family
 from .model import (
-    DECIMAL_TYPE,
     InconclusiveReplay,
     ReplayCase,
     ReplayError,
@@ -435,12 +435,13 @@ def _validate_value(value: Any, column: Column) -> Any:
         if type(value) is not int or not 0 <= value < 49_673:
             raise ReplayError(f"column {column.name!r} witness is outside the Date domain")
         return value
-    decimal = DECIMAL_TYPE.fullmatch(column.type)
-    if decimal:
+    decimal_type = decimal.parse_type(column.type)
+    if decimal_type is not None:
         if type(value) is not int:
             raise ReplayError(f"column {column.name!r} Decimal witness is not an atom integer")
-        precision = int(decimal.group(1))
-        if abs(value) >= 10**precision:
+        precision = decimal_type.precision
+        special = value in {-decimal.INF, decimal.INF, decimal.NAN}
+        if not special and abs(value) >= 10**precision:
             raise ReplayError(f"column {column.name!r} witness is outside {column.type}")
         return value
     raise ReplayError(f"column {column.name!r} has unsupported replay type {column.type!r}")

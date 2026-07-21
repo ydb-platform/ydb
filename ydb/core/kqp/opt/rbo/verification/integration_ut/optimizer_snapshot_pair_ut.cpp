@@ -223,6 +223,18 @@ void CreateSqlInColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateDecimalColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboDecimal` (
+            Id Uint64 NOT NULL,
+            D Decimal(7, 2),
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TKikimrRunner MakeTpcdsRunner() {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
@@ -749,6 +761,82 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const auto& integerItems = (*byItemType.at("Int32"))["items"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(integerItems[0]["value"].GetIntegerSafe(), 1);
         UNIT_ASSERT_VALUES_EQUAL(integerItems[1]["value"].GetIntegerSafe(), 2);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesDecimalComparison) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateDecimalColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id
+                FROM `/Root/RboDecimal`
+                WHERE D BETWEEN Decimal("100", 12, 2)
+                    AND Decimal("150", 12, 2);
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertDecimalPredicate = [](const NJson::TJsonValue& predicate) {
+            TVector<const NJson::TJsonValue*> comparisons;
+            CollectConjuncts(predicate, comparisons);
+            UNIT_ASSERT_VALUES_EQUAL(comparisons.size(), 2);
+
+            THashSet<TString> kinds;
+            THashSet<TString> scaledValues;
+            for (const auto* comparison : comparisons) {
+                kinds.insert((*comparison)["kind"].GetStringSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*comparison)["left"]["kind"].GetStringSafe(),
+                    "column");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*comparison)["left"]["column"].GetStringSafe(),
+                    "/Root/RboDecimal.D");
+                const auto& literal = (*comparison)["right"];
+                UNIT_ASSERT_VALUES_EQUAL(literal["kind"].GetStringSafe(), "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["type"].GetStringSafe(),
+                    "Decimal(12,2)");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["value"]["kind"].GetStringSafe(),
+                    "finite");
+                scaledValues.insert(literal["value"]["scaled"].GetStringSafe());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(kinds, THashSet<TString>({"gte", "lte"}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                scaledValues,
+                THashSet<TString>({"10000", "15000"}));
+        };
+
+        const auto& initialScan = OnlyPlanNode(initial, "scan");
+        UNIT_ASSERT(initialScan["predicate"].IsNull());
+        assertDecimalPredicate(OnlyPlanNode(initial, "filter")["predicate"]);
+
+        const auto finalFilters = PlanNodes(final, "filter");
+        UNIT_ASSERT_VALUES_EQUAL(finalFilters.size(), 1);
+        assertDecimalPredicate((*finalFilters.front())["predicate"]);
+        UNIT_ASSERT(OnlyPlanNode(final, "scan")["predicate"].IsNull());
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

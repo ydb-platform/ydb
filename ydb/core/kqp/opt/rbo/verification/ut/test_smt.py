@@ -79,6 +79,14 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.lt(smt.TRUE, right)
 
+    def test_equality_is_typed_and_constant_folded(self):
+        value = smt.symbol("value", smt.INT)
+        self.assertEqual(smt.eq(value, smt.int_value(1)).render(), "(= value 1)")
+        self.assertEqual(smt.eq(smt.int_value(1), smt.int_value(2)), smt.FALSE)
+        self.assertEqual(smt.eq(smt.FALSE, smt.TRUE), smt.FALSE)
+        with self.assertRaises(smt.SmtError):
+            smt.eq(smt.TRUE, value)
+
 
 if __name__ == "__main__":
     unittest.main()

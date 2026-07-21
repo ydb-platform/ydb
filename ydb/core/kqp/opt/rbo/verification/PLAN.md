@@ -75,6 +75,7 @@ The trusted Python code is deliberately split into small semantic modules:
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
+rbo_verifier/decimal.py     exact Decimal values, alignment, and comparison
 rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
 rbo_verifier/relation.py    bounded bag/sequence operator semantics
 rbo_verifier/stages.py      two-task StageGraph and connection semantics
@@ -95,7 +96,8 @@ The explicit scalar core initially contains:
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
 - ordinary nullable equality, null-safe equality, integer ordering when YQL's
   common integer type preserves both operands exactly, and same-type `Date`
-  ordering;
+  ordering; exact Decimal equality and ordering use YDB `DataCompare`
+  alignment for Decimal/Decimal and Decimal/integer operands;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
   propagation and exact fixed-width modular/two's-complement overflow;
 - restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
@@ -109,6 +111,7 @@ nullable. `ansi`, `warnNoAnsi`, `isCompact`, and `nullsProcessed` are erased
 only under that semantic gate. `tableSource`, dynamic, empty, oversized,
 nullable-item, heterogeneous-item, lossy or non-integer mixed-type,
 malformed-option, unknown-option, and duplicate-option forms fail closed.
+Decimal membership is deliberately outside this static-`IN` subset.
 
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
@@ -140,6 +143,12 @@ calls, division, strict casts, `Unwrap`, free variables, position-aware or
 unordered nodes, and side-effecting/CSE-unsafe nodes fail closed. Expanding this
 list requires an explicit totality review and tests.
 
+One cast shape is normalized before opaque fallback: when YQL cast analysis
+reports a complete conversion from a non-null integer literal to a non-null
+Decimal, the exporter evaluates it and emits the resulting Decimal literal.
+General casts, nullable cast shapes, and non-integer Decimal cast sources fail
+closed.
+
 The persisted fingerprint is collision-free canonical text rather than a
 machine hash. It length-prefixes node kind, callable and atom bytes, normalized
 atom flags, exact formatted types, child counts, and ordered children. Direct
@@ -158,11 +167,20 @@ opaque until explicitly modeled. Because those atoms have no YDB ordering,
 Version-one `Date` is the exact unsigned day-since-epoch domain
 `[0, NUdf::MAX_DATE)`. Numeric literals are range-checked, source slots and
 non-null opaque Date results receive explicit domain constraints, and same-type
-comparison, Sort, and Merge use integer day ordering. Canonical parameterized
-`Decimal(p,s)` remains an equality-only atom for columns that are carried but
-not actively transformed. Its unbounded carrier is an over-approximate domain:
-it can make a witness spurious, but cannot make an inequivalent bounded plan
-verify.
+comparison, Sort, and Merge use integer day ordering.
+
+Canonical `Decimal(p,s)` uses YDB's scaled-integer representation. Finite
+values satisfy `-10^p < code < 10^p`; negative infinity, positive infinity, and
+NaN are the only other legal codes. Snapshot literals tag these four cases
+explicitly, with a canonical signed-integer string only on `finite`. Ordinary
+equality and ordering are strict on NULL, NaN makes every ordinary comparison
+false, and infinities are ordered. Null-safe equality is accepted only for the
+same exact Decimal type and compares encoded non-null values, including NaN.
+Decimal/Decimal and Decimal/integer comparison alignment mirrors YDB
+`DataCompare`, including scale increase, integer decimal widths, the precision
+35 cap, and conversion saturation. Any alignment requiring an invalid
+zero-precision type fails closed. Decimal `IN`, Sort/Merge keys, arithmetic,
+and general casts remain unsupported.
 
 ## Relational semantics
 
@@ -179,7 +197,9 @@ Implementation sequence:
 5. M4: common aggregates and unordered literal Limit;
 6. M4: Sort/TopSort, ordered literal Limit, and ordered Merge;
 7. M4: actual column-store filter pushdown from the executed OLAP dialect;
-8. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+8. M4: exact Decimal literals, domains, comparison, and constant-cast
+   normalization;
+9. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -294,7 +314,10 @@ Separate concrete references cover aggregate, Limit, Sort/Merge, pushed OLAP
 filters, and two-task StageGraph Map, HashShuffle, Broadcast, serial/parallel
 UnionAll, and local-join routing combinations. The StageGraph reference checks
 also distinguish wrong hash functions, shuffle keys, broadcasts, and UnionAll
-modes.
+modes. Decimal tests exhaust every finite value for all `Decimal(p,s)` with
+`p <= 2`, plus all specials, against an independent rational-value comparison
+reference. Separate boundary cases cover precision-cap saturation and integer
+alignment; C++ tests use `NDecimal` as an exporter oracle.
 
 The first useful bound is two row slots per referenced table and two tasks.
 Larger bounds are query-specific because multiway joins grow rapidly.
@@ -307,8 +330,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Empty source, scan, project, filter, joins, and logical UnionAll.
 - Nullable exact YQL Bool, integer-width, String, and Utf8 identities with
   structurally identified scalar UFs, exact bounded and ordered Date, plus exact
-  parameterized Decimal identity with equality-only atom semantics. Solver
-  domains may be shared, but snapshot type identity is never collapsed.
+  parameterized Decimal identity (initially carried without active Decimal
+  transformations). Solver domains may be shared, but snapshot type identity is
+  never collapsed.
 - Bag-equivalence formula, deterministic SMT-LIB, witness decoding, CLI, and
   mutation tests.
 
@@ -363,6 +387,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   dictionary-path heterogeneity rejection, mutation and boundary tests, and a
   real-host query with nullable String and `Int64` lookups cover the gate and
   construct the normal obligation (or solve it when `RBO_Z3` is supplied).
+- Decimal literals are tagged as finite, negative infinity, positive infinity,
+  or NaN; source and opaque values use the exact legal typed domain. Ordinary
+  equality/order, exact-type null-safe equality, Decimal/Decimal and
+  Decimal/integer `DataCompare` alignment, precision-cap saturation, and
+  complete non-null integer constant casts are modeled. General casts, Decimal
+  `IN`, Sort/Merge keys, and arithmetic still fail closed. Exhaustive rational
+  references, `NDecimal` exporter tests, and a green real-host native Decimal
+  filter obligation cover this boundary.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -373,13 +405,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   process operations, and is covered by a real-host bounded proof.
 - The exact new-RBO `TPCDS_YQL` q96 schema and query pass strict initial/final
   export and produce `VERIFIED_BOUNDED` at two rows per table and two tasks. This
-  covers exact Date and passive Decimal catalog columns, canonical `Void` for
+  covers exact Date and typed Decimal catalog columns, canonical `Void` for
   `COUNT(*)`,
   four scans, three joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
+- The Decimal milestone moves TPC-DS q48 through strict initial/final export and
+  emits its two-row/two-task SMT obligation. This is formula coverage, not a
+  solver proof; the focused formula-only run took 365116 ms and no Z3 executable
+  was present.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
   and explicit unsupported/optimizer-failure inventory.
@@ -389,7 +425,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Separate normalized-plan and exact concrete-counterexample inspector.
 - Separate real-YDB replay tool for deterministic, range-valid inspector
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
-  multi-result TPC-DS q14, q23, and q39 remain an explicit replay extension.
+  legal Decimal specials are rendered as `-inf`, `inf`, and `nan`; multi-result
+  TPC-DS q14, q23, and q39 remain an explicit replay extension.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.

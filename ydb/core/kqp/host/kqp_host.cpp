@@ -1223,7 +1223,8 @@ public:
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
         NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
         const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false,
+        std::shared_ptr<IRBOSemanticSnapshotSink> rboSemanticSnapshotSink = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1242,6 +1243,7 @@ public:
         , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
         , QueryServiceConfig(queryServiceConfig)
         , UsePessimisticLocks(usePessimisticLocks)
+        , RBOSemanticSnapshotSink(std::move(rboSemanticSnapshotSink))
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -2173,6 +2175,7 @@ private:
 
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
+        TransformCtx->RBOSemanticSnapshotSink = RBOSemanticSnapshotSink;
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
@@ -2453,6 +2456,7 @@ private:
     NActors::TActorSystem* ActorSystem = nullptr;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     bool UsePessimisticLocks = false;
+    std::shared_ptr<IRBOSemanticSnapshotSink> RBOSemanticSnapshotSink;
 };
 
 } // anonymous namespace
@@ -2475,10 +2479,11 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks, std::shared_ptr<IRBOSemanticSnapshotSink> rboSemanticSnapshotSink)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks,
+                                   std::move(rboSemanticSnapshotSink));
 }
 
 } // namespace NKikimr::NKqp

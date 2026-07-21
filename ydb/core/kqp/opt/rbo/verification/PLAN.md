@@ -205,7 +205,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Initial/final exporter hooks.
 - Stable operator, IU, expression, stage, and edge IDs.
 - C++ unit tests proving semantically relevant fields survive export.
-- First end-to-end new-RBO comparison.
+- First end-to-end new-RBO comparison. The integration test drives a real
+  `IKqpHost`, captures both boundaries, and passes them through the normal CLI;
+  solving is explicit until M2b supplies the hermetic Z3 target.
 
 ### M2b: hermetic solver packaging
 

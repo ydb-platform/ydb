@@ -11,6 +11,8 @@ and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
 optional sink on `TKqlTransformContext` receives the initial snapshot before the
 first RBO stage and the final snapshot immediately before physical generation.
+`CreateKqpHost` accepts the same sink as immutable instrumentation configuration
+and copies it into every per-query transform context created by the host.
 Supported final plans include exact stage membership and Map, HashShuffle,
 Broadcast, and serial or parallel UnionAll connections. Merge fields are
 captured and decoded, but execution remains fail-closed until ordered Sort
@@ -33,7 +35,10 @@ rejected until the snapshot can substantiate them.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, and `Utf8`) even when several identities use
-the same SMT domain.
+the same SMT domain. Integer slots currently use an unbounded SMT carrier rather
+than explicit source-type range constraints. This may produce an out-of-range
+`COUNTEREXAMPLE`, which replay can reject, but cannot turn a real bounded
+counterexample into `VERIFIED_BOUNDED`.
 
 The chosen final boundary is immediately before `ConvertToPhysical`. Therefore
 the verifier does not prove physical lowering, task construction, or execution.
@@ -53,6 +58,9 @@ the runtime's exact 64-bit modular overflow. A column-storage source is split
 into symbolic source tasks before a pushed intermediate aggregate executes.
 `distinct`, `DistinctAll`, `unwrap`, min/max, average, and variance currently
 return `UNSUPPORTED` rather than use an approximation.
+Intermediate aggregation models the pre-physical logical state per task and
+key; memory-pressure batching performed later by a physical hash combiner is
+outside the snapshot boundary.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:
@@ -132,6 +140,18 @@ Run its tests with:
 
 Solver integration tests are enabled when an explicit solver binary is
 available. Formula construction and parsing tests do not depend on Z3.
+
+The medium integration test constructs a real new-RBO `IKqpHost`, captures its
+initial/final pair, and invokes the normal CLI. It always requires successful
+strict decoding and SMT construction. Set `RBO_Z3` to additionally require a
+`VERIFIED_BOUNDED` verdict; M2b will replace that opt-in path with a hermetic
+solver dependency. The fixture clears the host's implicit result-row cap because
+`Limit` remains an explicit M4 item.
+
+```bash
+RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \
+  ydb/core/kqp/opt/rbo/verification/integration_ut 2>&1 | tail
+```
 
 Build the Ya-owned CLI with:
 

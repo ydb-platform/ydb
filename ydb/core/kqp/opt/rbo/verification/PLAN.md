@@ -328,8 +328,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   covers passive Date/Decimal catalog columns, canonical `Void` for `COUNT(*)`,
   four scans, three joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
-- TPCH/TPCDS coverage and timeout report.
-- Explicit unsupported-feature inventory.
+- The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
+  writes a structured timeout-aware report, and preserves diagnostic artifacts
+  for every correctness, unknown, schema, or solver outcome.
+- [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
+  commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
+  and explicit unsupported/optimizer-failure inventory.
 
 ### M5: confirmation and localization — pending
 

@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <memory>
+
 namespace NActors {
 class TActorSystem;
 } // namespace NActors
@@ -16,6 +18,7 @@ namespace NKikimr {
 namespace NKqp {
 
 struct TKqpQueryRef;
+class IRBOSemanticSnapshotSink;
 
 using TSqlVersion = ui16;
 
@@ -133,7 +136,9 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
     NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-    bool usePessimisticLocks = false);
+    bool usePessimisticLocks = false,
+    // Optional query instrumentation copied into each per-query transform context.
+    std::shared_ptr<IRBOSemanticSnapshotSink> rboSemanticSnapshotSink = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

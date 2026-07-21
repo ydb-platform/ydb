@@ -16,6 +16,8 @@ PY_SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    cpp_ut
+    integration_ut
     ut
 )
 

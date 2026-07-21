@@ -5,7 +5,9 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/fq/libs/result_formatter
     ydb/core/kqp/gateway/utils
+    ydb/core/kqp/host
     ydb/core/kqp/opt
     ydb/core/kqp/opt/rbo
     ydb/core/kqp/provider

@@ -3,6 +3,8 @@
 This directory contains the standalone bounded-equivalence checker described in
 [PLAN.md](PLAN.md). It compares two versioned semantic snapshots and asks Z3 for
 a bounded input database on which their result bags or ordered sequences differ.
+The reproducible 121-query dashboard contract and current unsupported inventory
+are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,

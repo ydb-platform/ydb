@@ -793,6 +793,7 @@ public:
 
     TDuration Timeout = TDuration::MilliSeconds(HealthCheckConfig.GetTimeout());
     bool ReturnHints = false;
+    bool ReturnStorageHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() const {
@@ -805,6 +806,7 @@ public:
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
         ReturnHints = Request->Request.return_hints() && IsSpecificDatabaseFilter();
+        ReturnStorageHints = Request->Request.return_hints();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
@@ -1146,10 +1148,59 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
+    std::vector<int> GetRequiredFields();
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvSystemStateRequest>() {
+        return {
+                NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLoadAverageFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewPeerIdFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLocationFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewWithPeerUsFieldNumber,
+            };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvVDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskStateFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kReplicatedFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kDiskSpaceFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvPDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TPDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kPathFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kAvailableSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kTotalSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kStateFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvBSGroupStateRequest>() {
+        return {
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupGenerationFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupIDFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kStoragePoolNameFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kErasureSpeciesFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kVDiskIdsFieldNumber,
+        };
+    }
+
+    template<typename TEvent>
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
-        for (int field : fields) {
+        for (int field : GetRequiredFields<TEvent>()) {
             request->Record.AddFieldsRequired(field);
         }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
@@ -1163,7 +1214,7 @@ public:
 
     void RequestGenericNode(TNodeId nodeId) {
         if (NodeSystemState.count(nodeId) == 0) {
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId));
             ++Requests;
         }
     }
@@ -1223,7 +1274,7 @@ public:
             case TEvWhiteboard::EvSystemStateRequest: {
                 auto& request = NodeSystemState[nodeId];
                 if (!request.IsOk()) {
-                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
                 }
                 break;
             }
@@ -2382,6 +2433,21 @@ public:
         }
     }
 
+    static bool IsPhantomOnly(const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo) {
+        return vDiskInfo.HasDetailedReplicationStatus()
+            && vDiskInfo.GetDetailedReplicationStatus() == NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+    }
+
+    static bool IsPhantomOnly(const NKikimrSysView::TVSlotEntry* vSlot) {
+        return vSlot->GetInfo().HasPhantomOnly() && vSlot->GetInfo().GetPhantomOnly();
+    }
+
+    static void ReportPhantomOnlyHint(TSelfCheckContext& context) {
+        TSelfCheckContext hintContext(&context, "HINT-PHANTOM-ONLY-VDISK");
+        hintContext.ReportStatus(Ydb::Monitoring::StatusFlag::UNSPECIFIED,
+            "Only phantom blobs remain to replicate");
+    }
+
     void FillVDiskStatus(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
@@ -2441,6 +2507,9 @@ public:
 
         switch (status->number()) {
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
+                if (ReturnStorageHints && IsPhantomOnly(vSlot)) {
+                    ReportPhantomOnlyHint(context);
+                }
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
@@ -2622,6 +2691,9 @@ public:
 
         if (!vDiskInfo.GetReplicated()) {
             context.IssueRecords.clear();
+            if (ReturnStorageHints && IsPhantomOnly(vDiskInfo)) {
+                ReportPhantomOnlyHint(context);
+            }
             context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;

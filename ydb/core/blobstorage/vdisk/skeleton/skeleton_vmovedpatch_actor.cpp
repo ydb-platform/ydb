@@ -155,8 +155,9 @@ namespace NKikimr {
                 // We have chosen UserData as PutHandleClass on purpose.
                 // If VMovedPatch and Put were AsyncWrite, it would become a deadlock
                 // because the put subrequest may not send and the moved patch request will end by timeout.
-                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
-                        NKikimrBlobStorage::UserData, TEvBlobStorage::TEvPut::TacticDefault);
+                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(
+                        PatchedId, Buffer, Deadline, NKikimrBlobStorage::UserData,
+                        TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::SkeletonVMovedPatch);
                 put->Orbit = std::move(Orbit);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix

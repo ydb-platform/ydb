@@ -1071,7 +1071,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         testCtx.Send(new TEvents::TEvWakeup());
 
-        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(1), nodeWardenFake);
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(firstNodeId), nodeWardenFake);
 
         testCtx.GetRuntime()->WaitFor("TEvControllerUpdateDiskStatus", [&received]() {
             return received;

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "health_check.cpp"
 
+#include <functional>
 #include <util/stream/null.h>
 
 namespace NKikimr {
@@ -73,6 +74,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
         ui32 Generation = DEFAULT_GROUP_GENERATION;
         NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
+        bool PhantomOnly = false;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
                        ui32 generation = DEFAULT_GROUP_GENERATION)
@@ -89,6 +91,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     };
 
     using TVDisks = TVector<TTestVSlotInfo>;
+
+    TTestVSlotInfo PhantomOnlyVDisk() {
+        TTestVSlotInfo vdisk{std::optional<NKikimrBlobStorage::EVDiskStatus>(NKikimrBlobStorage::REPLICATING)};
+        vdisk.PhantomOnly = true;
+        return vdisk;
+    }
 
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
@@ -191,15 +199,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     void AddVSlotsToSysViewResponse(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev, size_t groupCount,
                                     const TVDisks& vslots, ui32 groupStartId = GROUP_START_ID,
-                                    bool withPdisk = false) {
+                                    bool rewrite = true, bool withPdisk = false, bool withPhantomOnly = true) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
-        record.clear_entries();
+        if (rewrite) {
+            record.clear_entries();
+        }
 
         auto groupId = groupStartId;
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         for (size_t i = 0; i < groupCount; ++i) {
-            auto vslotId = VCARD_START_ID;
+            static int vslotId;
+            if (rewrite) {
+                vslotId = VCARD_START_ID;
+            }
             auto pdiskId = PDISK_START_ID;
             for (const auto& vslot : vslots) {
                 auto* entry = record.add_entries();
@@ -212,6 +225,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 entry->mutable_info()->set_failrealm(vslotId);
                 if (vslot.Status) {
                     entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(*vslot.Status)->name());
+                }
+                if (withPhantomOnly) {
+                    entry->mutable_info()->set_phantomonly(vslot.PhantomOnly);
+                } else {
+                    entry->mutable_info()->clear_phantomonly();
                 }
                 entry->mutable_info()->set_groupgeneration(vslot.Generation);
                 entry->mutable_info()->set_vdisk(vslotId);
@@ -311,7 +329,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         sPool->set_name(STORAGE_POOL_NAME);
     };
 
-    void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount, ui32 groupStartId = GROUP_START_ID) {
+    void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, const TVDisks& vslots,
+                                      ui32 groupStartId = GROUP_START_ID) {
         auto& pbRecord = (*ev)->Get()->Record;
 
         auto sample = pbRecord.vdiskstateinfo(0);
@@ -320,12 +339,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto groupId = groupStartId;
         for (int i = 0; i < groupCount; i++) {
             auto slotId = VCARD_START_ID;
-            for (int j = 0; j < vslotCount; j++) {
+            for (const auto& vslot : vslots) {
                 auto state = pbRecord.add_vdiskstateinfo();
                 state->CopyFrom(sample);
-                state->mutable_vdiskid()->set_vdisk(slotId++);
                 state->mutable_vdiskid()->set_groupid(groupId);
+                state->mutable_vdiskid()->set_groupgeneration(DEFAULT_GROUP_GENERATION);
+                state->mutable_vdiskid()->set_ring(slotId);
+                state->mutable_vdiskid()->set_domain(0);
+                state->mutable_vdiskid()->set_vdisk(slotId++);
                 state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
+                if (vslot.PhantomOnly) {
+                    state->set_detailedreplicationstatus(NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly);
+                } else {
+                    state->clear_detailedreplicationstatus();
+                }
                 state->set_nodeid(1);
             }
             groupId++;
@@ -461,7 +488,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks, bool forStaticGroup = false, double occupancy = 0) {
+    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks,
+                                                         bool forStaticGroup = false, double occupancy = 0, bool withPhantomOnly = true,
+                                                         bool returnHints = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -497,9 +526,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
                     if (forStaticGroup) {
-                        AddVSlotsToSysViewResponse(x, 1, vdisks, 0, true);
+                        AddVSlotsToSysViewResponse(x, 1, vdisks, 0, true, true, withPhantomOnly);
                     } else {
-                        AddVSlotsToSysViewResponse(x, 1, vdisks, GROUP_START_ID, true);
+                        AddVSlotsToSysViewResponse(x, 1, vdisks, GROUP_START_ID, true, true, withPhantomOnly);
                     }
                     break;
                 }
@@ -521,9 +550,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
                     auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
                     if (forStaticGroup) {
-                        AddVSlotInVDiskStateResponse(x, 1, vdisks.size(), 0);
+                        AddVSlotInVDiskStateResponse(x, 1, vdisks, 0);
                     } else {
-                        AddVSlotInVDiskStateResponse(x, 1, vdisks.size());
+                        AddVSlotInVDiskStateResponse(x, 1, vdisks);
                     }
                     break;
                 }
@@ -539,21 +568,42 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_merge_records(true);
+        request->Request.set_return_hints(returnHints);
 
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
-    void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+    struct TLocationFilter {
+        TVector<std::function<bool(const Ydb::Monitoring::Location&)>> Filters;
+
+        bool operator()(const Ydb::Monitoring::Location& location) const {
+            for (const auto& filter : Filters) {
+                if (!filter(location)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        TLocationFilter& Pool(const TString& name) {
+            Filters.emplace_back([=](const Ydb::Monitoring::Location& location) {
+                return location.storage().pool().name() == name;
+            });
+            return *this;
+        }
+    };
+
+    void CheckHcResultHasIssuesWithStatus(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
                                           const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total,
-                                          std::string_view pool = "/Root:test") {
+                                          TLocationFilter locationFilter = {}) {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
-            if (issue_log.type() == type && (pool.empty() || issue_log.location().storage().pool().name() == pool) && issue_log.status() == expectingStatus) {
+            if (issue_log.type() == type && locationFilter(issue_log.location()) && issue_log.status() == expectingStatus) {
                 issuesCount++;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
+        UNIT_ASSERT_VALUES_EQUAL_C(issuesCount, total, "Wrong issues count for " << type << " with expecting status " << expectingStatus);
     }
 
      void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
@@ -681,6 +731,30 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
     }
 
+    Y_UNIT_TEST(NonStaticGroupKeepsBlueIssueAndGetsPhantomOnlyHintFromSysView) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{PhantomOnlyVDisk()},
+            false, 0, true, true);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 1, TLocationFilter().Pool("/Root:test"));
+    }
+
+    Y_UNIT_TEST(NonStaticGroupDoesNotUseWhiteboardFallbackForPhantomOnlyHint) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{PhantomOnlyVDisk()},
+            false, 0, false, true);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
+    }
+
+    Y_UNIT_TEST(PhantomOnlyHintRequiresReturnHints) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{PhantomOnlyVDisk()},
+            false, 0, true);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
+    }
+
     Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
@@ -694,7 +768,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(StaticGroupIssue) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, "static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1,
+                                         TLocationFilter().Pool("static"));
     }
 
     Y_UNIT_TEST(GreenStatusWhenCreatingGroup) {
@@ -2482,9 +2557,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString() << Endl;
         if (expectedStatus) {
-            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1, "");
-            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1, "");
-            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1, "");
+            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
         }
 
         auto statusToResult = [](std::optional<Ydb::Monitoring::StatusFlag::Status> status) {

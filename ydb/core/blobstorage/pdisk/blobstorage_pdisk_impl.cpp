@@ -1593,6 +1593,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
 
         *Mon.NumActiveSlots = TotalOwners;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
+        if (ExpectedSlotCount) {
+            *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
+        }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
         i64 minSlotSize = Max<i64>();
@@ -4283,7 +4286,7 @@ void TPDisk::ProgressShredState() {
                 while (ShredLogPaddingInFlight < 2) {
                     TRcBuf data = TRcBuf::Uninitialized(2<<20);
                     memset(data.GetDataMut(), 0, data.Size());
-                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0);
+                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0, TWriteSource::ShredPadding);
                     double burstMs;
                     TLogWrite* request = ReqCreator.CreateLogWrite(evLog, PCtx->PDiskActor, burstMs, {});
                     request->Orbit = std::move(evLog.Orbit);

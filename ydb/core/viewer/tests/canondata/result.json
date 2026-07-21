@@ -2786,6 +2786,14 @@
             {
                 "ErasureSpecies": "block-4-2",
                 "PDiskFilter": "Type:SSD"
+            },
+            {
+                "ErasureSpecies": "none",
+                "PDiskFilter": "Type:ROT,Kind:0"
+            },
+            {
+                "ErasureSpecies": "none",
+                "PDiskFilter": "Type:ROT"
             }
         ],
         "StorageTotal": "not-zero-number-text",

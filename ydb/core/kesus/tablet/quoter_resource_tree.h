@@ -10,7 +10,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
-#include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -434,7 +433,7 @@ private:
     THashMap<ui64, THolder<TQuoterResourceTree>> ResourcesById;
     THashMap<TString, TQuoterResourceTree*> ResourcesByPath;
     THashMap<TQuoterSessionId, THolder<TQuoterSession>> Sessions;
-    THashMultiMap<NActors::TActorId, TQuoterSessionId> PipeServerIdToSession;
+    THashMap<NActors::TActorId, THashSet<TQuoterSessionId>> PipeServerIdToSession;
 
     TCounters Counters;
 };

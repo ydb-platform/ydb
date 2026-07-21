@@ -123,7 +123,8 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
                 Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
-                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts, nullptr, true, Priority);
+                auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts,
+                    nullptr, true, Priority, TWriteSource::HullWriteSst, true);
                 MsgQueue.push(std::move(ev));
                 HasBuffer = false;
             }
@@ -672,7 +673,7 @@ namespace NKikimr {
             ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
             ratio->InplacedDataTotal = ratio->InplacedDataKeep = info.InplaceDataTotalSize;
             ratio->HugeDataTotal = ratio->HugeDataKeep = info.HugeDataTotalSize;
-            LevelSegment->StorageRatio.Set(ratio);
+            LevelSegment->StorageRatio.Set(ratio, TInstant::Zero());
 
             // write out place holder
             TIdxDiskPlaceHolder placeHolder(SstId);

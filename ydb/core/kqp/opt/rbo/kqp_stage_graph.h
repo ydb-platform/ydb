@@ -65,6 +65,10 @@ struct TUnionAllConnection: public TConnection {
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson() const override;
 
+    bool IsParallel() const noexcept {
+        return Parallel;
+    }
+
 private:
     bool Parallel{false};
 };

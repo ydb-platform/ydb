@@ -178,6 +178,21 @@ std::pair<TString, TString> EqualityColumns(const NJson::TJsonValue& expression)
     };
 }
 
+TIntrusivePtr<TOpMap> MakeCopyMap(
+    TExportTestContext& ctx,
+    TIntrusivePtr<IOperator> input,
+    const TString& output,
+    const TString& source)
+{
+    const auto pos = TPositionHandle();
+    return MakeIntrusive<TOpMap>(input, pos, TVector<TMapElement>{TMapElement(
+        TInfoUnit(output),
+        TInfoUnit(source),
+        pos,
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps)});
+}
+
 TString ExportDeterministicPlan() {
     TExportTestContext ctx;
     const auto& table = AddTable(ctx, "/Root/A", {
@@ -192,9 +207,40 @@ TString ExportDeterministicPlan() {
     return result.Json;
 }
 
+TString ExportDeterministicStageGraph() {
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/A", {
+        {"k", "Int32", true},
+        {"payload", "Utf8", false},
+    });
+    auto read = MakeRead(ctx, table, "a", {"k", "payload"});
+    auto project = MakeCopyMap(ctx, read, "result", "a.k");
+    TOpRoot root(project, TPositionHandle(), {"result"});
+
+    auto& graph = root.PlanProps.StageGraph;
+    const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+    const ui32 consumer = graph.AddStage();
+    read->Props.StageId = producer;
+    project->Props.StageId = consumer;
+    graph.Connect(
+        producer,
+        consumer,
+        MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+
+    const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+    UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+    return result.Json;
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
+    }
+
+    Y_UNIT_TEST(StageGraphOutputIgnoresRandomRuntimeGuids) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            ExportDeterministicStageGraph(),
+            ExportDeterministicStageGraph());
     }
 
     Y_UNIT_TEST(ExportsSchemaScanAndExactMapProjection) {
@@ -373,6 +419,532 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "StageGraph");
     }
 
+    Y_UNIT_TEST(ExportsGroupedDuplicateEdgesAndParallelUnion) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            read,
+            read,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a.k")});
+        TOpRoot root(unionAll, pos, {"a.k"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        unionAll->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(producer), true));
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& stageGraph = snapshot["stage_graph"];
+        UNIT_ASSERT_VALUES_EQUAL(stageGraph.GetMapSafe().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stageGraph["root_stage"].GetStringSafe(), "s1");
+        UNIT_ASSERT(stageGraph["assumptions"].GetArraySafe().empty());
+
+        const auto& stages = stageGraph["stages"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stages[0].GetMapSafe().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stages[1].GetMapSafe().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stages[0]["source_storage"].GetStringSafe(), "row");
+        UNIT_ASSERT(stages[1]["source_storage"].IsNull());
+
+        const auto& unionNode = FindNode(snapshot, "union_all");
+        const auto& unionInputs = unionNode["inputs"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(unionInputs.size(), 2);
+        const TString leftNode = unionInputs[0]["node"].GetStringSafe();
+        const TString rightNode = unionInputs[1]["node"].GetStringSafe();
+        UNIT_ASSERT_VALUES_EQUAL(leftNode, rightNode);
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(stages[1]["inputs"]),
+            (TVector<TString>{leftNode, rightNode}));
+
+        const auto& producerOutputs = stages[0]["outputs"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(producerOutputs.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(producerOutputs[0]["index"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(producerOutputs[0]["node"].GetStringSafe(), leftNode);
+        UNIT_ASSERT_VALUES_EQUAL(producerOutputs[1]["index"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(producerOutputs[1]["node"].GetStringSafe(), rightNode);
+
+        const auto& rootOutputs = stages[1]["outputs"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(rootOutputs.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rootOutputs[0]["index"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            rootOutputs[0]["node"].GetStringSafe(),
+            snapshot["plan"]["root"].GetStringSafe());
+
+        const auto& edges = stageGraph["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0].GetMapSafe().size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["id"].GetStringSafe(), "e0");
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["producer"].GetStringSafe(), "s0");
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["consumer"].GetStringSafe(), "s1");
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["occurrence"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["producer_output"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["consumer_input"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "map");
+
+        UNIT_ASSERT_VALUES_EQUAL(edges[1].GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["id"].GetStringSafe(), "e1");
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["occurrence"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["producer_output"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["consumer_input"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["kind"].GetStringSafe(), "union_all");
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["parallel"].GetBooleanSafe(), true);
+    }
+
+    Y_UNIT_TEST(ExportsHashShuffleAndBroadcastConnectionSemantics) {
+        TExportTestContext ctx;
+        AddTable(ctx, "/Root/A", {{"k", "Int32", true}, {"x", "Int32", true}});
+        AddTable(ctx, "/Root/B", {{"k", "Int32", true}, {"x", "Int32", true}});
+        auto left = MakeRead(ctx, ctx.Tables->ExistingTable("ut", "/Root/A"), "a", {"k", "x"});
+        auto right = MakeRead(ctx, ctx.Tables->ExistingTable("ut", "/Root/B"), "b", {"k", "x"});
+        const auto pos = TPositionHandle();
+        auto join = MakeIntrusive<TOpJoin>(
+            left,
+            right,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a.k"), TInfoUnit("b.k")}});
+        TOpRoot root(join, pos, {"a.k", "b.k"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 leftStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 rightStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 joinStage = graph.AddStage();
+        left->Props.StageId = leftStage;
+        right->Props.StageId = rightStage;
+        join->Props.StageId = joinStage;
+        auto shuffle = MakeIntrusive<TShuffleConnection>(
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            graph.GetOutputIndex(leftStage),
+            true);
+        shuffle->HashFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+        graph.Connect(leftStage, joinStage, shuffle);
+        graph.Connect(
+            rightStage,
+            joinStage,
+            MakeIntrusive<TBroadcastConnection>(graph.GetOutputIndex(rightStage)));
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& edges = snapshot["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0].GetMapSafe().size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "hash_shuffle");
+        UNIT_ASSERT_VALUES_EQUAL(Strings(edges[0]["keys"]), (TVector<TString>{"a.k"}));
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["hash_function"].GetStringSafe(), "HashV2");
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["use_spilling"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1].GetMapSafe().size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(edges[1]["kind"].GetStringSafe(), "broadcast");
+    }
+
+    Y_UNIT_TEST(ExportsEveryMergeOrderingField) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int32", true},
+            {"x", "Int32", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        auto project = MakeCopyMap(ctx, read, "result", "a.k");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        project->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TMergeConnection>(
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("a.k"), true, false),
+                    TSortElement(TInfoUnit("a.x"), false, true),
+                },
+                graph.GetOutputIndex(producer)));
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& edge = snapshot["stage_graph"]["edges"][0];
+        UNIT_ASSERT_VALUES_EQUAL(edge.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(edge["kind"].GetStringSafe(), "merge");
+        const auto& order = edge["order"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(order.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(order[0].GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(order[0]["column"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(order[0]["ascending"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(order[0]["nulls_first"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(order[1].GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(order[1]["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(order[1]["ascending"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(order[1]["nulls_first"].GetBooleanSafe(), true);
+    }
+
+    Y_UNIT_TEST(UnsupportedSourceConnectionAndStorageFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            auto project = MakeCopyMap(ctx, read, "result", "a.k");
+            TOpRoot root(project, TPositionHandle(), {"result"});
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = producer;
+            project->Props.StageId = consumer;
+            graph.Connect(producer, consumer, MakeIntrusive<TSourceConnection>());
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(result.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "source connections");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            auto project = MakeCopyMap(ctx, read, "result", "a.k");
+            TOpRoot root(project, TPositionHandle(), {"result"});
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 producer = graph.AddSourceStage(
+                static_cast<NYql::EStorageType>(255));
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = producer;
+            project->Props.StageId = consumer;
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(result.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "source distribution storage");
+        }
+    }
+
+    Y_UNIT_TEST(HashShuffleWithoutAHashFunctionFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto project = MakeCopyMap(ctx, read, "result", "a.k");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        project->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TShuffleConnection>(
+                TVector<TInfoUnit>{TInfoUnit("a.k")},
+                graph.GetOutputIndex(producer)));
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT(result.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "no hash function");
+    }
+
+    Y_UNIT_TEST(ColumnShardHashShuffleFailsClosedWithoutShardMapping) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto project = MakeCopyMap(ctx, read, "result", "a.k");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        project->Props.StageId = consumer;
+        auto shuffle = MakeIntrusive<TShuffleConnection>(
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            graph.GetOutputIndex(producer));
+        shuffle->HashFuncType = NYql::NDq::EHashShuffleFuncType::ColumnShardHashV1;
+        graph.Connect(producer, consumer, shuffle);
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT(result.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "requires shard mapping");
+    }
+
+    Y_UNIT_TEST(RowStorageSourceStageRejectsLocalOperators) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto project = MakeCopyMap(ctx, read, "result", "a.k");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        read->Props.StageId = source;
+        project->Props.StageId = source;
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT(result.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "must contain only its Read");
+    }
+
+    Y_UNIT_TEST(ExplicitShuffleEliminationAssumptionsFailClosed) {
+        for (const bool eliminateLeft : {true, false}) {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            AddTable(ctx, "/Root/B", {{"k", "Int32", true}});
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/A"),
+                "a",
+                {"k"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/B"),
+                "b",
+                {"k"});
+            const auto pos = TPositionHandle();
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                pos,
+                "Inner",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{
+                    {TInfoUnit("a.k"), TInfoUnit("b.k")},
+                });
+            if (eliminateLeft) {
+                join->Props.LeftShuffleBy = TVector<TInfoUnit>{};
+            } else {
+                join->Props.RightShuffleBy = TVector<TInfoUnit>{};
+            }
+            TOpRoot root(join, pos, {"a.k", "b.k"});
+
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 leftStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 rightStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 joinStage = graph.AddStage();
+            left->Props.StageId = leftStage;
+            right->Props.StageId = rightStage;
+            join->Props.StageId = joinStage;
+            graph.Connect(
+                leftStage,
+                joinStage,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(leftStage)));
+            graph.Connect(
+                rightStage,
+                joinStage,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(rightStage)));
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(result.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "source co-partitioning assumption");
+        }
+    }
+
+    Y_UNIT_TEST(MalformedStageMembershipAndProducerSinkFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            auto project = MakeCopyMap(ctx, read, "result", "a.k");
+            TOpRoot root(project, TPositionHandle(), {"result"});
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = producer;
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(result.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "missing or invalid stage");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            read->StorageType = NYql::EStorageType::ColumnStorage;
+            const auto pos = TPositionHandle();
+            auto left = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+            auto right = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                left,
+                right,
+                pos,
+                TVector<TInfoUnit>{TInfoUnit("a.k")});
+            TOpRoot root(unionAll, pos, {"a.k"});
+
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 producer = graph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = producer;
+            left->Props.StageId = producer;
+            right->Props.StageId = producer;
+            unionAll->Props.StageId = consumer;
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(result.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "more than one logical sink");
+        }
+    }
+
+    Y_UNIT_TEST(ConnectionContainerMismatchFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto project = MakeCopyMap(ctx, read, "result", "a.k");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        project->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+        graph.StageOutputs[producer].clear();
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT(result.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "connection keys disagree");
+    }
+
+    Y_UNIT_TEST(ConsumerTaskCountsMatchExecutorAndChannelConstraints) {
+        const auto exportDuplicate = [](TStringBuf mode) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            const auto pos = TPositionHandle();
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                read,
+                read,
+                pos,
+                TVector<TInfoUnit>{TInfoUnit("a.k")});
+            TOpRoot root(unionAll, pos, {"a.k"});
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = producer;
+            unionAll->Props.StageId = consumer;
+            if (mode == "broadcast") {
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TBroadcastConnection>(graph.GetOutputIndex(producer)));
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TBroadcastConnection>(graph.GetOutputIndex(producer)));
+            } else if (mode == "map-and-serial") {
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TUnionAllConnection>(
+                        graph.GetOutputIndex(producer),
+                        false));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(mode, "two-maps");
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+                graph.Connect(
+                    producer,
+                    consumer,
+                    MakeIntrusive<TMapConnection>(graph.GetOutputIndex(producer)));
+            }
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto broadcast = exportDuplicate("broadcast");
+        UNIT_ASSERT_C(broadcast.IsSupported(), broadcast.UnsupportedReason);
+
+        const auto serialWithMap = exportDuplicate("map-and-serial");
+        UNIT_ASSERT(!serialWithMap.IsSupported());
+        UNIT_ASSERT(serialWithMap.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(serialWithMap.UnsupportedReason, "serial UnionAll");
+
+        const auto twoMaps = exportDuplicate("two-maps");
+        UNIT_ASSERT(!twoMaps.IsSupported());
+        UNIT_ASSERT(twoMaps.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(twoMaps.UnsupportedReason, "more than one Map");
+    }
+
+    Y_UNIT_TEST(ParallelUnionUsesItsSingleTaskProducerCount) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto gather = MakeCopyMap(ctx, read, "middle", "a.k");
+        const auto pos = TPositionHandle();
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            gather,
+            gather,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("middle")});
+        TOpRoot root(unionAll, pos, {"middle"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 gatherStage = graph.AddStage();
+        const ui32 rootStage = graph.AddStage();
+        read->Props.StageId = source;
+        gather->Props.StageId = gatherStage;
+        unionAll->Props.StageId = rootStage;
+        graph.Connect(
+            source,
+            gatherStage,
+            MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(source), false));
+        graph.Connect(
+            gatherStage,
+            rootStage,
+            MakeIntrusive<TMapConnection>(graph.GetOutputIndex(gatherStage)));
+        graph.Connect(
+            gatherStage,
+            rootStage,
+            MakeIntrusive<TUnionAllConnection>(
+                graph.GetOutputIndex(gatherStage),
+                true));
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+    }
+
     Y_UNIT_TEST(ChangedPhysicalTableIdentityFailsClosedAgainstInitialCatalog) {
         TExportTestContext ctx;
         auto& table = ctx.Tables->GetOrAddTable("ut", "/Root", "/Root/A");
@@ -429,13 +1001,17 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         capture.CaptureInitial(initialRoot, ctx.RboCtx);
 
         const auto pos = TPositionHandle();
+        auto empty = MakeIntrusive<TOpEmptySource>(pos);
         auto replacement = MakeIntrusive<TOpMap>(
-            MakeIntrusive<TOpEmptySource>(pos),
+            empty,
             pos,
             TVector<TMapElement>{TMapElement(
                 TInfoUnit("a.k"),
                 MakeConstant("Int32", "0", pos, &ctx.ExprCtx))});
         TOpRoot finalRoot(replacement, pos, {"a.k"});
+        const ui32 finalStage = finalRoot.PlanProps.StageGraph.AddStage();
+        empty->Props.StageId = finalStage;
+        replacement->Props.StageId = finalStage;
         capture.CaptureFinal(finalRoot, ctx.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
@@ -446,6 +1022,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         const auto initialSnapshot = ParseSupported(sink.Results[0]);
         const auto finalSnapshot = ParseSupported(sink.Results[1]);
+        UNIT_ASSERT(initialSnapshot["stage_graph"].IsNull());
+        UNIT_ASSERT(!finalSnapshot["stage_graph"].IsNull());
         const auto& initialTables = initialSnapshot["schema"]["tables"].GetArraySafe();
         const auto& finalTables = finalSnapshot["schema"]["tables"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(initialTables.size(), 1);
@@ -457,6 +1035,47 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             initialTables[0]["columns"].GetArraySafe().size(),
             finalTables[0]["columns"].GetArraySafe().size());
+    }
+
+    Y_UNIT_TEST(PairCaptureRejectsAStagedInitialBoundary) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+        const ui32 stage = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::RowStorage);
+        read->Props.StageId = stage;
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT(!sink.Results[0].IsSupported());
+        UNIT_ASSERT(sink.Results[0].Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(
+            sink.Results[0].UnsupportedReason,
+            "Initial semantic snapshot boundary requires stage_graph:null");
+    }
+
+    Y_UNIT_TEST(PairCaptureRejectsALogicalFinalBoundary) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        capture.CaptureFinal(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(sink.Results[0].IsSupported());
+        UNIT_ASSERT(!sink.Results[1].IsSupported());
+        UNIT_ASSERT(sink.Results[1].Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(
+            sink.Results[1].UnsupportedReason,
+            "Final semantic snapshot boundary requires a non-null stage_graph");
     }
 
     Y_UNIT_TEST(UnsupportedFinalSnapshotIsDeliveredWithoutThrowing) {
@@ -476,6 +1095,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
             EOpPhase::Undefined);
         TOpRoot finalRoot(limit, pos, {"a.k"});
+        const ui32 finalStage = finalRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::RowStorage);
+        read->Props.StageId = finalStage;
+        limit->Props.StageId = finalStage;
         capture.CaptureFinal(finalRoot, ctx.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
@@ -496,6 +1119,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TThrowOnceSemanticSnapshotSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(root, ctx.RboCtx);
+        const ui32 finalStage = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::RowStorage);
+        read->Props.StageId = finalStage;
         capture.CaptureFinal(root, ctx.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);

@@ -101,13 +101,20 @@ class Database:
 
 
 class Evaluator:
-    def __init__(self, snapshot: Snapshot, database: Database, scalar: ScalarEncoder) -> None:
+    def __init__(
+        self,
+        snapshot: Snapshot,
+        database: Database,
+        scalar: ScalarEncoder,
+        edge_inputs: Mapping[tuple[str, int], Relation] | None = None,
+    ) -> None:
         self.snapshot = snapshot
         self.database = database
         self.scalar = scalar
         self.nodes = snapshot.plan.node_map()
         self.schemas = validate_snapshot(snapshot)
         self.cache: dict[str, Relation] = {}
+        self.edge_inputs = edge_inputs or {}
 
     def root(self) -> Relation:
         relation = self.node(self.snapshot.plan.root)
@@ -147,7 +154,7 @@ class Evaluator:
             return Relation(columns, rows)
 
         if isinstance(node, Project):
-            source = self.node(node.input)
+            source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
             return Relation(
                 columns,
@@ -164,7 +171,7 @@ class Evaluator:
             )
 
         if isinstance(node, Filter):
-            source = self.node(node.input)
+            source = self._input(node.id, 0, node.input)
             return Relation(
                 source.columns,
                 tuple(
@@ -177,12 +184,16 @@ class Evaluator:
             )
 
         if isinstance(node, Join):
-            return self._join(node, self.node(node.left), self.node(node.right))
+            return self._join(
+                node,
+                self._input(node.id, 0, node.left),
+                self._input(node.id, 1, node.right),
+            )
 
         if isinstance(node, UnionAll):
             rows: list[Row] = []
-            for item in node.inputs:
-                source = self.node(item.node)
+            for index, item in enumerate(node.inputs):
+                source = self._input(node.id, index, item.node)
                 for row in source.rows:
                     rows.append(
                         Row(
@@ -196,6 +207,10 @@ class Evaluator:
             return Relation(self._columns(node.id), tuple(rows))
 
         raise AssertionError(f"unknown plan node {type(node).__name__}")
+
+    def _input(self, parent: str, ordinal: int, child: str) -> Relation:
+        key = (parent, ordinal)
+        return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
         matches: list[list[smt.Term]] = []

@@ -9,8 +9,9 @@ from typing import Any, Mapping
 
 from . import smt
 from .ir import Snapshot
-from .relation import Database, Evaluator, WitnessCell, WitnessRow, bag_equal
+from .relation import Database, Evaluator, WitnessRow, bag_equal
 from .scalar import Encoder as ScalarEncoder
+from .stages import TASKS, Evaluator as StageEvaluator, Router, StageError
 from .types import family
 
 
@@ -48,11 +49,16 @@ class Problem:
 class Result:
     status: str
     row_bound: int
+    task_bound: int = TASKS
     witness: Mapping[str, list[dict[str, Any]]] | None = None
     reason: str | None = None
 
     def to_json(self) -> dict[str, Any]:
-        result: dict[str, Any] = {"status": self.status, "row_bound": self.row_bound}
+        result: dict[str, Any] = {
+            "status": self.status,
+            "row_bound": self.row_bound,
+            "task_bound": self.task_bound,
+        }
         if self.witness is not None:
             result["witness"] = self.witness
         if self.reason is not None:
@@ -65,6 +71,30 @@ def build_problem(
     after: Snapshot,
     row_bound: int,
     timeout_ms: int | None = None,
+) -> Problem:
+    _check_boundary_roles(before, after)
+    return _build_problem(before, after, row_bound, timeout_ms)
+
+
+def build_logical_kernel_problem_for_tests(
+    before: Snapshot,
+    after: Snapshot,
+    row_bound: int,
+    timeout_ms: int | None = None,
+) -> Problem:
+    """Bypass boundary roles only for direct tests of the logical kernel."""
+    if before.stage_graph is not None or after.stage_graph is not None:
+        raise VerificationError(
+            "logical-kernel test comparisons require stage_graph:null on both snapshots"
+        )
+    return _build_problem(before, after, row_bound, timeout_ms)
+
+
+def _build_problem(
+    before: Snapshot,
+    after: Snapshot,
+    row_bound: int,
+    timeout_ms: int | None,
 ) -> Problem:
     _check_catalogs(before, after)
     if len(before.plan.output) != len(after.plan.output):
@@ -87,10 +117,33 @@ def build_problem(
     script = smt.Script(timeout_ms)
     database = Database(before, row_bound, script)
     scalar = ScalarEncoder(script)
-    before_relation = Evaluator(before, database, scalar).root()
-    after_relation = Evaluator(after, database, scalar).root()
+    router = Router(script)
+    try:
+        before_relation = (
+            Evaluator(before, database, scalar).root()
+            if before.stage_graph is None
+            else StageEvaluator(before, database, scalar, router).root()
+        )
+        after_relation = (
+            Evaluator(after, database, scalar).root()
+            if after.stage_graph is None
+            else StageEvaluator(after, database, scalar, router).root()
+        )
+    except StageError as error:
+        raise VerificationError(str(error)) from error
     script.assert_(smt.not_(bag_equal(before_relation, after_relation, scalar)))
     return Problem(script, database.witness)
+
+
+def _check_boundary_roles(before: Snapshot, after: Snapshot) -> None:
+    if before.stage_graph is not None:
+        raise VerificationError(
+            "initial snapshot must be captured before stage assignment with stage_graph:null"
+        )
+    if after.stage_graph is None:
+        raise VerificationError(
+            "final snapshot must be captured after stage assignment with a non-null stage_graph"
+        )
 
 
 def solve(problem: Problem, solver: str | Path, row_bound: int, timeout_ms: int | None = None) -> Result:

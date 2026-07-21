@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .ir import SnapshotError, load_snapshot
+from .stages import TASKS
 from .verify import SchemaMismatch, SolverError, VerificationError, build_problem, solve
 
 
@@ -39,13 +40,27 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.emit_smt is not None:
             options.emit_smt.write_text(problem.formula(), encoding="utf-8")
         if options.solver is None:
-            print(json.dumps({"status": "FORMULA_EMITTED", "row_bound": options.rows}, sort_keys=True))
+            print(
+                json.dumps(
+                    {
+                        "status": "FORMULA_EMITTED",
+                        "row_bound": options.rows,
+                        "task_bound": TASKS,
+                    },
+                    sort_keys=True,
+                )
+            )
             return 0
         result = solve(problem, options.solver, options.rows, options.timeout_ms)
     except SchemaMismatch as error:
         print(
             json.dumps(
-                {"status": "SCHEMA_MISMATCH", "row_bound": options.rows, "reason": str(error)},
+                {
+                    "status": "SCHEMA_MISMATCH",
+                    "row_bound": options.rows,
+                    "task_bound": TASKS,
+                    "reason": str(error),
+                },
                 sort_keys=True,
             )
         )

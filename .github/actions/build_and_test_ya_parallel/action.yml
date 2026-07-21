@@ -87,6 +87,10 @@ inputs:
   publish_github_status:
     type: boolean
     default: true
+  status_context_prefix:
+    type: string
+    default: "parallel_"
+    description: "Prefix for GitHub commit status contexts (parallel_ for debug; empty for production names)"
   publish_pr_comment:
     type: boolean
     default: true
@@ -182,6 +186,7 @@ runs:
         prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
         prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
         publish_github_status: ${{ inputs.publish_github_status }}
+        status_context_prefix: ${{ inputs.status_context_prefix }}
         publish_pr_comment: ${{ inputs.publish_pr_comment }}
         single_attempt: ${{ inputs.single_attempt }}
         start_retry: ${{ inputs.start_retry }}

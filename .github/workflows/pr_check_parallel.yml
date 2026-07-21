@@ -245,10 +245,10 @@ jobs:
               | group_by(.context)
               | map(.[0])
               | map(select(.context | (
-                  startswith("build_relwithdebinfo")
-                  or startswith("build_release-asan")
-                  or startswith("test_relwithdebinfo")
-                  or startswith("test_release-asan")
+                  startswith("parallel_build_relwithdebinfo")
+                  or startswith("parallel_build_release-asan")
+                  or startswith("parallel_test_relwithdebinfo")
+                  or startswith("parallel_test_release-asan")
                 )))
               | if length == 4 and all(.state == "success") then "success" else "failure" end
             ')

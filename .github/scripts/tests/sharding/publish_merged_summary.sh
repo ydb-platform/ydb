@@ -159,7 +159,7 @@ if [[ "${SKIP_GITHUB_PUBLISH:-}" != "1" ]] && [[ -n "$STATUS_SHA" ]]; then
     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
-    -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"test_${BUILD_PRESET}\"}"
+    -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"${STATUS_CONTEXT_PREFIX:-parallel_}test_${BUILD_PRESET}\"}"
 fi
 
 if [[ "${SKIP_FAIL_CHECK:-}" != "1" && "$IS_TEST_RESULT_IGNORED" -eq 0 ]]; then

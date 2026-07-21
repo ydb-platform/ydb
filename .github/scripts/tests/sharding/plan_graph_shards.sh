@@ -33,6 +33,19 @@ if [ -z "${MAX_SHARDS:-}" ] && [ -f "$CAPACITY_CONFIG" ] && [ -n "${GITHUB_TOKEN
   fi
 fi
 
+SPLIT_EXTRA_ARGS=()
+if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
+  SPLIT_EXTRA_ARGS+=(--no-peak-cap)
+fi
+# Real pool-capacity cap supersedes the static peak-hour heuristic (same as
+# plan_shard_tests.sh): once we know how many runners fit the quota, applying
+# peak-cap on top would double-penalize.
+CAPACITY_APPLIED=0
+if [ -n "${MAX_SHARDS:-}" ]; then
+  CAPACITY_APPLIED=1
+  SPLIT_EXTRA_ARGS+=(--no-peak-cap)
+fi
+
 run_split() {
   local count="$1"
   python3 "$SCRIPT_DIR/split_graph_result.py" \
@@ -44,8 +57,17 @@ run_split() {
     --build-type "${BUILD_PRESET:-relwithdebinfo}" \
     --branch "${HISTORY_BRANCH:-main}" \
     --days-back "${HISTORY_DAYS_BACK:-3}" \
-    --threads "$TEST_THREADS"
+    --threads "$TEST_THREADS" \
+    "${SPLIT_EXTRA_ARGS[@]}"
 }
+
+if [ "$SHARD_COUNT" = "auto" ]; then
+  if [ "${DISABLE_PEAK_CAP:-}" = "1" ] || [ "$CAPACITY_APPLIED" = "1" ]; then
+    echo "Peak-hour cap disabled for auto shard count (DISABLE_PEAK_CAP=${DISABLE_PEAK_CAP:-0}, capacity=${CAPACITY_APPLIED})"
+  else
+    echo "Peak-hour cap enabled for auto shard count"
+  fi
+fi
 
 run_split "$SHARD_COUNT"
 

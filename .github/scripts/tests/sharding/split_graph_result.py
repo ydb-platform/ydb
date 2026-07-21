@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,11 @@ for path in (_SCRIPT_DIR, _TESTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from choose_shard_count import choose_shard_count, enrich_plan_timing_estimate  # noqa: E402
+from choose_shard_count import (  # noqa: E402
+    choose_shard_count,
+    enrich_plan_timing_estimate,
+    is_peak_hour_utc,
+)
 from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p50  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
     component_weight,
@@ -158,6 +163,17 @@ def main() -> int:
         choices=("increment_graph", "full_graph"),
         help="Plan mode stored in shard_plan.json (default: increment_graph)",
     )
+    parser.add_argument(
+        "--no-peak-cap",
+        action="store_true",
+        help="Ignore the peak-hour shard cap when --shard-count=auto",
+    )
+    parser.add_argument(
+        "--now-utc-hour",
+        type=int,
+        default=None,
+        help="Override current UTC hour (for tests)",
+    )
     args = parser.parse_args()
 
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
@@ -202,14 +218,17 @@ def main() -> int:
     total_weight = sum(preview_weights)
 
     if args.shard_count == "auto":
+        hour = args.now_utc_hour if args.now_utc_hour is not None else datetime.now(timezone.utc).hour
+        peak = (not args.no_peak_cap) and is_peak_hour_utc(hour)
         shard_count, estimate_min = choose_shard_count(
             total_weight,
             threads=args.threads,
             profile=args.profile,
+            is_peak=peak,
         )
         print(
             f"Adaptive shard count (profile={args.profile}) from graph weight {total_weight:.0f}s "
-            f"(~{estimate_min:.1f} min single job) -> {shard_count}",
+            f"(~{estimate_min:.1f} min single job), peak={peak} (hour {hour} UTC) -> {shard_count}",
             file=sys.stderr,
         )
     else:

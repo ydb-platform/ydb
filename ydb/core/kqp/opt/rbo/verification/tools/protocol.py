@@ -1,4 +1,4 @@
-"""Strict capture and verifier subprocess contracts for rule localization."""
+"""Strict capture and verifier subprocess contracts for transformation localization."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 
-PROTOCOL = "ydb-rbo-rule-prefix-capture-v1"
+PROTOCOL = "ydb-rbo-transformation-prefix-capture-v2"
 CAPTURE_MANIFEST = "capture.json"
+EVENT_KINDS = frozenset({"RULE_APPLICATION", "ATOMIC_STAGE_COMMIT"})
 
 
 class LocalizationError(RuntimeError):
@@ -19,20 +20,26 @@ class LocalizationError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class Application:
+class Event:
     ordinal: int
+    kind: str
     stage: str
-    rule: str
+    name: str
 
     def to_json(self) -> dict[str, Any]:
-        return {"ordinal": self.ordinal, "stage": self.stage, "rule": self.rule}
+        return {
+            "ordinal": self.ordinal,
+            "kind": self.kind,
+            "stage": self.stage,
+            "name": self.name,
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class Capture:
     status: str
     initial: Path
-    applications: tuple[Application, ...]
+    events: tuple[Event, ...]
     prefix: Path | None = None
     final: Path | None = None
     unsupported_reason: str | None = None
@@ -47,7 +54,7 @@ class Config:
     rows: int = 2
     timeout_ms: int = 10_000
     capture_timeout_seconds: int = 300
-    max_applications: int = 10_000
+    max_events: int = 10_000
 
 
 CommandRunner = Callable[[Sequence[str], int], subprocess.CompletedProcess[str]]
@@ -61,9 +68,9 @@ def capture(
 ) -> Capture:
     arguments = [
         *config.capture_command,
-        "--rbo-rule-prefix-ordinal",
+        "--rbo-transformation-prefix-ordinal",
         str(ordinal),
-        "--rbo-rule-prefix-output",
+        "--rbo-transformation-prefix-output",
         str(directory),
     ]
     process = run(arguments, config.capture_timeout_seconds)
@@ -102,12 +109,14 @@ def verify(
         str(directory / "obligation.smt2"),
     ]
     if diagnostic:
-        arguments.append("--diagnostic-rule-prefix")
+        arguments.append("--diagnostic-transformation-prefix")
     process = run(arguments, max(30, config.timeout_ms // 1000 + 30))
     _save_process(directory / "verifier", process)
     verdict = _decode_verdict(process)
-    if diagnostic and verdict.get("comparison_scope") != "RULE_APPLICATION_PREFIX":
-        raise LocalizationError("verifier did not confirm rule-prefix comparison scope")
+    if diagnostic and verdict.get("comparison_scope") != "OPTIMIZER_TRANSFORMATION_PREFIX":
+        raise LocalizationError(
+            "verifier did not confirm transformation-prefix comparison scope"
+        )
     if not diagnostic and "comparison_scope" in verdict:
         raise LocalizationError("normal final verifier unexpectedly reported a diagnostic scope")
     expected_exit = {
@@ -149,8 +158,8 @@ def validate_config(config: Config) -> None:
         raise LocalizationError("solver timeout must be positive")
     if config.capture_timeout_seconds <= 0:
         raise LocalizationError("capture timeout must be positive")
-    if config.max_applications <= 0:
-        raise LocalizationError("maximum application count must be positive")
+    if config.max_events <= 0:
+        raise LocalizationError("maximum event count must be positive")
     if config.artifacts.exists():
         raise LocalizationError(f"artifact directory already exists: {config.artifacts}")
 
@@ -177,7 +186,7 @@ def _decode_capture(raw: Any, ordinal: int, directory: Path) -> Capture:
         "requested_ordinal",
         "status",
         "initial_snapshot",
-        "applications",
+        "events",
     }
     specific = {
         "PREFIX_CAPTURED": "prefix_snapshot",
@@ -197,47 +206,50 @@ def _decode_capture(raw: Any, ordinal: int, directory: Path) -> Capture:
     if type(raw["requested_ordinal"]) is not int or raw["requested_ordinal"] != ordinal:
         raise LocalizationError("capture manifest does not match the requested ordinal")
 
-    applications = _decode_applications(raw["applications"])
+    events = _decode_events(raw["events"])
     initial = _artifact(directory, raw["initial_snapshot"], "initial_snapshot")
     is_prefix = status in {"PREFIX_CAPTURED", "PREFIX_UNSUPPORTED"}
-    if is_prefix and len(applications) != ordinal:
-        raise LocalizationError(f"{status} must contain the requested application prefix")
-    if not is_prefix and len(applications) >= ordinal:
-        raise LocalizationError(f"{status} must contain fewer applications than requested")
+    if is_prefix and len(events) != ordinal:
+        raise LocalizationError(f"{status} must contain the requested event prefix")
+    if not is_prefix and len(events) >= ordinal:
+        raise LocalizationError(f"{status} must contain fewer events than requested")
     if status == "PREFIX_CAPTURED":
         return Capture(
             status,
             initial,
-            applications,
+            events,
             prefix=_artifact(directory, raw[specific], specific),
         )
     if status == "OPTIMIZER_COMPLETE":
         return Capture(
             status,
             initial,
-            applications,
+            events,
             final=_artifact(directory, raw[specific], specific),
         )
     reason = raw[specific]
     if not isinstance(reason, str) or not reason:
         raise LocalizationError("unsupported_reason must be a non-empty string")
-    return Capture(status, initial, applications, unsupported_reason=reason)
+    return Capture(status, initial, events, unsupported_reason=reason)
 
 
-def _decode_applications(raw: Any) -> tuple[Application, ...]:
+def _decode_events(raw: Any) -> tuple[Event, ...]:
     if not isinstance(raw, list):
-        raise LocalizationError("applications must be a JSON array")
-    result: list[Application] = []
+        raise LocalizationError("events must be a JSON array")
+    result: list[Event] = []
     for index, item in enumerate(raw, 1):
-        if not isinstance(item, dict) or set(item) != {"ordinal", "stage", "rule"}:
-            raise LocalizationError(f"application {index} has invalid fields")
+        expected_fields = {"ordinal", "kind", "stage", "name"}
+        if not isinstance(item, dict) or set(item) != expected_fields:
+            raise LocalizationError(f"event {index} has invalid fields")
         if type(item["ordinal"]) is not int or item["ordinal"] != index:
-            raise LocalizationError(f"application {index} has a non-contiguous ordinal")
+            raise LocalizationError(f"event {index} has a non-contiguous ordinal")
+        if not isinstance(item["kind"], str) or item["kind"] not in EVENT_KINDS:
+            raise LocalizationError(f"event {index} has an invalid kind")
         if not isinstance(item["stage"], str) or not item["stage"]:
-            raise LocalizationError(f"application {index} has an invalid stage")
-        if not isinstance(item["rule"], str) or not item["rule"]:
-            raise LocalizationError(f"application {index} has an invalid rule")
-        result.append(Application(index, item["stage"], item["rule"]))
+            raise LocalizationError(f"event {index} has an invalid stage")
+        if not isinstance(item["name"], str) or not item["name"]:
+            raise LocalizationError(f"event {index} has an invalid name")
+        result.append(Event(index, item["kind"], item["stage"], item["name"]))
     return tuple(result)
 
 

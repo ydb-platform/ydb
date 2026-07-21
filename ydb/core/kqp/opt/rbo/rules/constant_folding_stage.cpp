@@ -77,7 +77,12 @@ void ExtractConstantExprs(const TExprNode::TPtr& input, TVector<std::pair<TExprN
 
 } // anonymous namespace
 
-TConstantFoldingStage::TConstantFoldingStage() : IRBOStage("Constant folding stage") {
+TConstantFoldingStage::TConstantFoldingStage()
+    : IRBOStage(
+        "Constant folding stage",
+        ERBOStageTransformationMode::AtomicStageCommit,
+        "Fold constant expressions")
+{
     Props = ERuleProperties::RequireParents |  ERuleProperties::RequireTypes;
 }
 

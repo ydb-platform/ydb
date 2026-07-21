@@ -15,7 +15,7 @@ from .verify import (
     SolverError,
     VerificationError,
     build_problem,
-    build_rule_prefix_problem,
+    build_transformation_prefix_problem,
     solve,
 )
 
@@ -29,9 +29,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--solver", type=Path, help="explicit Z3 executable")
     result.add_argument("--emit-smt", type=Path, help="write the exact SMT-LIB obligation")
     result.add_argument(
-        "--diagnostic-rule-prefix",
+        "--diagnostic-transformation-prefix",
         action="store_true",
-        help="compare the logical initial snapshot with one captured rule prefix",
+        help="compare the logical initial snapshot with one transformation prefix",
     )
     return result
 
@@ -39,7 +39,9 @@ def parser() -> argparse.ArgumentParser:
 def main(arguments: Sequence[str] | None = None) -> int:
     options = parser().parse_args(arguments)
     comparison_scope = (
-        "RULE_APPLICATION_PREFIX" if options.diagnostic_rule_prefix else None
+        "OPTIMIZER_TRANSFORMATION_PREFIX"
+        if options.diagnostic_transformation_prefix
+        else None
     )
     if options.rows < 0:
         return _error(
@@ -60,8 +62,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         before = load_snapshot(options.before)
         after = load_snapshot(options.after)
         builder = (
-            build_rule_prefix_problem
-            if options.diagnostic_rule_prefix
+            build_transformation_prefix_problem
+            if options.diagnostic_transformation_prefix
             else build_problem
         )
         problem = builder(before, after, options.rows, options.timeout_ms)

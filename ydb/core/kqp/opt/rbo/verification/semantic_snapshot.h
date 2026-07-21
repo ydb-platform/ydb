@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rule_application.h"
+#include "transformation_event.h"
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -58,7 +58,7 @@ struct TSemanticSnapshotExportResult {
 enum class ERBOSemanticSnapshotBoundaryV1 {
     Initial,
     Final,
-    RuleApplicationPrefix,
+    TransformationPrefix,
 };
 
 struct TRBOSemanticSnapshotBoundaryResultV1 {
@@ -69,9 +69,9 @@ struct TRBOSemanticSnapshotBoundaryResultV1 {
     ERBOSemanticSnapshotBoundaryV1 Boundary;
     TString Json;
     TString UnsupportedReason;
-    // Empty for Initial and for non-diagnostic runs.  A diagnostic Prefix has
+    // Empty for Initial and for non-diagnostic runs. A diagnostic Prefix has
     // [1..target]; diagnostic Final has the complete shorter sequence.
-    TVector<TRBORuleApplicationV1> RuleApplications;
+    TVector<TRBOTransformationEventV1> TransformationEvents;
 };
 
 class IRBOSemanticSnapshotSink {
@@ -81,9 +81,9 @@ public:
     // The result is passed by value so the sink owns the JSON or diagnostic.
     virtual void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) = 0;
 
-    // Diagnostic-only opt-in.  Applications are numbered from one across the
+    // Diagnostic-only opt-in. Transformations are numbered from one across the
     // complete optimizer pipeline.  The default cannot affect optimization.
-    virtual std::optional<ui64> GetRuleApplicationPrefixTarget() const {
+    virtual std::optional<ui64> GetTransformationPrefixTarget() const {
         return std::nullopt;
     }
 };
@@ -101,14 +101,14 @@ public:
 
     void CaptureInitial(TOpRoot& root, TRBOContext& ctx) noexcept;
     void CaptureFinal(TOpRoot& root, const TRBOContext& ctx) noexcept;
-    void CaptureRuleApplicationPrefix(
+    void CaptureTransformationPrefix(
         TOpRoot& root,
         TRBOContext& ctx,
-        const TVector<TRBORuleApplicationV1>& applications) noexcept;
+        const TVector<TRBOTransformationEventV1>& events) noexcept;
 
     // Sink configuration is untrusted instrumentation.  Invalid values and
     // exceptions disable the debug hook without changing query compilation.
-    std::optional<ui64> GetRuleApplicationPrefixTarget() const noexcept;
+    std::optional<ui64> GetTransformationPrefixTarget() const noexcept;
 
 private:
     void Deliver(TRBOSemanticSnapshotBoundaryResultV1 result) noexcept;

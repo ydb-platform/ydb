@@ -4,12 +4,20 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NOpt;
 
 class IRBOSemanticSnapshotSink;
+
+enum class ERBOStageTransformationMode {
+    RuleApplications,
+    AtomicStageCommit,
+    NoSemanticMutation,
+};
 
 enum ERuleProperties: ui32 {
     RequireParents         = 0x01,
@@ -69,7 +77,23 @@ class ISimplifiedRule : public IRule {
  */
 class IRBOStage : public NNonCopyable::TNonCopyable {
   public:
-    IRBOStage(TString&& stageName) : StageName(std::move(stageName)) {}
+    IRBOStage(
+        TString&& stageName,
+        ERBOStageTransformationMode transformationMode,
+        TString&& transformationName = {})
+        : StageName(std::move(stageName))
+        , TransformationMode(transformationMode)
+        , TransformationName(std::move(transformationName))
+    {
+        Y_ENSURE(
+            TransformationMode != ERBOStageTransformationMode::AtomicStageCommit ||
+                !TransformationName.empty(),
+            "An atomic RBO stage must have a diagnostic transformation name");
+        Y_ENSURE(
+            TransformationMode == ERBOStageTransformationMode::AtomicStageCommit ||
+                TransformationName.empty(),
+            "Only an atomic RBO stage may have a diagnostic transformation name");
+    }
 
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
 
@@ -87,6 +111,8 @@ class IRBOStage : public NNonCopyable::TNonCopyable {
     ui32 Props = 0x00;
 
     TString StageName;
+    const ERBOStageTransformationMode TransformationMode;
+    const TString TransformationName;
 };
 
 /**

@@ -30,8 +30,8 @@ constexpr const char* TestCluster = "local_ut";
 class TRecordingSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
 public:
     explicit TRecordingSemanticSnapshotSink(
-        std::optional<ui64> ruleApplicationPrefixTarget = std::nullopt)
-        : RuleApplicationPrefixTarget(ruleApplicationPrefixTarget)
+        std::optional<ui64> transformationPrefixTarget = std::nullopt)
+        : TransformationPrefixTarget(transformationPrefixTarget)
     {
     }
 
@@ -40,8 +40,8 @@ public:
         Results.push_back(std::move(result));
     }
 
-    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
-        return RuleApplicationPrefixTarget;
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
+        return TransformationPrefixTarget;
     }
 
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Extract() {
@@ -50,7 +50,7 @@ public:
     }
 
 private:
-    const std::optional<ui64> RuleApplicationPrefixTarget;
+    const std::optional<ui64> TransformationPrefixTarget;
     std::mutex Mutex;
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
@@ -252,7 +252,7 @@ NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     ui64 timeoutMs = 10'000,
-    bool diagnosticRulePrefix = false)
+    bool diagnosticTransformationPrefix = false)
 {
     TTempDir tempDir;
     const auto initialPath = tempDir.Path() / "initial.json";
@@ -269,8 +269,8 @@ NJson::TJsonValue BuildVerificationProblem(
         << "--rows" << "2"
         << "--timeout-ms" << ToString(timeoutMs)
         << "--emit-smt" << formulaPath.GetPath();
-    if (diagnosticRulePrefix) {
-        command << "--diagnostic-rule-prefix";
+    if (diagnosticTransformationPrefix) {
+        command << "--diagnostic-transformation-prefix";
     }
 
     const auto solver = TryGetEnv("RBO_Z3");
@@ -293,7 +293,7 @@ NJson::TJsonValue BuildVerificationProblem(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
-    Y_UNIT_TEST(RealHostStopsAfterOneCommittedRuleAndExportsItsPrefix) {
+    Y_UNIT_TEST(RealHostStopsAtNoOpConstantFoldingAtomicCheckpoint) {
         TKikimrRunner kikimr;
 
         NYql::TExprContext moduleContext;
@@ -315,12 +315,19 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
         UNIT_ASSERT(
             results[1].Boundary ==
-            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
-        UNIT_ASSERT(results[0].RuleApplications.empty());
-        UNIT_ASSERT_VALUES_EQUAL(results[1].RuleApplications.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(results[1].RuleApplications[0].Ordinal, 1);
-        UNIT_ASSERT(!results[1].RuleApplications[0].StageName.empty());
-        UNIT_ASSERT(!results[1].RuleApplications[0].RuleName.empty());
+            ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+        UNIT_ASSERT(results[0].TransformationEvents.empty());
+        UNIT_ASSERT_VALUES_EQUAL(results[1].TransformationEvents.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(results[1].TransformationEvents[0].Ordinal, 1);
+        UNIT_ASSERT(
+            results[1].TransformationEvents[0].Kind ==
+            ERBOTransformationEventKindV1::AtomicStageCommit);
+        UNIT_ASSERT_VALUES_EQUAL(
+            results[1].TransformationEvents[0].Stage,
+            "Constant folding stage");
+        UNIT_ASSERT_VALUES_EQUAL(
+            results[1].TransformationEvents[0].Name,
+            "Fold constant expressions");
 
         const auto initial = ParseSnapshot(results[0]);
         const auto prefix = ParseSnapshot(results[1]);
@@ -336,7 +343,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
         UNIT_ASSERT_VALUES_EQUAL(
             verdict["comparison_scope"].GetStringSafe(),
-            "RULE_APPLICATION_PREFIX");
+            "OPTIMIZER_TRANSFORMATION_PREFIX");
     }
 
     Y_UNIT_TEST(RealHostProducesInitialAndFinalSnapshots) {
@@ -360,6 +367,8 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
         UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
         UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        UNIT_ASSERT(results[0].TransformationEvents.empty());
+        UNIT_ASSERT(results[1].TransformationEvents.empty());
 
         const auto initial = ParseSnapshot(results[0]);
         const auto final = ParseSnapshot(results[1]);
@@ -439,6 +448,96 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostCompletionAndHashPrefixIncludeAtomicStages) {
+        TKikimrRunner kikimr;
+        const TString query = R"(--!syntax_v1
+                SELECT Key FROM `/Root/KeyValue` LIMIT 1;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+        TVector<TRBOSemanticSnapshotBoundaryResultV1> complete;
+        {
+            NYql::TExprContext moduleContext;
+            NYql::IModuleResolver::TPtr moduleResolver;
+            UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+            auto sink = std::make_shared<TRecordingSemanticSnapshotSink>(10'000);
+            auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+            const auto prepared = host->SyncPrepareDataQuery(query, settings);
+            UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+            complete = sink->Extract();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(complete.size(), 2);
+        UNIT_ASSERT(complete[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(complete[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        UNIT_ASSERT(complete[0].TransformationEvents.empty());
+        UNIT_ASSERT(!complete[1].TransformationEvents.empty());
+        UNIT_ASSERT(ParseSnapshot(complete[1])["stage_graph"].IsMap());
+
+        std::optional<ui64> constantFoldingOrdinal;
+        std::optional<ui64> hashPropagationOrdinal;
+        const auto& events = complete[1].TransformationEvents;
+        for (ui64 index = 0; index < events.size(); ++index) {
+            const auto& event = events[index];
+            UNIT_ASSERT_VALUES_EQUAL(event.Ordinal, index + 1);
+            UNIT_ASSERT(!event.Stage.empty());
+            UNIT_ASSERT(!event.Name.empty());
+
+            if (event.Stage == "Constant folding stage") {
+                UNIT_ASSERT(!constantFoldingOrdinal);
+                UNIT_ASSERT(
+                    event.Kind ==
+                    ERBOTransformationEventKindV1::AtomicStageCommit);
+                UNIT_ASSERT_VALUES_EQUAL(event.Name, "Fold constant expressions");
+                constantFoldingOrdinal = event.Ordinal;
+            } else if (event.Stage == "Hash function propagation") {
+                UNIT_ASSERT(!hashPropagationOrdinal);
+                UNIT_ASSERT(
+                    event.Kind ==
+                    ERBOTransformationEventKindV1::AtomicStageCommit);
+                UNIT_ASSERT_VALUES_EQUAL(event.Name, "Propagate hash functions");
+                hashPropagationOrdinal = event.Ordinal;
+            }
+        }
+
+        UNIT_ASSERT(constantFoldingOrdinal);
+        UNIT_ASSERT(hashPropagationOrdinal);
+        UNIT_ASSERT(*constantFoldingOrdinal < *hashPropagationOrdinal);
+        UNIT_ASSERT_VALUES_EQUAL(*hashPropagationOrdinal, events.size());
+
+        TVector<TRBOSemanticSnapshotBoundaryResultV1> stopped;
+        {
+            NYql::TExprContext moduleContext;
+            NYql::IModuleResolver::TPtr moduleResolver;
+            UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+            auto sink = std::make_shared<TRecordingSemanticSnapshotSink>(
+                *hashPropagationOrdinal);
+            auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+            const auto prepared = host->SyncPrepareDataQuery(query, settings);
+            UNIT_ASSERT(!prepared.Success());
+            stopped = sink->Extract();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(stopped.size(), 2);
+        UNIT_ASSERT(stopped[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            stopped[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(stopped[1].TransformationEvents.size(), events.size());
+        for (ui64 index = 0; index < events.size(); ++index) {
+            const auto& expected = events[index];
+            const auto& actual = stopped[1].TransformationEvents[index];
+            UNIT_ASSERT_VALUES_EQUAL(actual.Ordinal, expected.Ordinal);
+            UNIT_ASSERT(actual.Kind == expected.Kind);
+            UNIT_ASSERT_VALUES_EQUAL(actual.Stage, expected.Stage);
+            UNIT_ASSERT_VALUES_EQUAL(actual.Name, expected.Name);
+        }
+        UNIT_ASSERT(ParseSnapshot(stopped[1])["stage_graph"].IsMap());
     }
 
     Y_UNIT_TEST(RealHostProducesTopSortAndMergeSnapshots) {

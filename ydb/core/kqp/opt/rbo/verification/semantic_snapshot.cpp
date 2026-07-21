@@ -2754,7 +2754,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
         ERBOSemanticSnapshotBoundaryV1::Final,
         {},
         {},
-        ctx.RuleApplicationDebug.Applications,
+        ctx.TransformationDebug.Events,
     };
 
     try {
@@ -2782,34 +2782,36 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
     Deliver(std::move(result));
 }
 
-void TSemanticSnapshotPairCaptureV1::CaptureRuleApplicationPrefix(
+void TSemanticSnapshotPairCaptureV1::CaptureTransformationPrefix(
     TOpRoot& root,
     TRBOContext& ctx,
-    const TVector<TRBORuleApplicationV1>& applications) noexcept
+    const TVector<TRBOTransformationEventV1>& events) noexcept
 {
     if (!Sink) {
         return;
     }
 
     TRBOSemanticSnapshotBoundaryResultV1 result{
-        ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+        ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
         {},
         {},
-        applications,
+        events,
     };
 
     try {
-        bool validApplications = !result.RuleApplications.empty();
-        for (ui64 index = 0; index < result.RuleApplications.size(); ++index) {
-            const auto& point = result.RuleApplications[index];
-            validApplications = validApplications &&
-                point.Ordinal == index + 1 &&
-                !point.StageName.empty() &&
-                !point.RuleName.empty();
+        bool validEvents = !result.TransformationEvents.empty();
+        for (ui64 index = 0; index < result.TransformationEvents.size(); ++index) {
+            const auto& event = result.TransformationEvents[index];
+            validEvents = validEvents &&
+                event.Ordinal == index + 1 &&
+                (event.Kind == ERBOTransformationEventKindV1::RuleApplication ||
+                    event.Kind == ERBOTransformationEventKindV1::AtomicStageCommit) &&
+                !event.Stage.empty() &&
+                !event.Name.empty();
         }
-        if (!validApplications) {
+        if (!validEvents) {
             result.UnsupportedReason =
-                "Rule-application prefix metadata must be non-empty, contiguous, and have a stage and rule";
+                "Transformation-prefix metadata must be non-empty, contiguous, and have a valid kind, stage, and name";
         } else if (!InitialAttempted) {
             result.UnsupportedReason = "Initial semantic snapshot capture was not attempted";
         } else if (!Catalog) {
@@ -2817,12 +2819,12 @@ void TSemanticSnapshotPairCaptureV1::CaptureRuleApplicationPrefix(
                 ? TString("Initial semantic snapshot catalog is unavailable")
                 : CatalogFailure;
         } else {
-            // A committed rule invalidates derived properties.  Rebuild the
+            // A committed transformation invalidates derived properties. Rebuild the
             // minimum semantic caches only after the optimizer has stopped;
             // this diagnostic path must never perturb later rule matching.
             root.RecomputeOutputIUsSubtree();
             if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-                Unsupported("RBO type annotation failed for a rule-application prefix snapshot");
+                Unsupported("RBO type annotation failed for a transformation-prefix snapshot");
             }
             auto snapshot = ExportSemanticSnapshotV1(root, ctx, *Catalog);
             result.Json = std::move(snapshot.Json);
@@ -2830,22 +2832,22 @@ void TSemanticSnapshotPairCaptureV1::CaptureRuleApplicationPrefix(
         }
     } catch (const std::exception& error) {
         result.UnsupportedReason = TStringBuilder()
-            << "Rule-application prefix semantic snapshot capture failed closed: "
+            << "Transformation-prefix semantic snapshot capture failed closed: "
             << error.what();
     } catch (...) {
         result.UnsupportedReason =
-            "Rule-application prefix semantic snapshot capture failed closed with an unknown exception";
+            "Transformation-prefix semantic snapshot capture failed closed with an unknown exception";
     }
 
     Deliver(std::move(result));
 }
 
-std::optional<ui64> TSemanticSnapshotPairCaptureV1::GetRuleApplicationPrefixTarget() const noexcept {
+std::optional<ui64> TSemanticSnapshotPairCaptureV1::GetTransformationPrefixTarget() const noexcept {
     if (!Sink) {
         return std::nullopt;
     }
     try {
-        const auto target = Sink->GetRuleApplicationPrefixTarget();
+        const auto target = Sink->GetTransformationPrefixTarget();
         return target && *target > 0 ? target : std::nullopt;
     } catch (...) {
         // Instrumentation configuration must not alter normal compilation.

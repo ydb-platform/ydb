@@ -50,7 +50,10 @@ void PropagateHashFuncs(TStageGraph& stageGraph, const TKikimrConfiguration::TPt
 } // anonymous namespace
 
 TPropagateHashFuncStage::TPropagateHashFuncStage()
-    : IRBOStage("Hash function propagation")
+    : IRBOStage(
+        "Hash function propagation",
+        ERBOStageTransformationMode::AtomicStageCommit,
+        "Propagate hash functions")
 {}
 
 void TPropagateHashFuncStage::RunStage(TOpRoot& root, TRBOContext& ctx) {

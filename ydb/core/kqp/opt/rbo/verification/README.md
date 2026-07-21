@@ -10,10 +10,10 @@ The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
 M4. Separate normalized-plan, concrete-counterexample inspection, and isolated
-real-YDB replay tools are also implemented. A real-host rule-prefix capture
+real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
-Hermetic solver packaging and complete localization of mutating non-rule stages
-remain future milestones.
+Committed rule applications and mutating non-rule stages share one explicit
+transformation-event stream. Hermetic solver packaging remains a future milestone.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -305,21 +305,22 @@ unknown, the result remains `COUNTEREXAMPLE` with a reason and no witness.
 
 Normal verification requires a logical initial snapshot and a final snapshot
 with a complete StageGraph. The separate localization path may compare that
-same logical initial snapshot with a captured logical or complete staged rule
-prefix:
+same logical initial snapshot with a captured logical or complete staged
+transformation prefix:
 
 ```bash
 PYTHONPATH=ydb/core/kqp/opt/rbo/verification \
 python3 -m rbo_verifier initial.json prefix.json \
-  --diagnostic-rule-prefix --rows 2 --solver /path/to/z3
+  --diagnostic-transformation-prefix --rows 2 --solver /path/to/z3
 ```
 
 This mode uses the same formula kernel but an explicitly different boundary
 contract. Every result, including errors, carries
-`"comparison_scope":"RULE_APPLICATION_PREFIX"`; it is evidence about one
+`"comparison_scope":"OPTIMIZER_TRANSFORMATION_PREFIX"`; it is evidence about one
 optimizer prefix, not a whole start-to-finish verdict. A standalone sequential
 localizer drives this mode because equivalence is not monotonic across rule
-applications and therefore cannot be bisected soundly with binary search.
+applications or atomic stage commits and therefore cannot be bisected soundly
+with binary search.
 `kqp_rbo_prefix_capture` supplies the real-host capture side of that protocol;
 see [tools/README.md](tools/README.md) for its strict artifact contract and the
 complete localizer invocation.

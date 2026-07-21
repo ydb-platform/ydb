@@ -358,9 +358,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Separate real-YDB replay tool for deterministic, range-valid inspector
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
   multi-result TPC-DS q14, q23, and q39 remain an explicit replay extension.
-- Explicit diagnostic rule-prefix verifier boundary; rule-application snapshot
-  hook and separate sequential localization driver remain in progress.
-- CI policy for confirmed counterexamples and bounded verification coverage.
+- Explicit diagnostic rule-prefix verifier boundary, committed-rule snapshot
+  hook, strict real-host capture command, and separate sequential localization
+  driver are implemented. Constant folding and hash propagation still need
+  explicit atomic transformation checkpoints before localization is complete.
+- Formula-construction coverage has a checked-in regression floor. Hermetic
+  solver-backed proof policy and replay-confirmed counterexample policy remain.
 
 ## Non-goals
 

@@ -28,8 +28,11 @@ Results have five distinct meanings:
 
 - `VERIFIED_BOUNDED`: no counterexample exists at the declared row and task
   bounds, for the modeled semantics.
-- `COUNTEREXAMPLE`: Z3 produced a candidate input database. An opaque scalar
-  function may make the candidate spurious, so concrete replay is required.
+- `COUNTEREXAMPLE`: the obligation is satisfiable and normally includes a
+  candidate input database. If a second solver run cannot extract the model,
+  the verdict remains a counterexample but carries a reason and no witness. An
+  opaque scalar function may make a candidate spurious, so concrete replay is
+  required.
 - `UNKNOWN`: the solver timed out or could not decide the formula.
 - `SCHEMA_MISMATCH`: the root result names, order, types, or nullability differ;
   this is a definite correctness failure and requires no solver model.
@@ -232,8 +235,13 @@ contains enough source-distribution information to verify them.
 
 ## Diagnostics outside the kernel
 
-- `tools/inspect.py` renders normalized plans, solver formulas, candidate base
-  rows, and a per-operator concrete evaluation trace.
+- `kqp_rbo_inspect plan` renders every normalized plan and StageGraph field in
+  deterministic line-oriented text.
+- `kqp_rbo_inspect witness` rebuilds the unchanged start-to-finish obligation
+  and renders candidate base rows plus every enabled per-operator, stage-task,
+  connection, and root-boundary result from one solver model. Optional
+  read-only observers collect immutable terms; definitional model aliases are
+  added only after normal formula construction and are audit-capped.
 - `tools/replay.py` consumes witness JSON, creates the bounded database in a real
   YDB instance, and compares new-RBO execution with a trusted baseline.
 - `tools/bisect.py` reruns the optimizer with a stop-after-application debug hook
@@ -335,8 +343,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
   and explicit unsupported/optimizer-failure inventory.
 
-### M5: confirmation and localization — pending
+### M5: confirmation and localization — in progress
 
+- Separate normalized-plan and exact concrete-counterexample inspector.
 - Real-YDB replay tool.
 - Rule-application snapshot hook and separate bisection driver.
 - CI policy for confirmed counterexamples and bounded verification coverage.

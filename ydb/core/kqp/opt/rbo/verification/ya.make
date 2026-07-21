@@ -18,10 +18,13 @@ END()
 RECURSE_FOR_TESTS(
     benchmark_ut
     cpp_ut
+    inspect_ut
     integration_ut
     ut
 )
 
 RECURSE(
     bin
+    inspect_bin
+    inspector
 )

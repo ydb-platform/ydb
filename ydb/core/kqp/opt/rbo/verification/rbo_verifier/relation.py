@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations, permutations
-from typing import Callable, Iterator, Mapping
+from typing import Callable, Iterator, Mapping, TypeAlias
 
 from . import smt
 from .ir import (
@@ -87,6 +87,20 @@ class RelationFamily:
         ):
             raise RelationError("relation has multiple conditional outcomes")
         return self.outcomes[0].relation
+
+
+NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
+
+
+@dataclass(frozen=True, slots=True)
+class FamilyComparison:
+    """The exact normalized outcome pairs used by family equivalence."""
+
+    left: RelationFamily
+    right: RelationFamily
+    ordered: bool
+    pair_equal: tuple[tuple[smt.Term, ...], ...]
+    equivalent: smt.Term
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +198,7 @@ class Evaluator:
         node_overrides: Mapping[str, RelationFamily] | None = None,
         choice_scope: str = "logical",
         defer_pushed_limits: bool = False,
+        node_observer: NodeObserver | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.database = database
@@ -195,6 +210,8 @@ class Evaluator:
         self.edge_inputs = edge_inputs or {}
         self.choice_scope = choice_scope
         self.defer_pushed_limits = defer_pushed_limits
+        self.node_observer = node_observer
+        self.observed_nodes: set[str] = set()
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -214,12 +231,14 @@ class Evaluator:
         )
 
     def node(self, node_id: str) -> RelationFamily:
-        if node_id in self.cache:
-            return self.cache[node_id]
-        node = self.nodes[node_id]
-        relation = self._evaluate(node)
-        self.cache[node_id] = relation
-        return relation
+        if node_id not in self.cache:
+            node = self.nodes[node_id]
+            self.cache[node_id] = self._evaluate(node)
+        family = self.cache[node_id]
+        if self.node_observer is not None and node_id not in self.observed_nodes:
+            self.node_observer(self.choice_scope, node_id, family)
+            self.observed_nodes.add(node_id)
+        return family
 
     def _evaluate(self, node: PlanNode) -> RelationFamily:
         if isinstance(node, EmptySource):
@@ -1187,30 +1206,43 @@ def _as_sequence_family(family: RelationFamily) -> RelationFamily:
     return RelationFamily(tuple(outcomes))
 
 
-def family_equal(
+def _comparison_inputs(
     left: RelationFamily,
     right: RelationFamily,
-    scalar: ScalarEncoder,
-) -> smt.Term:
-    """Mutual inclusion of enabled bags or initial-query result sequences."""
-
+) -> tuple[RelationFamily, RelationFamily, bool]:
     ordered = left.sequence
     if ordered and not right.sequence:
         right = _as_sequence_family(right)
-
     comparisons = len(left.outcomes) * len(right.outcomes)
     if comparisons > MAX_OUTCOME_COMPARISONS:
         raise RelationError(
             f"outcome comparison requires {comparisons} pairs, exceeding "
             f"the {MAX_OUTCOME_COMPARISONS} pair audit bound"
         )
+    return left, right, ordered
 
+
+def _relations_equal(
+    left: Relation,
+    right: Relation,
+    scalar: ScalarEncoder,
+    ordered: bool,
+) -> smt.Term:
+    return (
+        sequence_equal(left, right, scalar)
+        if ordered
+        else bag_equal(left, right, scalar)
+    )
+
+
+def _families_equivalent(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+    ordered: bool,
+) -> smt.Term:
     def relations_equal(left_relation: Relation, right_relation: Relation) -> smt.Term:
-        return (
-            sequence_equal(left_relation, right_relation, scalar)
-            if ordered
-            else bag_equal(left_relation, right_relation, scalar)
-        )
+        return _relations_equal(left_relation, right_relation, scalar, ordered)
 
     def included(source: RelationFamily, target: RelationFamily) -> smt.Term:
         return smt.and_(
@@ -1242,3 +1274,38 @@ def family_equal(
         included(left, right),
         included(right, left),
     )
+
+
+def compare_families(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+) -> FamilyComparison:
+    """Expose the exact normalized outcome pairs used by family equivalence."""
+
+    left, right, ordered = _comparison_inputs(left, right)
+    pair_equal = tuple(
+        tuple(
+            _relations_equal(
+                left_outcome.relation,
+                right_outcome.relation,
+                scalar,
+                ordered,
+            )
+            for right_outcome in right.outcomes
+        )
+        for left_outcome in left.outcomes
+    )
+    equivalent = _families_equivalent(left, right, scalar, ordered)
+    return FamilyComparison(left, right, ordered, pair_equal, equivalent)
+
+
+def family_equal(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+) -> smt.Term:
+    """Mutual inclusion of enabled bags or initial-query result sequences."""
+
+    left, right, ordered = _comparison_inputs(left, right)
+    return _families_equivalent(left, right, scalar, ordered)

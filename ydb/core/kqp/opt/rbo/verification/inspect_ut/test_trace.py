@@ -1,0 +1,396 @@
+import os
+import unittest
+
+from ydb.core.kqp.opt.rbo.verification.inspector.trace import Probes, _family_json, prepare
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    Outcome,
+    Relation,
+    RelationFamily,
+)
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem
+
+
+SOLVER = os.environ.get("RBO_Z3")
+
+
+def _schema(scalar_type="Int64", nullable=False):
+    return {
+        "tables": [{
+            "name": "A",
+            "columns": [{"name": "x", "type": scalar_type, "nullable": nullable}],
+            "unique_keys": [],
+        }]
+    }
+
+
+def _scan(node="scan"):
+    return {
+        "id": node,
+        "op": "scan",
+        "table": "A",
+        "columns": [{"source": "x", "output": "x"}],
+        "predicate": None,
+        "pushed_limit": None,
+    }
+
+
+def _project(expression, node="project"):
+    return {
+        "id": node,
+        "op": "project",
+        "input": "scan",
+        "ordered": False,
+        "columns": [{"output": "x", "expression": expression}],
+    }
+
+
+def _logical(expression=None, scalar_type="Int64", nullable=False):
+    nodes = [_scan()]
+    root = "scan"
+    if expression is not None:
+        nodes.append(_project(expression))
+        root = "project"
+    return parse_snapshot({
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": _schema(scalar_type, nullable),
+        "plan": {"nodes": nodes, "root": root, "output": ["x"]},
+        "stage_graph": None,
+    })
+
+
+def _staged(
+    expression,
+    split=False,
+    connection="map",
+    scalar_type="Int64",
+    nullable=False,
+):
+    nodes = [_scan(), _project(expression)]
+    if split:
+        stages = [
+            {
+                "id": "source",
+                "nodes": ["scan"],
+                "inputs": [],
+                "outputs": [{"index": 0, "node": "scan"}],
+                "source_storage": "row",
+            },
+            {
+                "id": "root",
+                "nodes": ["project"],
+                "inputs": ["scan"],
+                "outputs": [{"index": 0, "node": "project"}],
+                "source_storage": None,
+            },
+        ]
+        edge = {
+            "id": connection,
+            "producer": "source",
+            "consumer": "root",
+            "occurrence": 0,
+            "producer_output": 0,
+            "consumer_input": 0,
+            "kind": connection,
+        }
+        if connection == "hash_shuffle":
+            edge.update(keys=["x"], hash_function="HashV1", use_spilling=False)
+        edges = [edge]
+    else:
+        stages = [{
+            "id": "root",
+            "nodes": ["scan", "project"],
+            "inputs": [],
+            "outputs": [{"index": 0, "node": "project"}],
+            "source_storage": "column",
+        }]
+        edges = []
+    return parse_snapshot({
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": _schema(scalar_type, nullable),
+        "plan": {"nodes": nodes, "root": "project", "output": ["x"]},
+        "stage_graph": {
+            "root_stage": "root",
+            "stages": stages,
+            "edges": edges,
+            "assumptions": [],
+        },
+    })
+
+
+def _staged_limit():
+    return parse_snapshot({
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": _schema(),
+        "plan": {
+            "nodes": [
+                _scan(),
+                _project(ZERO),
+                {
+                    "id": "limit",
+                    "op": "limit",
+                    "input": "project",
+                    "count": {"kind": "literal", "type": "Uint64", "value": 1},
+                    "offset": None,
+                    "phase": "final",
+                },
+            ],
+            "root": "limit",
+            "output": ["x"],
+        },
+        "stage_graph": {
+            "root_stage": "root",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan", "project"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "project"}],
+                    "source_storage": "column",
+                },
+                {
+                    "id": "root",
+                    "nodes": ["limit"],
+                    "inputs": ["project"],
+                    "outputs": [{"index": 0, "node": "limit"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [{
+                "id": "gather",
+                "producer": "source",
+                "consumer": "root",
+                "occurrence": 0,
+                "producer_output": 0,
+                "consumer_input": 0,
+                "kind": "union_all",
+                "parallel": False,
+            }],
+            "assumptions": [],
+        },
+    })
+
+
+def _constant(value, staged, include_table):
+    graph = None
+    if staged:
+        graph = {
+            "root_stage": "root",
+            "stages": [{
+                "id": "root",
+                "nodes": ["source", "project"],
+                "inputs": [],
+                "outputs": [{"index": 0, "node": "project"}],
+                "source_storage": None,
+            }],
+            "edges": [],
+            "assumptions": [],
+        }
+    return parse_snapshot({
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": _schema() if include_table else {"tables": []},
+        "plan": {
+            "nodes": [
+                {"id": "source", "op": "empty_source"},
+                {
+                    "id": "project",
+                    "op": "project",
+                    "input": "source",
+                    "ordered": False,
+                    "columns": [{
+                        "output": "x",
+                        "expression": {
+                            "kind": "literal",
+                            "type": "Int64",
+                            "value": value,
+                        },
+                    }],
+                },
+            ],
+            "root": "project",
+            "output": ["x"],
+        },
+        "stage_graph": graph,
+    })
+
+
+COLUMN = {"kind": "column", "column": "x"}
+ZERO = {"kind": "literal", "type": "Int64", "value": 0}
+OPAQUE_STRING = {
+    "kind": "opaque",
+    "fingerprint": "nullable_string($0)",
+    "type": "String",
+    "nullable": True,
+    "args": [COLUMN],
+}
+NULL_STRING = {"kind": "null", "type": "String"}
+
+
+class ObserverTest(unittest.TestCase):
+    def test_read_only_observers_do_not_change_the_obligation(self):
+        before = _logical(COLUMN)
+        after = _staged(COLUMN, split=True)
+        plain = build_problem(before, after, 1, 1_000).formula()
+        nodes = []
+        edges = []
+        boundaries = []
+        comparisons = []
+        observed = build_problem(
+            before,
+            after,
+            1,
+            1_000,
+            before_node_observer=lambda *event: nodes.append(event),
+            after_node_observer=lambda *event: nodes.append(event),
+            after_edge_observer=lambda *event: edges.append(event),
+            boundary_observer=lambda *event: boundaries.append(event),
+            comparison_observer=comparisons.append,
+        ).formula()
+        self.assertEqual(observed, plain)
+        self.assertTrue(nodes)
+        self.assertEqual(len(edges), 2)
+        self.assertEqual(len(boundaries), 2)
+        self.assertEqual(len(comparisons), 1)
+
+    def test_source_scan_override_is_observed_once_per_task(self):
+        prepared = prepare(_logical(COLUMN), _staged(COLUMN), 1, 1_000)
+        scans = [
+            event for event in prepared.observation.after.nodes
+            if event.node == "scan"
+        ]
+        self.assertEqual(
+            [event.scope for event in scans],
+            ["stage:root:task:0", "stage:root:task:1"],
+        )
+
+    def test_connected_partitions_are_observed_per_consumer_task(self):
+        for connection, tasks in (("map", (0, 1)), ("hash_shuffle", (0, 1)), ("broadcast", (0,))):
+            with self.subTest(connection=connection):
+                prepared = prepare(
+                    _logical(COLUMN),
+                    _staged(COLUMN, split=True, connection=connection),
+                    1,
+                    1_000,
+                )
+                self.assertEqual(
+                    [
+                        (event.edge.id, event.consumer_task)
+                        for event in prepared.observation.after.edges
+                    ],
+                    [(connection, task) for task in tasks],
+                )
+
+    def test_every_simultaneously_enabled_outcome_is_retained(self):
+        relation = Relation((Column("x", "Int64", False),), ())
+        result = RelationFamily((
+            Outcome(smt.TRUE, relation, (("tie", 0),)),
+            Outcome(smt.TRUE, relation, (("tie", 1),)),
+        ))
+        probes = Probes(smt.Script())
+        for outcome in result.outcomes:
+            probes.add(outcome.enabled)
+        rendered = _family_json(result, probes, {}, {})
+        self.assertEqual(
+            [outcome["index"] for outcome in rendered["outcomes"]],
+            [0, 1],
+        )
+
+
+@unittest.skipUnless(SOLVER, "set RBO_Z3 to run concrete trace tests")
+class ConcreteTraceTest(unittest.TestCase):
+    def test_counterexample_uses_one_model_for_witness_and_operator_trace(self):
+        result = prepare(_logical(), _staged(ZERO), 1, 10_000).solve(SOLVER, 10_000)
+        self.assertEqual(result["status"], "COUNTEREXAMPLE")
+        self.assertTrue(result["mismatches"])
+        self.assertEqual(len(result["witness"]["A"]), 1)
+
+        after = result["trace"]["after"]
+        scopes = {
+            (item["scope"]["stage"], item["scope"]["task"])
+            for item in after["operators"]
+        }
+        self.assertEqual(scopes, {("root", 0), ("root", 1)})
+        absent = [
+            row
+            for item in after["operators"]
+            for outcome in item["result"]["outcomes"]
+            for row in outcome["rows"]
+            if not row["present"]
+        ]
+        self.assertTrue(absent)
+        self.assertTrue(all("values" not in row for row in absent))
+
+        before_values = _present_values(result["trace"]["before"]["boundary"])
+        after_values = _present_values(after["boundary"])
+        self.assertNotEqual(before_values, after_values)
+
+    def test_nullable_opaque_string_is_decoded_from_the_trace_model(self):
+        result = prepare(
+            _logical(OPAQUE_STRING, "String", True),
+            _staged(NULL_STRING, scalar_type="String", nullable=True),
+            1,
+            10_000,
+        ).solve(SOLVER, 10_000)
+        self.assertEqual(result["status"], "COUNTEREXAMPLE")
+        self.assertEqual(len(result["witness"]["A"]), 1)
+        before = _present_values(result["trace"]["before"]["boundary"])
+        after = _present_values(result["trace"]["after"]["boundary"])
+        self.assertEqual(len(before), 1)
+        self.assertIsInstance(before[0][0], str)
+        self.assertEqual(after, [(None,)])
+
+    def test_all_enabled_unordered_limit_choices_are_retained(self):
+        result = prepare(_logical(ZERO), _staged_limit(), 2, 10_000).solve(
+            SOLVER, 10_000
+        )
+        self.assertEqual(result["status"], "COUNTEREXAMPLE")
+        self.assertEqual(len(result["witness"]["A"]), 2)
+        outcomes = result["trace"]["after"]["boundary"]["outcomes"]
+        self.assertEqual(len(outcomes), 2)
+        self.assertTrue(all(outcome["decisions"] for outcome in outcomes))
+        self.assertEqual(_present_values(result["trace"]["after"]["boundary"]), [(0,), (0,)])
+
+    def test_constant_trace_needs_no_model_values(self):
+        for include_table, witness in ((False, {}), (True, {"A": []})):
+            with self.subTest(include_table=include_table):
+                result = prepare(
+                    _constant(1, False, include_table),
+                    _constant(2, True, include_table),
+                    0,
+                    10_000,
+                ).solve(SOLVER, 10_000)
+                self.assertEqual(result["status"], "COUNTEREXAMPLE")
+                self.assertEqual(result["witness"], witness)
+                self.assertEqual(
+                    _present_values(result["trace"]["before"]["boundary"]),
+                    [(1,)],
+                )
+                self.assertEqual(
+                    _present_values(result["trace"]["after"]["boundary"]),
+                    [(2,)],
+                )
+
+    def test_equivalent_pair_has_no_concrete_trace(self):
+        result = prepare(_logical(COLUMN), _staged(COLUMN), 1, 10_000).solve(
+            SOLVER, 10_000
+        )
+        self.assertEqual(result["status"], "VERIFIED_BOUNDED")
+        self.assertNotIn("trace", result)
+
+
+def _present_values(result):
+    return [
+        tuple(cell["value"] for cell in row["values"])
+        for outcome in result["outcomes"]
+        for row in outcome["rows"]
+        if row["present"]
+    ]
+
+
+if __name__ == "__main__":
+    unittest.main()

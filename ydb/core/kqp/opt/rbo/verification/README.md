@@ -9,8 +9,9 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
-M4. Hermetic solver packaging, replay, and rule bisection remain future
-milestones.
+M4. A separate normalized-plan and concrete-counterexample inspector is also
+implemented. Hermetic solver packaging, real-YDB replay, and rule bisection
+remain future milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -277,6 +278,7 @@ Build the Ya-owned CLI with:
 
 ```bash
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/bin
+./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/inspect_bin
 ```
 
 ## CLI
@@ -294,4 +296,39 @@ stable witness format, so concrete replay is the confirmation boundary. Every
 bounded verdict reports both `row_bound` and the fixed `task_bound` of two. A
 `SCHEMA_MISMATCH` verdict is a direct correctness failure and does not depend on
 either bound. Use `--emit-smt formula.smt2` without `--solver` to inspect the
-exact proof obligation.
+exact proof obligation. If satisfiability succeeds but model extraction returns
+unknown, the result remains `COUNTEREXAMPLE` with a reason and no witness.
+
+## Plan and counterexample inspection
+
+The separate `kqp_rbo_inspect` executable renders every modeled snapshot field
+as deterministic line-oriented text:
+
+```bash
+ydb/core/kqp/opt/rbo/verification/inspect_bin/kqp_rbo_inspect \
+  plan final.snapshot.json
+```
+
+Its `witness` command rebuilds and solves the normal start-to-finish obligation,
+then prints the candidate database and concrete result family at every logical
+operator, stage task, connection input, and compared root boundary:
+
+```bash
+ydb/core/kqp/opt/rbo/verification/inspect_bin/kqp_rbo_inspect \
+  witness initial.snapshot.json final.snapshot.json \
+  --solver /path/to/z3 --rows 2 --timeout-ms 10000
+```
+
+The inspector observes immutable SMT terms during normal evaluation. Only after
+the obligation is complete does it add definitional aliases for model
+extraction. Base rows, routing-dependent rows, opaque scalar results,
+nondeterministic outcomes, and the exact root mismatch are requested together
+from one SAT model. All enabled outcomes are printed; absent rows omit their
+meaningless payloads. Trace extraction fails closed above 100,000 unique terms.
+Enabling the read-only observers without aliases is regression-tested to leave
+the normal SMT-LIB obligation byte-for-byte unchanged.
+
+```bash
+./ya make --build relwithdebinfo -tA \
+  ydb/core/kqp/opt/rbo/verification/inspect_ut 2>&1 | tail
+```

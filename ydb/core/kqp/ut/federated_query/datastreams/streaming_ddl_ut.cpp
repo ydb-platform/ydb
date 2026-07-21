@@ -4,12 +4,41 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 
 #include <fmt/format.h>
 
 #include <random>
+
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
 
 namespace NKikimr::NKqp {
 
@@ -1258,6 +1287,150 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
             CheckScriptExecutionsCount(2, 0);
         }
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryWithStreamLookupJoinLocalTable, WithFeatureFlag, WithFullscanFlag, TStreamingTestFixture) {
+        if (!WithFeatureFlag && WithFullscanFlag) {
+            // legal, but nothing to check
+            return;
+        }
+        LogSettings
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFeatureFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableNodeShutdownHints(true);
+        }
+
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P3"))",
+            "table"_a = ydbTable
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || (payload ?? "NULL")) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "Error: DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got");
+        if (!WithFeatureFlag) {
+            return;
+        }
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            {2, R"({"time": 2, "event": "C", "host": "host2.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1", "C-NULL"};
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(sampleMessages);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessages(sampleResult);
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P4"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P5"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P6"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4", "C-P5"});
+
+        {
+            TMockMonHttpRequest monReq("force_shutdown=all");
+            auto edgeActor = GetRuntime().AllocateEdgeActor();
+            auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime().GetNodeId(0));
+            GetRuntime().Send(kqpProxy, edgeActor, new NActors::NMon::TEvHttpInfo(monReq));
+            GetRuntime().template GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>(edgeActor, TDuration::Seconds(5));
+        }
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P7", "B-P9", "A-P7", "C-P8"});
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto results = ExecQuery(
+            "SELECT ast_compressed FROM `.metadata/script_executions`;"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
+            const auto& ast = result.ColumnParser(0).GetOptionalString();
+            UNIT_ASSERT(ast);
+            UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {

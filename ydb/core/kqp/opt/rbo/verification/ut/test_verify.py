@@ -624,6 +624,50 @@ def filtered_snapshot(predicate):
     )
 
 
+def date_filtered_snapshot(kind, day):
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "D",
+                        "columns": [
+                            {"name": "day", "type": "Date", "nullable": True}
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": [
+                    {
+                        "id": "scan",
+                        "op": "scan",
+                        "table": "D",
+                        "columns": [{"source": "day", "output": "d.day"}],
+                        "pushed_limit": None,
+                    },
+                    {
+                        "id": "filter",
+                        "op": "filter",
+                        "input": "scan",
+                        "predicate": {
+                            "kind": kind,
+                            "left": {"kind": "column", "column": "d.day"},
+                            "right": {"kind": "literal", "type": "Date", "value": day},
+                        },
+                    },
+                ],
+                "root": "filter",
+                "output": ["d.day"],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
 def left_join_elimination_snapshot(with_join, right_key_is_unique):
     value = schema()
     value["tables"][1]["unique_keys"] = (
@@ -1315,6 +1359,23 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):
+    def test_date_filter_equivalence_and_boundary_mutation_use_exact_days(self):
+        before = date_filtered_snapshot("lt", 1)
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(before, before, 1).script
+            )
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    before,
+                    date_filtered_snapshot("lte", 1),
+                    1,
+                ).script
+            )
+        )
+
     def test_identical_passive_date_and_decimal_columns_have_no_model(self):
         snapshot = parse_snapshot(_snapshot_with_stage_graph(
             {

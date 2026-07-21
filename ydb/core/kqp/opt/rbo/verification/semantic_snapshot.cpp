@@ -102,7 +102,7 @@ bool IsSupportedLiteralType(TStringBuf type) {
         "Bool",
         "Int8", "Int16", "Int32", "Int64",
         "Uint8", "Uint16", "Uint32", "Uint64",
-        "String", "Utf8",
+        "String", "Utf8", "Date",
     };
     return Types.contains(type);
 }
@@ -332,6 +332,17 @@ NJson::TJsonValue LiteralExpr(const TExprNode& node) {
         return result;
     }
 
+    if (type == "Date") {
+        const ui64 parsed = ParseInteger<ui64>(value, type);
+        if (parsed >= NUdf::MAX_DATE) {
+            Unsupported(TStringBuilder()
+                << "Date literal is out of range [0, "
+                << NUdf::MAX_DATE << "): " << value);
+        }
+        result["value"] = static_cast<ui64>(static_cast<ui16>(parsed));
+        return result;
+    }
+
     if (!NYql::IsUtf8(std::string_view(value.data(), value.size()))) {
         Unsupported(TStringBuilder() << type << " literal is not valid UTF-8");
     }
@@ -412,6 +423,15 @@ bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
     const ui32 signedWidth = leftSigned ? leftWidth : rightWidth;
     const ui32 unsignedWidth = leftSigned ? rightWidth : leftWidth;
     return signedWidth > unsignedWidth;
+}
+
+bool OrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
+    return IntegerComparisonCompatible(left, right) ||
+        (left == "Date" && right == "Date");
+}
+
+bool IsModeledOrderingType(TStringBuf type) {
+    return IsIntegerType(type) || type == "Date";
 }
 
 TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
@@ -540,8 +560,21 @@ void CheckOpaqueCallable(const TExprNode& node) {
         if (ScalarTypeName(node) != "Bool") {
             Unsupported(TStringBuilder() << "Opaque comparison result is not Bool: " << name);
         }
-        ScalarTypeName(*node.Child(0));
-        ScalarTypeName(*node.Child(1));
+        const TString leftType = ScalarTypeName(*node.Child(0));
+        const TString rightType = ScalarTypeName(*node.Child(1));
+        if (leftType != rightType &&
+            !IntegerComparisonCompatible(leftType, rightType))
+        {
+            Unsupported(TStringBuilder()
+                << "Opaque comparison operand types differ: "
+                << leftType << " and " << rightType);
+        }
+        if (name != "!=" &&
+            !OrderingComparisonCompatible(leftType, rightType))
+        {
+            Unsupported(TStringBuilder()
+                << "Opaque ordering is modeled only for integers and Date: " << name);
+        }
         return;
     }
 
@@ -814,7 +847,14 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (IsSupportedType(node.Content())) {
-        return LiteralExpr(node);
+        auto result = LiteralExpr(node);
+        if (node.Content() == "Date") {
+            bool nullable = false;
+            if (ScalarTypeName(node, &nullable) != node.Content() || nullable) {
+                Unsupported("Date literal type annotation does not match its callable");
+            }
+        }
+        return result;
     }
 
     if (node.IsCallable("Nothing")) {
@@ -870,10 +910,11 @@ NJson::TJsonValue ExportExprNode(
                     << leftType << " and " << rightType);
             }
             if (!equality &&
-                !IntegerComparisonCompatible(leftType, rightType))
+                !OrderingComparisonCompatible(leftType, rightType))
             {
                 Unsupported(TStringBuilder()
-                    << node.Content() << " ordering is modeled only for integers");
+                    << node.Content()
+                    << " ordering is modeled only for integers and Date");
             }
         }
 
@@ -1521,8 +1562,8 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Sort key " << column);
                     }
-                    if (!IsIntegerType(TypeName(OutputType(*sort.GetInput(), column)))) {
-                        Unsupported("Sort ordering is modeled only for integers");
+                    if (!IsModeledOrderingType(TypeName(OutputType(*sort.GetInput(), column)))) {
+                        Unsupported("Sort ordering is modeled only for integers and Date");
                     }
 
                     auto item = JsonMap();
@@ -2254,8 +2295,8 @@ private:
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
                 }
-                if (!IsIntegerType(TypeName(OutputType(*boundary.ProducerNode, column)))) {
-                    Unsupported("StageGraph Merge ordering is modeled only for integers");
+                if (!IsModeledOrderingType(TypeName(OutputType(*boundary.ProducerNode, column)))) {
+                    Unsupported("StageGraph Merge ordering is modeled only for integers and Date");
                 }
                 auto item = JsonMap();
                 item["column"] = column;

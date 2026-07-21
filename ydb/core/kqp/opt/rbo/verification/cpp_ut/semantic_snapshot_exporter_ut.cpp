@@ -145,6 +145,19 @@ void SetOutputType(
         ctx.ExprCtx.MakeType<TStructExprType>(std::move(items)));
 }
 
+void SetExactOutputType(
+    TExportTestContext& ctx,
+    IOperator& op,
+    const TVector<std::pair<TString, const TTypeAnnotationNode*>>& outputs)
+{
+    TVector<const TItemExprType*> items;
+    for (const auto& [name, type] : outputs) {
+        items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(name, type));
+    }
+    op.Type = ctx.ExprCtx.MakeType<TListExprType>(
+        ctx.ExprCtx.MakeType<TStructExprType>(std::move(items)));
+}
+
 const NJson::TJsonValue& FindNode(const NJson::TJsonValue& snapshot, TStringBuf operation) {
     for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
         if (node["op"].GetStringSafe() == operation) {
@@ -695,18 +708,127 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(DateLiteralFailsClosed) {
-        TExportTestContext ctx;
-        const auto result = ExportMapExpressionResult(
-            ctx,
-            "a",
-            TypedLiteral(
+    Y_UNIT_TEST(ExportsExactNumericDateLiteralAndRejectsInvalidForms) {
+        for (const ui16 day : {ui16{0}, ui16{NUdf::MAX_DATE - 1}}) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
                 ctx,
-                "Date",
-                "0",
-                ScalarType(ctx, NUdf::EDataSlot::Date)));
-        UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported literal callable Date");
+                "a",
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    ToString(day),
+                    ScalarType(ctx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(expression["value"].GetUIntegerSafe(), day);
+        }
+
+        for (const TString value : {"-1", "49673", "65535", "not-a-day"}) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    value,
+                    ScalarType(ctx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT_C(!result.IsSupported(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Date literal");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Date",
+                    {},
+                    ScalarType(ctx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported literal callable Date");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    "0",
+                    ScalarType(ctx, NUdf::EDataSlot::Uint16)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Date literal type annotation does not match");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsSameTypeDateOrderingAndRejectsNumericCarrierSubstitution) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/DateComparison", {
+                {"d", "Date", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"d"});
+            const auto* optionalDate = ScalarType(ctx, NUdf::EDataSlot::Date, true);
+            const auto* date = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* optionalBool = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+            SetExactOutputType(ctx, *read, {{"a.d", optionalDate}});
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            ">=",
+                            {
+                                TypedMember(ctx, "a.d", optionalDate),
+                                TypedLiteral(ctx, "Date", "49672", date),
+                            },
+                            optionalBool),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& expression = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "gte");
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["column"].GetStringSafe(), "a.d");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["value"].GetUIntegerSafe(), 49672);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* date = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* uint16 = ScalarType(ctx, NUdf::EDataSlot::Uint16);
+            const auto* boolean = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "<",
+                    {
+                        TypedLiteral(ctx, "Date", "0", date),
+                        TypedLiteral(ctx, "Uint16", "1", uint16),
+                    },
+                    boolean));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "comparison operand types differ");
+        }
     }
 
     Y_UNIT_TEST(ExportsDecimalNothingAndTypeDescriptor) {
@@ -1762,6 +1884,68 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsDateSortAndRejectsTextAndDecimalOrdering) {
+        const auto pos = TPositionHandle();
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/DateSort", {
+                {"d", "Date", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"d"});
+            const auto* optionalDate = ScalarType(ctx, NUdf::EDataSlot::Date, true);
+            SetExactOutputType(ctx, *read, {{"a.d", optionalDate}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.d"), true, false)});
+            SetExactOutputType(ctx, *sort, {{"a.d", optionalDate}});
+            TOpRoot root(sort, pos, {"a.d"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                snapshot["schema"]["tables"][0]["columns"][0]["type"].GetStringSafe(),
+                "Date");
+            const auto& order = FindNode(snapshot, "sort")["order"][0];
+            UNIT_ASSERT_VALUES_EQUAL(order["column"].GetStringSafe(), "a.d");
+            UNIT_ASSERT(order["ascending"].GetBooleanSafe());
+            UNIT_ASSERT(!order["nulls_first"].GetBooleanSafe());
+        }
+
+        for (const TString typeName : {"String", "Utf8", "Decimal(5,2)"}) {
+            TExportTestContext ctx;
+            const TTypeAnnotationNode* dataType = nullptr;
+            if (typeName == "String") {
+                dataType = ScalarType(ctx, NUdf::EDataSlot::String);
+            } else if (typeName == "Utf8") {
+                dataType = ScalarType(ctx, NUdf::EDataSlot::Utf8);
+            } else {
+                dataType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
+                    NUdf::EDataSlot::Decimal,
+                    "5",
+                    "2");
+            }
+            const auto* optionalType = ctx.ExprCtx.MakeType<TOptionalExprType>(dataType);
+            const auto& table = AddTable(ctx, "/Root/NonOrdered", {
+                {"value", typeName, false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"value"});
+            SetExactOutputType(ctx, *read, {{"a.value", optionalType}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.value"), true, false)});
+            SetExactOutputType(ctx, *sort, {{"a.value", optionalType}});
+            TOpRoot root(sort, pos, {"a.value"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT_C(!result.IsSupported(), typeName);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Sort ordering is modeled only for integers and Date");
+        }
+    }
+
     Y_UNIT_TEST(InvalidSortSemanticsFailClosed) {
         const auto pos = TPositionHandle();
 
@@ -1882,13 +2066,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Sort output type");
 
-            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Date}});
-            SetOutputType(ctx, *sort, {{"a.k", NUdf::EDataSlot::Date}});
-            result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                "Sort ordering is modeled only for integers");
         }
 
         {
@@ -2337,12 +2514,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {
             {"k", "Int32", true},
-            {"x", "Int32", false},
+            {"x", "Date", false},
         });
         auto read = MakeRead(ctx, table, "a", {"k", "x"});
         SetOutputType(ctx, *read, {
             {"a.k", NUdf::EDataSlot::Int32},
-            {"a.x", NUdf::EDataSlot::Int32, true},
+            {"a.x", NUdf::EDataSlot::Date, true},
         });
         auto project = MakeCopyMap(ctx, read, "result", "a.k");
         TOpRoot root(project, TPositionHandle(), {"result"});

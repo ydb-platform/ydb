@@ -344,7 +344,7 @@ public:
             limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
             limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
             limits.ReconciliationCount = config.GetReconciliationCount();
-            limits.CleanupPeriod = TDuration::MilliSeconds(std::max<ui64>(config.GetCleanupPeriodMs(), 200));
+            limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
         } else { // deprecated

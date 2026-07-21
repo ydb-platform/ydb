@@ -32,6 +32,8 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_BACKUP
+
 // additional html elements
 namespace NMonitoring {
     const char NavTag[] = "nav";
@@ -79,8 +81,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
     static constexpr TBackupLimits BackupLimits = TBackupLimits();
 
-    static constexpr TStringBuf LogPrefix() {
-        return "monitoring"sv;
+    static constexpr auto ActorActivityType() {
+        return TActivity::SCHEME_BOARD_MONITORING_ACTOR;
+    }
+
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TMonitoring"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     using TActivity = NKikimrServices::TActivity;
@@ -1757,10 +1766,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 BackupProgress = TBackupProgress();
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting backup to file: " << filePath
-                    << ", in-flight limit: " << inFlightLimit
-                    << ", require majority: " << requireMajority
-                );
+                YDB_LOG_INFO("Starting backup",
+                    {"selfId", this->SelfId()},
+                    {"filePath", filePath},
+                    {"inFlightLimit", inFlightLimit},
+                    {"majority", requireMajority});
 
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, requireMajority, SelfId()));
 
@@ -1811,10 +1821,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 RestoreProgress = TRestoreProgress();
                 RestoreProgress.Status = TRestoreProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting restore from " << filePath
-                    << " for SchemeShard ID: " << schemeShardId
-                    << " of generation: " << generation
-                );
+                YDB_LOG_INFO("Starting restore",
+                    {"selfId", this->SelfId()},
+                    {"filePath", filePath},
+                    {"schemeShardId", schemeShardId},
+                    {"generation", generation});
 
                 Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
 
@@ -1840,7 +1851,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     template <typename TProgress, typename TEventPtr>
     void Handle(TProgress& progress, TEventPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << msg.ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", this->SelfId()},
+            {"ev", msg});
         progress = TProgress(msg);
     }
 
@@ -1861,10 +1874,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
 public:
-    static constexpr auto ActorActivityType() {
-        return TActivity::SCHEME_BOARD_MONITORING_ACTOR;
-    }
-
     void Bootstrap() {
         if (auto* mon = AppData()->Mon) {
             auto* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -1876,6 +1885,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvRegister, Handle);
             hFunc(TSchemeBoardMonEvents::TEvUnregister, Handle);

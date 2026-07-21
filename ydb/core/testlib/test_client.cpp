@@ -1622,6 +1622,7 @@ namespace Tests {
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            settings.Address = Settings->AppConfig->GetKafkaProxyConfig().GetListeningAddress();
             bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
                 ssl = true;

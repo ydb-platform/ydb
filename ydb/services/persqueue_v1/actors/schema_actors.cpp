@@ -534,6 +534,7 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         auto res = ApplyResponse(ev, ctx);
         if (res) {
             GotLocation = true;
+            LocationsBackoff.Reset();
             AFL_ENSURE(RequestsInfly > 0);
             --RequestsInfly;
 
@@ -546,11 +547,25 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         }
     }
 
+    if (!LocationsBackoff.HasMore()) {
+        YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl PartitionsLocation retries exceeded",
+            {"selfId", ctx.SelfID},
+            {"response", record.DebugString()});
+        return RaiseError(
+            "Partition locations are not available",
+            Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
+            Ydb::StatusIds::UNAVAILABLE,
+            ctx
+        );
+    }
+
+    const auto delay = LocationsBackoff.Next();
     YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Something wrong on location, retry",
         {"selfId", ctx.SelfID},
+        {"iteration", LocationsBackoff.GetIteration()},
+        {"delay", delay.ToString()},
         {"response", record.DebugString()});
-    //Something gone wrong, retry
-    ctx.Schedule(TDuration::MilliSeconds(200), new TEvPQProxy::TEvRequestTablet(BalancerTabletId));
+    ctx.Schedule(delay, new TEvPQProxy::TEvRequestTablet(BalancerTabletId));
 }
 
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {

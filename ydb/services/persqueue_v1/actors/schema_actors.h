@@ -2,6 +2,7 @@
 
 #include "events.h"
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 
@@ -134,6 +135,7 @@ private:
 
     bool GotLocation = false;
     bool GotReadSessions = false;
+    TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
 
 protected:
     ui64 BalancerTabletId = 0;

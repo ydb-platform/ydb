@@ -811,7 +811,9 @@ Ydb::Topic::StreamWriteMessage::FromClient MakeStreamWriteRequest(
     if (deferredPublish) {
         auto* deferred = write->mutable_deferred_publish();
         deferred->set_int_publication_id(deferredPublish->first);
-        deferred->set_ext_publication_id(deferredPublish->second);
+        if (!deferredPublish->second.empty()) {
+            deferred->set_ext_publication_id(deferredPublish->second);
+        }
     }
     if (tx) {
         write->mutable_tx()->set_session(tx->first);
@@ -1954,15 +1956,28 @@ Y_UNIT_TEST(StreamWriteDeferredPublishDisabledByDefault) {
         TString(DisabledMessage));
 }
 
-Y_UNIT_TEST(StreamWriteRejectsEmptyExtPublicationId) {
+Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     auto fixture = TDeferredStreamWriteFixture::Enabled();
-    auto session = fixture.OpenWriteStream("producer-empty-ext");
+    auto session = fixture.OpenWriteStream("producer-omit-ext");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "payload",
+        std::make_pair(fixture.IntPublicationId, TString())));
+}
+
+Y_UNIT_TEST(StreamWriteRejectsTooLongExtPublicationId) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-long-ext");
 
     WriteAndExpectFailure(
         *session->Stream,
-        MakeStreamWriteRequest(1, "payload", std::make_pair(fixture.IntPublicationId, TString(""))),
+        MakeStreamWriteRequest(
+            1,
+            "payload",
+            std::make_pair(fixture.IntPublicationId, TString(MaxDeferredPublishStringLength + 1, 'x'))),
         Ydb::StatusIds::BAD_REQUEST,
-        TString("WriteRequest.deferred_publish.ext_publication_id must not be empty"));
+        TString("WriteRequest.deferred_publish.ext_publication_id is too long"));
 }
 
 Y_UNIT_TEST(StreamWriteFailsOnUnknownIntPublicationId) {

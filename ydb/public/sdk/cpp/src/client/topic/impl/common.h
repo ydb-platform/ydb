@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace NYdb::inline Dev::NTopic {
@@ -144,6 +145,18 @@ inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const std::opt
     return ProtoMessageFieldSize(fieldNumber, txSize);
 }
 
+template <typename TMessage>
+inline size_t ProtoWriteRequestContextFieldSize(const TMessage& message) {
+    if constexpr (requires { message.WriteContext; }) {
+        if (auto* tx = std::get_if<TTransactionId>(&message.WriteContext)) {
+            return ProtoTransactionIdentityFieldSize(3, std::optional<TTransactionId>(*tx));
+        }
+        return 0;
+    } else {
+        return ProtoTransactionIdentityFieldSize(3, message.Tx);
+    }
+}
+
 inline size_t ProtoTopicMessageDataFieldSize(
         TInstant createdAt,
         size_t dataSize,
@@ -167,7 +180,7 @@ size_t EstimateTopicWriteRequestBlockSize(
     size_t size = 0;
     if (includeRequestFields) {
         size += ProtoInt32FieldSize(2, static_cast<i32>(block.CodecID));
-        size += ProtoTransactionIdentityFieldSize(3, originalMessages.front().Tx);
+        size += ProtoWriteRequestContextFieldSize(originalMessages.front());
     }
 
     if (block.MessageCount > 1) {

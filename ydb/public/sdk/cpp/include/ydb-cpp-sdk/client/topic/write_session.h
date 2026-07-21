@@ -198,6 +198,21 @@ concept Serializable =
         { Serialize(t) } -> std::convertible_to<std::string>;
     };
 
+//! Deferred publication identity for StreamWrite.
+struct TDeferredPublication {
+    uint64_t IntPublicationId = 0;
+    std::optional<std::string> ExtPublicationId;
+
+    bool operator==(const TDeferredPublication& other) const {
+        return IntPublicationId == other.IntPublicationId
+            && ExtPublicationId == other.ExtPublicationId;
+    }
+
+    bool operator!=(const TDeferredPublication& other) const {
+        return !(*this == other);
+    }
+};
+
 //! Contains the message to write and all the options.
 struct TWriteMessage {
     using TSelf = TWriteMessage;
@@ -231,6 +246,7 @@ public:
         , CreateTimestamp_(other.CreateTimestamp_)
         , MessageMeta_(other.MessageMeta_)
         , Tx_(other.Tx_)
+        , DeferredPublication_(other.DeferredPublication_)
         , Key(other.Key)
         , Partition(other.Partition)
     {}
@@ -244,6 +260,7 @@ public:
         , CreateTimestamp_(std::move(other.CreateTimestamp_))
         , MessageMeta_(std::move(other.MessageMeta_))
         , Tx_(std::move(other.Tx_))
+        , DeferredPublication_(std::move(other.DeferredPublication_))
         , Key(std::move(other.Key))
         , Partition(std::move(other.Partition))
     {}
@@ -263,6 +280,7 @@ public:
         Key = other.Key;
         Partition = other.Partition;
         Tx_ = other.Tx_;
+        DeferredPublication_ = other.DeferredPublication_;
 
         return *this;
     }
@@ -282,6 +300,7 @@ public:
         Key = std::move(other.Key);
         Partition = std::move(other.Partition);
         Tx_ = std::move(other.Tx_);
+        DeferredPublication_ = std::move(other.DeferredPublication_);
 
         return *this;
     }
@@ -325,6 +344,9 @@ public:
 
     //! Transaction id
     FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
+
+    //! Deferred publication identity. Incompatible with Tx.
+    FLUENT_SETTING_OPTIONAL(TDeferredPublication, DeferredPublication);
 
     TTransactionBase* GetTxPtr() const
     {

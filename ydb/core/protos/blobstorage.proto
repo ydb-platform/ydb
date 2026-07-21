@@ -15,6 +15,12 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
+enum TChecksumType {
+    NoChecksum = 0;
+    XXH3_64BitBlob = 1;
+    XXH3_64BitBlobAndLogoBlobId = 2;
+}
+
 message TMessageId {
     // (SequenceId, MsgId) pair identifies message order, used to implement flow control (i.e. windows)
     optional uint64 SequenceId = 1;
@@ -440,6 +446,9 @@ message TQueryResult {
 
     optional bool Keep = 10;
     optional bool DoNotKeep = 11;
+
+    optional fixed64 Checksum = 13;
+    optional TChecksumType ChecksumType = 14;
 }
 
 message TEvVGetResult {

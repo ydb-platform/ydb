@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 
@@ -137,6 +138,186 @@ Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
 // With CRC
 Y_UNIT_TEST(TestBlock42GetBlobCrcCheck) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, true);
+}
+
+void TestDsProxyGetChecksum(bool wrongData, NKikimrBlobStorage::TChecksumType checksumType,
+        const TString& checksumValue) {
+    TActorSystemStub actorSystemStub;
+
+    TBlobStorageGroupType groupType(TErasureType::ErasureNone);
+    const ui32 groupId = 0;
+    const ui32 domainCount = groupType.BlobSubgroupSize();
+
+    TGroupMock group(groupId, TErasureType::ErasureNone, domainCount, 1, 1);
+    TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
+
+    constexpr ui32 size = 64;
+    const TLogoBlobID blobId(123456789, 1, 10, 0, size, 676767);
+    const TString originalData = []() {
+        TString data = TString::TUninitialized(size);
+        for (ui32 i = 0; i < size; ++i) {
+            data[i] = 'a' + (i % 26);
+        }
+        return data;
+    }();
+    const TString mockedReadData = [originalData, wrongData]() {
+        TString data = originalData;
+        if (wrongData) {
+            data.back() = 'A';
+        }
+        return data;
+    }();
+    const TString& vdiskResponseData = mockedReadData;
+    const bool checksumExpectedToPass = [checksumType, checksumValue, wrongData]() {
+        switch (checksumType) {
+            case NKikimrBlobStorage::TChecksumType::NoChecksum:
+                return true;
+            case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
+                return (checksumValue == "MatchesOriginalData" && !wrongData) || checksumValue == "MatchesReturnedData";
+            case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlobAndLogoBlobId:
+                return false;
+            default:
+                UNIT_FAIL("unknown checksum type");
+                return false;
+        }
+    }();
+    const NKikimrProto::EReplyStatus expectedStatus = checksumExpectedToPass ? NKikimrProto::OK : NKikimrProto::ERROR;
+
+    TBlobTestSet blobSet;
+    TVector<TBlobTestSet::TBlob> blobs;
+    blobs.emplace_back(blobId, originalData);
+    blobSet.AddBlobs(blobs);
+    group.PutBlobSet(blobSet);
+
+    // Client/API -> DSProxy: user-level get query array embedded into TEvGet.
+    TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[1]);
+    queries[0].Set(blobId);
+
+    TEvBlobStorage::TEvGet ev(queries, 1, TInstant::Max(),
+        NKikimrBlobStorage::EGetHandleClass::FastRead, false, false);
+    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
+
+    TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
+    logCtx.LogAcc.IsLogEnabled = false;
+
+    // DSProxy/TGetImpl -> VDisk queues/SkeletonFront: generated VDisk-level read requests.
+    // from ydb/core/protos/blobstorage.proto.
+    TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
+    getImpl.GenerateInitialRequests(logCtx, vGets);
+    UNIT_ASSERT_VALUES_EQUAL(vGets.size(), 1);
+
+    // DSProxy/TGetImpl <- VDisk/Skeleton: VDisk-level read response; TGroupMock fills it in this test.
+    // from ydb/core/protos/blobstorage.proto
+    TEvBlobStorage::TEvVGetResult vGetResult;
+
+    // DSProxy/TGetImpl -> VDisk queues/SkeletonFront: follow-up reads/writes that strategies may schedule.
+    // from ydb/core/protos/blobstorage.proto
+    TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> nextVGets;
+    TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> nextVPuts;
+
+    // DSProxy/TGetImpl -> original client/API: final user-level get result.
+    TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
+    {
+        group.OnVGet(*vGets.front(), vGetResult);
+        UNIT_ASSERT_VALUES_EQUAL(vGetResult.Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(vGetResult.Record.ResultSize(), 1);
+
+        const auto makePartData = [&](const TString& data) {
+            TString encryptedData = data;
+            char *dataBytes = encryptedData.Detach();
+            Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *group.GetInfo());
+
+            TDataPartSet partSet;
+            partSet.Parts.resize(group.GetInfo()->Type.TotalPartCount());
+            group.GetInfo()->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedData, partSet);
+            UNIT_ASSERT_VALUES_EQUAL(partSet.Parts.size(), 1);
+            return partSet.Parts[0].OwnedString.ConvertToString();
+        };
+
+        NKikimrBlobStorage::TQueryResult *result = vGetResult.Record.MutableResult(0);
+        const TString correctPartData = makePartData(originalData);
+        const TString vdiskResponsePartData = makePartData(vdiskResponseData);
+        result->SetBufferData(vdiskResponsePartData);
+        result->SetSize(result->GetBufferData().size());
+        const ui64 originalDataChecksum = TDiskBlob::CalculateChecksum(TRope(correctPartData));
+        const ui64 mockedDataChecksum = TDiskBlob::CalculateChecksum(TRope(vdiskResponsePartData));
+
+        if (checksumValue == "Missing") {
+            // Nothing to set.
+        } else if (checksumValue == "MatchesReturnedData") {
+            result->SetChecksum(mockedDataChecksum);
+        } else if (checksumValue == "MatchesOriginalData") {
+            result->SetChecksum(originalDataChecksum);
+        } else if (checksumValue == "Invalid") {
+            result->SetChecksum(mockedDataChecksum ^ ui64(1));
+        } else {
+            UNIT_FAIL("unknown checksum value");
+        }
+
+        result->SetChecksumType(checksumType);
+
+        getImpl.OnVGetResult(logCtx, vGetResult, nextVGets, nextVPuts, getResult);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(nextVGets.size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(nextVPuts.size(), 0);
+    UNIT_ASSERT(getResult);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, expectedStatus);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Id, blobId);
+    if (expectedStatus == NKikimrProto::OK) {
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer.ConvertToString(), vdiskResponseData);
+    } else {
+        UNIT_ASSERT(getResult->Responses[0].Buffer.IsEmpty());
+    }
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataNoChecksum) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::NoChecksum, "Missing");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataNoChecksum) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::NoChecksum, "Missing");
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataXxh3MatchesReturnedData) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "MatchesReturnedData");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataXxh3MatchesReturnedData) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "MatchesReturnedData");
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataXxh3MatchesOriginalData) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "MatchesOriginalData");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataXxh3MatchesOriginalData) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "MatchesOriginalData");
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataXxh3Invalid) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "Invalid");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataXxh3Invalid) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "Invalid");
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataXxh3Missing) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "Missing");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataXxh3Missing) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob, "Missing");
+}
+
+Y_UNIT_TEST(TestDsProxyGetCorrectDataXxh3BlobAndLogoBlobId) {
+    TestDsProxyGetChecksum(false, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlobAndLogoBlobId, "MatchesReturnedData");
+}
+
+Y_UNIT_TEST(TestDsProxyGetWrongDataXxh3BlobAndLogoBlobId) {
+    TestDsProxyGetChecksum(true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlobAndLogoBlobId, "MatchesReturnedData");
 }
 
 //Y_UNIT_TEST(TestBlock42GetBlobCrcCheckVerbose) {

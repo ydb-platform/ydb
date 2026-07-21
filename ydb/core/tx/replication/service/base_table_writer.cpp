@@ -157,8 +157,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Leave(bool hardError = false) {
-        YDB_LOG_INFO("Leave hard",
-            {"error", hardError});
+        YDB_LOG_INFO("Leave",
+            {"hardError", hardError});
 
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();

@@ -65,7 +65,7 @@ class TS3Writer
             return true;
         }
 
-        YDB_LOG_ERROR("Error at",
+        YDB_LOG_ERROR("Error",
             {"marker", marker},
             {"error", result});
         RetryOrLeave(result.GetError());

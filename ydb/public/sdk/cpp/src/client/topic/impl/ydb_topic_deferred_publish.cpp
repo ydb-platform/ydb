@@ -156,7 +156,6 @@ public:
         auto promise = NThreading::NewPromise<TPublishResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
             Y_UNUSED(any);
-            PublishResult result;
             promise.SetValue(TPublishResult(TStatus(std::move(status))));
         };
 
@@ -188,7 +187,6 @@ public:
         auto promise = NThreading::NewPromise<TCancelPublicationResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
             Y_UNUSED(any);
-            CancelPublicationResult result;
             promise.SetValue(TCancelPublicationResult(TStatus(std::move(status))));
         };
 

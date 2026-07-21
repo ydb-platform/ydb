@@ -33,10 +33,16 @@ int main() {
 
     std::optional<NYdb::NTopic::TContinuationToken> token;
     while (!token.has_value()) {
-        session->WaitEvent().Wait();
+        if (!session->WaitEvent().Wait(TDuration::Seconds(30))) {
+            std::cerr << "Timeout waiting for write continuation token" << std::endl;
+            return 1;
+        }
         for (auto& event : session->GetEvents()) {
             if (auto* ready = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
                 token = std::move(ready->ContinuationToken);
+            } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                std::cerr << "Write session closed: " << closed->GetIssues().ToString() << std::endl;
+                return 1;
             }
         }
     }

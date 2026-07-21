@@ -145,6 +145,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueNonE
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestEnableContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifo3Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifoDlq3Consumers
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifoWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifoWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStd0Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionExtended
@@ -156,6 +157,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthReceiveMe
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthSendMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenGetQueueUrl
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthWithEnforceUserTokenSendMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestPurgeQueueNonExisting
@@ -211,6 +213,7 @@ ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
+ydb/core/mind/hive/ut THiveTest.TestResetServerlessComputeResourcesMode
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
@@ -254,6 +257,7 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath

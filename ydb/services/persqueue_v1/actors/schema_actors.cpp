@@ -2,6 +2,7 @@
 
 #include "persqueue_utils.h"
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -284,8 +285,16 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
 }
 
 void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    CancelRequestTimeout(ctx);
     for (auto& [_, tablet] : Tablets) {
         NTabletPipe::CloseClient(ctx, tablet.Pipe);
+    }
+}
+
+void TDescribeTopicActorImpl::CancelRequestTimeout(const TActorContext& ctx) {
+    if (TimeoutTimerActorId) {
+        ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoison());
+        TimeoutTimerActorId = {};
     }
 }
 
@@ -368,6 +377,7 @@ void TDescribeTopicActorImpl::Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, con
 }
 
 void TDescribeTopicActorImpl::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    TimeoutTimerActorId = {};
     YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Request timed out",
         {"selfId", ctx.SelfID});
     RaiseError(
@@ -820,7 +830,8 @@ bool TDescribeTopicActorImpl::ProcessTablets(
         return false;
     }
 
-    ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
+    TimeoutTimerActorId = CreateLongTimer(ctx, RequestTimeout,
+        new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
     return true;
 }
 

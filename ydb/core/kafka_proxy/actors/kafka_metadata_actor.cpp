@@ -1,5 +1,6 @@
 #include "kafka_metadata_actor.h"
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
@@ -50,6 +51,8 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     }
 
     Become(&TKafkaMetadataActor::StateWork);
+    TimeoutTimerActorId = CreateLongTimer(ctx, RequestTimeout,
+        new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup()));
     RespondIfRequired(ctx);
 }
 
@@ -348,6 +351,7 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     auto Respond = [&] {
+        CancelRequestTimeout();
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
     };
@@ -390,6 +394,32 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     }
 
     Respond();
+}
+
+void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    TimeoutTimerActorId = {};
+    YDB_LOG_ERROR("Metadata request timed out",
+        {LogPrefix()},
+        {"correlationId", CorrelationId},
+        {"pendingResponses", PendingResponses});
+    RespondWithTimeout(ctx);
+}
+
+void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
+    ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+    for (auto& topic : Response->Topics) {
+        AddTopicError(topic, ErrorCode);
+    }
+    CancelRequestTimeout();
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
+    Die(ctx);
+}
+
+void TKafkaMetadataActor::CancelRequestTimeout() {
+    if (TimeoutTimerActorId) {
+        Send(TimeoutTimerActorId, new TEvents::TEvPoison());
+        TimeoutTimerActorId = {};
+    }
 }
 
 NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {

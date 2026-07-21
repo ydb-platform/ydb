@@ -133,12 +133,15 @@ public:
     void PassAway(const TActorContext& ctx);
 
 private:
+    void CancelRequestTimeout(const TActorContext& ctx);
+
     std::map<ui64, TTabletInfo> Tablets;
     ui32 RequestsInfly = 0;
 
     bool GotLocation = false;
     bool GotReadSessions = false;
     TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+    TActorId TimeoutTimerActorId;
 
 protected:
     ui64 BalancerTabletId = 0;

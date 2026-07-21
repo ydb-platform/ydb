@@ -713,6 +713,16 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             }
             return result;
         }
+
+        void SetPDiskType(ui32 nodeId, NKikimrBlobStorage::EPDiskType type) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.SetType(type);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
     };
 
     NKikimrBlobStorage::TGroupGeometry Geometry(ui32 numFailDomains) {
@@ -724,16 +734,28 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     }
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-                    i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1) {
+            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1, bool allowUnusableDisks = false) {
+        auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(numFailDomains));
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+        selfManagementConfig->MutableStaticGroupSelfHealAllowedNodes()->CopyFrom(allowedNodeIds);
+
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
-        keeper.AllocateStaticGroup(&s.Config, TGroupId::FromValue(0), /*groupGeneration=*/ 2,
-            TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies), Geometry(numFailDomains),
-            /*pdiskFilters=*/ {}, NKikimrBlobStorage::EPDiskType::ROT, replacedDisks, forbid,
-            /*requiredSpace=*/ 0, &s.BaseConfig, /*convertToDonor=*/ false, /*ignoreVSlotQuotaCheck=*/ true,
-            /*isSelfHealReasonDecommit=*/ false, TBridgePileId(), std::nullopt, allowedNodeIds, applyNodeAllowList);
+        keeper.AllocateStaticGroup({
+            .Config = &s.Config,
+            .GroupId = TGroupId::FromValue(0),
+            .GroupGeneration = 2,
+            .GroupType = TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies),
+            .ReplacedDisks = std::move(replacedDisks),
+            .ForbiddenPDisks = std::move(forbid),
+            .BaseConfig = &s.BaseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .AllowUnusableDisks = allowUnusableDisks,
+            .ApplySelfHealNodeAllowList = applyNodeAllowList,
+        });
     }
 
     NProtoBuf::RepeatedField<ui32> NodeIds(const std::vector<ui32>& nodeIds) {
@@ -811,6 +833,23 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_EXCEPTION(
             Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(Block42RejectsUnusablePreservedPDiskByDefault) {
+        TSetup s = MakeBlock42Setup();
+        s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(Block42AllowsUnusablePreservedPDiskWhenRequested) {
+        TSetup s = MakeBlock42Setup();
+        s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8,
+                /*allowUnusableDisks=*/ true));
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[1], 2u);
     }
 }
 

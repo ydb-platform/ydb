@@ -50,16 +50,12 @@ END DO
 
 {% note info %}
 
-<<<<<<< HEAD
-Запись в топики выполняется через [external data source](../../../concepts/datamodel/external_data_source.md). В примере `ydb_source` — это заранее созданный external data source, а `output_topic` и `input_topic` — топики, доступные через него.
-=======
 Потоковые запросы могут работать с [локальными и внешними топиками](../../../concepts/query_execution/topics.md#local-external-topics).
 
 В примере:
 
 - `ext_source` — это заранее созданный [`external data source`](../../../concepts/datamodel/external_data_source.md);
 - `input_topic` и `output_topic` — локальные или внешние [топики](../../../concepts/datamodel/topic.md).
->>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 
 {% endnote %}
 
@@ -67,16 +63,14 @@ END DO
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- ydb_source — external data source для работы с топиками
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- или внешний топик ext_source.output_topic
     SELECT
         -- Формирование JSON из отдельных полей
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        -- Чтение из топика
-        ydb_source.input_topic
+        ext_source.input_topic -- или локальный топик input_topic
     WITH (
         FORMAT = json_each_row,  -- Формат входных данных
         SCHEMA = (               -- Схема входных данных
@@ -108,8 +102,7 @@ DO BEGIN
         Id,
         Name
     FROM
-        -- ydb_source — external data source для работы с топиками
-        ydb_source.input_topic
+        input_topic -- или внешний топик ext_source.input_topic
     WITH (
         FORMAT = json_each_row,  -- Формат входных данных
         SCHEMA = (               -- Схема входных данных
@@ -132,14 +125,13 @@ CREATE STREAMING QUERY my_streaming_query WITH (
 ) AS
 DO BEGIN
 
-    -- ydb_source — external data source для работы с топиками
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- или внешний топик ext_source.output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        ydb_source.input_topic
+        ext_source.input_topic -- или локальный топик input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (

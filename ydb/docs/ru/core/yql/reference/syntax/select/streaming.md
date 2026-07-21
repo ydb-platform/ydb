@@ -10,16 +10,12 @@
 
 {% note info %}
 
-<<<<<<< HEAD
-В примерах `ydb_source` — это заранее созданный [внешний источник данных](../../../../concepts/datamodel/external_data_source.md), а `topic_name` — топик, доступный через него.
-=======
 В примерах:
 
 - `ext_source` — заранее созданный [`external data source`](../../../../concepts/datamodel/external_data_source.md);
 - `input_topic` — локальный или внешний топик.
 
 Подробнее — [локальные и внешние топики](../../../../concepts/query_execution/topics.md#local-external-topics).
->>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 
 {% endnote %}
 
@@ -29,7 +25,7 @@
 SELECT
     Data
 FROM
-    ydb_source.topic_name
+    ext_source.input_topic -- или локальный топик input_topic
 WITH (
     FORMAT = raw,
     SCHEMA = (

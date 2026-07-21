@@ -55,6 +55,14 @@ namespace NActors {
         ReceiveContext.Reset(new TReceiveContext);
     }
 
+    TInterconnectSessionTCP::TInterconnectSessionTCP(
+        TInterconnectProxyTCP* const proxy,
+        NInterconnect::NRdma::TQueuePair::TPtr rdmaQp)
+        : TInterconnectSessionTCP(proxy)
+    {
+        RdmaQp = rdmaQp;
+    }
+
     TInterconnectSessionTCP::~TInterconnectSessionTCP() {
         // close socket ASAP when actor system is being shut down
         if (Socket) {
@@ -414,9 +422,18 @@ namespace NActors {
         // Keep most session params stable, but pass current transport-level liveness mode.
         TSessionParams inputSessionParams = Params;
         inputSessionParams.UseKernelLiveness = KernelLivenessMode;
-        auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
-        ReceiverId = RegisterWithSameMailbox(actor.Release());
+
+        TInputSessionTCP* inputSession = nullptr;
+        if (ev->Get()->RdmaHanshakeResult.HasPreinitedSession()) {
+            inputSession = ev->Get()->RdmaHanshakeResult.ReleasePreinitedSession();
+            ReceiverId = IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::SelfId);
+        } else {
+            inputSession = new TInputSessionTCP(Proxy->Common, RdmaQp, std::move(cq));
+            ReceiverId = RegisterWithSameMailbox(inputSession);
+        }
+
+        IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::StartRecieve, SelfId(), Socket, XdcSocket,
+            ReceiveContext, Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams));
 
         // register our socket with the appropriate I/O backend
         if (Proxy->Common->Settings.UseUring && !Params.Encryption && TUringContext::IsSupported()) {

@@ -357,9 +357,11 @@ protected:
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
         if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            KAFKA_LOG_D("Flag changed on TAddPartitionsToTxnRequestData");
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
                 NKafkaTransactions::BuildResponse<TAddPartitionsToTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
                 EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            CloseConnection = true;
             return;
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
@@ -373,9 +375,11 @@ protected:
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
         if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            KAFKA_LOG_D("Flag changed on TAddOffsetsToTxnRequestData");
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
-                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+                NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+                EKafkaErrors::INVALID_TXN_STATE));
+            // CloseConnection = true;
             return;
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
@@ -389,9 +393,11 @@ protected:
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
         if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            KAFKA_LOG_D("Flag changed on TTxnOffsetCommitRequestData");
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
-                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+                NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+                EKafkaErrors::INVALID_TXN_STATE));
+            // CloseConnection = true;
             return;
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
@@ -405,9 +411,11 @@ protected:
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
         if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            KAFKA_LOG_D("Flag changed on TEndTxnRequestData");
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-                NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
-                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+                NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
+                EKafkaErrors::INVALID_TXN_STATE));
+            // CloseConnection = true;
             return;
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
@@ -568,8 +576,8 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
-        if (r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE &&
-            Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
+                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
             KAFKA_LOG_I("EnableServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.");
             CloseConnection = true;
         }

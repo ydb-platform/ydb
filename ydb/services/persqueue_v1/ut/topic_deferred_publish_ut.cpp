@@ -801,7 +801,7 @@ void InitStreamWriteSession(
 Ydb::Topic::StreamWriteMessage::FromClient MakeStreamWriteRequest(
     ui64 seqNo,
     const TString& data,
-    const TMaybe<std::pair<ui64, TString>>& deferredPublish = Nothing(),
+    const TMaybe<std::pair<ui64, TMaybe<TString>>>& deferredPublish = Nothing(),
     const TMaybe<std::pair<TString, TString>>& tx = Nothing())
 {
     Ydb::Topic::StreamWriteMessage::FromClient req;
@@ -811,8 +811,8 @@ Ydb::Topic::StreamWriteMessage::FromClient MakeStreamWriteRequest(
     if (deferredPublish) {
         auto* deferred = write->mutable_deferred_publish();
         deferred->set_int_publication_id(deferredPublish->first);
-        if (!deferredPublish->second.empty()) {
-            deferred->set_ext_publication_id(deferredPublish->second);
+        if (deferredPublish->second) {
+            deferred->set_ext_publication_id(*deferredPublish->second);
         }
     }
     if (tx) {
@@ -826,6 +826,14 @@ Ydb::Topic::StreamWriteMessage::FromClient MakeStreamWriteRequest(
     msg->set_uncompressed_size(data.size());
     *msg->mutable_created_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
     return req;
+}
+
+std::pair<ui64, TMaybe<TString>> DeferredPublishOmitExt(ui64 intPublicationId) {
+    return {intPublicationId, Nothing()};
+}
+
+std::pair<ui64, TMaybe<TString>> DeferredPublishWithExt(ui64 intPublicationId, const TString& extPublicationId) {
+    return {intPublicationId, MakeMaybe(extPublicationId)};
 }
 
 void WriteAndExpectWriteResponse(
@@ -1927,7 +1935,7 @@ Y_UNIT_TEST(StreamWriteDeferredPublishAcksWrite) {
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
         1,
         "deferred-payload",
-        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
 
     AssertDestinationRowCount(fixture.Server, "root@builtin", fixture.IntPublicationId, 1);
 
@@ -1951,7 +1959,7 @@ Y_UNIT_TEST(StreamWriteDeferredPublishDisabledByDefault) {
 
     WriteAndExpectFailure(
         *session->Stream,
-        MakeStreamWriteRequest(1, "payload", std::make_pair(1u, TString("ext-disabled"))),
+        MakeStreamWriteRequest(1, "payload", DeferredPublishWithExt(1u, TString("ext-disabled"))),
         Ydb::StatusIds::UNSUPPORTED,
         TString(DisabledMessage));
 }
@@ -1963,7 +1971,27 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
         1,
         "payload",
-        std::make_pair(fixture.IntPublicationId, TString())));
+        DeferredPublishOmitExt(fixture.IntPublicationId)));
+}
+
+Y_UNIT_TEST(StreamWriteAllowsEmptyExtPublicationId) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-empty-ext");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "payload",
+        DeferredPublishWithExt(fixture.IntPublicationId, TString())));
+}
+
+Y_UNIT_TEST(StreamWriteAllowsNonEmptyExtPublicationId) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-nonempty-ext");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "payload",
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
 }
 
 Y_UNIT_TEST(StreamWriteRejectsTooLongExtPublicationId) {
@@ -1975,7 +2003,7 @@ Y_UNIT_TEST(StreamWriteRejectsTooLongExtPublicationId) {
         MakeStreamWriteRequest(
             1,
             "payload",
-            std::make_pair(fixture.IntPublicationId, TString(MaxDeferredPublishStringLength + 1, 'x'))),
+            DeferredPublishWithExt(fixture.IntPublicationId, TString(MaxDeferredPublishStringLength + 1, 'x'))),
         Ydb::StatusIds::BAD_REQUEST,
         TString("WriteRequest.deferred_publish.ext_publication_id is too long"));
 }
@@ -1988,7 +2016,7 @@ Y_UNIT_TEST(StreamWriteFailsOnUnknownIntPublicationId) {
     UNIT_ASSERT(session->Stream->Write(MakeStreamWriteRequest(
         1,
         "payload",
-        std::make_pair(999999u, TString("missing-ext")))));
+        DeferredPublishWithExt(999999u, TString("missing-ext")))));
     UNIT_ASSERT(session->Stream->Read(&resp));
     UNIT_ASSERT(resp.status() != Ydb::StatusIds::SUCCESS);
 }
@@ -2000,7 +2028,7 @@ Y_UNIT_TEST(StreamWriteDeferredThenRegularInSameSession) {
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
         1,
         "deferred-part",
-        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(2, "regular-part"));
 }
 
@@ -2012,14 +2040,14 @@ Y_UNIT_TEST(StreamWriteMergesPartitionsIntoDestinationBlob) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "partition-0",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
     {
         auto session = fixture.OpenWriteStream("producer-part-1", 1);
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "partition-1",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     AssertDestinationRowCount(fixture.Server, "root@builtin", fixture.IntPublicationId, 1);
@@ -2046,7 +2074,7 @@ Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2070,14 +2098,14 @@ Y_UNIT_TEST(PublishAfterStreamWriteToTwoPartitionsMakesDataVisible) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload0),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
     {
         auto session = fixture.OpenWriteStream("producer-part-1", 1);
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload1),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2102,14 +2130,14 @@ Y_UNIT_TEST(CancelAfterStreamWriteToTwoPartitionsClearsRegistryWithoutData) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "deferred-payload-cancel-0",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
     {
         auto session = fixture.OpenWriteStream("producer-cancel-1", 1);
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "deferred-payload-cancel-1",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2130,7 +2158,7 @@ Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "deferred-payload-cancel",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2150,7 +2178,7 @@ Y_UNIT_TEST(RepeatFinalizeReturnsNotFound) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "payload-repeat",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto firstPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2214,14 +2242,14 @@ Y_UNIT_TEST(PublishMultipleDestinations) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "topic-a-payload",
-            std::make_pair(intPublicationId, TString("ext-multi"))));
+            DeferredPublishWithExt(intPublicationId, TString("ext-multi"))));
     }
     {
         auto session = TStreamWriteSession::Open(*topicStub, "finalize-multi-topic-b", "producer-b", 0);
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "topic-b-payload",
-            std::make_pair(intPublicationId, TString("ext-multi"))));
+            DeferredPublishWithExt(intPublicationId, TString("ext-multi"))));
     }
 
     const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
@@ -2241,7 +2269,7 @@ Y_UNIT_TEST(PublishBeforeWriteAckKeepsRegistry) {
     UNIT_ASSERT(session->Stream->Write(MakeStreamWriteRequest(
         1,
         "payload-before-ack",
-        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId))));
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId))));
     publishThread.join();
 
     UNIT_ASSERT_VALUES_UNEQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
@@ -2256,7 +2284,7 @@ Y_UNIT_TEST(PublishFailureOnInvalidDestinationKeepsRegistry) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "payload-bad-dest",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const TString badBlob = NPQ::NDeferredPublish::SerializeDestinationBlob(
@@ -2306,7 +2334,7 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2328,7 +2356,7 @@ Y_UNIT_TEST(CancelDiscardsData) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             "lifecycle-cancel-payload",
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
@@ -2347,7 +2375,7 @@ Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     AssertTopicNotVisible(fixture.Server, fixture.TopicShortName);
@@ -2381,14 +2409,14 @@ Y_UNIT_TEST(MultiDestinationSinglePublication) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payloadA),
-            std::make_pair(intPublicationId, TString("ext-lifecycle-multi-dest"))));
+            DeferredPublishWithExt(intPublicationId, TString("ext-lifecycle-multi-dest"))));
     }
     {
         auto session = TStreamWriteSession::Open(*topicStub, "lifecycle-multi-topic-b", "producer-b", 0);
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payloadB),
-            std::make_pair(intPublicationId, TString("ext-lifecycle-multi-dest"))));
+            DeferredPublishWithExt(intPublicationId, TString("ext-lifecycle-multi-dest"))));
     }
 
     const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
@@ -2408,7 +2436,7 @@ Y_UNIT_TEST(RepeatFinalizeNotFound) {
         WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
             1,
             TString(payload),
-            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
     }
 
     const auto firstPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);

@@ -321,6 +321,8 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }

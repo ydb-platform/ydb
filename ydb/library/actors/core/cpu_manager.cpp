@@ -236,6 +236,19 @@ namespace NActors {
         return pools;
     }
 
+    std::optional<TCpuMask> TCpuManager::GetExecutorPoolAffinity(ui32 poolId) const {
+        if (poolId >= ExecutorPoolCount) {
+            return std::nullopt;
+        }
+
+        const TAffinity *affinity = Executors[poolId]->Affinity();
+        if (!affinity || affinity->Empty()) {
+            return std::nullopt;
+        }
+
+        return static_cast<TCpuMask>(*affinity);
+    }
+
     void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
         if (poolId < ExecutorPoolCount) {
             Executors[poolId]->GetCurrentStats(poolStats, statsCopy);

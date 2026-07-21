@@ -175,13 +175,27 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC"})
+        .Enum("name", {"System", "User", "Batch", "IO", "IC", "Storage"})
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
           .Optional();
         })
-        .Int64("threads", nonNegative())
+        .Int64("threads", [](auto& threads){
+          threads
+          .Optional()
+          .Min(0);
+        })
+        .Int64("placement_groups", [](auto& placementGroups){
+          placementGroups
+          .Optional()
+          .Min(1);
+        })
+        .Int64("placement_group_threads", [](auto& placementGroupThreads){
+          placementGroupThreads
+          .Optional()
+          .Min(1);
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()
@@ -197,7 +211,28 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Optional()
           .Min(0);
         })
-        .Enum("type", {"IO", "BASIC"});
+        .Enum("type", {"IO", "BASIC", "NUMA"})
+        .AddCheck("threads and placement_groups usage must match executor type", [](auto& executorContext) {
+          auto node = executorContext.Node();
+          const bool isNuma = node["type"].Enum().Value() == "NUMA";
+          const bool hasThreads = node["threads"].Exists();
+          const bool hasPlacementGroups = node["placement_groups"].Exists();
+          const bool hasPlacementGroupThreads = node["placement_group_threads"].Exists();
+
+          if (isNuma) {
+            executorContext.Expect(!hasThreads,
+              "NUMA executor must not define threads");
+            executorContext.Expect(hasPlacementGroups,
+              "NUMA executor must define placement_groups");
+          } else {
+            executorContext.Expect(hasThreads,
+              "non-NUMA executor must define threads");
+            executorContext.Expect(!hasPlacementGroups,
+              "placement_groups can only be defined for NUMA executor");
+            executorContext.Expect(!hasPlacementGroupThreads,
+              "placement_group_threads can only be defined for NUMA executor");
+          }
+        });
       });
     })
     .Map("scheduler", [](auto& scheduler){

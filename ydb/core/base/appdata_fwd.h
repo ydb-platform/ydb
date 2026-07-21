@@ -183,6 +183,7 @@ struct TAppData {
     const ui32 IOPoolId;
     const ui32 BatchPoolId;
     TMap<TString, ui32> ServicePools;
+    TVector<ui32> StoragePools;
 
     const NScheme::TTypeRegistry* TypeRegistry = nullptr;
     const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
@@ -315,7 +316,8 @@ struct TAppData {
             const NScheme::TTypeRegistry* typeRegistry,
             const NMiniKQL::IFunctionRegistry* functionRegistry,
             const TFormatFactory* formatFactory,
-            TProgramShouldContinue *kikimrShouldContinue);
+            TProgramShouldContinue *kikimrShouldContinue,
+            TVector<ui32> storagePools = {});
 
     ~TAppData();
 

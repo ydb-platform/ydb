@@ -432,6 +432,7 @@ public:
                     delete params;
 
                     TPDiskConfig *cfg = actor->Cfg.Get();
+                    TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
@@ -489,6 +490,8 @@ public:
                 TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
+
+                TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
 
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";

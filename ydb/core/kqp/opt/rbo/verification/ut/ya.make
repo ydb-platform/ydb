@@ -2,6 +2,7 @@ PY3TEST()
 
 TEST_SRCS(
     test_ir.py
+    test_decimal.py
     test_limit.py
     test_logical_reference.py
     test_olap_filter.py

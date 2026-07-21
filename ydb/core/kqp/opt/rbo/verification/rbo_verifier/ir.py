@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, TypeAlias
 
+from . import decimal
 from .types import (
     BOOL,
     DATE,
@@ -18,9 +19,9 @@ from .types import (
     VOID,
     equality_comparison_compatible,
     family,
-    integer_comparison_compatible,
     is_ordered_type,
     is_scalar_type,
+    ordering_comparison_compatible,
 )
 
 
@@ -88,7 +89,7 @@ class Expr:
     kind: str
     args: tuple[Expr, ...] = ()
     column: str | None = None
-    value: bool | int | str | None = None
+    value: bool | int | str | decimal.Literal | None = None
     result_type: str | None = None
     nullable: bool | None = None
     fingerprint: str | None = None
@@ -331,7 +332,9 @@ def _scalar_type(value: Any, path: str) -> str:
     return result
 
 
-def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str:
+def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | decimal.Literal:
+    if decimal.is_type(scalar_type):
+        return _decimal_literal(value, scalar_type, path)
     scalar_family = family(scalar_type)
     valid = (
         (scalar_family == "bool" and isinstance(value, bool))
@@ -346,6 +349,24 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str:
     if not valid:
         _fail(path, f"value does not have type {scalar_type!r}")
     return value
+
+
+def _decimal_literal(value: Any, scalar_type: str, path: str) -> decimal.Literal:
+    obj = _object(value, path)
+    kind = _string(obj.get("kind"), f"{path}.kind")
+    if kind == decimal.FINITE:
+        _keys(obj, {"kind", "scaled"}, path)
+        scaled = _string(obj["scaled"], f"{path}.scaled")
+        try:
+            result = decimal.Literal(kind, decimal.parse_scaled_integer(scaled))
+            decimal.literal_code(result, scalar_type)
+        except ValueError as error:
+            _fail(path, str(error))
+        return result
+    if kind in {decimal.POS_INF, decimal.NEG_INF, decimal.NAN_KIND}:
+        _keys(obj, {"kind"}, path)
+        return decimal.Literal(kind)
+    _fail(f"{path}.kind", f"unsupported Decimal literal kind {kind!r}")
 
 
 def _parse_expr(value: Any, path: str) -> Expr:
@@ -912,6 +933,8 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
                 item_name = item.name
             elif item.name != item_name:
                 _fail(item_path, f"IN items must have one type, starting with {item_name!r}")
+            if decimal.is_type(lookup.name) or decimal.is_type(item.name):
+                _fail(item_path, "Decimal IN is not supported")
             if not equality_comparison_compatible(lookup.name, item.name):
                 _fail(
                     item_path,
@@ -923,13 +946,17 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
     if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
-        compatible_integers = integer_comparison_compatible(left.name, right.name)
-        compatible_dates = left.name == DATE and right.name == DATE
         if not equality_comparison_compatible(left.name, right.name):
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
-        if expr.kind != "eq" and not (compatible_integers or compatible_dates):
-            _fail(path, f"{expr.kind} requires integer or Date arguments")
+        if (
+            expr.null_safe
+            and (decimal.is_type(left.name) or decimal.is_type(right.name))
+            and left.name != right.name
+        ):
+            _fail(path, "null-safe Decimal equality requires exactly matching types")
+        if expr.kind != "eq" and not ordering_comparison_compatible(left.name, right.name):
+            _fail(path, f"{expr.kind} requires integer, Date, or Decimal arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
     if expr.kind in {"add", "sub", "mul"}:

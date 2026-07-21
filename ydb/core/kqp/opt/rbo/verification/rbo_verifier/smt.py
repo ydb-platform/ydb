@@ -153,6 +153,8 @@ def eq(left: Term, right: Term) -> Term:
         raise SmtError(f"equality sort mismatch: {left.sort} and {right.sort}")
     if left == right:
         return TRUE
+    if left.operation in {"bool", "int"} and right.operation == left.operation:
+        return bool_value(left.atom == right.atom)
     return Term(BOOL, "=", (left, right))
 
 

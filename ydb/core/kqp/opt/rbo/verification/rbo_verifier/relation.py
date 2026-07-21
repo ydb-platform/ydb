@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from itertools import combinations, permutations
 from typing import Callable, Iterator, Mapping, TypeAlias
 
-from . import smt
+from . import decimal, smt
 from .ir import (
     Aggregate,
     AggregateTrait,
@@ -152,6 +152,8 @@ class Database:
                     )
                     if column.type == DATE:
                         script.assert_(date_domain(value))
+                    elif decimal.is_type(column.type):
+                        script.assert_(decimal.domain(value, column.type))
                     values[column.name] = Value(column.type, is_null, value)
                     cells[column.name] = WitnessCell(column.type, is_null, value)
                 rows.append(Row(present, values))

@@ -9,7 +9,6 @@ from typing import Any, Mapping
 from ..rbo_verifier.ir import Table
 
 
-DECIMAL_TYPE = re.compile(r"Decimal\(([1-9][0-9]*),([0-9]+)\)\Z")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 

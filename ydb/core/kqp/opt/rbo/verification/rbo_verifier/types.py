@@ -1,6 +1,6 @@
 """Exact scalar identities supported by semantic snapshot version one."""
 
-import re
+from . import decimal
 
 BOOL = "Bool"
 DATE = "Date"
@@ -26,15 +26,8 @@ INTEGER_TYPES = frozenset(
 STRING_TYPES = frozenset({"String", "Utf8"})
 FIXED_SCALAR_TYPES = frozenset({BOOL, DATE}) | INTEGER_TYPES | STRING_TYPES
 
-_DECIMAL_TYPE = re.compile(
-    r"Decimal\((?P<precision>[1-9]|[12][0-9]|3[0-5]),"
-    r"(?P<scale>0|[1-9]|[12][0-9]|3[0-5])\)"
-)
-
-
 def is_decimal_type(scalar_type: str) -> bool:
-    match = _DECIMAL_TYPE.fullmatch(scalar_type)
-    return bool(match) and int(match["scale"]) <= int(match["precision"])
+    return decimal.is_type(scalar_type)
 
 
 def is_scalar_type(scalar_type: str) -> bool:
@@ -70,7 +63,29 @@ def integer_comparison_compatible(left: str, right: str) -> bool:
 def equality_comparison_compatible(left: str, right: str) -> bool:
     """Whether ordinary equality compares both scalar values without loss."""
 
-    return left == right or integer_comparison_compatible(left, right)
+    return (
+        left == right
+        or integer_comparison_compatible(left, right)
+        or decimal_comparison_compatible(left, right)
+    )
+
+
+def decimal_comparison_compatible(left: str, right: str) -> bool:
+    left_decimal = is_decimal_type(left)
+    right_decimal = is_decimal_type(right)
+    compatible_families = (
+        (left_decimal and (right_decimal or right in INTEGER_TYPES))
+        or (right_decimal and left in INTEGER_TYPES)
+    )
+    return compatible_families and decimal.alignment_supported(left, right)
+
+
+def ordering_comparison_compatible(left: str, right: str) -> bool:
+    return (
+        integer_comparison_compatible(left, right)
+        or (left == DATE and right == DATE)
+        or decimal_comparison_compatible(left, right)
+    )
 
 
 def family(scalar_type: str) -> str:

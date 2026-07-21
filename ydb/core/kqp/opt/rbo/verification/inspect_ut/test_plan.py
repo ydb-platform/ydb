@@ -9,7 +9,7 @@ from ydb.core.kqp.opt.rbo.verification.inspector.plan import (
     render_snapshot,
     snapshot_digest,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import ir
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, ir
 
 
 def _column(name="x"):
@@ -34,6 +34,11 @@ class ExpressionRendererTest(unittest.TestCase):
             (
                 _literal("line\n", "String"),
                 'literal(type="String", value="line\\n")',
+            ),
+            (
+                _literal(decimal.Literal(decimal.FINITE, -123), "Decimal(5,2)"),
+                'literal(type="Decimal(5,2)", '
+                'value={"kind": "finite", "scaled": "-123"})',
             ),
             (
                 ir.Expr(kind="null", result_type="Int64", nullable=True),

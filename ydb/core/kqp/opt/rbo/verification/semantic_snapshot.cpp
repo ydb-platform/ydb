@@ -11,6 +11,7 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/utf8.h>
 
@@ -25,6 +26,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -41,7 +43,12 @@ class TUnsupportedSnapshot final : public yexception {
     ythrow TUnsupportedSnapshot() << reason;
 }
 
-bool IsCanonicalDecimalParameters(
+struct TDecimalParameters {
+    ui8 Precision;
+    ui8 Scale;
+};
+
+std::optional<TDecimalParameters> ParseCanonicalDecimalParameters(
     std::string_view precisionText,
     std::string_view scaleText)
 {
@@ -55,7 +62,7 @@ bool IsCanonicalDecimalParameters(
                 return false;
             }
             value = value * 10 + static_cast<ui32>(digit - '0');
-            if (value > 35) {
+            if (value > NYql::NDecimal::MaxPrecision) {
                 return false;
             }
         }
@@ -63,25 +70,36 @@ bool IsCanonicalDecimalParameters(
     };
     ui32 precision = 0;
     ui32 scale = 0;
-    return parse(precisionText, precision) &&
-        parse(scaleText, scale) &&
-        precision > 0 && scale <= precision;
+    if (!parse(precisionText, precision) ||
+        !parse(scaleText, scale) ||
+        precision == 0 || scale > precision)
+    {
+        return std::nullopt;
+    }
+    return TDecimalParameters{
+        static_cast<ui8>(precision),
+        static_cast<ui8>(scale),
+    };
 }
 
-bool IsCanonicalDecimalType(TStringBuf type) {
+std::optional<TDecimalParameters> ParseCanonicalDecimalType(TStringBuf type) {
     const std::string_view text(type.data(), type.size());
     constexpr std::string_view Prefix = "Decimal(";
     if (!text.starts_with(Prefix) || !text.ends_with(')')) {
-        return false;
+        return std::nullopt;
     }
     const auto body = text.substr(Prefix.size(), text.size() - Prefix.size() - 1);
     const auto comma = body.find(',');
     if (comma == std::string_view::npos || body.find(',', comma + 1) != std::string_view::npos) {
-        return false;
+        return std::nullopt;
     }
-    return IsCanonicalDecimalParameters(
+    return ParseCanonicalDecimalParameters(
         body.substr(0, comma),
         body.substr(comma + 1));
+}
+
+bool IsCanonicalDecimalType(TStringBuf type) {
+    return ParseCanonicalDecimalType(type).has_value();
 }
 
 bool IsSupportedType(TStringBuf type) {
@@ -350,6 +368,74 @@ NJson::TJsonValue LiteralExpr(const TExprNode& node) {
     return result;
 }
 
+NJson::TJsonValue DecimalValueExpr(
+    TStringBuf type,
+    const TDecimalParameters& parameters,
+    TStringBuf text)
+{
+    const auto value = NYql::NDecimal::FromString(
+        text,
+        parameters.Precision,
+        parameters.Scale);
+    if (NYql::NDecimal::IsError(value)) {
+        Unsupported(TStringBuilder() << "Invalid " << type << " literal " << text);
+    }
+
+    auto encoded = JsonMap();
+    if (NYql::NDecimal::IsNan(value)) {
+        encoded["kind"] = "nan";
+    } else if (value == NYql::NDecimal::Inf()) {
+        encoded["kind"] = "pos_inf";
+    } else if (value == -NYql::NDecimal::Inf()) {
+        encoded["kind"] = "neg_inf";
+    } else {
+        if (!NYql::NDecimal::IsNormal(value, parameters.Precision)) {
+            Unsupported(TStringBuilder() << "Invalid " << type << " literal " << text);
+        }
+        const char* scaled = NYql::NDecimal::ToString(
+            value,
+            NYql::NDecimal::MaxPrecision,
+            0);
+        if (!scaled) {
+            Unsupported(TStringBuilder() << "Cannot canonicalize " << type << " literal " << text);
+        }
+        encoded["kind"] = "finite";
+        encoded["scaled"] = TString(scaled);
+    }
+
+    auto result = JsonMap();
+    result["kind"] = "literal";
+    result["type"] = TString(type);
+    result["value"] = std::move(encoded);
+    return result;
+}
+
+NJson::TJsonValue DecimalLiteralExpr(const TExprNode& node) {
+    if (!node.IsCallable("Decimal") || node.ChildrenSize() != 3 ||
+        !node.Child(0)->IsAtom() || !node.Child(1)->IsAtom() ||
+        !node.Child(2)->IsAtom())
+    {
+        Unsupported("Unsupported Decimal literal callable");
+    }
+
+    const TStringBuf precision = node.Child(1)->Content();
+    const TStringBuf scale = node.Child(2)->Content();
+    const auto parameters = ParseCanonicalDecimalParameters(
+        std::string_view(precision.data(), precision.size()),
+        std::string_view(scale.data(), scale.size()));
+    if (!parameters) {
+        Unsupported("Decimal literal has invalid precision or scale");
+    }
+
+    const TString type = TStringBuilder()
+        << "Decimal(" << precision << "," << scale << ")";
+    bool nullable = false;
+    if (TypeName(node.GetTypeAnn(), &nullable) != type || nullable) {
+        Unsupported("Decimal literal type annotation does not match its parameters");
+    }
+    return DecimalValueExpr(type, *parameters, node.Child(0)->Content());
+}
+
 NJson::TJsonValue Uint64LiteralExpr(const TExprNode& node, TStringBuf field) {
     if (!node.IsCallable("Uint64") || node.ChildrenSize() != 1 ||
         !node.Child(0)->IsAtom())
@@ -426,12 +512,70 @@ bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
 }
 
 bool EqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
-    return left == right || IntegerComparisonCompatible(left, right);
+    // Static SQL IN has a separate, deliberately narrow audit surface.  Do
+    // not let new Decimal comparison support widen it implicitly.
+    return (!IsCanonicalDecimalType(left) && !IsCanonicalDecimalType(right)) &&
+        (left == right || IntegerComparisonCompatible(left, right));
 }
 
-bool OrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
+bool DecimalScaleAlignmentSupported(
+    const TDecimalParameters& source,
+    ui8 targetPrecision,
+    ui8 targetScale)
+{
+    const ui8 sourceIntegralDigits = source.Precision - source.Scale;
+    const ui8 targetIntegralDigits = targetPrecision - targetScale;
+    return !(targetIntegralDigits < sourceIntegralDigits &&
+        targetScale != source.Scale &&
+        targetIntegralDigits + source.Scale == 0);
+}
+
+bool DecimalComparisonCompatible(TStringBuf left, TStringBuf right) {
+    const auto leftDecimal = ParseCanonicalDecimalType(left);
+    const auto rightDecimal = ParseCanonicalDecimalType(right);
+    if (leftDecimal && rightDecimal) {
+        if (leftDecimal->Scale == rightDecimal->Scale) {
+            return true;
+        }
+        const auto& source = leftDecimal->Scale < rightDecimal->Scale
+            ? *leftDecimal
+            : *rightDecimal;
+        const ui8 targetScale = std::max(leftDecimal->Scale, rightDecimal->Scale);
+        const ui8 targetPrecision = std::min<ui8>(
+            NYql::NDecimal::MaxPrecision,
+            source.Precision + targetScale - source.Scale);
+        return DecimalScaleAlignmentSupported(source, targetPrecision, targetScale);
+    }
+
+    const auto decimal = leftDecimal ? leftDecimal : rightDecimal;
+    const TStringBuf integer = leftDecimal ? right : left;
+    if (!decimal || !IsIntegerType(integer)) {
+        return false;
+    }
+    const auto slot = NUdf::FindDataSlot(integer);
+    if (!slot) {
+        return false;
+    }
+    const ui8 digits = NUdf::GetDataTypeInfo(*slot).DecimalDigits;
+    const TDecimalParameters source{digits, 0};
+    const ui8 targetPrecision = std::min<ui8>(
+        NYql::NDecimal::MaxPrecision,
+        digits + decimal->Scale);
+    return DecimalScaleAlignmentSupported(
+        source,
+        targetPrecision,
+        decimal->Scale);
+}
+
+bool ScalarEqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
+    return EqualityComparisonCompatible(left, right) ||
+        DecimalComparisonCompatible(left, right);
+}
+
+bool ScalarOrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
     return IntegerComparisonCompatible(left, right) ||
-        (left == "Date" && right == "Date");
+        (left == "Date" && right == "Date") ||
+        DecimalComparisonCompatible(left, right);
 }
 
 bool IsModeledOrderingType(TStringBuf type) {
@@ -475,7 +619,7 @@ TString DataTypeDescriptorName(const TExprNode& node, bool* nullable = nullptr) 
         }
         const TStringBuf precision = dataType->Child(1)->Content();
         const TStringBuf scale = dataType->Child(2)->Content();
-        if (!IsCanonicalDecimalParameters(
+        if (!ParseCanonicalDecimalParameters(
                 std::string_view(precision.data(), precision.size()),
                 std::string_view(scale.data(), scale.size())))
         {
@@ -511,8 +655,113 @@ TString NothingTypeName(const TExprNode& node) {
     return type;
 }
 
+void CheckComparisonCallable(
+    const TExprNode& node,
+    bool allowMissingAnnotations = false)
+{
+    if (node.ChildrenSize() != 2) {
+        Unsupported(TStringBuilder()
+            << node.Content() << " must have exactly two arguments");
+    }
+
+    if (!node.GetTypeAnn() || !node.Child(0)->GetTypeAnn() ||
+        !node.Child(1)->GetTypeAnn())
+    {
+        if (allowMissingAnnotations) {
+            return;
+        }
+        Unsupported(TStringBuilder()
+            << node.Content() << " comparison has no type annotation");
+    }
+
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Bool") {
+        Unsupported(TStringBuilder()
+            << node.Content() << " comparison result is not Bool");
+    }
+
+    bool leftNullable = false;
+    bool rightNullable = false;
+    const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
+    const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
+    const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
+    if (!(equality
+            ? ScalarEqualityComparisonCompatible(leftType, rightType)
+            : ScalarOrderingComparisonCompatible(leftType, rightType)))
+    {
+        Unsupported(TStringBuilder()
+            << node.Content() << " comparison operand types differ: "
+            << leftType << " and " << rightType);
+    }
+
+    if (node.IsCallable("IsNotDistinctFrom") &&
+        (IsCanonicalDecimalType(leftType) || IsCanonicalDecimalType(rightType)) &&
+        leftType != rightType)
+    {
+        Unsupported(
+            "IsNotDistinctFrom Decimal operands must have exactly the same type");
+    }
+
+    const bool expectedNullable = node.IsCallable("IsNotDistinctFrom")
+        ? false
+        : leftNullable || rightNullable;
+    if (resultNullable != expectedNullable) {
+        Unsupported(TStringBuilder()
+            << node.Content() << " comparison result has inconsistent nullability");
+    }
+}
+
+NJson::TJsonValue DecimalConstantCastExpr(const TExprNode& node) {
+    CheckScalarArity(node, 2, 2);
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    const auto parameters = ParseCanonicalDecimalType(resultType);
+    if (!parameters || resultNullable) {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " constant Decimal cast must have a non-nullable Decimal result");
+    }
+
+    bool targetNullable = false;
+    const TString targetType = DataTypeDescriptorName(*node.Child(1), &targetNullable);
+    if (targetNullable || targetType != resultType) {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " constant Decimal cast target does not match its non-nullable result");
+    }
+
+    const auto& source = *node.Child(0);
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    if (sourceNullable || !IsIntegerType(sourceType) ||
+        !source.IsCallable() || source.Content() != sourceType ||
+        source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom())
+    {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " constant Decimal cast source is not a non-nullable integer literal");
+    }
+    LiteralExpr(source);
+
+    if (CastResult<false>(source.GetTypeAnn(), node.GetTypeAnn()) !=
+        NUdf::ECastOptions::Complete)
+    {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " constant Decimal cast is not complete");
+    }
+    return DecimalValueExpr(resultType, *parameters, source.Child(0)->Content());
+}
+
 void CheckOpaqueCallable(const TExprNode& node) {
     const TStringBuf name = node.Content();
+
+    if (name == "Decimal") {
+        DecimalLiteralExpr(node);
+        return;
+    }
 
     if (IsSupportedType(name)) {
         LiteralExpr(node);
@@ -559,25 +808,10 @@ void CheckOpaqueCallable(const TExprNode& node) {
         return;
     }
 
-    if (name == "!=" || name == "<" || name == "<=" || name == ">" || name == ">=") {
-        CheckScalarArity(node, 2, 2);
-        if (ScalarTypeName(node) != "Bool") {
-            Unsupported(TStringBuilder() << "Opaque comparison result is not Bool: " << name);
-        }
-        const TString leftType = ScalarTypeName(*node.Child(0));
-        const TString rightType = ScalarTypeName(*node.Child(1));
-        if (!EqualityComparisonCompatible(leftType, rightType))
-        {
-            Unsupported(TStringBuilder()
-                << "Opaque comparison operand types differ: "
-                << leftType << " and " << rightType);
-        }
-        if (name != "!=" &&
-            !OrderingComparisonCompatible(leftType, rightType))
-        {
-            Unsupported(TStringBuilder()
-                << "Opaque ordering is modeled only for integers and Date: " << name);
-        }
+    if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "IsNotDistinctFrom"})) {
+        CheckComparisonCallable(
+            node,
+            node.IsCallable({"==", "IsNotDistinctFrom"}));
         return;
     }
 
@@ -589,11 +823,6 @@ void CheckOpaqueCallable(const TExprNode& node) {
         CheckScalarArity(node, 1, 1);
         return;
     }
-    if (name == "==" || name == "IsNotDistinctFrom") {
-        CheckScalarArity(node, 2, 2);
-        return;
-    }
-
     if (name == "Just") {
         CheckScalarArity(node, 1, 1);
         bool nullable = false;
@@ -648,6 +877,10 @@ void CheckOpaqueCallable(const TExprNode& node) {
     }
 
     if (name == "SafeCast" || name == "Convert") {
+        if (ParseCanonicalDecimalType(ScalarTypeName(node))) {
+            DecimalConstantCastExpr(node);
+            return;
+        }
         CheckScalarArity(node, 2, 2);
         const TString resultType = ScalarTypeName(node);
         ScalarTypeName(*node.Child(0));
@@ -849,6 +1082,10 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (node.IsCallable("Decimal")) {
+        return DecimalLiteralExpr(node);
+    }
+
     if (IsSupportedType(node.Content())) {
         auto result = LiteralExpr(node);
         if (node.Content() == "Date") {
@@ -858,6 +1095,12 @@ NJson::TJsonValue ExportExprNode(
             }
         }
         return result;
+    }
+
+    if (node.IsCallable({"SafeCast", "Convert"}) &&
+        ParseCanonicalDecimalType(ScalarTypeName(node)))
+    {
+        return DecimalConstantCastExpr(node);
     }
 
     if (node.IsCallable("Nothing")) {
@@ -1016,32 +1259,8 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "IsNotDistinctFrom"})) {
-        if (node.ChildrenSize() != 2) {
-            Unsupported(TStringBuilder() << node.Content() << " must have exactly two arguments");
-        }
+        CheckComparisonCallable(node, true);
         const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
-        if (node.GetTypeAnn() && node.Child(0)->GetTypeAnn() &&
-            node.Child(1)->GetTypeAnn())
-        {
-            if (ScalarTypeName(node) != "Bool") {
-                Unsupported(TStringBuilder() << node.Content() << " comparison result is not Bool");
-            }
-            const TString leftType = ScalarTypeName(*node.Child(0));
-            const TString rightType = ScalarTypeName(*node.Child(1));
-            if (!EqualityComparisonCompatible(leftType, rightType))
-            {
-                Unsupported(TStringBuilder()
-                    << node.Content() << " comparison operand types differ: "
-                    << leftType << " and " << rightType);
-            }
-            if (!equality &&
-                !OrderingComparisonCompatible(leftType, rightType))
-            {
-                Unsupported(TStringBuilder()
-                    << node.Content()
-                    << " ordering is modeled only for integers and Date");
-            }
-        }
 
         static const THashMap<TString, TString> Kinds = {
             {"<", "lt"},
@@ -1208,6 +1427,16 @@ NJson::TJsonValue ExportOlapScalar(
 
     if (node->IsAtom()) {
         return OlapColumnExpr(node->Content(), columns);
+    }
+
+    if (node->IsCallable("Decimal")) {
+        return DecimalLiteralExpr(*node);
+    }
+
+    if (node->IsCallable({"SafeCast", "Convert"}) &&
+        ParseCanonicalDecimalType(ScalarTypeName(*node)))
+    {
+        return DecimalConstantCastExpr(*node);
     }
 
     if (node->IsCallable() && IsSupportedType(node->Content())) {

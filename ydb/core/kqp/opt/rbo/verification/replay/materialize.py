@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Mapping
 
+from ..rbo_verifier import decimal
 from ..rbo_verifier.ir import Column
-from .model import DECIMAL_TYPE, ReplayCase, ReplayError, ReplayTable, primary_key, safe_identifier
+from .model import ReplayCase, ReplayError, ReplayTable, primary_key, safe_identifier
 
 
 PATH_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+\Z")
@@ -282,13 +283,19 @@ def _json_value(value: Any, column: Column) -> Any:
         return base64.b64encode(value.encode("utf-8", errors="strict")).decode("ascii")
     if column.type == "Date":
         return (date(1970, 1, 1) + timedelta(days=value)).isoformat()
-    decimal = DECIMAL_TYPE.fullmatch(column.type)
-    if decimal:
-        return _decimal_text(value, int(decimal.group(2)))
+    decimal_type = decimal.parse_type(column.type)
+    if decimal_type is not None:
+        return _decimal_text(value, decimal_type.scale)
     return value
 
 
 def _decimal_text(coefficient: int, scale: int) -> str:
+    if coefficient == -decimal.INF:
+        return "-inf"
+    if coefficient == decimal.INF:
+        return "inf"
+    if coefficient == decimal.NAN:
+        return "nan"
     sign = "-" if coefficient < 0 else ""
     digits = str(abs(coefficient))
     if scale == 0:

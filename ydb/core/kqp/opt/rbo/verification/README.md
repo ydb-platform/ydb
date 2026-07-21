@@ -9,7 +9,7 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, and
-benchmark-dashboard parts of M4. Separate normalized-plan,
+exact Decimal-comparison, and benchmark-dashboard parts of M4. Separate normalized-plan,
 concrete-counterexample inspection, and isolated real-YDB replay tools are also
 implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -46,12 +46,25 @@ Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
 `Decimal(p,s)`) even when several identities use the same SMT domain. Decimal
 identity requires `1 <= p <= 35` and `0 <= s <= p`, with no alternate spelling.
-Integer and Decimal slots currently use unbounded SMT carriers rather than
-source-domain range constraints. This may produce an out-of-range or
-symbolic-atom `COUNTEREXAMPLE`, which replay can reject, but cannot turn a real
-bounded counterexample into `VERIFIED_BOUNDED`. Date is exact: numeric literals,
-source cells, and non-null opaque results are constrained to unsigned day values
-in `[0, 49673)`.
+Integer slots currently use unbounded SMT carriers rather than source-domain
+range constraints. This may produce an out-of-range `COUNTEREXAMPLE`, which
+replay can reject, but cannot turn a real bounded counterexample into
+`VERIFIED_BOUNDED`. Date is exact: numeric literals, source cells, and non-null
+opaque results are constrained to unsigned day values in `[0, 49673)`.
+
+Decimal uses the exact YDB scaled-integer representation. A legal non-null
+`Decimal(p,s)` value is a finite code `c` with `-10^p < c < 10^p`, negative or
+positive infinity, or NaN. The snapshot literal is explicitly tagged; finite
+codes use a canonical signed-integer string, while specials have no `scaled`
+field:
+
+```json
+{"kind":"literal","type":"Decimal(7,2)","value":{"kind":"finite","scaled":"1234"}}
+{"kind":"literal","type":"Decimal(7,2)","value":{"kind":"neg_inf"}}
+```
+
+The other special tags are `pos_inf` and `nan`. Source cells and non-null opaque
+Decimal results receive the same typed-domain constraint.
 
 Same-type integer `+`, `-`, and `*` are structural scalar nodes. Both operands
 and the result must have exactly the same signed or unsigned width, and result
@@ -82,11 +95,27 @@ than relying on a denylist. This includes UDF and PG calls, division, strict
 casts, `Unwrap`, runtime-dependent generators, free variables, and unsafe AST
 metadata.
 
+A complete cast of a non-null integer constant to a non-null Decimal is handled
+before opaque fallback: the exporter evaluates the YDB cast and emits the
+resulting tagged Decimal literal. General casts, nullable cast shapes, and
+non-integer Decimal cast sources remain unsupported.
+
 The explicit comparison core accepts unequal integer widths only when YQL's
 common integer type represents both operands without wrapping: equal signedness,
 or a signed type wider than the unsigned type. This covers the canonical
 `Int64`-column/`Int32`-literal benchmark form while mixed-width cases that would
 bitcast or wrap still fail closed. Date comparison requires Date on both sides.
+
+Ordinary Decimal `=`, `<`, `<=`, `>`, and `>=` are strict on NULL; NaN makes
+every ordinary comparison false, and infinities participate in the YDB order.
+Decimal/Decimal and Decimal/integer operands use the same scale alignment as
+YDB `DataCompare`: integers first receive their declared decimal width, scales
+are raised, precision is capped at 35, and narrowing or scale-up saturates to an
+infinity exactly where the YDB Decimal conversion does. Alignments that would
+require an invalid zero-precision Decimal fail closed. Null-safe Decimal
+equality is admitted only for exactly identical Decimal types and compares the
+encoded non-null values, including NaN; its usual both-NULL/one-NULL behavior is
+unchanged.
 
 Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
 It preserves exact callable/atom bytes, normalized atom flags, formatted types,
@@ -121,11 +150,12 @@ encoding is exact within the declared row/task/family bounds: it rejects an
 unordered or differently ordered producer and enumerates all sorted,
 producer-order-preserving interleavings.
 
-`String`, `Utf8`, and Decimal remain equality-only uninterpreted atoms. Date is
-an exact bounded integer-day type with literals, equality, ordinary ordering,
-Sort, and Merge. String, Utf8, and Decimal still have no modeled YDB ordering,
-so using one in Sort or Merge order metadata returns `UNSUPPORTED` during
-strict validation instead of inventing an ordering.
+`String` and `Utf8` remain equality-only uninterpreted atoms. Date is an exact
+bounded integer-day type with literals, equality, ordinary ordering, Sort, and
+Merge. Decimal has exact literals, its legal typed domain, and the comparison
+semantics above, but Decimal `IN`, Sort/Merge ordering, arithmetic, and general
+casts remain unsupported. String, Utf8, and Decimal sort keys therefore return
+`UNSUPPORTED` during strict validation instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
@@ -282,10 +312,12 @@ checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
 solver budget. Nullable `String IN ('first', 'second')` and
 `Int64 IN (Int32...)` expressions exercise both static-membership type gates
-through the real host and construct one normal obligation. All tests always
-require strict decoding and SMT construction. Set `RBO_Z3` to additionally
-require `VERIFIED_BOUNDED`; M2b will replace that opt-in path with a hermetic
-solver dependency.
+through the real host and construct one normal obligation. A native Decimal
+column filter likewise checks exact tagged literals and comparison predicates
+at both real-host boundaries; its normal two-row/two-task obligation is green.
+All tests always require strict decoding and SMT construction. Set `RBO_Z3` to
+additionally require `VERIFIED_BOUNDED`; M2b will replace that opt-in path with
+a hermetic solver dependency.
 
 ```bash
 RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \
@@ -415,9 +447,11 @@ ydb/core/kqp/opt/rbo/verification/replay_bin/kqp_rbo_replay \
 Before connecting, the tool strictly validates both snapshots, the trace and
 witness shape, primary keys, source integer/Date/Decimal ranges, table identity
 encoding, storage inference, exact backtick-quoted source paths, result schema,
-and observable determinism. It accepts exactly one top-level result query; the
-current TPC-DS sources q14, q23, and q39 contain two result queries and fail
-closed until replay gains an explicit multi-result contract. It returns
+and observable determinism. Legal Decimal special codes are accepted and
+rendered for BulkUpsert as `-inf`, `inf`, and `nan`; invalid or out-of-precision
+finite codes still fail closed. The tool accepts exactly one top-level result
+query; the current TPC-DS sources q14, q23, and q39 contain two result queries
+and fail closed until replay gains an explicit multi-result contract. It returns
 `INCONCLUSIVE_NONDETERMINISM` when the bounded model admits more than one
 distinct result for either side.
 

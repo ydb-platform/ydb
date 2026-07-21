@@ -8,7 +8,6 @@ from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     NODE_MODULES_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
-    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     NPM_REGISTRY_URL,
 )
 from .lockfile import Lockfile
@@ -24,7 +23,6 @@ from .utils import (
     s_rooted,
 )
 from .pnpm_workspace import PnpmWorkspace
-from .node_modules_bundler import bundle_node_modules
 from .timeit import timeit
 from .package_json import PackageJson
 
@@ -319,7 +317,6 @@ class PackageManager(object):
         yatool_prebuilder_path=None,
         use_legacy_pnpm_virtual_store=False,
         local_cli=False,
-        nm_bundle=False,
         original_lf_path=None,
     ):
         """
@@ -342,15 +339,7 @@ class PackageManager(object):
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
-        if nm_bundle:
-            # TODO: how to bundle node_modules with GVS?
-            bundle_node_modules(
-                build_root=self.build_root,
-                node_modules_path=self._nm_path(),
-                peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
-                bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
-                inject_peers=self.inject_peers,
-            )
+        return ws
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.

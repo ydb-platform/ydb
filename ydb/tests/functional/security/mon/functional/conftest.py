@@ -79,18 +79,18 @@ def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard(certif
 
 
 @pytest.fixture
-def mon_base_url(ydb_cluster_with_external_access_controls):
-    return get_mon_base_url(ydb_cluster_with_external_access_controls)
+def mon_base_url_with_extra_sids_control(ydb_cluster_with_extra_sids_controls):
+    return get_mon_base_url(ydb_cluster_with_extra_sids_controls)
 
 
 @pytest.fixture
-def describe_schema_grants(mon_base_url):
-    with grant_describe_schema_provided(mon_base_url):
+def describe_schema_grants(mon_base_url_with_extra_sids_control):
+    with grant_describe_schema_provided(mon_base_url_with_extra_sids_control):
         yield
 
 
 @pytest.fixture(scope='module')
-def ydb_cluster_with_external_access_controls(certificates):
+def ydb_cluster_with_extra_sids_controls(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=True,

@@ -16,7 +16,6 @@ from .utils import (
     build_pre_lockfile_path,
     build_ws_config_path,
     b_rooted,
-    build_nm_bundle_path,
     build_nm_path,
     build_pj_path,
     build_pnpm_store_path,
@@ -417,7 +416,7 @@ class PackageManager(object):
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(
-        self, store_path: str, has_deps: bool, local_cli: bool
+        self, store_path: str, has_deps: bool, local_cli: bool, include_peer_outputs: bool = False
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [
             s_rooted(build_pj_path(self.module_path)),
@@ -427,6 +426,15 @@ class PackageManager(object):
             b_rooted(build_ws_config_path(self.module_path)),
         ]
         resources = []
+
+        # Hermetic node_modules preparation merges generated workspace metadata
+        # from peers. Keep these inputs out of the legacy graph.
+        # TS_PROTO_AUTO has no source package.json to inspect here.
+        if include_peer_outputs and os.path.exists(build_pj_path(self.sources_path)):
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_ws_config_path(dep_path)))
+                if not self.inject_peers:
+                    ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
 
         if has_deps and not local_cli:
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
@@ -449,6 +457,8 @@ class PackageManager(object):
         outs = []
 
         if nm_bundle:
+            from .utils import build_nm_bundle_path
+
             outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs

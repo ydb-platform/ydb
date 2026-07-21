@@ -18,6 +18,7 @@
 #include <util/datetime/base.h>
 #include <util/folder/tempdir.h>
 #include <util/generic/map.h>
+#include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
@@ -103,7 +104,9 @@ NYql::TKikimrConfiguration::TPtr MakeConfiguration() {
     const auto defaultsData = NResource::Find("kqp_default_settings.txt");
     TStringInput defaultsStream(defaultsData);
     NKikimrKqp::TKqpDefaultSettings defaults;
-    UNIT_ASSERT(TryParseFromTextFormat(defaultsStream, defaults));
+    if (!TryParseFromTextFormat(defaultsStream, defaults)) {
+        ythrow yexception() << "Cannot parse embedded KQP default settings";
+    }
     config->Init(
         defaults.GetDefaultSettings(),
         TestCluster,
@@ -169,7 +172,11 @@ void CreateTables(TKikimrRunner& kikimr, const TSuite& suite) {
         "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto result = session.ExecuteSchemeQuery(TString(schema)).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    if (!result.IsSuccess()) {
+        ythrow yexception()
+            << "Cannot create " << suite.Name << " tables: "
+            << result.GetIssues().ToString();
+    }
 }
 
 TString Query(const TSuite& suite, ui32 queryId) {
@@ -188,18 +195,22 @@ ui64 TimeoutMs() {
         return DefaultTimeoutMs;
     }
     ui64 result = 0;
-    UNIT_ASSERT_C(
-        TryFromString<ui64>(*value, result) && result > 0,
-        "RBO_COVERAGE_TIMEOUT_MS must be a positive integer");
+    if (!TryFromString<ui64>(*value, result) || result == 0) {
+        ythrow yexception()
+            << "RBO_COVERAGE_TIMEOUT_MS must be a positive integer; got "
+            << *value;
+    }
     return result;
 }
 
 ui32 ParseQueryId(TStringBuf text, const TSuite& suite) {
     ui32 result = 0;
-    UNIT_ASSERT_C(
-        TryFromString<ui32>(text, result) &&
-            result >= 1 && result <= suite.QueryCount,
-        "Invalid query id " << text << " for " << suite.Name);
+    if (!TryFromString<ui32>(text, result) ||
+        result < 1 || result > suite.QueryCount)
+    {
+        ythrow yexception()
+            << "Invalid query id " << text << " for " << suite.Name;
+    }
     return result;
 }
 
@@ -220,17 +231,21 @@ std::set<ui32> SelectedQueries(const TSuite& suite) {
             result.insert(ParseQueryId(token, suite));
             continue;
         }
-        UNIT_ASSERT_C(
-            token.find('-', dash + 1) == TStringBuf::npos,
-            "Invalid query range " << token);
+        if (token.find('-', dash + 1) != TStringBuf::npos) {
+            ythrow yexception() << "Invalid query range " << token;
+        }
         const ui32 first = ParseQueryId(token.SubStr(0, dash), suite);
         const ui32 last = ParseQueryId(token.SubStr(dash + 1), suite);
-        UNIT_ASSERT_C(first <= last, "Descending query range " << token);
+        if (first > last) {
+            ythrow yexception() << "Descending query range " << token;
+        }
         for (ui32 queryId = first; queryId <= last; ++queryId) {
             result.insert(queryId);
         }
     }
-    UNIT_ASSERT_C(!result.empty(), "RBO_COVERAGE_QUERIES selected no queries");
+    if (result.empty()) {
+        ythrow yexception() << "RBO_COVERAGE_QUERIES selected no queries";
+    }
     return result;
 }
 
@@ -519,43 +534,16 @@ TOutcome ClassifyQuery(
 }
 
 void RunCoverage(const TSuite& suite) {
-    auto kikimr = MakeRunner();
-    CreateTables(kikimr, suite);
-
-    NYql::TExprContext moduleContext;
-    NYql::IModuleResolver::TPtr moduleResolver;
-    UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
-
     const auto solver = TryGetEnv("RBO_Z3");
-    const ui64 timeoutMs = TimeoutMs();
-    const auto selected = SelectedQueries(suite);
+    ui64 timeoutMs = DefaultTimeoutMs;
+    bool timeoutResolved = false;
     NJson::TJsonValue rows(NJson::JSON_ARRAY);
     TMap<TString, ui32> summary;
     TMap<std::pair<TString, TString>, TVector<ui32>> unsupported;
     TMap<TString, TVector<ui32>> optimizerFailures;
     bool fatal = false;
 
-    for (const ui32 queryId : selected) {
-        Cerr << "Checking " << suite.Name << " q" << queryId << Endl;
-        TOutcome outcome;
-        try {
-            outcome = ClassifyQuery(
-                kikimr,
-                moduleResolver,
-                suite,
-                queryId,
-                timeoutMs,
-                solver);
-        } catch (const std::exception& error) {
-            outcome = HarnessError(
-                queryId,
-                0,
-                0,
-                TStringBuilder() << "classification threw: " << error.what());
-        } catch (...) {
-            outcome = HarnessError(
-                queryId, 0, 0, "classification threw a non-standard exception");
-        }
+    const auto record = [&](ui32 queryId, TString source, TOutcome outcome) {
         ++summary[outcome.Status];
         if (outcome.Status == "UNSUPPORTED") {
             for (const auto& reason : outcome.UnsupportedReasons) {
@@ -566,9 +554,63 @@ void RunCoverage(const TSuite& suite) {
         }
         fatal = fatal || outcome.Fatal;
         outcome.Json["suite"] = suite.Name;
-        outcome.Json["source"] = suite.QueryPrefix + ToString(queryId) + ".yql";
-        outcome.Json["timeout_ms"] = timeoutMs;
+        outcome.Json["source"] = std::move(source);
+        outcome.Json["timeout_ms"] = timeoutResolved
+            ? NJson::TJsonValue(timeoutMs)
+            : NJson::TJsonValue(NJson::JSON_NULL);
         rows.AppendValue(std::move(outcome.Json));
+    };
+
+    try {
+        timeoutMs = TimeoutMs();
+        timeoutResolved = true;
+        const auto selected = SelectedQueries(suite);
+        auto kikimr = MakeRunner();
+        CreateTables(kikimr, suite);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        if (!NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver)) {
+            ythrow yexception() << "Cannot construct the default YQL module resolver";
+        }
+
+        for (const ui32 queryId : selected) {
+            Cerr << "Checking " << suite.Name << " q" << queryId << Endl;
+            TOutcome outcome;
+            try {
+                outcome = ClassifyQuery(
+                    kikimr,
+                    moduleResolver,
+                    suite,
+                    queryId,
+                    timeoutMs,
+                    solver);
+            } catch (const std::exception& error) {
+                outcome = HarnessError(
+                    queryId,
+                    0,
+                    0,
+                    TStringBuilder() << "classification threw: " << error.what());
+            } catch (...) {
+                outcome = HarnessError(
+                    queryId, 0, 0, "classification threw a non-standard exception");
+            }
+            record(
+                queryId,
+                suite.QueryPrefix + ToString(queryId) + ".yql",
+                std::move(outcome));
+        }
+    } catch (const std::exception& error) {
+        record(
+            0,
+            "",
+            HarnessError(
+                0, 0, 0, TStringBuilder() << "suite execution threw: " << error.what()));
+    } catch (...) {
+        record(
+            0,
+            "",
+            HarnessError(0, 0, 0, "suite execution threw a non-standard exception"));
     }
 
     NJson::TJsonValue summaryJson(NJson::JSON_MAP);
@@ -600,7 +642,9 @@ void RunCoverage(const TSuite& suite) {
     report["row_bound"] = RowBound;
     report["task_bound"] = TaskBound;
     report["solver_present"] = solver.Defined();
-    report["timeout_ms"] = timeoutMs;
+    report["timeout_ms"] = timeoutResolved
+        ? NJson::TJsonValue(timeoutMs)
+        : NJson::TJsonValue(NJson::JSON_NULL);
     report["summary"] = std::move(summaryJson);
     report["queries"] = std::move(rows);
     report["unsupported_inventory"] = std::move(unsupportedJson);

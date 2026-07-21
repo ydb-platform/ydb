@@ -25,13 +25,15 @@ private:
 
     static void OnInternalResult(const NThreading::TFuture<TResponse>& f, typename IExternalController<TDialogPolicy>::TPtr externalController) {
         if (!f.HasValue() || f.HasException()) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot receive result on initialization");
             externalController->OnRequestFailed(Ydb::StatusIds::INTERNAL_ERROR, "cannot receive result from future");
             return;
         }
         TResponse response = f.GetValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
-            AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("response", response.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "",
+                {"event", "unexpected reply"},
+                {"response", response.DebugString()});
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.operation().issues(), issues);
             externalController->OnRequestFailed(response.operation().status(), issues.ToString());
@@ -169,7 +171,9 @@ public:
     }
 
     virtual void OnRequestFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage) override {
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << SessionContext->GetSessionId() << ", reason: " << errorMessage;
+        YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot close session with",
+            {"id", SessionContext->GetSessionId()},
+            {"reason", errorMessage});
     }
 };
 

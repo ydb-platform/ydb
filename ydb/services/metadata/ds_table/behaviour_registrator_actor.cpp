@@ -2,6 +2,8 @@
 
 #include <ydb/services/metadata/initializer/accessor_init.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 class TBehaviourRegistrator::TInternalController: public NInitializer::IInitializerOutput, public ISchemeDescribeController {
@@ -37,7 +39,9 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionSuccess::TPtr& ev) {
 void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
     const TString& initId = Behaviour->GetTypeId();
     Y_ABORT_UNLESS(initId == ev->Get()->GetRequestId());
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service cannot receive table description for " << initId << Endl;
+    YDB_LOG_INFO("Metadata service cannot receive table description",
+        {"initId", initId},
+        {"endl", Endl});
     Schedule(TDuration::Seconds(1), new TEvStartRegistration());
 }
 

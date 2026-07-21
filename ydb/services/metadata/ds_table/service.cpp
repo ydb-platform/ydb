@@ -10,6 +10,8 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 IActor* CreateService(const TConfig& config) {
@@ -105,7 +107,8 @@ void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     RegistrationData->EventsWaiting = std::make_shared<TEventsCollector>(SelfId());
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
+    YDB_LOG_INFO("Metadata service started",
+        {"endl", Endl});
     Become(&TService::StateMain);
     Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }

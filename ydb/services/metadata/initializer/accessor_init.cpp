@@ -8,6 +8,8 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/library/actors/core/invoke.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_INITIALIZER
+
 namespace NKikimr::NMetadata::NInitializer {
 
 constexpr auto RETRY_AFTER_DURATION = TDuration::Seconds(1);
@@ -26,10 +28,11 @@ void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
         Modifiers.pop_front();
     }
     if (Modifiers.size()) {
-        ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
+        YDB_LOG_INFO("Modifiers",
+            {"count", Modifiers.size()});
         Modifiers.front()->Execute(GetSelfPtr(), Config);
     } else {
-        ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
+        YDB_LOG_INFO("Initialization finished");
         ExternalController->OnInitializationFinished(ComponentId);
     }
 }
@@ -48,14 +51,15 @@ TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
 
 TDSAccessorInitialized::~TDSAccessorInitialized() {
     if (!Modifiers.empty()) {
-        ALS_WARN(NKikimrServices::METADATA_INITIALIZER)
-            << "Try to destroy TDSAccessorInitialized with remaining modifiers: " 
-            << Modifiers.size() << Endl;
+        YDB_LOG_WARN("Try to destroy TDSAccessorInitialized with remaining",
+            {"modifiers", Modifiers.size()},
+            {"endl", Endl});
     }
 }
 
 void TDSAccessorInitialized::OnModificationFinished(const TString& modificationId) {
-    ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
+    YDB_LOG_INFO("Modifiers",
+        {"count", Modifiers.size()});
     Y_ABORT_UNLESS(Modifiers.size());
     Y_ABORT_UNLESS(Modifiers.front()->GetModificationId() == modificationId);
 
@@ -84,14 +88,18 @@ void TDSAccessorInitialized::OnPreparationFinished(const TVector<ITableModifier:
 }
 
 void TDSAccessorInitialized::OnPreparationProblem(const TString& errorMessage) const {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnPreparationProblem")("error", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "OnPreparationProblem"},
+        {"error", errorMessage});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         self->InitializationBehaviour->Prepare(self); 
     }, RETRY_AFTER_DURATION);
 }
 
 void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnAlteringProblem")("error", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "OnAlteringProblem"},
+        {"error", errorMessage});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->OnModificationFinished(self->Modifiers.front()->GetModificationId());
@@ -99,7 +107,10 @@ void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
 }
 
 void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& modificationId) {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnModificationFailed")("error", errorMessage)("modificationId", modificationId);
+    YDB_LOG_ERROR("",
+        {"event", "OnModificationFailed"},
+        {"error", errorMessage},
+        {"modificationId", modificationId});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->DoNextModifier(false);

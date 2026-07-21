@@ -1,7 +1,5 @@
 #pragma once
 
-#ifndef KIKIMR_DISABLE_S3_OPS
-
 #include "export_iface.h"
 
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
@@ -87,5 +85,3 @@ std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TParquetExportSettings
 
 } // namespace NDataShard
 } // namespace NKikimr
-
-#endif // KIKIMR_DISABLE_S3_OPS

@@ -161,9 +161,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        csController->WaitActualization(TDuration::Seconds(10));
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
+        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -219,8 +219,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithLocalDBStorage)).Execute(settings);
-    }   
-    
+    }
+
     TString scriptChunkDetailsMinMaxWithBSStorage = R"(
         STOP_COMPACTION
         ------
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-    
+
     Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
@@ -309,14 +309,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertDDLQueryNotOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm2` LOCAL USING min_max ON(`value`);
             )");
-        
+
         assertDDLQueryOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom` LOCAL USING bloom_filter ON(`value`);
             )");
         assertDDLQueryNotOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom2` LOCAL USING bloom_filter ON(`value`);
             )");
-        
+
         assertDDLQueryOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom_ngram` LOCAL USING bloom_ngram_filter ON(`value`)
                             WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom_ngram2` LOCAL USING bloom_ngram_filter ON(`value`)
                                 WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
             )");
-        
+
         assertDDLQueryNotOk(R"(
                 CREATE TABLE `/Root/two_minmax_in_create` (
                     `key` Int32 NOT NULL,
@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
     }
-    
+
 
     TString scriptMinMaxIndexOnInsertEnabled = R"(
         STOP_COMPACTION
@@ -695,9 +695,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
         NYdb::TStatus status = runDDLQuery(R"(
-            ALTER TABLE `/Root/minmax_test_table_doesnt_exist` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);            
+            ALTER TABLE `/Root/minmax_test_table_doesnt_exist` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
-        
+
         UNIT_ASSERT_C(!status.IsSuccess(), status.GetIssues().ToString());
     }
 
@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT
             CAST(item AS Int32) AS `key`,
             "Value_" || CAST(item+1 AS String) AS `value_str`,
             CAST(item+1 AS Utf8) AS `value_utf`,
@@ -928,7 +928,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT
             CAST(item AS Int32) AS `key`,
             "Value_" || CAST(item AS String) AS `value_str`,
             CAST(item AS Utf8) AS `value_utf`,
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->WaitCompactions(TDuration::Seconds(5));
 
 
-        using TQueryResult = TVector<TString>; 
+        using TQueryResult = TVector<TString>;
 
         auto runDMLQueryTyped = [&](TString text) -> TQueryResult {
             auto columns = runDMLQuery(text);
@@ -950,7 +950,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             return res;
         };
-        
+
         {
             TQueryResult tierNamesStr = runDMLQueryTyped(R"(
                 SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
@@ -958,7 +958,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
             for (const auto& tierName: tierNamesStr) {
                 UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
-            }            
+            }
         }
         {
             TQueryResult tierNamesUtf8 = runDMLQueryTyped(R"(
@@ -2038,9 +2038,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        csController->WaitActualization(TDuration::Seconds(10));
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
+        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

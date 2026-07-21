@@ -1256,6 +1256,19 @@ namespace {
             return info;
         }
 
+        void VerifyColumnTableS3ExportHasData(const TString& destinationPrefix) {
+            const TString prefix = destinationPrefix.StartsWith('/') ? destinationPrefix : "/" + destinationPrefix;
+            UNIT_ASSERT(HasS3File(prefix + "/scheme.pb"));
+            bool hasDataFile = false;
+            for (const auto& [path, content] : S3Mock().GetData()) {
+                if (path.StartsWith(prefix + "/") && path.Contains("data") && !content.empty()) {
+                    hasDataFile = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(hasDataFile);
+        }
+
         ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {
             const ui64 exportTxId = ++txId;
             TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
@@ -5337,6 +5350,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         )", S3Port()));
         Env().TestWaitNotification(Runtime(), exportTxId);
         TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        VerifyColumnTableS3ExportHasData("ColumnExport");
 
         const ui64 importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
@@ -5356,11 +5370,23 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env().TestWaitNotification(Runtime(), importId);
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/RowImported"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/RowImported"), {NLs::PathExist, NLs::IsTable});
         TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnImported"), {
             NLs::PathExist,
             NLs::IsColumnTable,
         });
+
+        {
+            auto tableDesc = DescribePath(Runtime(), "/MyRoot/RowImported", true, false, true);
+            const auto& partitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT(!partitions.empty());
+            const auto rowContent = ReadTable(
+                Runtime(), partitions[0].GetDatashardId(), "RowImported", {"key"}, {"key", "value"});
+            const auto rowList = NClient::TValue::Create(rowContent)["Result"]["List"];
+            UNIT_ASSERT_VALUES_EQUAL(rowList.Size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rowList[0]["key"]), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(TString(rowList[0]["value"]), "rowValue");
+        }
     }
 
     Y_UNIT_TEST(ExportImportColumnTableAfterAddAndDropColumns) {
@@ -5659,6 +5685,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         )", S3Port()));
         Env().TestWaitNotification(Runtime(), exportTxId);
         TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        VerifyColumnTableS3ExportHasData("MultiShardExport");
 
         const ui64 importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
@@ -5720,6 +5747,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         )", S3Port()));
         Env().TestWaitNotification(Runtime(), importId);
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnImported"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(ShouldFailExportNonexistentColumnTable) {

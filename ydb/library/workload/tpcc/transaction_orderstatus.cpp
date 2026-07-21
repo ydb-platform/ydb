@@ -131,7 +131,7 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
 
     const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
         TInputs generated;
-        generated.WarehouseID = context.WarehouseID;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
         generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
         // Determine lookup method (60% by name, 40% by id)
         generated.LookupByName = RandomNumber(1, 100) <= 60;

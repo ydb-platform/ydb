@@ -555,7 +555,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
 
     const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
         TInputs generated;
-        generated.WarehouseID = context.WarehouseID;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
         generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
         generated.CustomerID = GetRandomCustomerID();
         generated.NumItems = RandomNumber(MIN_ITEMS, MAX_ITEMS);

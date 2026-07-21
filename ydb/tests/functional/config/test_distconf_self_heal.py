@@ -266,13 +266,6 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         assert_eq(len(rg["Ring"]), 9)
 
 
-# NB: SelfManagementConfig is read by distconf self-heal from the process-static NodeWarden
-# configuration (Cfg->SelfManagementConfig), which is populated once at node startup and is not
-# updated by dynamic ReplaceConfig calls. So both "allowed nodes" and "automatic management"
-# options below are configured via self_management_extra_options (baked into the initial YAML
-# config before cluster start), not via runtime config replacement.
-
-
 class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):
     # 3 extra spare nodes (10, 11, 12) relative to the base 9-node MIRROR_3_DC topology so that
     # forbidding one node still leaves enough nodes for a valid, fully-healthy configuration.

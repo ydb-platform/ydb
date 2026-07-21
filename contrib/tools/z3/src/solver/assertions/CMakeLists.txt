@@ -1,0 +1,9 @@
+z3_add_component(solver_assertions
+  SOURCES
+    asserted_formulas.cpp
+  COMPONENT_DEPENDENCIES
+    smt2parser
+    params
+    qe_lite
+    solver
+)

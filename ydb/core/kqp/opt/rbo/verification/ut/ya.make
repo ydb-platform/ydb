@@ -18,4 +18,8 @@ PEERDIR(
     ydb/core/kqp/opt/rbo/verification
 )
 
+DEPENDS(
+    contrib/tools/z3
+)
+
 END()

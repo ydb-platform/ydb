@@ -1,0 +1,73 @@
+/*++
+Copyright (c) 2013 Microsoft Corporation
+
+Module Name:
+
+    dl_mk_karr_invariants.h
+
+Abstract:
+
+    Extract integer linear invariants.
+
+Author:
+
+    Nikolaj Bjorner (nbjorner) 2013-03-08
+
+Revision History:
+
+--*/
+#pragma once
+
+#include "muz/base/dl_context.h"
+#include "muz/base/dl_rule_set.h"
+#include "muz/base/dl_rule_transformer.h"
+#include "ast/arith_decl_plugin.h"
+#include "math/hilbert/hilbert_basis.h"
+
+namespace datalog {
+
+    /**
+       \brief Rule transformer that strengthens bodies with invariants.
+    */
+
+    struct matrix {
+        vector<vector<rational> > A;
+        vector<rational>          b;
+        bool_vector             eq;
+        unsigned size() const { return A.size(); }
+        void reset() { A.reset(); b.reset(); eq.reset(); }
+        void append(matrix const& other) { A.append(other.A); b.append(other.b); eq.append(other.eq); }
+        void display(std::ostream& out) const;
+        static void display_row(
+            std::ostream& out, vector<rational> const& row, rational const& b, bool is_eq);
+        static void display_ineq(
+            std::ostream& out, vector<rational> const& row, rational const& b, bool is_eq);
+    };
+
+    class mk_karr_invariants : public rule_transformer::plugin {
+
+        class add_invariant_model_converter;
+        
+        context&        m_ctx;
+        ast_manager&    m;
+        rule_manager&   rm;
+        context         m_inner_ctx;
+        arith_util      a;
+        obj_map<func_decl, expr*>      m_fun2inv;
+        ast_ref_vector m_pinned;
+
+        void get_invariants(rule_set const& src);
+
+        void update_body(rule_set& result, rule& r);
+        rule_set* update_rules(rule_set const& src);
+    public:
+        mk_karr_invariants(context & ctx, unsigned priority);
+        
+        rule_set * operator()(rule_set const & source) override;
+
+    };
+
+
+};
+
+

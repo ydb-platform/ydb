@@ -1,0 +1,19 @@
+z3_add_component(cmd_context
+  SOURCES
+    basic_cmds.cpp
+    cmd_context.cpp
+    cmd_context_to_goal.cpp
+    cmd_util.cpp
+    echo_tactic.cpp
+    eval_cmd.cpp
+    parametric_cmd.cpp
+    pdecl.cpp
+    simplify_cmd.cpp
+    simplifier_cmds.cpp
+    tactic_cmds.cpp
+    tactic_manager.cpp
+  COMPONENT_DEPENDENCIES
+    rewriter
+    solver
+    params
+)

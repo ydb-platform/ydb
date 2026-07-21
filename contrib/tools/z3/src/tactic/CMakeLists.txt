@@ -1,0 +1,19 @@
+z3_add_component(tactic
+  SOURCES
+    dependency_converter.cpp
+    goal.cpp
+    goal_num_occurs.cpp
+    goal_shared_occs.cpp
+    goal_util.cpp
+    probe.cpp
+    tactical.cpp
+    tactic.cpp
+  COMPONENT_DEPENDENCIES
+    ast
+    model
+    simplifiers
+    converters
+  TACTIC_HEADERS
+    probe.h
+    tactic.h
+)

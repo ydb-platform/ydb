@@ -1,6 +1,11 @@
 import os
 import unittest
 
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
+
 from ydb.core.kqp.opt.rbo.verification.inspector.trace import Probes, _family_json, prepare
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
@@ -12,7 +17,11 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem
 
 
-SOLVER = os.environ.get("RBO_Z3")
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 def _schema(scalar_type="Int64", nullable=False):
@@ -301,7 +310,7 @@ class ObserverTest(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(SOLVER, "set RBO_Z3 to run concrete trace tests")
+@unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class ConcreteTraceTest(unittest.TestCase):
     def test_counterexample_uses_one_model_for_witness_and_operator_trace(self):
         result = prepare(_logical(), _staged(ZERO), 1, 10_000).solve(SOLVER, 10_000)

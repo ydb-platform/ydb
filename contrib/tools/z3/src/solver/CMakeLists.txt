@@ -1,0 +1,26 @@
+z3_add_component(solver
+  SOURCES
+    check_sat_result.cpp
+    check_logic.cpp
+    combined_solver.cpp
+    mus.cpp
+    parallel_tactical.cpp
+    simplifier_solver.cpp
+    slice_solver.cpp
+    smt_logics.cpp
+    solver.cpp
+    solver_na2as.cpp
+    solver_pool.cpp
+    solver_preprocess.cpp
+    solver2tactic.cpp
+    tactic2solver.cpp
+  COMPONENT_DEPENDENCIES
+    model
+    tactic
+    params
+    qe_lite
+  PYG_FILES
+    combined_solver_params.pyg
+    parallel_params.pyg
+
+)

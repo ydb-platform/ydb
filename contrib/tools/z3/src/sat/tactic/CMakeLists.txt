@@ -1,0 +1,13 @@
+z3_add_component(sat_tactic
+  SOURCES
+    goal2sat.cpp
+    sat2goal.cpp
+    sat_tactic.cpp
+  COMPONENT_DEPENDENCIES
+    sat
+    tactic
+    solver
+    sat_smt
+  TACTIC_HEADERS
+    sat_tactic.h
+)

@@ -8,6 +8,11 @@ from contextlib import redirect_stderr, redirect_stdout
 from itertools import product
 from unittest import mock
 
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
+
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     SnapshotError,
     parse_snapshot,
@@ -41,7 +46,11 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
 )
 
 
-SOLVER = os.environ.get("RBO_Z3")
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 def schema():
@@ -1844,7 +1853,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                     parse_snapshot(value)
 
 
-@unittest.skipUnless(SOLVER, "set RBO_Z3 to run solver integration tests")
+@unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
     def test_split_count_and_sum_are_bounded_equivalent(self):
         for function, grouped, nullable_input in product(

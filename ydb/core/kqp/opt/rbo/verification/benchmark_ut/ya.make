@@ -11,6 +11,7 @@ SRCS(
 )
 
 DEPENDS(
+    contrib/tools/z3
     ydb/core/kqp/opt/rbo/verification/bin
 )
 

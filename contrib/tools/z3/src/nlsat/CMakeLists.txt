@@ -1,0 +1,19 @@
+z3_add_component(nlsat
+  SOURCES
+    nlsat_clause.cpp
+    nlsat_common.cpp
+    nlsat_evaluator.cpp
+    nlsat_explain.cpp
+    nlsat_interval_set.cpp
+    levelwise.cpp
+    nlsat_simplify.cpp
+    nlsat_solver.cpp
+    nlsat_types.cpp
+    nlsat_simple_checker.cpp
+    nlsat_variable_ordering_strategy.cpp
+    COMPONENT_DEPENDENCIES
+    polynomial
+    sat
+  PYG_FILES
+    nlsat_params.pyg
+)

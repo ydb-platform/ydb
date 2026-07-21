@@ -1,0 +1,390 @@
+/*++
+Copyright (c) 2006 Microsoft Corporation
+
+Module Name:
+
+    dl_rule.h
+
+Abstract:
+
+    <abstract>
+
+Author:
+
+    Leonardo de Moura (leonardo) 2010-05-17.
+
+Revision History:
+
+--*/
+
+#pragma once
+
+#include "ast/ast.h"
+#include "muz/base/dl_costs.h"
+#include "muz/base/dl_util.h"
+#include "ast/used_vars.h"
+#include "ast/converters/proof_converter.h"
+#include "ast/converters/model_converter.h"
+#include "ast/rewriter/ast_counter.h"
+#include "ast/rewriter/rewriter.h"
+#include "muz/base/hnf.h"
+#include "qe/lite/qe_lite_tactic.h"
+#include "ast/rewriter/var_subst.h"
+#include "ast/datatype_decl_plugin.h"
+#include "ast/rewriter/label_rewriter.h"
+
+namespace datalog {
+
+    class rule;
+    class rule_manager;
+    class rule_set;
+    class table;
+    class context;
+
+    typedef obj_ref<rule, rule_manager> rule_ref;
+    typedef ref_vector<rule, rule_manager> rule_ref_vector;
+    typedef ptr_vector<rule> rule_vector;
+
+
+    struct uninterpreted_function_finder_proc {
+        ast_manager& m;
+        datatype_util m_dt;
+        dl_decl_util  m_dl;
+        bool m_found;
+        func_decl* m_func;
+        uninterpreted_function_finder_proc(ast_manager& m): 
+            m(m), m_dt(m), m_dl(m), m_found(false), m_func(nullptr) {}
+        void operator()(var * n) { }
+        void operator()(quantifier * n) { }
+        void operator()(app * n) {
+            if (is_uninterp(n) && !m_dl.is_rule_sort(n->get_decl()->get_range())) {
+                m_found = true;
+                m_func = n->get_decl();
+            }
+            else if (m_dt.is_accessor(n)) {
+                sort* s = n->get_arg(0)->get_sort();
+                SASSERT(m_dt.is_datatype(s));
+                if (m_dt.get_datatype_constructors(s)->size() > 1) {
+                    m_found = true;
+                    m_func = n->get_decl();
+                }
+            }
+        }
+        void reset() { m_found = false; m_func = nullptr; }
+
+        bool found(func_decl*& f) const { f = m_func; return m_found; }
+    };
+
+    struct quantifier_finder_proc {
+        bool m_exist;
+        bool m_univ;
+        bool m_lambda;
+        quantifier_finder_proc() : m_exist(false), m_univ(false), m_lambda(false) {}
+        void operator()(var * n) { }
+        void operator()(quantifier * n) {
+            switch (n->get_kind()) {
+            case forall_k: m_univ = true; break;
+            case exists_k: m_exist = true; break;
+            case lambda_k: m_lambda = true; break;
+            }
+        }
+        void operator()(app * n) { }
+        void reset() { m_exist = m_univ = m_lambda = false; }
+    };
+
+    struct fd_finder_proc {
+        ast_manager& m;
+        bv_util      m_bv;
+        bool         m_is_fd;
+        fd_finder_proc(ast_manager& m): m(m), m_bv(m), m_is_fd(true) {}
+
+        bool is_fd() const { return m_is_fd; }
+        bool is_fd(sort* s) { return m.is_bool(s) || m_bv.is_bv_sort(s); }
+        void operator()(var* n) { m_is_fd &= is_fd(n->get_sort()); }
+        void operator()(quantifier* ) { m_is_fd = false; }
+        void operator()(app* n) { m_is_fd &= is_fd(n->get_decl()->get_range()); }
+        void reset() { m_is_fd = true; }
+    };
+
+
+    /**
+       \brief Manager for the \c rule class
+
+       \remark \c rule_manager objects are interchangeable as long as they
+         contain the same \c ast_manager object.
+    */
+    class rule_manager
+    {
+        ast_manager&         m;
+        context&             m_ctx;
+        rule_counter         m_counter;
+        used_vars            m_used;
+        var_idx_set          m_var_idx;
+        expr_free_vars       m_free_vars;
+        app_ref_vector       m_body;
+        app_ref              m_head;
+        expr_ref_vector      m_args;
+        bool_vector        m_neg;
+        hnf                  m_hnf;
+        qe_lite              m_qe;
+        label_rewriter       m_rwr;
+        mutable uninterpreted_function_finder_proc m_ufproc;
+        mutable quantifier_finder_proc m_qproc;
+        mutable expr_sparse_mark       m_visited;
+        mutable fd_finder_proc         m_fd_proc;
+
+
+        // only the context can create a rule_manager
+        friend class context;
+
+        explicit rule_manager(context& ctx);
+
+        /**
+           \brief Move functions from predicate tails into the interpreted tail by introducing new variables.
+        */
+        void hoist_compound_predicates(unsigned num_bound, app_ref& head, app_ref_vector& body);
+
+        void hoist_compound(unsigned& num_bound, app_ref& fml, app_ref_vector& body);
+
+        void flatten_body(app_ref_vector& body);
+
+        void remove_labels(expr_ref& fml, proof_ref& pr);
+
+        void check_app(expr* e);
+
+        bool contains_predicate(expr* fml) const;
+
+        void bind_variables(expr* fml, bool is_forall, expr_ref& result);
+
+        void mk_negations(app_ref_vector& body, bool_vector& is_negated);
+
+        void mk_rule_core(expr* fml, proof* p, rule_set& rules, symbol const& name);
+
+        void mk_horn_rule(expr* fml, proof* p, rule_set& rules, symbol const& name);
+
+        static expr_ref mk_implies(app_ref_vector const& body, expr* head);
+
+        unsigned extract_horn(expr* fml, app_ref_vector& body, app_ref& head);
+
+        /**
+           \brief Perform cheap quantifier elimination to reduce the number of variables in the interpreted tail.
+         */
+        void reduce_unbound_vars(rule_ref& r);
+
+        void reset_collect_vars();
+
+        var_idx_set& finalize_collect_vars();
+
+    public:
+
+        ast_manager& get_manager() const { return m; }
+
+        void inc_ref(rule * r);
+
+        void dec_ref(rule * r);
+
+        used_vars& reset_used() { m_used.reset(); return m_used; }
+
+        var_idx_set& collect_vars(expr * pred);
+
+        var_idx_set& collect_vars(expr * e1, expr* e2);
+
+        var_idx_set& collect_rule_vars(rule * r);
+
+        var_idx_set& collect_rule_vars_ex(rule * r, app* t);
+
+        var_idx_set& collect_tail_vars(rule * r);
+
+        void accumulate_vars(expr* pred);
+
+        // ptr_vector<sort>& get_var_sorts() { return m_vars; }
+
+        var_idx_set&      get_var_idx() { return m_var_idx; }
+
+        /**
+           \brief Create a Datalog rule from a Horn formula.
+           The formula is of the form (forall (...) (forall (...) (=> (and ...) head)))
+           
+        */
+        void mk_rule(expr* fml, proof* p, rule_set& rules, symbol const& name = symbol::null);
+
+        /**
+           \brief Create a Datalog query from an expression.
+           The formula is of the form (exists (...) (exists (...) (and ...))
+        */
+        func_decl* mk_query(expr* query, rule_set& rules);
+
+        /**
+           \brief Create a Datalog rule head :- tail[0], ..., tail[n-1].
+           Return 0 if it is not a valid rule.
+           
+           \remark A tail may contain negation. tail[i] is assumed to be negated if is_neg != 0 && is_neg[i] == true
+        */
+        rule * mk(app * head, unsigned n, app * const * tail, bool const * is_neg = nullptr,
+                  symbol const& name = symbol::null, bool normalize = true);
+
+        /**
+           \brief Create a rule with the same tail as \c source and with a specified head.
+        */
+        rule * mk(rule const * source, app * new_head, symbol const& name = symbol::null);
+
+        /**
+           \brief Create a copy of the given rule.
+        */
+        rule * mk(rule const * source, symbol const& name = symbol::null);
+
+        /** make sure there are not non-quantified variables that occur only in interpreted predicates */
+        void fix_unbound_vars(rule_ref& r, bool try_quantifier_elimination);
+
+        /**
+           \brief add proof that new rule is obtained by rewriting old rule.
+         */
+        void mk_rule_rewrite_proof(rule& old_rule, rule& new_rule);
+
+        /**
+           \brief tag rule as asserted.
+         */
+        void mk_rule_asserted_proof(rule& r);
+
+        /**
+           \brief apply substitution to variables of rule.
+        */
+        void substitute(rule_ref& r, unsigned sz, expr*const* es);
+
+        /**
+            \brief Check that head :- tail[0], ..., tail[n-1]
+            is a valid Datalog rule.
+         */
+        void check_valid_rule(app * head, unsigned n, app * const * tail) const;
+
+        /**
+            \brief Check that \c head may occur as a Datalog rule head.
+        */
+        void check_valid_head(expr * head) const;
+
+        /**
+            \brief Return true if \c head may occur as a fact.
+        */
+        bool is_fact(app * head) const;
+
+        static bool is_forall(ast_manager& m, expr* e, quantifier*& q);
+
+        rule_counter& get_counter() { return m_counter; }
+
+        app_ref ensure_app(expr* e);
+
+        void to_formula(rule const& r, expr_ref& result);
+
+        std::ostream& display_smt2(rule const& r, std::ostream & out);
+
+        bool has_uninterpreted_non_predicates(rule const& r, func_decl*& f) const;
+        void has_quantifiers(rule const& r, bool& existential, bool& universal, bool& lam) const;
+        bool has_quantifiers(rule const& r) const;
+        bool is_finite_domain(rule const& r) const;
+
+    };
+
+    class rule : public accounted_object {
+        friend class rule_manager;
+
+        app*     m_head = nullptr;
+        proof*   m_proof = nullptr;
+        unsigned m_tail_size = 0;
+        unsigned m_ref_cnt = 0;
+        unsigned m_positive_cnt = 0;
+        unsigned m_uninterp_cnt = 0;
+        symbol   m_name;
+        /**
+           The following field is an array of tagged pointers. 
+           - Tag 0: the atom is not negated
+           - Tag 1: the atom is negated.
+
+           The order of tail formulas is the following:
+
+           uninterpreted positive,
+           uninterpreted negative,
+           interpreted.
+
+           The negated flag is never set for interpreted tails.
+        */
+        app *   m_tail[0]; 
+        
+        static unsigned get_obj_size(unsigned n) { return sizeof(rule) + n * sizeof(app *); }
+
+        rule() : m_ref_cnt(0), m_name(symbol::null) {}
+
+        void deallocate(ast_manager & m);
+
+        void get_used_vars(used_vars& uv) const;
+        
+    public:
+
+        proof * get_proof() const { return m_proof; }
+
+        void set_proof(ast_manager& m, proof* p);
+        
+        app * get_head() const { return m_head; }
+
+        func_decl* get_decl() const { return get_head()->get_decl(); }
+
+        unsigned get_tail_size() const { return m_tail_size; }
+
+        /**
+           \brief Return number of positive uninterpreted predicates in the tail.
+
+           These predicates are the first in the tail.
+        */
+        unsigned get_positive_tail_size() const { return m_positive_cnt; }
+        unsigned get_uninterpreted_tail_size() const { return m_uninterp_cnt; }
+
+        /**
+           \brief Return i-th tail atom. The first \c get_uninterpreted_tail_size() 
+             atoms are uninterpreted and the first \c get_positive_tail_size() are 
+             uninterpreted and non-negated.
+        */
+        app * get_tail(unsigned i) const { SASSERT(i < m_tail_size); return UNTAG(app *, m_tail[i]); }
+
+        func_decl* get_decl(unsigned i) const { SASSERT(i < get_uninterpreted_tail_size()); return get_tail(i)->get_decl(); }
+
+        bool is_neg_tail(unsigned i) const { SASSERT(i < m_tail_size); return GET_TAG(m_tail[i]) == 1; }
+
+        /**
+        Check whether predicate p is in the interpreted tail.
+        
+        If only_positive is true, only the positive predicate tail atoms are checked.
+        */
+        bool is_in_tail(const func_decl * p, bool only_positive=false) const;
+
+        bool has_negation() const;
+
+        /**
+           \brief Store in d the (direct) dependencies of the given rule.
+        */
+
+        void norm_vars(rule_manager & rm);
+
+        void get_vars(ast_manager& m, ptr_vector<sort>& sorts) const;
+
+        void display(context & ctx, std::ostream & out, bool compact = false) const;
+
+        /**
+           \brief Return the name(s) associated with this rule. Plural for preprocessed (e.g. obtained by inlining) rules.
+
+           This possibly returns a ";"-separated list of names.
+        */
+        symbol const& name() const { return m_name; } ;
+
+        unsigned hash() const;
+
+    };
+
+    struct rule_eq_proc { 
+        bool operator()(const rule * r1, const rule * r2) const;
+    };
+    struct rule_hash_proc {
+        unsigned operator()(const rule * r) const;
+    };
+
+};
+
+

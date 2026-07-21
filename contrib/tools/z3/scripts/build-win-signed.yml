@@ -1,0 +1,47 @@
+parameters:
+  ReleaseVersion: ''
+  BuildArchitecture: ''
+
+jobs:
+- job: WindowsBuild${{parameters.BuildArchitecture}}
+  displayName: "Windows build (${{parameters.BuildArchitecture}})"
+  timeoutInMinutes: 120
+  pool:
+    vmImage: "windows-latest"
+  steps:
+  - powershell: write-host $(System.TeamProjectId)
+    displayName: 'System.TeamProjectId'
+  - powershell: write-host $(System.DefinitionId)
+    displayName: 'System.DefinitionId'
+  - powershell: write-host $(Build.BuildId)
+    displayName: 'Build.BuildId'
+  - task: CmdLine@2
+    displayName: Build
+    inputs:
+      script:
+         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{parameters.BuildArchitecture}} &&
+        python scripts\mk_win_dist.py
+            --${{parameters.BuildArchitecture}}-only
+            --dotnet-key=$(Build.SourcesDirectory)/resources/z3.snk
+  - task: CopyFiles@2
+    displayName: 'Collect Symbols'
+    inputs:
+      sourceFolder: dist
+      contents: '**/*.pdb'
+      targetFolder: '$(Build.ArtifactStagingDirectory)/symbols'
+  - task: DeleteFiles@1
+    displayName: Cleanup
+    inputs:
+      SourceFolder: 'dist/z3-${{parameters.ReleaseVersion}}-${{parameters.BuildArchitecture}}-win/bin'
+      Contents: 'CodeSignSummary*'
+  - task: ArchiveFiles@2
+    displayName: Zip
+    inputs:
+      rootFolderOrFile: 'dist/z3-${{parameters.ReleaseVersion}}-${{parameters.BuildArchitecture}}-win'
+      includeRootFolder: true
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/z3-${{parameters.ReleaseVersion}}-${{parameters.BuildArchitecture}}-win.zip'
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)/z3-${{parameters.ReleaseVersion}}-${{parameters.BuildArchitecture}}-win.zip'
+      artifactName: 'WindowsBuild-${{parameters.BuildArchitecture}}'

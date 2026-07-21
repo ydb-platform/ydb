@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2021",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "build/",
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -345,15 +345,6 @@ message TFeatureFlags {
     optional bool EnableColumnshardDyNumber = 298 [default = false];
     optional bool EnableDataShardDirectPartImport = 299 [default = false];
     optional bool EnableIdmPermissionsManagement = 301 [default = false];
-<<<<<<< HEAD
-=======
-    // Disables accumulating the SSD-system component of FileStore (filesystem) space into the
-    // owning domain's allocated counter. FileStore shards are resized to the final filesystem
-    // size (up to petabytes), with thousands of shards the per-domain ui64 counter can overflow.
-    // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
-    // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
-    optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
->>>>>>> 88f150f2821 (WLM FFs for new classifiers (#47305))
 }

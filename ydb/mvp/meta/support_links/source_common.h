@@ -15,6 +15,14 @@ inline bool IsAbsoluteUrl(TStringBuf url) {
     return url.StartsWith("http://") || url.StartsWith("https://");
 }
 
+inline bool HasUrlQuery(TStringBuf url) {
+    return url.Contains('?');
+}
+
+inline bool HasUrlTemplatePlaceholders(TStringBuf url) {
+    return url.Contains('{') || url.Contains('}');
+}
+
 inline TString JoinUrl(TStringBuf endpoint, TStringBuf path) {
     const bool endpointHasSlash = endpoint.EndsWith('/');
     const bool pathHasSlash = path.StartsWith('/');
@@ -29,7 +37,7 @@ inline TString JoinUrl(TStringBuf endpoint, TStringBuf path) {
 
 inline TString AppendQueryParam(const TString& url, TStringBuf key, TStringBuf value) {
     TStringBuilder result;
-    result << url << (url.Contains('?') ? '&' : '?') << key << "=" << CGIEscapeRet(value);
+    result << url << (HasUrlQuery(url) ? '&' : '?') << key << "=" << CGIEscapeRet(value);
     return result;
 }
 

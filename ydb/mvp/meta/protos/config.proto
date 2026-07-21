@@ -26,7 +26,8 @@ message TMetaConfig {
             }
 
             // Link source identifier (for example: grafana/dashboard/search).
-            optional string Source = 1;
+            // Defaults to the simple URL source.
+            optional string Source = 1 [default = "url"];
             // Optional display name shown in UI.
             optional string Title = 2;
             // Source-specific URL. Can be absolute or relative, depending on source.

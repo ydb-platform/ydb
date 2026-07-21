@@ -430,17 +430,6 @@ void GrantPublicationTableWrite(NPersQueue::TTestServer& server, const TString& 
     }
 }
 
-void GrantPublicationRegistryDelete(NPersQueue::TTestServer& server, const TString& subject) {
-    GrantPublicationTableWrite(server, subject);
-    if (SchemePathExists(server, "/Root/.metadata/topic_deferred_publications")) {
-        server.AnnoyingClient->TestGrant(
-            "/Root/.metadata",
-            "topic_deferred_publications",
-            subject,
-            NACLib::EAccessRights::GenericWrite);
-    }
-}
-
 void InsertDestinationRow(
     NPersQueue::TTestServer& server,
     const TString& authTicket,
@@ -1983,7 +1972,6 @@ Y_UNIT_TEST_SUITE(TopicDeferredPublishFinalize) {
 
 Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-publish-topic", "ext-publish");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     constexpr TStringBuf payload = "deferred-payload-visible";
     {
@@ -2005,9 +1993,73 @@ Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
     UNIT_ASSERT_VALUES_EQUAL(*message, TString(payload));
 }
 
+<<<<<<< HEAD
+=======
+Y_UNIT_TEST(PublishAfterStreamWriteToTwoPartitionsMakesDataVisible) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-two-partitions-topic", "ext-two-partitions");
+
+    constexpr TStringBuf payload0 = "deferred-payload-part-0";
+    constexpr TStringBuf payload1 = "deferred-payload-part-1";
+    {
+        auto session = fixture.OpenWriteStream("producer-part-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload0),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-part-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload1),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(publishOutcome.RpcStatus.ok());
+    UNIT_ASSERT(publishOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    const auto message0 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 0);
+    const auto message1 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 1);
+    UNIT_ASSERT(message0.Defined());
+    UNIT_ASSERT(message1.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*message0, TString(payload0));
+    UNIT_ASSERT_VALUES_EQUAL(*message1, TString(payload1));
+}
+
+Y_UNIT_TEST(CancelAfterStreamWriteToTwoPartitionsClearsRegistryWithoutData) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-two-partitions-topic", "ext-cancel-two-partitions");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-0",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-1",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(cancelOutcome.RpcStatus.ok());
+    UNIT_ASSERT(cancelOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 0).Defined());
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 1).Defined());
+}
+
+>>>>>>> a87284b65c8 (Run deferred publish finalize KQP ops as metadata@system (#47232))
 Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-topic", "ext-cancel");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     {
         auto session = fixture.OpenWriteStream("producer-cancel");
@@ -2028,7 +2080,6 @@ Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {
 
 Y_UNIT_TEST(RepeatFinalizeReturnsNotFound) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-repeat-topic", "ext-repeat");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     {
         auto session = fixture.OpenWriteStream("producer-repeat");
@@ -2093,7 +2144,6 @@ Y_UNIT_TEST(PublishMultipleDestinations) {
     auto topicStub = MakeTopicServiceStub(server);
     const ui64 intPublicationId = BeginPublicationIntId(
         CallBeginPublication(*deferredStub, "/Root", "ext-multi"));
-    GrantPublicationRegistryDelete(server, "root@builtin");
 
     {
         auto session = TStreamWriteSession::Open(*topicStub, "finalize-multi-topic-a", "producer-a", 0);
@@ -2117,7 +2167,6 @@ Y_UNIT_TEST(PublishMultipleDestinations) {
 
 Y_UNIT_TEST(PublishBeforeWriteAckKeepsRegistry) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-before-ack-topic", "ext-before-ack");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     TFinalizePublicationOutcome publishOutcome;
     std::thread publishThread([&]() {
@@ -2137,7 +2186,6 @@ Y_UNIT_TEST(PublishBeforeWriteAckKeepsRegistry) {
 
 Y_UNIT_TEST(PublishFailureOnInvalidDestinationKeepsRegistry) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-bad-dest-topic", "ext-bad-dest");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     {
         auto session = fixture.OpenWriteStream("producer-bad-dest");
@@ -2187,7 +2235,6 @@ Y_UNIT_TEST_SUITE(TopicDeferredPublishLifecycle) {
 
 Y_UNIT_TEST(PublishMakesDataVisible) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-publish-topic", "ext-lifecycle-publish");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     constexpr TStringBuf payload = "lifecycle-publish-payload";
     {
@@ -2211,7 +2258,6 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
 
 Y_UNIT_TEST(CancelDiscardsData) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-cancel-topic", "ext-lifecycle-cancel");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     {
         auto session = fixture.OpenWriteStream("producer-lifecycle-cancel");
@@ -2230,7 +2276,6 @@ Y_UNIT_TEST(CancelDiscardsData) {
 
 Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-staging-topic", "ext-lifecycle-staging");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     constexpr TStringBuf payload = "lifecycle-staging-payload";
     {
@@ -2264,7 +2309,6 @@ Y_UNIT_TEST(MultiDestinationSinglePublication) {
     auto topicStub = MakeTopicServiceStub(server);
     const ui64 intPublicationId = BeginPublicationIntId(
         CallBeginPublication(*deferredStub, "/Root", "ext-lifecycle-multi-dest"));
-    GrantPublicationRegistryDelete(server, "root@builtin");
 
     constexpr TStringBuf payloadA = "lifecycle-topic-a";
     constexpr TStringBuf payloadB = "lifecycle-topic-b";
@@ -2293,7 +2337,6 @@ Y_UNIT_TEST(MultiDestinationSinglePublication) {
 
 Y_UNIT_TEST(RepeatFinalizeNotFound) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-repeat-topic", "ext-lifecycle-repeat");
-    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
 
     constexpr TStringBuf payload = "lifecycle-repeat-payload";
     {
@@ -2333,7 +2376,6 @@ Y_UNIT_TEST(BeginOnlyPublishAborts) {
 
     const ui64 intPublicationId = BeginPublicationIntId(
         CallBeginPublication(*deferredStub, "/Root", "ext-begin-only-publish"));
-    GrantPublicationRegistryDelete(server, "root@builtin");
 
     const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
     UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::ABORTED);
@@ -2351,7 +2393,6 @@ Y_UNIT_TEST(BeginOnlyCancelDeletes) {
 
     const ui64 intPublicationId = BeginPublicationIntId(
         CallBeginPublication(*deferredStub, "/Root", "ext-begin-only-cancel"));
-    GrantPublicationRegistryDelete(server, "root@builtin");
 
     const auto cancelOutcome = CallCancelPublication(*deferredStub, "/Root", intPublicationId);
     UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);

@@ -69,7 +69,7 @@ rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
 rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
 rbo_verifier/relation.py    bounded bag/sequence operator semantics
-rbo_verifier/stages.py      future M3 StageGraph and connection semantics
+rbo_verifier/stages.py      two-task StageGraph and connection semantics
 rbo_verifier/verify.py      one counterexample formula and verdict decoding
 ```
 
@@ -213,16 +213,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Build a command-line solver target without linking it into `ydbd`.
 - Make integration tests locate that binary explicitly through `ya`.
 
-### M3: StageGraph execution
+### M3: StageGraph routing
 
-- Two-producer-task Map, HashShuffle, Broadcast, UnionAll, and Merge with
+- Two-producer-task Map, HashShuffle, Broadcast, and UnionAll with
   connection-derived consumer counts.
-- Local join/aggregate execution and final gather.
+- Local join execution and final gather.
 - Wrong-shuffle and wrong-broadcast mutation tests.
+- Preserve and validate Merge metadata, but fail closed on execution until M4
+  supplies ordered Sort and Merge semantics.
 
 ### M4: benchmark coverage
 
-- Aggregates, order, top-sort, limit, and required scalar refinements.
+- Aggregates, order, Merge, top-sort, limit, and required scalar refinements.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

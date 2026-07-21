@@ -30,6 +30,8 @@ JOIN_KINDS = frozenset(
         "exclusion",
     }
 )
+STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_all", "merge"})
+HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
 
 
 class SnapshotError(ValueError):
@@ -155,12 +157,58 @@ class Plan:
 
 
 @dataclass(frozen=True, slots=True)
+class StageOutput:
+    index: int
+    node: str
+
+
+@dataclass(frozen=True, slots=True)
+class Stage:
+    id: str
+    nodes: tuple[str, ...]
+    inputs: tuple[str, ...]
+    outputs: tuple[StageOutput, ...]
+    source_storage: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class MergeOrder:
+    column: str
+    ascending: bool
+    nulls_first: bool
+
+
+@dataclass(frozen=True, slots=True)
+class StageEdge:
+    id: str
+    producer: str
+    consumer: str
+    occurrence: int
+    producer_output: int
+    consumer_input: int
+    kind: str
+    keys: tuple[str, ...] = ()
+    hash_function: str | None = None
+    use_spilling: bool | None = None
+    parallel: bool | None = None
+    order: tuple[MergeOrder, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class StageGraph:
+    root_stage: str
+    stages: tuple[Stage, ...]
+    edges: tuple[StageEdge, ...]
+
+    def stage_map(self) -> dict[str, Stage]:
+        return {stage.id: stage for stage in self.stages}
+
+
+@dataclass(frozen=True, slots=True)
 class Snapshot:
     tables: tuple[Table, ...]
     plan: Plan
-    # Version one is deliberately logical-only.  The required JSON field makes
-    # accidental omission of the final StageGraph visible.
-    stage_graph: None = None
+    stage_graph: StageGraph | None = None
 
     def table_map(self) -> dict[str, Table]:
         return {table.name: table for table in self.tables}
@@ -196,6 +244,12 @@ def _string(value: Any, path: str) -> str:
 def _bool(value: Any, path: str) -> bool:
     if not isinstance(value, bool):
         _fail(path, "expected a Boolean")
+    return value
+
+
+def _index(value: Any, path: str) -> int:
+    if type(value) is not int or value < 0:
+        _fail(path, "expected a non-negative integer")
     return value
 
 
@@ -418,8 +472,8 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     ),
                 )
             )
-        if len(inputs) < 2:
-            _fail(f"{path}.inputs", "requires at least two inputs")
+        if len(inputs) != 2:
+            _fail(f"{path}.inputs", "requires exactly two inputs")
         output = tuple(
             _string(column, f"{path}.output[{index}]")
             for index, column in enumerate(_array(obj["output"], f"{path}.output"))
@@ -431,6 +485,123 @@ def _parse_node(value: Any, path: str) -> PlanNode:
     _fail(f"{path}.op", f"unsupported operator {operation!r}")
 
 
+def _parse_stage(value: Any, path: str) -> Stage:
+    obj = _object(value, path)
+    _keys(obj, {"id", "nodes", "inputs", "outputs", "source_storage"}, path)
+    nodes = tuple(
+        _string(item, f"{path}.nodes[{index}]")
+        for index, item in enumerate(_array(obj["nodes"], f"{path}.nodes"))
+    )
+    if not nodes:
+        _fail(f"{path}.nodes", "must not be empty")
+    inputs = tuple(
+        _string(item, f"{path}.inputs[{index}]")
+        for index, item in enumerate(_array(obj["inputs"], f"{path}.inputs"))
+    )
+    outputs: list[StageOutput] = []
+    for index, raw_output in enumerate(_array(obj["outputs"], f"{path}.outputs")):
+        output_path = f"{path}.outputs[{index}]"
+        output = _object(raw_output, output_path)
+        _keys(output, {"index", "node"}, output_path)
+        outputs.append(
+            StageOutput(
+                _index(output["index"], f"{output_path}.index"),
+                _string(output["node"], f"{output_path}.node"),
+            )
+        )
+    if not outputs:
+        _fail(f"{path}.outputs", "must not be empty")
+    storage = obj["source_storage"]
+    if storage is not None and storage not in {"row", "column"}:
+        _fail(f"{path}.source_storage", "expected null, 'row', or 'column'")
+    return Stage(
+        _string(obj["id"], f"{path}.id"),
+        nodes,
+        inputs,
+        tuple(outputs),
+        storage,
+    )
+
+
+def _parse_stage_edge(value: Any, path: str) -> StageEdge:
+    obj = _object(value, path)
+    common = {
+        "id", "producer", "consumer", "occurrence", "producer_output", "consumer_input", "kind"
+    }
+    kind = _string(obj.get("kind"), f"{path}.kind")
+    if kind not in STAGE_CONNECTION_KINDS:
+        _fail(f"{path}.kind", f"unsupported connection kind {kind!r}")
+    extra = {
+        "hash_shuffle": {"keys", "hash_function", "use_spilling"},
+        "union_all": {"parallel"},
+        "merge": {"order"},
+    }.get(kind, set())
+    _keys(obj, common | extra, path)
+    fields = dict(
+        id=_string(obj["id"], f"{path}.id"),
+        producer=_string(obj["producer"], f"{path}.producer"),
+        consumer=_string(obj["consumer"], f"{path}.consumer"),
+        occurrence=_index(obj["occurrence"], f"{path}.occurrence"),
+        producer_output=_index(obj["producer_output"], f"{path}.producer_output"),
+        consumer_input=_index(obj["consumer_input"], f"{path}.consumer_input"),
+        kind=kind,
+    )
+    if kind == "hash_shuffle":
+        keys = tuple(
+            _string(item, f"{path}.keys[{index}]")
+            for index, item in enumerate(_array(obj["keys"], f"{path}.keys"))
+        )
+        if not keys:
+            _fail(f"{path}.keys", "must not be empty")
+        hash_function = _string(obj["hash_function"], f"{path}.hash_function")
+        if hash_function not in HASH_FUNCTIONS:
+            _fail(f"{path}.hash_function", f"unsupported hash function {hash_function!r}")
+        return StageEdge(
+            **fields,
+            keys=keys,
+            hash_function=hash_function,
+            use_spilling=_bool(obj["use_spilling"], f"{path}.use_spilling"),
+        )
+    if kind == "union_all":
+        return StageEdge(**fields, parallel=_bool(obj["parallel"], f"{path}.parallel"))
+    if kind == "merge":
+        order: list[MergeOrder] = []
+        for index, raw_order in enumerate(_array(obj["order"], f"{path}.order")):
+            order_path = f"{path}.order[{index}]"
+            item = _object(raw_order, order_path)
+            _keys(item, {"column", "ascending", "nulls_first"}, order_path)
+            order.append(
+                MergeOrder(
+                    _string(item["column"], f"{order_path}.column"),
+                    _bool(item["ascending"], f"{order_path}.ascending"),
+                    _bool(item["nulls_first"], f"{order_path}.nulls_first"),
+                )
+            )
+        if not order:
+            _fail(f"{path}.order", "must not be empty")
+        return StageEdge(**fields, order=tuple(order))
+    return StageEdge(**fields)
+
+
+def _parse_stage_graph(value: Any, path: str) -> StageGraph:
+    obj = _object(value, path)
+    _keys(obj, {"root_stage", "stages", "edges", "assumptions"}, path)
+    assumptions = _array(obj["assumptions"], f"{path}.assumptions")
+    if assumptions:
+        _fail(f"{path}.assumptions", "version one does not model distribution assumptions")
+    return StageGraph(
+        root_stage=_string(obj["root_stage"], f"{path}.root_stage"),
+        stages=tuple(
+            _parse_stage(stage, f"{path}.stages[{index}]")
+            for index, stage in enumerate(_array(obj["stages"], f"{path}.stages"))
+        ),
+        edges=tuple(
+            _parse_stage_edge(edge, f"{path}.edges[{index}]")
+            for index, edge in enumerate(_array(obj["edges"], f"{path}.edges"))
+        ),
+    )
+
+
 def parse_snapshot(value: Any) -> Snapshot:
     obj = _object(value, "snapshot")
     _keys(obj, {"format", "version", "schema", "plan", "stage_graph"}, "snapshot")
@@ -438,9 +609,6 @@ def parse_snapshot(value: Any) -> Snapshot:
         _fail("snapshot.format", f"expected {FORMAT!r}")
     if type(obj["version"]) is not int or obj["version"] != VERSION:
         _fail("snapshot.version", f"expected version {VERSION}")
-    if obj["stage_graph"] is not None:
-        _fail("snapshot.stage_graph", "StageGraph is not implemented in version one")
-
     schema = _object(obj["schema"], "snapshot.schema")
     _keys(schema, {"tables"}, "snapshot.schema")
     tables = tuple(
@@ -460,6 +628,11 @@ def parse_snapshot(value: Any) -> Snapshot:
     snapshot = Snapshot(
         tables=tables,
         plan=Plan(nodes=nodes, root=_string(raw_plan["root"], "snapshot.plan.root"), output=output),
+        stage_graph=(
+            None
+            if obj["stage_graph"] is None
+            else _parse_stage_graph(obj["stage_graph"], "snapshot.stage_graph")
+        ),
     )
     validate_snapshot(snapshot)
     return snapshot
@@ -514,6 +687,309 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
 
 def _nullable_columns(columns: Mapping[str, Column]) -> dict[str, Column]:
     return {name: replace(column, nullable=True) for name, column in columns.items()}
+
+
+def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
+    if isinstance(node, (EmptySource, Scan)):
+        return ()
+    if isinstance(node, (Project, Filter)):
+        return (node.input,)
+    if isinstance(node, Join):
+        return (node.left, node.right)
+    if isinstance(node, UnionAll):
+        return tuple(item.node for item in node.inputs)
+    raise AssertionError(f"unknown node class {type(node).__name__}")
+
+
+def stage_input_slots(plan: Plan, stage: Stage) -> tuple[tuple[str, int, str], ...]:
+    """Return (consumer node, child ordinal, producer node) for stage arguments."""
+
+    members = set(stage.nodes)
+    nodes = plan.node_map()
+    return tuple(
+        (node_id, child_index, child_id)
+        for node_id in stage.nodes
+        for child_index, child_id in enumerate(plan_node_inputs(nodes[node_id]))
+        if child_id not in members
+    )
+
+
+def _validate_stage_graph(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+) -> None:
+    graph = snapshot.stage_graph
+    if graph is None:
+        return
+    path = "snapshot.stage_graph"
+    if not graph.stages:
+        _fail(f"{path}.stages", "must not be empty")
+    _unique([stage.id for stage in graph.stages], f"{path}.stages")
+    _unique([edge.id for edge in graph.edges], f"{path}.edges")
+    stages = graph.stage_map()
+    if graph.root_stage not in stages:
+        _fail(f"{path}.root_stage", f"unknown stage {graph.root_stage!r}")
+
+    plan_nodes = snapshot.plan.node_map()
+    owner: dict[str, str] = {}
+    outputs: dict[tuple[str, int], str] = {}
+    for stage_index, stage in enumerate(graph.stages):
+        stage_path = f"{path}.stages[{stage_index}]"
+        _unique(stage.nodes, f"{stage_path}.nodes")
+        members = set(stage.nodes)
+        seen: set[str] = set()
+        same_stage_parents = {node_id: 0 for node_id in stage.nodes}
+        for node_id in stage.nodes:
+            if node_id not in plan_nodes:
+                _fail(f"{stage_path}.nodes", f"unknown plan node {node_id!r}")
+            if node_id in owner:
+                _fail(f"{stage_path}.nodes", f"plan node {node_id!r} is also in stage {owner[node_id]!r}")
+            local_inputs = [item for item in plan_node_inputs(plan_nodes[node_id]) if item in members]
+            if isinstance(plan_nodes[node_id], (Join, UnionAll)) and local_inputs:
+                _fail(
+                    f"{stage_path}.nodes",
+                    "Join/UnionAll inputs must cross stage boundaries",
+                )
+            if any(item not in seen for item in local_inputs):
+                _fail(f"{stage_path}.nodes", "must be in local topological order")
+            for item in local_inputs:
+                same_stage_parents[item] += 1
+            seen.add(node_id)
+            owner[node_id] = stage.id
+
+        sinks = [node_id for node_id, parents in same_stage_parents.items() if parents == 0]
+        if len(sinks) != 1:
+            _fail(stage_path, "must have exactly one local output sink")
+        sink = sinks[0]
+
+        expected_inputs = tuple(slot[2] for slot in stage_input_slots(snapshot.plan, stage))
+        if stage.inputs != expected_inputs:
+            _fail(
+                f"{stage_path}.inputs",
+                f"expected cross-stage child occurrences {expected_inputs!r}",
+            )
+        indices = [output.index for output in stage.outputs]
+        if sorted(indices) != list(range(len(indices))):
+            _fail(f"{stage_path}.outputs", "indices must be contiguous from zero")
+        for output in stage.outputs:
+            if output.node not in seen:
+                _fail(f"{stage_path}.outputs", f"node {output.node!r} is not a stage member")
+            if output.node != sink:
+                _fail(f"{stage_path}.outputs", "every output must map the local stage sink")
+            outputs[(stage.id, output.index)] = output.node
+
+        scans = [plan_nodes[node_id] for node_id in stage.nodes if isinstance(plan_nodes[node_id], Scan)]
+        if stage.source_storage is None and scans:
+            _fail(f"{stage_path}.source_storage", "a scan stage must declare source storage")
+        if stage.source_storage is not None:
+            if len(scans) != 1 or stage.inputs:
+                _fail(stage_path, "a source stage must contain one scan and have no inputs")
+            if stage.source_storage == "row" and len(stage.nodes) != 1:
+                _fail(stage_path, "a row-storage source stage must contain only its scan")
+
+    missing = plan_nodes.keys() - owner.keys()
+    if missing:
+        _fail(f"{path}.stages", f"plan nodes have no stage: {', '.join(sorted(missing))}")
+    root = stages[graph.root_stage]
+    if len(root.outputs) != 1:
+        _fail(f"{path}.root_stage", "must have exactly the synthetic output zero")
+    if outputs.get((root.id, 0)) != snapshot.plan.root:
+        _fail(f"{path}.root_stage", "output zero must be the plan root")
+
+    edge_by_consumer_input: dict[tuple[str, int], StageEdge] = {}
+    edge_by_producer_output: dict[tuple[str, int], StageEdge] = {}
+    occurrences: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    adjacency: dict[str, set[str]] = {stage.id: set() for stage in graph.stages}
+    for edge_index, edge in enumerate(graph.edges):
+        edge_path = f"{path}.edges[{edge_index}]"
+        producer = stages.get(edge.producer)
+        consumer = stages.get(edge.consumer)
+        if producer is None or consumer is None:
+            _fail(edge_path, "references an unknown producer or consumer stage")
+        if edge.producer == edge.consumer:
+            _fail(edge_path, "self-edges are not allowed")
+        produced_node = outputs.get((edge.producer, edge.producer_output))
+        if produced_node is None:
+            _fail(f"{edge_path}.producer_output", "unknown producer output")
+        producer_output = (edge.producer, edge.producer_output)
+        if producer_output in edge_by_producer_output:
+            _fail(f"{edge_path}.producer_output", "is already consumed")
+        edge_by_producer_output[producer_output] = edge
+        if edge.consumer_input >= len(consumer.inputs):
+            _fail(f"{edge_path}.consumer_input", "is outside the consumer input list")
+        if consumer.inputs[edge.consumer_input] != produced_node:
+            _fail(edge_path, "producer output does not match the consumer input occurrence")
+        ordinal = (edge.consumer, edge.consumer_input)
+        if ordinal in edge_by_consumer_input:
+            _fail(f"{edge_path}.consumer_input", "is already connected")
+        edge_by_consumer_input[ordinal] = edge
+        occurrences.setdefault((edge.producer, edge.consumer), []).append(
+            (edge.consumer_input, edge.occurrence)
+        )
+        adjacency[edge.producer].add(edge.consumer)
+
+        columns = schemas[produced_node]
+        for column in edge.keys:
+            if column not in columns:
+                _fail(f"{edge_path}.keys", f"column {column!r} is not produced")
+        for item in edge.order:
+            if item.column not in columns:
+                _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
+
+    for stage in graph.stages:
+        declared_outputs = {(stage.id, output.index) for output in stage.outputs}
+        consumed_outputs = {
+            producer_output
+            for producer_output in edge_by_producer_output
+            if producer_output[0] == stage.id
+        }
+        if stage.id == graph.root_stage:
+            if consumed_outputs:
+                _fail(f"stage {stage.id!r}.outputs", "root output must not feed another stage")
+        elif consumed_outputs != declared_outputs:
+            _fail(
+                f"stage {stage.id!r}.outputs",
+                "every declared output must feed exactly one edge occurrence",
+            )
+
+        stage_edges = sorted(
+            (edge for edge in graph.edges if edge.consumer == stage.id),
+            key=lambda edge: edge.consumer_input,
+        )
+        connected = [edge.consumer_input for edge in stage_edges]
+        if connected != list(range(len(stage.inputs))):
+            _fail(f"stage {stage.id!r}.inputs", "every input must have exactly one connection")
+        closed: set[str] = set()
+        previous: str | None = None
+        for edge in stage_edges:
+            if edge.producer != previous:
+                if edge.producer in closed:
+                    _fail(f"stage {stage.id!r}.inputs", "connections from one producer must be grouped")
+                if previous is not None:
+                    closed.add(previous)
+                previous = edge.producer
+    for pair, values in occurrences.items():
+        ordered = [occurrence for _, occurrence in sorted(values)]
+        if ordered != list(range(len(values))):
+            _fail(
+                f"{path}.edges",
+                f"occurrences for {pair!r} must follow effective consumer input order",
+            )
+
+    visiting: set[str] = set()
+    reached: set[str] = set()
+    reverse: dict[str, set[str]] = {stage.id: set() for stage in graph.stages}
+    for producer, consumers in adjacency.items():
+        for consumer in consumers:
+            reverse[consumer].add(producer)
+
+    def visit(stage_id: str) -> None:
+        if stage_id in visiting:
+            _fail(f"{path}.edges", f"cycle through stage {stage_id!r}")
+        if stage_id in reached:
+            return
+        visiting.add(stage_id)
+        for producer in reverse[stage_id]:
+            visit(producer)
+        visiting.remove(stage_id)
+        reached.add(stage_id)
+
+    visit(graph.root_stage)
+    if reached != stages.keys():
+        _fail(f"{path}.stages", "every stage must reach root_stage")
+
+    _infer_stage_task_counts(graph, path)
+
+
+def _infer_stage_task_counts(graph: StageGraph, path: str) -> dict[str, int]:
+    """Mirror CountComputeTasks in the bounded one/two-task model."""
+
+    stages = graph.stage_map()
+    incoming = {
+        stage.id: tuple(sorted(
+            (edge for edge in graph.edges if edge.consumer == stage.id),
+            key=lambda edge: edge.consumer_input,
+        ))
+        for stage in graph.stages
+    }
+    counts: dict[str, int] = {}
+    visiting: set[str] = set()
+
+    def task_count(stage_id: str) -> int:
+        if stage_id in counts:
+            return counts[stage_id]
+        if stage_id in visiting:
+            _fail(f"{path}.edges", f"cycle through stage {stage_id!r}")
+        visiting.add(stage_id)
+        stage = stages[stage_id]
+        edges = incoming[stage_id]
+        if stage.source_storage is not None:
+            result = 2
+        elif not edges:
+            result = 1
+        else:
+            # CountComputeTasks starts with one task. Map copies its producer's
+            # count at its physical input position, while ParallelUnionAll
+            # takes the running maximum. HashShuffle selects the bounded two
+            # tasks only when no Map connection forces the count.
+            result = 1
+            has_hash = False
+            force_map_tasks = False
+            map_count = 0
+            for edge in edges:
+                producer_tasks = task_count(edge.producer)
+                if edge.kind == "map":
+                    result = producer_tasks
+                    force_map_tasks = True
+                    map_count += 1
+                elif edge.kind == "hash_shuffle":
+                    has_hash = True
+                elif edge.kind == "union_all" and edge.parallel:
+                    result = max(result, producer_tasks)
+
+            if map_count > 1:
+                _fail(
+                    f"stage {stage_id!r}.inputs",
+                    "only one Map connection is physically allowed",
+                )
+            if has_hash and not force_map_tasks:
+                result = 2
+
+            # Channel builders impose these constraints after task counting.
+            for edge in edges:
+                producer_tasks = task_count(edge.producer)
+                if edge.kind == "map" and producer_tasks != result:
+                    _fail(
+                        f"stage {stage_id!r}.inputs",
+                        "Map producer and consumer task counts must match",
+                    )
+                if edge.kind == "union_all" and not edge.parallel and result != 1:
+                    _fail(
+                        f"stage {stage_id!r}.inputs",
+                        "serial UnionAll requires exactly one consumer task",
+                    )
+                if edge.kind == "merge" and result != 1:
+                    _fail(
+                        f"stage {stage_id!r}.inputs",
+                        "Merge requires exactly one consumer task",
+                    )
+
+        if result not in {1, 2}:
+            _fail(f"stage {stage_id!r}.inputs", "task count exceeds the version-one bound")
+        visiting.remove(stage_id)
+        counts[stage_id] = result
+        return result
+
+    task_count(graph.root_stage)
+    return counts
+
+
+def stage_task_counts(snapshot: Snapshot) -> dict[str, int]:
+    """Return validated bounded task counts for a snapshot StageGraph."""
+
+    if snapshot.stage_graph is None:
+        raise SnapshotError("snapshot.stage_graph: expected a StageGraph")
+    return _infer_stage_task_counts(snapshot.stage_graph, "snapshot.stage_graph")
 
 
 def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
@@ -644,4 +1120,5 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     for column in snapshot.plan.output:
         if column not in root_schema:
             _fail("snapshot.plan.output", f"column {column!r} is not produced by the root")
+    _validate_stage_graph(snapshot, schemas)
     return schemas

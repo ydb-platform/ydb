@@ -80,10 +80,214 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
-    def test_non_null_stage_graph_is_rejected_in_version_one(self):
+    def test_incomplete_stage_graph_is_rejected(self):
         value = copy.deepcopy(minimal_snapshot())
         value["stage_graph"] = {"stages": []}
-        with self.assertRaisesRegex(SnapshotError, "StageGraph is not implemented"):
+        with self.assertRaisesRegex(SnapshotError, "missing fields: assumptions, edges, root_stage"):
+            parse_snapshot(value)
+
+    def test_strict_stage_graph_is_accepted(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["stage_graph"] = {
+            "root_stage": "s0",
+            "stages": [
+                {
+                    "id": "s0",
+                    "nodes": ["scan", "filter"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "filter"}],
+                    "source_storage": "column",
+                }
+            ],
+            "edges": [],
+            "assumptions": [],
+        }
+        snapshot = parse_snapshot(value)
+        self.assertEqual(snapshot.stage_graph.root_stage, "s0")
+
+    def test_row_storage_source_stage_must_contain_only_the_scan(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["stage_graph"] = {
+            "root_stage": "s0",
+            "stages": [
+                {
+                    "id": "s0",
+                    "nodes": ["scan", "filter"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "filter"}],
+                    "source_storage": "row",
+                }
+            ],
+            "edges": [],
+            "assumptions": [],
+        }
+        with self.assertRaisesRegex(SnapshotError, "row-storage source stage.*only its scan"):
+            parse_snapshot(value)
+
+    def test_repeated_shuffle_keys_preserve_order(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["stage_graph"] = {
+            "root_stage": "consumer",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "scan"}],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "consumer",
+                    "nodes": ["filter"],
+                    "inputs": ["scan"],
+                    "outputs": [{"index": 0, "node": "filter"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "edge",
+                    "producer": "source",
+                    "consumer": "consumer",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "hash_shuffle",
+                    "keys": ["a.k", "a.k"],
+                    "hash_function": "HashV1",
+                    "use_spilling": False,
+                }
+            ],
+            "assumptions": [],
+        }
+        snapshot = parse_snapshot(value)
+        self.assertEqual(snapshot.stage_graph.edges[0].keys, ("a.k", "a.k"))
+
+        value["stage_graph"]["edges"][0]["hash_function"] = "ColumnShardHashV1"
+        with self.assertRaisesRegex(SnapshotError, "unsupported hash function"):
+            parse_snapshot(value)
+
+    def test_occurrences_follow_effective_consumer_order(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["plan"] = {
+            "nodes": [
+                value["plan"]["nodes"][0],
+                {
+                    "id": "union",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "scan", "columns": ["a.k"]},
+                        {"node": "scan", "columns": ["a.k"]},
+                    ],
+                    "output": ["u.k"],
+                },
+            ],
+            "root": "union",
+            "output": ["u.k"],
+        }
+        value["stage_graph"] = {
+            "root_stage": "consumer",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan"],
+                    "inputs": [],
+                    "outputs": [
+                        {"index": 0, "node": "scan"},
+                        {"index": 1, "node": "scan"},
+                    ],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "consumer",
+                    "nodes": ["union"],
+                    "inputs": ["scan", "scan"],
+                    "outputs": [{"index": 0, "node": "union"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "first",
+                    "producer": "source",
+                    "consumer": "consumer",
+                    "occurrence": 1,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "union_all",
+                    "parallel": True,
+                },
+                {
+                    "id": "second",
+                    "producer": "source",
+                    "consumer": "consumer",
+                    "occurrence": 0,
+                    "producer_output": 1,
+                    "consumer_input": 1,
+                    "kind": "union_all",
+                    "parallel": True,
+                },
+            ],
+            "assumptions": [],
+        }
+        with self.assertRaisesRegex(SnapshotError, "effective consumer input order"):
+            parse_snapshot(value)
+
+    def test_union_inputs_must_cross_stage_boundaries(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["plan"] = {
+            "nodes": [
+                value["plan"]["nodes"][0],
+                {
+                    "id": "union",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "scan", "columns": ["a.k"]},
+                        {"node": "scan", "columns": ["a.k"]},
+                    ],
+                    "output": ["u.k"],
+                },
+            ],
+            "root": "union",
+            "output": ["u.k"],
+        }
+        value["stage_graph"] = {
+            "root_stage": "stage",
+            "stages": [
+                {
+                    "id": "stage",
+                    "nodes": ["scan", "union"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "union"}],
+                    "source_storage": "row",
+                }
+            ],
+            "edges": [],
+            "assumptions": [],
+        }
+        with self.assertRaisesRegex(SnapshotError, "must cross stage boundaries"):
+            parse_snapshot(value)
+
+    def test_union_all_is_exactly_binary(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["plan"] = {
+            "nodes": [
+                value["plan"]["nodes"][0],
+                {
+                    "id": "union",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "scan", "columns": ["a.k"]},
+                        {"node": "scan", "columns": ["a.k"]},
+                        {"node": "scan", "columns": ["a.k"]},
+                    ],
+                    "output": ["u.k"],
+                },
+            ],
+            "root": "union",
+            "output": ["u.k"],
+        }
+        with self.assertRaisesRegex(SnapshotError, "requires exactly two inputs"):
             parse_snapshot(value)
 
     def test_boolean_is_not_accepted_as_version_one(self):

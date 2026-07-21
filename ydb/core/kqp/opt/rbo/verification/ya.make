@@ -8,6 +8,7 @@ PY_SRCS(
     rbo_verifier/relation.py
     rbo_verifier/scalar.py
     rbo_verifier/smt.py
+    rbo_verifier/stages.py
     rbo_verifier/types.py
     rbo_verifier/verify.py
 )

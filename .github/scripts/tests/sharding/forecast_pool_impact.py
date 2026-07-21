@@ -1637,11 +1637,14 @@ def write_html_report(result: dict[str, Any], path: Path) -> None:
   <h1>Ответы: очередь, время выполнения, шардирование</h1>
   <div class="sub" id="sub"></div>
 
-  <h2>1. Коротко</h2>
-  <div id="answers"></div>
+  <h2>1. Лучшие срезы: шардирование × квота</h2>
+  <p class="sub">Симуляция недели: wait = очередь, exec = wall critical path, total = wait + exec.
+    Каждый срез сравниваем с <b>OFF на той же квоте</b>.</p>
+  <div id="tradeoffComparisons"></div>
+  <div id="scenarioTable"></div>
 
   <div class="charts">
-    <h2>Интерактив: что будет при шардах и другой квоте</h2>
+    <h2>2. Интерактив: что будет при шардах и другой квоте</h2>
     <div class="rec" id="quotaRec"></div>
     <div class="controls">
       <div class="control">
@@ -1734,44 +1737,19 @@ def write_html_report(result: dict[str, Any], path: Path) -> None:
     <div id="quotaRecTable"></div>
   </div>
 
-  <h2>2. Сейчас (эмпирика GitHub)</h2>
-  <div id="nowBox"></div>
-  <h3>По дням недели (мин)</h3>
-  <div id="nowDay"></div>
-  <h3>По часам UTC (мин) — только часы с данными</h3>
-  <div id="nowHour"></div>
-
-  <h2>3. Лучшие срезы: шардирование × квота</h2>
-  <p class="sub">Симуляция недели: wait = очередь, exec = wall critical path, total = wait + exec.
-    Каждый срез сравниваем с <b>OFF на той же квоте</b>.</p>
-  <div id="tradeoffComparisons"></div>
-  <div id="scenarioTable"></div>
-
-  <h2>4. Квота: baseline vs sharding (tradeoff)</h2>
-  <div class="q">
-    <div class="ask">Как читать эту таблицу (важно)</div>
-    <div class="ans">
-      Есть <b>три разных потолка</b>, их нельзя смешивать:<br/>
-      1) <b>Folder quota в yaml</b> — например <code>quotas.instances: 140</code>. Это потолок облака, <b>не</b> число runners в симуляции.<br/>
-      2) <b>Pool budget (расчёт)</b> — сколько ghrun-машин реально влезает после reserved + headroom и деления на footprint. Сейчас это <b>не 140</b>, а меньше — обычно упираемся в SSD.<br/>
-      3) <b>Demand peak</b> — сколько runners <i>захотели бы</i> стартовать одновременно без очереди.<br/><br/>
-      <b>Квота (потолок)</b> — сколько максимум можем поднять одновременно; за неё саму не платим.<br/>
-      <b>Факт. потребление (биллинг)</b> — instance-hours / vCPU-hours / SSD·hours = ресурс × время, пока VM реально бежит.
-      Чарджим только это. Шарды часто поднимают пик (нужен больший потолок), но machine-time может вырасти лишь на prepare/merge.
-    </div>
-  </div>
-  <div id="poolBudgetBox"></div>
-  <div id="quotaAnswers"></div>
+  <h2>3. Политики при текущей квоте (1×)</h2>
+  <p class="sub">Только режимы шардирования на <b>нынешнем потолке</b>. Выбор «шарды × квота» и топ‑3 — в §1.
+    <b>Units</b> = абстрактный счёт за неделю (vCPU+RAM+SSD × время VM), не размер квоты.</p>
   <div id="quotaTable"></div>
   <div id="quotaLimits"></div>
 
-  <h2>5. Разбивка лучшего ON vs OFF</h2>
+  <h2>4. Разбивка лучшего ON vs OFF</h2>
   <h3>По дням — total p90 (мин)</h3>
   <div id="cmpDay"></div>
   <h3>По часам UTC — total p90 (мин)</h3>
   <div id="cmpHour"></div>
 
-  <h2>6. Что ещё важно</h2>
+  <h2>5. Что ещё важно</h2>
   <div id="extra"></div>
 
   <h2>Пересчёт</h2>
@@ -1810,87 +1788,10 @@ document.getElementById("sub").textContent =
   `Период ${D.period.start} → ${D.period.end} · folder instances quota=${PB.quotas.instances}, ` +
   `pool budget=${D.pool_budget_runners} runners (limited by ${PB.limiting_resource}) · шарды rwdi+asan вместе`;
 
-const RW = PB.by_preset.relwithdebinfo;
-const AS = PB.by_preset["release-asan"];
-document.getElementById("poolBudgetBox").innerHTML = `
-  <div class="q"><div class="ask">Footprint rwdi ≠ asan — и budget разный</div>
-    <div class="ans">
-      В yaml: <b>rwdi</b> ${RW.footprint.vcpu} vCPU / ${RW.footprint.ram_gb} GB RAM / ${RW.footprint.nrd_ssd_gb} SSD →
-      влезает <b>${RW.pool_budget_runners}</b> runners (лимит ${RW.limiting_resource}).<br/>
-      <b>asan</b> ${AS.footprint.vcpu} vCPU / ${AS.footprint.ram_gb} GB RAM / ${AS.footprint.nrd_ssd_gb} SSD →
-      влезает <b>${AS.pool_budget_runners}</b> runners (лимит ${AS.limiting_resource}).<br/><br/>
-      Folder <code>instances=${PB.quotas.instances}</code> — не budget.<br/>
-      Симуляция режет не «105 одинаковых слотов», а <b>общий ресурсный пул</b>
-      (instances/vCPU/RAM/SSD): asan-job ест больше vCPU/RAM, чем rwdi при том же числе машин.
-    </div>
-    <div class="note">${PB.how_computed}</div></div>
-`;
-
-const now = D.empirical_now;
 const off = D.scenarios.find(s => s.policy_id === "off");
 const rec = D.recommendation;
 const best = D.scenarios.find(s => s.policy_id === rec.policy_id);
 const adap = D.scenarios.find(s => s.policy_id === "adaptive");
-
-document.getElementById("answers").innerHTML = `
-  <div class="q"><div class="ask">Сколько PR ждут сейчас? <span class="pill">эмпирика GitHub</span></div>
-    <div class="ans">wait p50 = <b>${fmt(now.wait.p50)}</b> мин, p90 = <b>${fmt(now.wait.p90)}</b> мин (n=${now.n})</div>
-    <div class="note">Реальные runs: created_at → started_at первого heavy job. Это факт «как сейчас в GH», не модель.</div></div>
-  <div class="q"><div class="ask">Сколько сейчас выполняется heavy critical path? <span class="pill">эмпирика</span></div>
-    <div class="ans">exec p50 = <b>${fmt(now.exec.p50)}</b> мин, p90 = <b>${fmt(now.exec.p90)}</b> мин</div>
-    <div class="note">max(длительность heavy preset jobs) в одном PR-check.</div></div>
-  <div class="q"><div class="ask">Сколько total сейчас (wait + heavy)? <span class="pill">эмпирика</span></div>
-    <div class="ans">total p50 = <b>${fmt(now.total.p50)}</b> мин, p90 = <b>${fmt(now.total.p90)}</b> мин</div></div>
-  <div class="q"><div class="ask">Почему wait 3м «сейчас» ≠ ${fmt(off.wait_p90,0)}м в блоке про шардирование?</div>
-    <div class="ans">Это <b>разные величины</b>. 3м — измеренный wait в sample. ${fmt(off.wait_p90,0)}м — <b>симулированный</b> wait в сценарии OFF при полной недельной нагрузке (все PR + regression на pool ${D.pool_budget_runners}).
-      Модель специально жёстче: demand peak ~${fmt(off.demand_peak_runners,0)} runners vs budget ${D.pool_budget_runners} → очередь. Сравнивать OFF→ON можно только внутри симуляции (одинаковые правила), не «3м → 71м».</div>
-    <div class="note">Эмпирика занижает хвост очереди (sample дней/часов, когда runners часто свободны). Симуляция оценивает что будет при устойчивой нагрузке недели.</div></div>
-  <div class="q"><div class="ask">Что будет если включим шардирование? <span class="pill">только симуляция OFF→ON</span></div>
-    <div class="ans">Рекомендация: <span class="pill">${rec.label}</span><br/>
-      <b>Сравниваем модель OFF vs модель ON</b> (не эмпирику с моделью):<br/>
-      total p90: <b>${fmt(off.total_p90)}</b> → <b>${fmt(best.total_p90)}</b> мин (${delta(off.total_p90,best.total_p90)})<br/>
-      wait p90: <b>${fmt(off.wait_p90)}</b> → <b>${fmt(best.wait_p90)}</b> мин (${delta(off.wait_p90,best.wait_p90)}) &nbsp;<span style="color:var(--muted)">(эмпирика сейчас ${fmt(now.wait.p90)}м — см. выше)</span><br/>
-      exec p90: <b>${fmt(off.exec_p90)}</b> → <b>${fmt(best.exec_p90)}</b> мин (${delta(off.exec_p90,best.exec_p90)}) &nbsp;<span style="color:var(--muted)">(эмпирика ${fmt(now.exec.p90)}м ≈ модель OFF ${fmt(off.exec_p90)}м)</span><br/>
-      demand runners: <b>${fmt(off.demand_peak_runners,0)}</b> → <b>${fmt(best.demand_peak_runners,0)}</b> (${delta(off.demand_peak_runners,best.demand_peak_runners)})
-    </div>
-    <div class="note">${rec.why}</div></div>
-  <div class="q"><div class="ask">Как зависит от числа шардов?</div>
-    <div class="ans">Смотри таблицы latency + quota ниже: больше шардов → короче exec, выше peak demand квоты и часто выше wait.</div></div>
-  <div class="q"><div class="ask">Tradeoff по квоте?</div>
-    <div class="ans">Demand runners OFF→best: <b>${fmt(off.demand_peak_runners,0)}</b> → <b>${fmt(best.demand_peak_runners,0)}</b>
-      (${delta(off.demand_peak_runners,best.demand_peak_runners)}). Лимитирующий ресурс best: <b>${best.quota_limiting}</b> ${fmt(best.quota_limiting_pct,0)}% квоты
-      (OFF было ${fmt(off.quota_limiting_pct,0)}%). PR runner-hours/week: ${fmt(off.pr_runner_hours_demanded,0)} → ${fmt(best.pr_runner_hours_demanded,0)}
-      (${delta(off.pr_runner_hours_demanded,best.pr_runner_hours_demanded)}).</div>
-    <div class="note">Если % &gt; 100 — peak demand выше квоты: в проде будет очередь/кап шардов, а не «бесплатное» ускорение.</div></div>
-`;
-
-document.getElementById("nowBox").innerHTML = `
-  <table>
-    <tr><th class="left">Метрика</th><th>p50</th><th>p90</th><th>mean</th></tr>
-    <tr><td class="left">Wait (очередь до heavy)</td><td>${fmt(now.wait.p50)}</td><td>${fmt(now.wait.p90)}</td><td>${fmt(now.wait.mean)}</td></tr>
-    <tr><td class="left">Exec (heavy critical path)</td><td>${fmt(now.exec.p50)}</td><td>${fmt(now.exec.p90)}</td><td>${fmt(now.exec.mean)}</td></tr>
-    <tr><td class="left">Total (wait+heavy end)</td><td>${fmt(now.total.p50)}</td><td>${fmt(now.total.p90)}</td><td>${fmt(now.total.mean)}</td></tr>
-  </table>`;
-
-function dayTable(rows, keys) {
-  let h = "<table><tr><th class='left'>День</th><th>n</th>" + keys.map(k=>`<th>${k.label}</th>`).join("") + "</tr>";
-  for (const r of rows) {
-    if (!r.n) continue;
-    h += `<tr><td class="left">${r.name||("UTC "+r.hour)}</td><td>${fmt(r.n,0)}</td>` +
-      keys.map(k=>`<td>${fmt(k.get(r),0)}</td>`).join("") + "</tr>";
-  }
-  return h + "</table>";
-}
-
-document.getElementById("nowDay").innerHTML = dayTable(now.by_dow, [
-  {label:"wait p50", get:r=>r.wait.p50}, {label:"wait p90", get:r=>r.wait.p90},
-  {label:"exec p50", get:r=>r.exec.p50}, {label:"exec p90", get:r=>r.exec.p90},
-  {label:"total p90", get:r=>r.total.p90},
-]);
-document.getElementById("nowHour").innerHTML = dayTable(now.by_hour.filter(r=>r.n>=2), [
-  {label:"wait p50", get:r=>r.wait.p50}, {label:"wait p90", get:r=>r.wait.p90},
-  {label:"exec p90", get:r=>r.exec.p90}, {label:"total p90", get:r=>r.total.p90},
-]);
 
 function scenarioUnits(s) { return scenarioBillUnits(s); }
 
@@ -2006,69 +1907,39 @@ for (const r of sliceView) {
 document.getElementById("scenarioTable").innerHTML = st + "</table>";
 // Keep @1× policy table reference for old section below — rebuild short @1× view in a note
 document.getElementById("scenarioTable").insertAdjacentHTML("beforebegin",
-  `<p class="sub">Таблица: все срезы шардирование×квота, Δ всегда против <b>OFF на той же квоте</b>. Отсортировано по score (total+Units). Ниже в §4 — детали квоты.</p>`);
+  `<p class="sub">Таблица: все срезы шардирование×квота, Δ всегда против <b>OFF на той же квоте</b>. Отсортировано по score (total+Units).</p>`);
 
-const Q = D.quotas, R = D.reserved;
-document.getElementById("quotaAnswers").innerHTML = `
-  <div class="q"><div class="ask">Что меняется на ${best.label}? (главное)</div>
-    <div class="ans">
-      <b>Выигрыш:</b> total p90 ${fmt(off.total_p90)}→${fmt(best.total_p90)}м (${delta(off.total_p90,best.total_p90)}).<br/>
-      <b>Цена:</b> на пике хотим одновременно на ${fmt(best.demand_peak_runners - off.demand_peak_runners,0)} runners больше
-      (${fmt(off.demand_peak_runners,0)}→${fmt(best.demand_peak_runners,0)}, ${delta(off.demand_peak_runners,best.demand_peak_runners)}),
-      и на ${delta(off.pr_runner_hours_demanded,best.pr_runner_hours_demanded)} больше machine-time PR за неделю
-      (${fmt(off.pr_runner_hours_demanded,0)}→${fmt(best.pr_runner_hours_demanded,0)} runner-hours).<br/>
-      Пиковый «спрос к квоте» (vCPU): ${fmt(off.pct_vcpu,0)}%→${fmt(best.pct_vcpu,0)}% (${delta(off.pct_vcpu,best.pct_vcpu)}) —
-      оба &gt;100%, потому что OFF уже на пике перегружает квоту; 4 шарда добавляют ещё ~${fmt(best.pct_vcpu - off.pct_vcpu,0)}pp сверху.
-    </div>
-    <div class="note">Красное «выше квоты» = пиковый спрос, не средняя утилизация. Средняя по неделе: pool util ~${fmt(best.pool_util_pct,0)}%.</div></div>
-`;
+const offU1 = Math.max(scenarioUnits(off), 1e-9);
+const offT1 = Math.max(off.total_p90 || 0, 1e-9);
+let best1xId = null, best1xScore = Infinity;
+for (const s of D.scenarios) {
+  if (s.policy_id === "off") continue;
+  const sc = (s.total_p90 / offT1) + (scenarioUnits(s) / offU1);
+  if (sc < best1xScore) { best1xScore = sc; best1xId = s.policy_id; }
+}
 
 let qt = `<table><tr>
   <th class="left">Политика</th>
-  <th title="Потолок: сколько runners хотим одновременно на пике">пик спрос runners</th>
-  <th title="Потолок: (reserved+спрос)/quota">пик vs квота vCPU</th>
-  <th title="Биллинг: Σ (runners × wall) за неделю — платим за это">PR instance-h (билл)</th>
-  <th title="Биллинг: Σ (vCPU × wall)">PR vCPU-h (билл)</th>
-  <th title="Биллинг: Σ (SSD_GB × wall)">PR SSD·h (билл)</th>
-  <th>Δ total p90</th>
-  <th>Δ PR instance-h</th>
-  <th>вердикт</th></tr>`;
+  <th>total p90</th><th>Δ total</th>
+  <th>Units / нед</th><th>Δ Units</th>
+  <th title="Пиковый спрос к folder quota; &gt;100% = очередь">пик vCPU%</th>
+</tr>`;
 for (const s of D.scenarios) {
-  const cls = s.policy_id === rec.policy_id ? "best" : "";
-  const bi = s.bill_pr_instance_hours ?? s.pr_runner_hours_demanded;
-  const bv = s.bill_pr_vcpu_hours ?? 0;
-  const bs = s.bill_pr_ssd_gb_hours ?? 0;
-  const obi = off.bill_pr_instance_hours ?? off.pr_runner_hours_demanded;
-  const bt = s.bill_pr_test_instance_hours;
-  const bo = s.bill_pr_overhead_instance_hours;
-  const billSplit = (bt!=null && bo!=null)
-    ? `<br/><span style="color:var(--muted);font-size:11px">test ${fmt(bt,0)} + overhead ${fmt(bo,0)}</span>`
-    : "";
-  const verdict = s.policy_id === "off" ? "baseline: потолок vs факт. часы отдельно" :
-    (s.policy_id === rec.policy_id ? "лучший latency; смотри Δ биллинга" :
-    (s.total_p90 < off.total_p90 && (bi-obi)/Math.max(obi,1) > 0.35 ? "быстрее, но заметно дороже по machine-time" :
-    (s.total_p90 >= best.total_p90 ? "хуже best" : "ok")));
-  qt += `<tr class="${cls}"><td class="left">${s.label}</td>
-    <td>${fmt(s.demand_peak_runners,0)}</td>
-    <td class="${s.pct_vcpu>100?"bad":""}">${fmt(s.pct_vcpu,0)}%</td>
-    <td>${fmt(bi,0)}${billSplit}</td>
-    <td>${fmt(bv,0)}</td>
-    <td>${fmt(bs,0)}</td>
-    <td>${delta(off.total_p90,s.total_p90)}</td>
-    <td>${delta(obi,bi)}</td>
-    <td class="left">${verdict}</td></tr>`;
+  const u = scenarioUnits(s);
+  const cls = s.policy_id === best1xId ? "best-units" : "";
+  const mark = s.policy_id === best1xId ? '<span class="mark mark-units">← баланс @1×</span>' : "";
+  qt += `<tr class="${cls}"><td class="left">${s.label}${mark}</td>
+    <td>${fmt(s.total_p90,0)}м</td><td>${delta(off.total_p90, s.total_p90)}</td>
+    <td>${fmt(u,0)}</td><td>${s.policy_id === "off" ? "—" : delta(offU1, u)}</td>
+    <td class="${s.pct_vcpu>100?"bad":""}">${fmt(s.pct_vcpu,0)}%</td></tr>`;
 }
 document.getElementById("quotaTable").innerHTML = qt + "</table>";
 document.getElementById("quotaLimits").innerHTML = `
-  <div class="q"><div class="ask">Квота ≠ счёт. Почему в модели биллинг растёт при шардах?</div>
+  <div class="q"><div class="ask">Два числа — не путать</div>
     <div class="ans">
-      Ротация (короче жизнь каждого runner) <b>уже учтена</b>: платим Σ (число_VM × время_VM).<br/>
-      При N шардах: <code>N × (prepare + D/N + merge) = D + N×(prepare+merge)</code>.<br/>
-      Кусок <b>D</b> (тесты) почти тот же, что без шардов. Растёт только overhead
-      <b>N×(prepare+merge)</b> — в модели prepare=8м, merge=2м на шард.<br/>
-      Поэтому «чаще ротация» сама по себе счёт не уменьшает: те же тестовые VM·часы + добавка на setup/merge.
-      Выигрыш ротации — в latency/очереди (быстрее освобождаем пул), не в том, что D становится меньше.<br/>
-      Если в проде prepare/merge дешевле 10м или шарятся между шардами — Δ биллинга будет меньше, чем в модели.
+      <b>пик vCPU%</b> — хватает ли потолка на пике (за квоту не платим).<br/>
+      <b>Units</b> — сколько «сжигаем» за неделю (платим за VM×время). Шарды почти не меняют время тестов,
+      но добавляют prepare+merge → Units чуть выше. Лучшие срезы на большей квоте — в §1.
     </div></div>`;
 
 let cd = `<table><tr><th class="left">День</th><th>OFF total p90</th><th>${best.label} total p90</th><th>Δ</th>
@@ -2156,30 +2027,34 @@ function seriesFrom(scenario, key) {
   return (b && b[key]) || [];
 }
 
-if (QR) {
-  const b = QR.best || {};
-  const scaleTxt = b.scale == null ? "не найдено до ×3" : `×${b.scale} free capacity`;
+{
+  const pick = topByBoth[0];
+  const pickTxt = pick
+    ? `<b>${pick.name}</b> (total ${fmt(pick.total,0)}м, Units ${fmt(pick.units,0)})`
+    : "см. §1";
+  const b = (QR && QR.best) || {};
+  const gateTxt = (QR && b.scale != null)
+    ? `${POLICY_LABELS[b.policy_id]||b.label} @×${b.scale} (total ${fmt(b.total_p90)}м) — это порог «уже −40%», не лучший срез`
+    : "порог −40% до ×3 не найден";
   document.getElementById("quotaRec").innerHTML = `
-    <div class="ask">Какая квота нужна для хорошего ускорения?</div>
-    <div>Цель: total p90 ≤ <b>${fmt(QR.target_total_p90)}</b>м (−40%+ vs OFF@1.0× = ${fmt(b.off_total_p90)}м)
-      и wait p90 ≤ <b>${fmt(QR.target_wait_p90_max)}</b>м.</div>
-    <div style="margin-top:8px"><b>Рекомендация:</b> ${POLICY_LABELS[b.policy_id]||b.label||"—"} при <b>${scaleTxt}</b>.
-      ${b.scale!=null ? `Тогда total ${fmt(b.total_p90)}м, wait ${fmt(b.wait_p90)}м, exec ${fmt(b.exec_p90)}м.
-      Биллинг PR: ${fmt(b.off_bill_pr_instance_hours,0)}→${fmt(b.bill_pr_instance_hours,0)} instance-hours/week.` : ""}</div>
-    <div style="margin-top:8px;color:#9aa0a6">${QR.why}</div>
-    <div style="margin-top:8px;color:#9aa0a6">Квота = потолок одновременности. Счёт ≈ instance/vCPU-hours (ресурс×время работы).</div>`;
-  let rt = `<table style="width:100%;margin-top:12px;font-size:13px;border-collapse:collapse">
-    <tr><th class="left">Политика</th><th>мин. квота</th><th>total@hit</th><th>wait@hit</th><th>PR instance-h@hit</th><th>total@3×</th><th>PR instance-h@3×</th></tr>`;
-  for (const r of QR.per_policy) {
-    rt += `<tr><td class="left">${r.label}</td>
-      <td>${r.min_scale==null ? "нет до ×3" : "×"+r.min_scale}</td>
-      <td>${r.total_p90_at_hit==null?"—":fmt(r.total_p90_at_hit,0)}</td>
-      <td>${r.wait_p90_at_hit==null?"—":fmt(r.wait_p90_at_hit,0)}</td>
-      <td>${r.bill_pr_instance_hours_at_hit==null?"—":fmt(r.bill_pr_instance_hours_at_hit,0)}</td>
-      <td>${fmt(r.best_total_at_3x,0)}</td>
-      <td>${fmt(r.bill_pr_instance_hours_at_3x,0)}</td></tr>`;
+    <div class="ask">Слайдеры стартуют с топ‑1 по балансу из §1</div>
+    <div>Сейчас: ${pickTxt}. Крути шарды/квоту, чтобы сравнить с baseline OFF@1×.</div>
+    <div style="margin-top:8px;color:#9aa0a6">Другой вопрос (не путать с топ‑3): минимальная квота, чтобы total ≤ ${fmt(QR && QR.target_total_p90)}м (−40% vs OFF@1×) и wait не хуже OFF → ${gateTxt}. Таблица порогов — внизу секции.</div>`;
+  if (QR && QR.per_policy) {
+    let rt = `<p class="sub" style="margin-top:16px">Мин. квота на политику для порога −40% total vs OFF@1× (не рейтинг лучших срезов)</p>
+      <table style="width:100%;margin-top:8px;font-size:13px;border-collapse:collapse">
+      <tr><th class="left">Политика</th><th>мин. квота</th><th>total@hit</th><th>wait@hit</th><th>PR instance-h@hit</th><th>total@3×</th><th>PR instance-h@3×</th></tr>`;
+    for (const r of QR.per_policy) {
+      rt += `<tr><td class="left">${r.label}</td>
+        <td>${r.min_scale==null ? "нет до ×3" : "×"+r.min_scale}</td>
+        <td>${r.total_p90_at_hit==null?"—":fmt(r.total_p90_at_hit,0)}</td>
+        <td>${r.wait_p90_at_hit==null?"—":fmt(r.wait_p90_at_hit,0)}</td>
+        <td>${r.bill_pr_instance_hours_at_hit==null?"—":fmt(r.bill_pr_instance_hours_at_hit,0)}</td>
+        <td>${fmt(r.best_total_at_3x,0)}</td>
+        <td>${fmt(r.bill_pr_instance_hours_at_3x,0)}</td></tr>`;
+    }
+    document.getElementById("quotaRecTable").innerHTML = rt + "</table>";
   }
-  document.getElementById("quotaRecTable").innerHTML = rt + "</table>";
 }
 
 const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -2648,17 +2523,16 @@ function refreshCharts() {
   applyKey(chartPrUnits, baseline, selected, "week_pr_bill_units", la, lb);
 }
 
-// Default: recommended policy/scale if present, else 4 shards @ 1.0×
+// Default: top-1 balance slice from §1 (not min-quota −40% gate)
 (function initControls() {
   let pIdx = POLICY_IDS.indexOf("s4");
   let sIdx = 0;
-  if (QR && QR.best) {
-    const bi = POLICY_IDS.indexOf(QR.best.policy_id);
+  const pick = topByBoth[0];
+  if (pick) {
+    const bi = POLICY_IDS.indexOf(pick.policy_id);
     if (bi >= 0) pIdx = bi;
-    if (QR.best.scale != null) {
-      const si = SCALES.indexOf(QR.best.scale);
-      if (si >= 0) sIdx = si;
-    }
+    const si = SCALES.indexOf(pick.scale);
+    if (si >= 0) sIdx = si;
   }
   const hourFrom = document.getElementById("hourFrom");
   const hourTo = document.getElementById("hourTo");

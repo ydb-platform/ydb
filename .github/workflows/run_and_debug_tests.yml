@@ -20,10 +20,15 @@ on:
         required: false
         type: string
         default: 'ydb/apps/ydbd'
+      link_threads:
+        description: 'ya make --link-threads value'
+        required: false
+        type: string
+        default: '12'
 
 jobs:
   clean_build_benchmark:
-    name: Clean build (${{ inputs.build_preset }})
+    name: Clean build (${{ inputs.build_preset }}, link-threads=${{ inputs.link_threads }})
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     timeout-minutes: 600
     steps:
@@ -48,10 +53,11 @@ jobs:
           set -o pipefail
           BUILD_PRESET="${{ inputs.build_preset }}"
           BUILD_TARGET="${{ inputs.build_target }}"
+          LINK_THREADS="${{ inputs.link_threads }}"
 
           params=(
             --stat
-            --link-threads 12
+            --link-threads "$LINK_THREADS"
             --no-bazel-remote-store
             -DCONSISTENT_DEBUG
             --no-dir-outputs
@@ -126,6 +132,7 @@ jobs:
             echo "| Runner | \`${{ runner.name }}\` |"
             echo "| Build preset | \`${{ inputs.build_preset }}\` |"
             echo "| Build target | \`${{ inputs.build_target }}\` |"
+            echo "| Link threads | \`${{ inputs.link_threads }}\` |"
             echo "| Started (UTC) | ${{ steps.build.outputs.start_ts }} |"
             echo "| Finished (UTC) | ${{ steps.build.outputs.end_ts }} |"
             echo "| Wall time | **${{ steps.build.outputs.duration_sec }} sec** ($DURATION_HUMAN) |"

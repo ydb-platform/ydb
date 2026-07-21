@@ -42,6 +42,24 @@ than explicit source-type range constraints. This may produce an out-of-range
 `COUNTEREXAMPLE`, which replay can reject, but cannot turn a real bounded
 counterexample into `VERIFIED_BOUNDED`.
 
+Scalar syntax outside the explicit Boolean/equality core is represented by a
+shared typed uninterpreted function when the C++ exporter can positively audit
+it as deterministic and total. The current reviewed families are integer
+`+`, `-`, and `*`; scalar comparisons; `Just`, `Exists`, `Coalesce`, and `If`;
+`SafeCast`; and non-failing `Convert`. YQL has no complete generic totality or
+determinism flag, so all other callables fail closed rather than relying on a
+denylist. This includes UDF and PG calls, division, strict casts, `Unwrap`,
+runtime-dependent generators, free variables, and unsafe AST metadata.
+
+Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
+It preserves exact callable/atom bytes, normalized atom flags, formatted types,
+child order, constants, settings, and repeated arguments. Input IU names are
+replaced by first-use ordinals and emitted separately as the ordered `args`, so
+the same expression remains one UF across optimizer renames while swapped or
+repeated values retain their meaning. Positions, allocations, and DAG sharing
+do not affect identity. The representation fails closed above 256 expanded
+nodes, depth 64, or 64 KiB.
+
 The chosen final boundary is immediately before `ConvertToPhysical`. Therefore
 the verifier does not prove physical lowering, task construction, or execution.
 In particular, the current lowering does not visibly preserve

@@ -109,6 +109,22 @@ Volatile, stateful, observably failing, evaluation-count-sensitive, or otherwise
 unsupported expressions produce `UNSUPPORTED`. New concrete scalar semantics are
 added only in response to real optimizer transformations or spurious witnesses.
 
+YQL does not expose a complete determinism-and-totality annotation. The v1 C++
+exporter therefore uses a reviewed positive list: supported integer `+`, `-`,
+and `*`; scalar comparisons; `Just`, `Exists`, `Coalesce`, and `If`; `SafeCast`;
+and `Convert` only when YQL's cast analysis says it cannot fail. Unknown
+callables, UDF/PG calls, division, strict casts, `Unwrap`, free variables,
+position-aware or unordered nodes, and side-effecting/CSE-unsafe nodes fail
+closed. Expanding this list requires an explicit totality review and tests.
+
+The persisted fingerprint is collision-free canonical text rather than a
+machine hash. It length-prefixes node kind, callable and atom bytes, normalized
+atom flags, exact formatted types, child counts, and ordered children. Direct
+input-row Members become first-use ordinals; the corresponding unique IU values
+are emitted as ordered UF arguments. Source positions, allocations, IU names,
+and DAG sharing are deliberately absent. The exporter caps this representation
+at 256 expanded nodes, nesting depth 64, and 64 KiB.
+
 Version-one strings have equality-only uninterpreted-atom semantics. Literals
 receive deterministic integer atom IDs, while other integer IDs decode to
 collision-checked placeholder strings for replay. This avoids placing Z3's
@@ -273,6 +289,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A real-host ordered test captures logical Sort+Limit and the transformed
   per-task TopSort+Merge+final-Limit program, then constructs or solves the
   normal equivalence obligation.
+- Reviewed deterministic total scalar subtrees are exported as canonical typed
+  opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
+  repeated arguments, structural/literal/callable mutations, DAG-sharing
+  independence, nullability, and fail-closed safety gates. A real-host integer
+  arithmetic query shares the fingerprint across both boundaries and verifies
+  through the normal obligation.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

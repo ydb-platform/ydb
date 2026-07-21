@@ -137,9 +137,12 @@ TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(
     auto mergesToApply = BuildMergeRequest(allowedSplitsCount);
     auto splitsToApply = BuildSplitRequest(allowedSplitsCount);
 
-    YDB_LOG_DEBUG("Dump logPrefix, #_num_0",
+    YDB_LOG_DEBUG("Scale request",
         {"logPrefix", LogPrefix()},
-        {"scaleRequest", fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",         splitsToApply.Requests.size(),         splitsToApply.Unprocessed,         allowedSplitsCountLimit,         mergesToApply.Requests.size()     )});
+        {"splits", splitsToApply.Requests.size()},
+        {"unprocessed", splitsToApply.Unprocessed},
+        {"splitsLimit", allowedSplitsCountLimit},
+        {"merges", mergesToApply.Requests.size()});
 
     return {
         .Split = std::move(splitsToApply.Requests),
@@ -181,9 +184,10 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
                 };
             }
         }
-        YDB_LOG_DEBUG("Dump logPrefix, #_num_0",
+        YDB_LOG_DEBUG("Set partition boundaries requsts",
             {"logPrefix", LogPrefix()},
-            {"partitionBoundariesRequest", fmt::format("Set partition boundaries requsts: #modify={}, #create{}",             modifyPartitions,             createPartitions         )});
+            {"modify", modifyPartitions},
+            {"create", createPartitions});
     }
     return {
         .Requests = std::move(boundsToApply),

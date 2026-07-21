@@ -78,9 +78,8 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         }
         logMessage << ".";
     }
-    YDB_LOG_DEBUG("Dump logPrefix, logMessage",
-        {"logPrefix", LogPrefix()},
-        {"logMessage", logMessage});
+    YDB_LOG_DEBUG(logMessage,
+        {"logPrefix", LogPrefix()});
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();

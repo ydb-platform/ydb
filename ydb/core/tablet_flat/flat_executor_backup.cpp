@@ -208,8 +208,13 @@ class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActo
 public:
     using TBase = TActorBootstrapped<TSnapshotWriter>;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TSnapshotWriter"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"generation", Generation},
+            {"step", Step});
     }
 
     struct TTableFile {
@@ -240,7 +245,6 @@ public:
 
     void Bootstrap() {
         YDB_LOG_NOTICE("Starting snapshot",
-            {"logPrefix", LogPrefix()},
             {"path", SnapshotPath});
 
         DeleteOldBackups();
@@ -265,15 +269,13 @@ public:
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
             YDB_LOG_DEBUG("Schema written",
-                {"logPrefix", LogPrefix()},
                 {"bytes", stringOut.Size()});
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            YDB_LOG_DEBUG("No tables to scan, finalizing",
-                {"logPrefix", LogPrefix()});
+            YDB_LOG_DEBUG("No tables to scan, finalizing");
             return Finalize();
         }
 
@@ -296,10 +298,10 @@ public:
     void DeleteOldBackups() {
         try {
             const auto backupGenStep = TGenStep{Generation, Step};
-    
+
             TVector<TFsPath> children;
             BackupPath.Parent().List(children);
-    
+
             TVector<std::pair<TGenStep, TFsPath>> backups;
             for (const auto& child : children) {
                 auto genStep = ParseBackupGenStep(child.Basename());
@@ -308,20 +310,19 @@ public:
                 if (!genStep) {
                     continue;
                 }
-    
+
                 // valid backup directory
                 if (child.Child("snapshot").Exists()) {
                     backups.emplace_back(*genStep, child);
                     continue;
                 }
-    
+
                 // newer backup
                 if (genStep >= backupGenStep) {
                     continue;
                 }
-    
+
                 YDB_LOG_NOTICE("Deleting incomplete backup",
-                    {"logPrefix", LogPrefix()},
                     {"path", child});
                 child.ForceDelete();
             }
@@ -332,13 +333,11 @@ public:
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
                 YDB_LOG_NOTICE("Deleting old backup",
-                    {"logPrefix", LogPrefix()},
                     {"path", backups[i].second});
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
             YDB_LOG_ERROR("Failed to delete old backups",
-                {"logPrefix", LogPrefix()},
                 {"path", BackupPath},
                 {"error", e.what()});
         }
@@ -349,7 +348,6 @@ public:
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
             YDB_LOG_ERROR("Snapshot failed",
-                {"logPrefix", LogPrefix()},
                 {"error", error});
             Send(Owner, new TEvSnapshotCompleted(error));
         }
@@ -358,6 +356,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteSnapshot, Handle);
         }
@@ -366,7 +365,6 @@ public:
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
         YDB_LOG_DEBUG("Writing snapshot",
-            {"logPrefix", LogPrefix()},
             {"tableId", msg->TableId},
             {"bytes", msg->SnapshotData.Size()});
 
@@ -409,7 +407,6 @@ public:
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
         YDB_LOG_DEBUG("Table scan done",
-            {"logPrefix", LogPrefix()},
             {"done", DoneTables.size()},
             {"total", Tables.size()});
         if (DoneTables.size() == Tables.size()) {
@@ -497,7 +494,6 @@ public:
         DeleteOldBackups();
 
         YDB_LOG_NOTICE("Snapshot finalized",
-            {"logPrefix", LogPrefix()},
             {"bytes", WrittenBytes});
         return ReplyAndDie();
     }
@@ -584,7 +580,7 @@ public:
             } catch (const std::exception& e) {
                 TString value;
                 DbgPrintValue(value, cell, column.PType);
-        
+
                 throw yexception() << "Failed to write column to JSON: " << e.what()
                     << " Column# " << column.Name
                     << " Type# " << NScheme::TypeName(column.PType.GetTypeId(), "")
@@ -860,13 +856,17 @@ public:
         , InFlightBytesLimit(inFlightBytesLimit)
     {}
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TChangelogWriter"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"generation", Generation},
+            {"step", Step});
     }
 
     void Bootstrap() {
         YDB_LOG_NOTICE("Starting changelog",
-            {"logPrefix", LogPrefix()},
             {"path", ChangelogPath});
 
         // writing initial changelog and checksum files
@@ -877,6 +877,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
             hFunc(TEvPrivate::TEvIoComplete, Handle);
@@ -892,7 +893,6 @@ public:
 
         const auto* msg = ev->Get();
         YDB_LOG_DEBUG("Writing changelog",
-            {"logPrefix", LogPrefix()},
             {"step", msg->Step});
 
         TString dataUpdate;
@@ -1022,7 +1022,6 @@ public:
         }
 
         YDB_LOG_DEBUG("Changelog IO completed",
-            {"logPrefix", LogPrefix()},
             {"bytes", IoInFlightBytes},
             {"latency", msg->Latency},
             {"lag", msg->Lag});
@@ -1035,7 +1034,6 @@ public:
 
         if (NeedNewBackup()) {
             YDB_LOG_NOTICE("Requesting new backup",
-                {"logPrefix", LogPrefix()},
                 {"changelogBytes", WrittenBytes},
                 {"snapshotBytes", *SnapshotWrittenBytes});
             Send(Owner, new TEvStartNewBackup());
@@ -1072,7 +1070,6 @@ public:
 
     void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
         YDB_LOG_DEBUG("Starting Changelog IO",
-            {"logPrefix", LogPrefix()},
             {"bytes", Buffer.Size()});
 
         IoInFlightBytes = Buffer.Size();
@@ -1109,7 +1106,6 @@ public:
 
     void ReplyAndDie(const TString& error) {
         YDB_LOG_ERROR("Changelog failed",
-            {"logPrefix", LogPrefix()},
             {"error", error});
         Send(Owner, new TEvChangelogFailed(error));
         PassAway();

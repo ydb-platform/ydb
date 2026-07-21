@@ -4422,6 +4422,8 @@ STFUNC(TExecutor::StateInit) {
 }
 
 STFUNC(TExecutor::StateBoot) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     Y_ENSURE(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
@@ -4436,6 +4438,8 @@ STFUNC(TExecutor::StateBoot) {
 }
 
 STFUNC(TExecutor::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4476,6 +4480,8 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateFollower"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4496,6 +4502,8 @@ STFUNC(TExecutor::StateFollower) {
 
 STFUNC(TExecutor::StateFollowerBoot) {
     Y_ENSURE(BootLogic);
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -5378,8 +5386,12 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-TStringBuilder TExecutor::BackupLogPrefix() const {
-    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+NActors::NStructuredLog::TStructuredMessage TExecutor::GetLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TExecutor"},
+        {"selfId", SelfId()},
+        {"tabletId", Owner->TabletID()},
+        {"generation", Generation0});
 }
 
 void TExecutor::StartNewBackup() {
@@ -5396,8 +5408,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
-        YDB_LOG_DEBUG("Tablet excluded from backup",
-            {"backupLogPrefix", BackupLogPrefix()});
+        YDB_LOG_DEBUG("Tablet excluded from backup");
         return;
     }
 
@@ -5421,7 +5432,6 @@ void TExecutor::StartNewBackup() {
 
     if (snapshotWriter && changelogWriter) {
         YDB_LOG_NOTICE("Starting new backup",
-            {"backupLogPrefix", BackupLogPrefix()},
             {"type", tabletType},
             {"gen", Generation0},
             {"step", Step0});
@@ -5442,7 +5452,7 @@ void TExecutor::StartNewBackup() {
         CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
         YDB_LOG_DEBUG("Backup not configured",
-            {"backupLogPrefix", BackupLogPrefix()});
+            {"backupLogPrefix", GetLogPrefix()});
     }
 }
 
@@ -5451,7 +5461,6 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
         YDB_LOG_NOTICE("Snapshot completed",
-            {"backupLogPrefix", BackupLogPrefix()},
             {"bytes", ev->Get()->WrittenBytes});
         Owner->BackupSnapshotComplete(OwnerCtx());
 
@@ -5484,7 +5493,6 @@ void TExecutor::FailBackup(const TString& error) {
     }
 
     YDB_LOG_ERROR("Backup failed",
-        {"backupLogPrefix", BackupLogPrefix()},
         {"error", error});
     CommitManager->BackupLogic.Stop();
     ScheduleRetryBackup();
@@ -5501,7 +5509,6 @@ void TExecutor::ScheduleRetryBackup() {
 
         auto retryTimeout = BackupRetry->Next();
         YDB_LOG_NOTICE("Scheduling backup retry",
-            {"backupLogPrefix", BackupLogPrefix()},
             {"timeout", retryTimeout},
             {"attempt", BackupRetry->GetIteration()});
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);

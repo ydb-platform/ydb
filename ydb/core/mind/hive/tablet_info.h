@@ -204,6 +204,7 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
+    bool IsReadyToWork() const;
     bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;

@@ -351,6 +351,33 @@ IGraphTransformer::TStatus TryToUsingEntry(
 
 } // namespace
 
+TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings, TExtContext& ctx) {
+    TYqlFromSettings parsed;
+
+    auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
+        if (name == "cte") {
+            if (setting.ChildrenSize() != 1) {
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(setting.Pos()),
+                    TStringBuilder() << "No extra parameters are expected by setting "
+                                     << "'" << name << "'"));
+                return false;
+            }
+
+            parsed.IsCTE = true;
+            return true;
+        }
+
+        YQL_ENSURE(false, "unknown setting " << name);
+    };
+
+    if (!EnsureValidSettings(*settings, {"cte"}, validator, ctx.Expr)) {
+        return Nothing();
+    }
+
+    return parsed;
+}
+
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {
@@ -485,6 +512,95 @@ IGraphTransformer::TStatus InferYqlInferUnionType(
     }
 
     return status;
+}
+
+TMaybe<TVector<std::pair<TString, /*isSynthetic=*/bool>>>
+InferYqlSimpleColumnOrder(const TExprNode::TPtr& input) {
+    if (!input->IsCallable("YqlSelect")) {
+        return Nothing();
+    }
+
+    const auto order = [](const TExprNode::TPtr& item) {
+        const auto result = GetSetting(item->Head(), "result")->TailPtr();
+
+        TVector<std::pair<TString, /*isSynthetic=*/bool>>
+            order(Reserve(result->ChildrenSize()));
+        for (const auto& item : result->Children()) {
+            TString name(item->Child(0)->Content());
+            bool isSynthetic = (3 < item->ChildrenSize() &&
+                                HasSetting(*item->Child(2), "synthetic"));
+            order.emplace_back(std::move(name), isSynthetic);
+        }
+
+        return order;
+    };
+
+    const auto items = GetSetting(input->Head(), "set_items")->ChildPtr(1);
+
+    auto result = order(items->ChildPtr(0));
+
+    for (const auto& item : items->Children()) {
+        auto x = order(item);
+        if (result != x) {
+            return Nothing();
+        }
+    }
+
+    return result;
+}
+
+IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    TPositionHandle position,
+    const TVector<TPositionHandle>& expectedPositions,
+    const TVector<TString>& expectedOrder,
+    const TVector<std::pair<TString, /*isSynthetic=*/bool>>& actualOrder)
+{
+    constexpr size_t Limit = 4;
+
+    TIssue issue(
+        ctx.Expr.GetPosition(position),
+        "Column names in SELECT don't match column specification in parenthesis");
+    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_SOURCE_SELECT_COLUMN_MISMATCH, issue);
+
+    for (size_t i = 0;
+         (i < Min(actualOrder.size(), expectedOrder.size())) &&
+         (issue.GetSubIssues().size() < Limit);
+         i += 1)
+    {
+        const auto& [alias, isSynthetic] = actualOrder[i];
+        if (isSynthetic || alias == expectedOrder[i]) {
+            continue;
+        }
+
+        auto subIssue = MakeIntrusive<TIssue>(
+            ctx.Expr.GetPosition(expectedPositions[i]),
+            TStringBuilder()
+                << "At position " << (i + 1) << ' '
+                << "actual " << '"' << alias << '"' << ' '
+                << "doesn't match "
+                << "expected " << '"' << expectedOrder[i] << '"');
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_SOURCE_SELECT_COLUMN_MISMATCH, *subIssue);
+        issue.AddSubIssue(std::move(subIssue));
+    }
+
+    if (issue.GetSubIssues().empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (auto status = AddSqlSelectWarning(input, output, ctx.Expr, "yql_explicit_column_orders");
+        status != IGraphTransformer::TStatus::Repeat)
+    {
+        return status;
+    }
+
+    if (!ctx.Expr.AddWarning(issue)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Repeat;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(

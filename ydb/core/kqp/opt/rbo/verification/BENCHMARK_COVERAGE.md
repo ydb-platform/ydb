@@ -127,11 +127,11 @@ both an initial and final reason.
 |---|---|---|
 | Catalog required for subplans | q2, q4, q11, q15, q17, q21, q22 | q2, q4, q11, q15, q17, q21, q22 |
 | `Apply` | q13 | - |
-| `SqlIn` | q12, q19 | - |
 | `StringContains` | q9 | - |
 | Type `Interval` | q1 | - |
+| `>=` outside integer/Date ordering | q19 | - |
 | Callable `DecimalMul` | q3 | q3, q5, q8, q10 |
-| Callable `Map` | q5, q6, q7, q8, q10, q14 | q7 |
+| Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7 |
 | OLAP `string_contains` | - | q9 |
 | Unsupported OLAP non-callable node | - | q1, q6, q12, q14 |
 | `KqpOlapApply` | - | q13 |
@@ -139,7 +139,8 @@ both an initial and final reason.
 
 Exact Date literals and ordering removed the previous Date blockers without
 changing the 0/22 formula count: these deeper scalar and OLAP blockers were
-then exposed.
+then exposed. Restricted static `IN` similarly removed the first blocker from
+q12 and q19 without yet changing the formula count.
 
 ### TPC-DS inventory
 
@@ -155,7 +156,7 @@ are audited independently.
 |---|---|---|
 | `== Decimal(5,2)` vs `Int32` | q43, q61 | q61, q91 |
 | `>` outside integer/Date ordering | q31 | - |
-| `>= Decimal(7,2)` vs `Decimal(12,2)` | q13, q48, q85 | q13, q48 |
+| `>= Decimal(7,2)` vs `Decimal(12,2)` | q13, q48, q85 | q13, q48, q85 |
 | `>= Decimal(7,2)` vs `Decimal(35,2)` | q21 | q21 |
 | `>= Decimal(7,2)` vs `Int32` | q28, q37, q82 | - |
 | `>= Int64` vs `Decimal(12,2)` | q65 | q65 |
@@ -166,7 +167,7 @@ are audited independently.
 | Opaque arithmetic `+` | q64 | q64 |
 | Opaque arithmetic `-` | q11, q75 | q11, q75 |
 | Opaque comparison `Decimal(7,2)` vs `Int32` | - | q28 |
-| Opaque scalar with unordered children | q2, q59 | q2, q43, q59 |
+| Opaque scalar with unordered children | q2, q59, q66 | q2, q43, q59 |
 | Sort outside integer/Date ordering | q3, q25, q42, q50, q52, q55, q71, q76 | q3, q25, q42, q50, q52, q55, q71 |
 | Unsupported OLAP non-callable node | - | q37, q76, q77, q82 |
 | Callable `/` | q73, q78 | q78 |
@@ -175,11 +176,16 @@ are audited independently.
 | Callable `DecimalDiv` | q4, q90 | q4, q31, q90 |
 | Callable `DecimalMul` | q93 | q93 |
 | Callable `IfPresent` | - | q34, q68, q73, q79 |
-| Callable `SqlIn` | q8, q15, q18, q29, q46, q66, q68, q74, q79 | q8, q15, q18, q29, q46, q74, q85 |
-| Callable `Substring` | q19, q62, q99 | q19, q62, q99 |
+| Static `SqlIn` item/lookup type mismatch | q18, q29, q46, q68, q74, q79 | q18, q29, q46, q74 |
+| Callable `Substring` | q8, q15, q19, q62, q99 | q8, q15, q19, q62, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
 | Type `Double` | q7, q22, q26, q34 | q7, q22, q26 |
 | Type `Interval` | q5, q72, q77, q80 | q72 |
+
+Restricted exact-type static `IN` moved q8, q15, q66, and q85 to the deeper
+reasons shown above. Six queries retain mixed-type static collections and stay
+fail-closed until YQL's item-coercion rules are modeled explicitly. The overall
+2/99 formula count is therefore unchanged.
 
 ## Solver-backed focused results
 

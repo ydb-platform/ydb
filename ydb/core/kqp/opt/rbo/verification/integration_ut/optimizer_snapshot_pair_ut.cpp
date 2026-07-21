@@ -210,6 +210,18 @@ void CreateOrderedColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateSqlInColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboSqlIn` (
+            Id Uint64 NOT NULL,
+            S String,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TKikimrRunner MakeTpcdsRunner() {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
@@ -672,6 +684,60 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         };
         assertAddition(*initialAdditions[0]);
         assertAddition(*finalAdditions[0]);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableStringLookup) {
+        TKikimrRunner kikimr;
+        CreateSqlInColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT S IN ('first', 'second') AS Matched
+                FROM `/Root/RboSqlIn`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        ParseSnapshot(results[1]);
+
+        TVector<const NJson::TJsonValue*> memberships;
+        for (const auto* project : PlanNodes(initial, "project")) {
+            for (const auto& column : (*project)["columns"].GetArraySafe()) {
+                const auto& expression = column["expression"];
+                if (expression["kind"].GetStringSafe() == "in") {
+                    memberships.push_back(&expression);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(memberships.size(), 1);
+        const auto& membership = *memberships.front();
+        UNIT_ASSERT_VALUES_EQUAL(membership.GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(membership["lookup"]["kind"].GetStringSafe(), "column");
+        const auto& items = membership["items"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(items[0]["type"].GetStringSafe(), "String");
+        UNIT_ASSERT_VALUES_EQUAL(items[0]["value"].GetStringSafe(), "first");
+        UNIT_ASSERT_VALUES_EQUAL(items[1]["type"].GetStringSafe(), "String");
+        UNIT_ASSERT_VALUES_EQUAL(items[1]["value"].GetStringSafe(), "second");
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

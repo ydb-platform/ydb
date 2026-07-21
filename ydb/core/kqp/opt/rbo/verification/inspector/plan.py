@@ -71,6 +71,15 @@ def render_expression(expression: ir.Expr) -> str:
         if len(expression.args) != 1:
             raise InspectionError("not expression does not have exactly one argument")
         return f"not(arg={render_expression(expression.args[0])})"
+    if kind == "in":
+        if not 2 <= len(expression.args) <= ir.MAX_STATIC_IN_ITEMS + 1:
+            raise InspectionError(
+                f"in expression must have between 1 and {ir.MAX_STATIC_IN_ITEMS} items"
+            )
+        return (
+            f"in(lookup={render_expression(expression.args[0])}, "
+            f"items={_list(expression.args[1:], render_expression)})"
+        )
     if kind in {"eq", "lt", "lte", "gt", "gte"}:
         if len(expression.args) != 2:
             raise InspectionError(f"{kind} expression does not have exactly two arguments")

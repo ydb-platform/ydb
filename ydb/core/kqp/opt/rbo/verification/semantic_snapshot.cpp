@@ -865,6 +865,104 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (node.IsCallable("SqlIn")) {
+        constexpr size_t MaxItems = 512;
+        if (node.ChildrenSize() != 3) {
+            Unsupported("SqlIn must have exactly three arguments");
+        }
+
+        bool lookupNullable = false;
+        const TString lookupType = ScalarTypeName(*node.Child(1), &lookupNullable);
+        bool resultNullable = false;
+        if (ScalarTypeName(node, &resultNullable) != "Bool") {
+            Unsupported("SqlIn result is not Bool");
+        }
+        if (resultNullable != lookupNullable) {
+            Unsupported("SqlIn result nullability does not match its lookup");
+        }
+
+        const auto& collection = *node.Child(0);
+        if (!collection.IsList() && !collection.IsCallable("AsList")) {
+            Unsupported("SqlIn collection is not a direct static tuple or AsList");
+        }
+        if (collection.ChildrenSize() == 0 || collection.ChildrenSize() > MaxItems) {
+            Unsupported(TStringBuilder()
+                << "SqlIn static collection size must be in [1, " << MaxItems << "]");
+        }
+
+        if (!collection.GetTypeAnn()) {
+            Unsupported("SqlIn static collection has no type annotation");
+        }
+        if (collection.IsList()) {
+            if (collection.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple) {
+                Unsupported("SqlIn raw static collection is not typed as a tuple");
+            }
+            const auto* tupleType = collection.GetTypeAnn()->Cast<TTupleExprType>();
+            if (tupleType->GetSize() != collection.ChildrenSize()) {
+                Unsupported("SqlIn static tuple annotation has the wrong size");
+            }
+            for (const auto* itemType : tupleType->GetItems()) {
+                bool nullable = false;
+                if (TypeName(itemType, &nullable) != lookupType || nullable) {
+                    Unsupported("SqlIn static tuple annotation does not match its lookup type");
+                }
+            }
+        } else {
+            if (collection.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+                Unsupported("SqlIn AsList collection is not typed as a list");
+            }
+            bool nullable = false;
+            const auto* itemType = collection.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (TypeName(itemType, &nullable) != lookupType || nullable) {
+                Unsupported("SqlIn AsList item type does not match its lookup type");
+            }
+        }
+
+        auto items = JsonArray();
+        for (const auto& item : collection.Children()) {
+            bool nullable = false;
+            if (ScalarTypeName(*item, &nullable) != lookupType || nullable) {
+                Unsupported("SqlIn item is nullable or has a different lookup type");
+            }
+            items.AppendValue(ExportExprNode(*item, rowArgument, visibleColumns));
+        }
+
+        const auto& options = *node.Child(2);
+        if (!options.IsList()) {
+            Unsupported("SqlIn options are not a tuple");
+        }
+        THashSet<TString> optionNames;
+        for (const auto& option : options.Children()) {
+            if (!option->IsList() || option->ChildrenSize() != 1 ||
+                !option->Child(0)->IsAtom())
+            {
+                Unsupported("SqlIn option must be a one-atom tuple");
+            }
+            const TString name(option->Child(0)->Content());
+            if (name == "tableSource") {
+                Unsupported("SqlIn tableSource collections are unsupported");
+            }
+            // For a nonempty, non-null, exact-type collection, ANSI and legacy IN
+            // have the same 3VL result.  The other accepted flags control warnings,
+            // representation, or optimizer bookkeeping only.  tableSource is
+            // rejected above because it changes how collection items are extracted.
+            if (name != "ansi" && name != "warnNoAnsi" &&
+                name != "isCompact" && name != "nullsProcessed")
+            {
+                Unsupported(TStringBuilder() << "Unsupported SqlIn option " << name);
+            }
+            if (!optionNames.insert(name).second) {
+                Unsupported(TStringBuilder() << "Duplicate SqlIn option " << name);
+            }
+        }
+
+        auto result = JsonMap();
+        result["kind"] = "in";
+        result["lookup"] = ExportExprNode(*node.Child(1), rowArgument, visibleColumns);
+        result["items"] = std::move(items);
+        return result;
+    }
+
     if (node.IsCallable("And") || node.IsCallable("Or")) {
         if (node.ChildrenSize() == 0) {
             Unsupported(TStringBuilder() << node.Content() << " has no arguments");

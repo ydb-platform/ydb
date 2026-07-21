@@ -25,6 +25,7 @@ from .types import (
 
 FORMAT = "ydb-rbo-semantic-snapshot"
 VERSION = 1
+MAX_STATIC_IN_ITEMS = 512
 JOIN_KINDS = frozenset(
     {
         "cross",
@@ -389,6 +390,25 @@ def _parse_expr(value: Any, path: str) -> Expr:
     if kind == "not":
         _keys(obj, {"kind", "arg"}, path)
         return Expr(kind=kind, args=(_parse_expr(obj["arg"], f"{path}.arg"),))
+
+    if kind == "in":
+        _keys(obj, {"kind", "lookup", "items"}, path)
+        raw_items = _array(obj["items"], f"{path}.items")
+        if not 1 <= len(raw_items) <= MAX_STATIC_IN_ITEMS:
+            _fail(
+                f"{path}.items",
+                f"must contain between 1 and {MAX_STATIC_IN_ITEMS} expressions",
+            )
+        return Expr(
+            kind=kind,
+            args=(
+                _parse_expr(obj["lookup"], f"{path}.lookup"),
+                *(
+                    _parse_expr(item, f"{path}.items[{index}]")
+                    for index, item in enumerate(raw_items)
+                ),
+            ),
+        )
 
     if kind in {"eq", "lt", "lte", "gt", "gte"}:
         _keys(obj, {"kind", "left", "right"}, path, {"null_safe"})
@@ -878,6 +898,20 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         if any(argument.name != BOOL for argument in argument_types):
             _fail(path, f"{expr.kind} requires Boolean arguments")
         return ValueType(BOOL, any(argument.nullable for argument in argument_types))
+
+    if expr.kind == "in":
+        lookup = _infer_expr(expr.args[0], columns, f"{path}.lookup")
+        for index, item_expr in enumerate(expr.args[1:]):
+            item_path = f"{path}.items[{index}]"
+            item = _infer_expr(item_expr, columns, item_path)
+            if item.nullable:
+                _fail(item_path, "IN items must be non-nullable")
+            if item.name != lookup.name:
+                _fail(
+                    item_path,
+                    f"IN item type mismatch: expected {lookup.name!r}, got {item.name!r}",
+                )
+        return ValueType(BOOL, lookup.nullable)
 
     if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
         left = _infer_expr(expr.args[0], columns, f"{path}.left")

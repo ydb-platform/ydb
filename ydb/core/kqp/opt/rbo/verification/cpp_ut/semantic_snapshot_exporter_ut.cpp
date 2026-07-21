@@ -18,6 +18,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <initializer_list>
 #include <limits>
 #include <stdexcept>
 
@@ -449,6 +450,56 @@ TExprNode::TPtr TypedCallable(
         std::move(children));
     result->SetTypeAnn(type);
     return result;
+}
+
+TExprNode::TPtr SqlInOptions(
+    TExportTestContext& ctx,
+    std::initializer_list<TStringBuf> names)
+{
+    TExprNode::TListType options;
+    for (const TStringBuf name : names) {
+        options.push_back(ctx.ExprCtx.NewList(
+            TPositionHandle(),
+            {ctx.ExprCtx.NewAtom(TPositionHandle(), name)}));
+    }
+    return ctx.ExprCtx.NewList(TPositionHandle(), std::move(options));
+}
+
+TExprNode::TPtr TypedStaticTuple(
+    TExportTestContext& ctx,
+    TExprNode::TListType items,
+    const TTypeAnnotationNode* itemType)
+{
+    TTypeAnnotationNode::TListType itemTypes(items.size(), itemType);
+    auto result = ctx.ExprCtx.NewList(TPositionHandle(), std::move(items));
+    result->SetTypeAnn(ctx.ExprCtx.MakeType<TTupleExprType>(std::move(itemTypes)));
+    return result;
+}
+
+TExprNode::TPtr TypedStaticAsList(
+    TExportTestContext& ctx,
+    TExprNode::TListType items,
+    const TTypeAnnotationNode* itemType)
+{
+    return TypedCallable(
+        ctx,
+        "AsList",
+        std::move(items),
+        ctx.ExprCtx.MakeType<TListExprType>(itemType));
+}
+
+TExprNode::TPtr TypedSqlIn(
+    TExportTestContext& ctx,
+    TExprNode::TPtr collection,
+    TExprNode::TPtr lookup,
+    TExprNode::TPtr options,
+    const TTypeAnnotationNode* resultType)
+{
+    return TypedCallable(
+        ctx,
+        "SqlIn",
+        {std::move(collection), std::move(lookup), std::move(options)},
+        resultType);
 }
 
 TExprNode::TPtr DataTypeDescriptor(
@@ -1069,6 +1120,265 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "Void expression is not typed Void");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactStaticSqlInTupleAndAsList) {
+        for (const bool useAsList : {false, true}) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            const auto* optionalBool = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+
+            TExprNode::TListType items;
+            items.push_back(TypedLiteral(ctx, "Int32", "1", intType));
+            items.push_back(TypedCallable(
+                ctx,
+                "+",
+                {
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                    TypedLiteral(ctx, "Int32", "2", intType),
+                },
+                intType));
+            auto collection = useAsList
+                ? TypedStaticAsList(ctx, std::move(items), intType)
+                : TypedStaticTuple(ctx, std::move(items), intType);
+
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    std::move(collection),
+                    TypedMember(ctx, "a.x", optionalInt),
+                    SqlInOptions(ctx, {
+                        "ansi",
+                        "warnNoAnsi",
+                        "isCompact",
+                        "nullsProcessed",
+                    }),
+                    optionalBool),
+                true);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "in");
+            UNIT_ASSERT_VALUES_EQUAL(expression["lookup"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(expression["lookup"]["column"].GetStringSafe(), "a.x");
+            const auto& exportedItems = expression["items"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(exportedItems.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(exportedItems[0]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(exportedItems[0]["value"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(exportedItems[1]["kind"].GetStringSafe(), "add");
+        }
+    }
+
+    Y_UNIT_TEST(StaticSqlInAcceptsMaximumCollectionSize) {
+        TExportTestContext ctx;
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+        TExprNode::TListType items;
+        for (ui32 index = 0; index < 512; ++index) {
+            items.push_back(TypedLiteral(ctx, "Int32", ToString(index), intType));
+        }
+
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedSqlIn(
+                ctx,
+                TypedStaticAsList(ctx, std::move(items), intType),
+                TypedLiteral(ctx, "Int32", "1", intType),
+                SqlInOptions(ctx, {}),
+                boolType));
+
+        UNIT_ASSERT_VALUES_EQUAL(expression["items"].GetArraySafe().size(), 512);
+    }
+
+    Y_UNIT_TEST(StaticSqlInCollectionBoundsAndShapesFailClosed) {
+        const TVector<TString> expectedReasons = {
+            "collection size",
+            "collection size",
+            "not a direct static tuple or AsList",
+            "AsList collection is not typed as a list",
+            "not a direct static tuple or AsList",
+        };
+        for (ui32 testCase = 0; testCase < expectedReasons.size(); ++testCase) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            TExprNode::TPtr collection;
+            switch (testCase) {
+                case 0:
+                    collection = TypedStaticTuple(ctx, {}, intType);
+                    break;
+                case 1: {
+                    TExprNode::TListType items;
+                    for (ui32 index = 0; index < 513; ++index) {
+                        items.push_back(TypedLiteral(ctx, "Int32", ToString(index), intType));
+                    }
+                    collection = TypedStaticAsList(ctx, std::move(items), intType);
+                    break;
+                }
+                case 2:
+                    collection = TypedCallable(
+                        ctx,
+                        "List",
+                        {TypedLiteral(ctx, "Int32", "1", intType)},
+                        ctx.ExprCtx.MakeType<TListExprType>(intType));
+                    break;
+                case 3:
+                    collection = TypedCallable(
+                        ctx,
+                        "AsList",
+                        {TypedLiteral(ctx, "Int32", "1", intType)},
+                        ctx.ExprCtx.MakeType<TOptionalExprType>(
+                            ctx.ExprCtx.MakeType<TListExprType>(intType)));
+                    break;
+                case 4:
+                    collection = TypedCallable(
+                        ctx,
+                        "AsDict",
+                        {TypedLiteral(ctx, "Int32", "1", intType)},
+                        ctx.ExprCtx.MakeType<TDictExprType>(intType, intType));
+                    break;
+            }
+
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    std::move(collection),
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                    SqlInOptions(ctx, {}),
+                    boolType));
+            UNIT_ASSERT_C(!result.IsSupported(), testCase);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReasons[testCase]);
+        }
+    }
+
+    Y_UNIT_TEST(StaticSqlInTypesAndResultNullabilityFailClosed) {
+        const TVector<TString> expectedReasons = {
+            "item is nullable",
+            "different lookup type",
+            "tuple annotation does not match",
+            "result nullability does not match",
+            "result is not Bool",
+        };
+        for (ui32 testCase = 0; testCase < expectedReasons.size(); ++testCase) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+
+            TExprNode::TPtr item;
+            const TTypeAnnotationNode* annotatedItemType = intType;
+            const TTypeAnnotationNode* lookupType = intType;
+            const TTypeAnnotationNode* resultType = boolType;
+            switch (testCase) {
+                case 0:
+                    item = TypedCallable(ctx, "Nothing", {}, optionalInt);
+                    break;
+                case 1:
+                    item = TypedLiteral(ctx, "Int64", "1", int64Type);
+                    break;
+                case 2:
+                    item = TypedLiteral(ctx, "Int32", "1", intType);
+                    annotatedItemType = int64Type;
+                    break;
+                case 3:
+                    item = TypedLiteral(ctx, "Int32", "1", intType);
+                    lookupType = optionalInt;
+                    break;
+                case 4:
+                    item = TypedLiteral(ctx, "Int32", "1", intType);
+                    resultType = intType;
+                    break;
+            }
+
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    TypedStaticTuple(ctx, {std::move(item)}, annotatedItemType),
+                    TypedMember(ctx, "a.x", lookupType),
+                    SqlInOptions(ctx, {}),
+                    resultType),
+                testCase == 3);
+            UNIT_ASSERT_C(!result.IsSupported(), testCase);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReasons[testCase]);
+        }
+    }
+
+    Y_UNIT_TEST(StaticSqlInOptionsFailClosed) {
+        const TVector<TString> expectedReasons = {
+            "tableSource collections are unsupported",
+            "Duplicate SqlIn option",
+            "Unsupported SqlIn option",
+            "one-atom tuple",
+            "options are not a tuple",
+            "one-atom tuple",
+        };
+        for (ui32 testCase = 0; testCase < expectedReasons.size(); ++testCase) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            TExprNode::TPtr options;
+            switch (testCase) {
+                case 0:
+                    options = SqlInOptions(ctx, {"tableSource"});
+                    break;
+                case 1:
+                    options = SqlInOptions(ctx, {"ansi", "ansi"});
+                    break;
+                case 2:
+                    options = SqlInOptions(ctx, {"futureOption"});
+                    break;
+                case 3:
+                    options = ctx.ExprCtx.NewList(
+                        TPositionHandle(),
+                        {ctx.ExprCtx.NewList(
+                            TPositionHandle(),
+                            {
+                                ctx.ExprCtx.NewAtom(TPositionHandle(), "ansi"),
+                                ctx.ExprCtx.NewAtom(TPositionHandle(), "value"),
+                            })});
+                    break;
+                case 4:
+                    options = TypedStaticAsList(
+                        ctx,
+                        {ctx.ExprCtx.NewAtom(TPositionHandle(), "ansi")},
+                        intType);
+                    break;
+                case 5:
+                    options = ctx.ExprCtx.NewList(
+                        TPositionHandle(),
+                        {ctx.ExprCtx.NewAtom(TPositionHandle(), "ansi")});
+                    break;
+            }
+
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    TypedStaticAsList(
+                        ctx,
+                        {TypedLiteral(ctx, "Int32", "1", intType)},
+                        intType),
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                    std::move(options),
+                    boolType));
+            UNIT_ASSERT_C(!result.IsSupported(), testCase);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReasons[testCase]);
         }
     }
 

@@ -98,7 +98,16 @@ The explicit scalar core initially contains:
   ordering;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
   propagation and exact fixed-width modular/two's-complement overflow;
+- restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
+  recursively supported, non-null expressions of exactly the lookup's scalar
+  type, evaluated as the SQL three-valued OR of ordinary equality;
 - filter truth conversion.
+
+The static-`IN` result must be `Bool` and nullable exactly when its lookup is
+nullable. `ansi`, `warnNoAnsi`, `isCompact`, and `nullsProcessed` are erased
+only under that semantic gate. `tableSource`, dynamic, empty, oversized,
+nullable-item, mixed-type, malformed-option, unknown-option, and
+duplicate-option forms fail closed.
 
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
@@ -347,6 +356,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
   a real-host typed-`Int64` query verifies through the normal obligation.
+- Restricted static `IN` is exported as an explicit node and evaluated with SQL
+  three-valued membership semantics. Independent exhaustive integer/String
+  references, mutation and boundary tests, and a real-host nullable-String
+  query cover the exact gate and construct the normal obligation (or solve it
+  when `RBO_Z3` is supplied).
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious

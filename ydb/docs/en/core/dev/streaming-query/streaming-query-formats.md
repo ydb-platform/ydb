@@ -18,11 +18,7 @@ The list of built-in data formats in {{ ydb-short-name }} is given below:
 
 [Examples of parsing data in custom formats](#parsing).
 
-<<<<<<< HEAD
-In the examples on this page, `ydb_source` is a pre-created [external data source](../../concepts/datamodel/external_data_source.md), `input_topic` and `output_topic` are topics available through it, and `output_table` is a {{ ydb-short-name }} table.
-=======
 In the examples on this page, `input_topic` and `output_topic` are [topics](../../concepts/datamodel/topic.md) in the current database, and `output_table` is a {{ ydb-short-name }} table. For topics in another database, see [local and external topics](../../concepts/query_execution/topics.md#local-external-topics).
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ## Formats for writing data {#write_formats}
 
@@ -30,15 +26,16 @@ When writing to a topic, `SELECT` must return a single column of type `String`, 
 
 Writing a single column:
 
+
 ```sql
 CREATE STREAMING QUERY write_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         CAST(Data AS String)
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -49,22 +46,19 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-To write multiple columns, serialize them to JSON:
-=======
 
 To write multiple columns, serialize them into JSON:
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
+
 
 ```sql
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -76,24 +70,17 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-See also: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
-=======
 
 For more details on functions: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ## Formats for reading data {#read_formats}
 
-<<<<<<< HEAD
-### `csv_with_names` {#csv_with_names}
-=======
 ### csv_with_names format {#csv_with_names}
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 This format is based on the [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format. Data is placed in columns separated by commas, with column names in the first row.
 
 Example data (in a single message):
+
 
 ```text
 Year,Manufacturer,Model,Price
@@ -101,7 +88,9 @@ Year,Manufacturer,Model,Price
 1999,Man_2,Model_2,4900.00
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY csv_example AS
@@ -111,7 +100,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = csv_with_names,
         SCHEMA = (
@@ -125,16 +114,13 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `tsv_with_names` {#tsv_with_names}
-=======
 
 ### tsv_with_names format {#tsv_with_names}
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 This format is based on the [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) format. Data is placed in columns separated by tab characters (code `0x9`), with column names in the first row.
 
 Example data (in a single message):
+
 
 ```text
 Year    Manufacturer    Model   Price
@@ -142,7 +128,9 @@ Year    Manufacturer    Model   Price
 1999    Man_2   Model_2    4900.00
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY tsv_example AS
@@ -152,7 +140,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = tsv_with_names,
         SCHEMA = (
@@ -166,16 +154,13 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `json_list` {#json_list}
-=======
 
 ### json_list format {#json_list}
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON array of objects.
 
 Example of correct data (as a list of JSON objects):
+
 
 ```json
 [
@@ -184,19 +169,18 @@ Example of correct data (as a list of JSON objects):
 ]
 ```
 
-<<<<<<< HEAD
-Invalid example (separate objects per line, not wrapped in an array):
-=======
 
 Example of incorrect data (each message contains a separate JSON object, but these objects are not combined into a list):
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
+
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY json_list_example AS
@@ -206,7 +190,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_list,
         SCHEMA = (
@@ -220,40 +204,31 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `json_each_row` {#json_each_row}
-
-Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
-
-Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
-=======
 
 ### json_each_row format {#json_each_row}
 
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON object. This format is used when transferring data through streaming systems, such as Apache Kafka or [{{ydb-full-name}} Topics](../../concepts/datamodel/topic.md).
 Multiple separate JSONs in a single message are not supported; a JSON list is also not supported.
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Example of correct data (in a single message):
+
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
-<<<<<<< HEAD
-Invalid example (two objects in one message):
-=======
 
 Example of incorrect data:
 
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY json_each_row_example AS
@@ -263,7 +238,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -277,12 +252,8 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `json_as_string` {#json_as_string}
-=======
 
 ### json_as_string format {#json_as_string}
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data.
 
@@ -295,29 +266,27 @@ The `json_as_string` format does not split the input JSON document into fields, 
 
 Example of correct data:
 
+
 ```json
 { "Year": 1997, "Attrs": { "Manufacturer": "Man_1", "Model": "Model_1" }, "Price": 3000.0 }
 { "Year": 1999, "Attrs": { "Manufacturer": "Man_2", "Model": "Model_2" }, "Price": 4900.00 }
 ```
 
-<<<<<<< HEAD
-In this format the schema must be a single column of an allowed type — see [below](#schema).
-=======
 
 In this format, the schema of the read data must consist of only one column with one of the allowed data types; see [below](#schema) for details.
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY json_as_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -328,16 +297,13 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `parquet` {#parquet}
-=======
 
 ### parquet format {#parquet}
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 This format allows reading the contents of messages in [Apache Parquet](https://parquet.apache.org) format.
 
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY parquet_example AS
@@ -347,7 +313,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = parquet,
         SCHEMA = (
@@ -361,28 +327,23 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### `raw` {#raw}
-
-Reads message payloads as raw bytes. Default schema: `SCHEMA(Data String)`.
-=======
 
 ### raw format {#raw}
 
 This format allows reading the contents of messages as-is, in "raw" form. Data read in this way can be processed using [YQL](../../yql/reference/udf/list/string). Default schema: `SCHEMA(Data String)`.
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY raw_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -393,30 +354,17 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-### Supported schema types {#schema}
-=======
 
 ### Supported data types {#schema}
 
 Table of all supported types in the query schema:
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 | Type | csv_with_names | tsv_with_names | json_list | json_each_row | json_as_string | parquet | raw |
-|------|------------------|----------------|-----------|---------------|----------------|---------|-----|
-| `Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| `Bool` | ✓ | ✓ | ✓ | ✓ | | ✓ | |
-| `DyNumber` | | | | | | | |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
+| `Bool` | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |
+| `DyNumber` |  |  |  |  |  |  |  |
 | `String`, `Utf8` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-<<<<<<< HEAD
-| `Json` | | | | | ✓ | | ✓ |
-| `JsonDocument` | | | | | | | |
-| `Yson` | | | | | | | |
-| `Uuid` | | | | ✓ | | | |
-| `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDatetime`, `TzTimestamp` | | | | | | | |
-| `Interval` | | | | | | | |
-| `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDatetime64`, `TzTimestamp64` | | | | | | | |
-=======
 | `Json` |  |  |  |  | ✓ |  | ✓ |
 | `JsonDocument` |  |  |  |  |  |  |  |
 | `Yson` |  |  |  |  |  |  |  |
@@ -424,31 +372,33 @@ Table of all supported types in the query schema:
 | `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp` |  |  |  |  |  |  |  |
 | `Interval` |  |  |  |  |  |  |  |
 | `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64` |  |  |  |  |  |  |  |
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 | `Optional<T>` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-## Parsing custom formats {#parsing}
+## Examples of parsing data in custom formats {#parsing}
 
-### JSON with built-in functions {#json_builtins}
+### Parsing JSON with built-in functions {#json_builtins}
 
 Example data:
+
 
 ```json
 {"key": 1997, "value": "42"}
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY json_builtins_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         JSON_VALUE(Data, "$.key") AS Key,
         JSON_VALUE(Data, "$.value") AS Value
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -459,26 +409,21 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-See [JSON_VALUE](../../yql/reference/builtins/json.md#json_value).
-
-### JSON with Yson {#json_yson}
-=======
 
 For more details about functions: [JSON_VALUE](../../yql/reference/builtins/json.md#json_value).
 
 ### Parsing JSON with the Yson library {#json_yson}
 
 Example data ( [Change Data Capture](../../concepts/cdc.md) format):
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-Sample data ([Change Data Capture](../../concepts/cdc.md) style):
 
 ```json
 {"update":{"volume":10,"product":"bWlsaw=="},"key":[6],"ts":[1765192622420,18446744073709551615]}
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY json_yson_example AS
@@ -493,7 +438,7 @@ DO BEGIN
             >
         )
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -501,7 +446,7 @@ DO BEGIN
         )
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ts[0] AS Ts,
         update.volume AS Volume
@@ -512,32 +457,26 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-See also:
-=======
 
 For more details on functions:
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
 
-### DSV (TSKV) {#dsv}
+### Parsing DSV (TSKV) {#dsv}
 
 Example data:
 
-<<<<<<< HEAD
-```text
-=======
 
 ```json
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 name=Elena  uid=95792365232151958
 name=Denis  uid=78086244452810046
 name=Mikhail    uid=70609792906901286
 ```
 
+
 Example query:
+
 
 ```sql
 CREATE STREAMING QUERY dsv_example AS
@@ -546,12 +485,12 @@ DO BEGIN
     $input = SELECT
         Dsv::Parse(Data, "\t") AS Data
     FROM
-        ydb_source.input_topic
+        input_topic
     FLATTEN LIST BY (
         String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS Data
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         DictLookup(Data, "name") AS Name,
         DictLookup(Data, "uid") AS Uid
@@ -561,12 +500,8 @@ DO BEGIN
 END DO
 ```
 
-<<<<<<< HEAD
-See also:
-=======
 
 For more details on functions:
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)

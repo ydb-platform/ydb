@@ -25,7 +25,7 @@ END DO
 * `IF NOT EXISTS` — do not output an error if a streaming query with this name already exists; in this case, the existing query will remain unchanged.
 * `query_name` — the name of the streaming query to create.
 * `WITH (<key> = <value>)` — a list of settings for the new streaming query, optional.
-* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in {#T}, see [below](#examples) for query text examples.
+* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in [{#T}](../../../concepts/streaming-query.md#limitations), see [below](#examples) for query text examples.
 
 The `OR REPLACE` and `IF NOT EXISTS` settings cannot be used simultaneously.
 
@@ -52,16 +52,12 @@ The `AsStruct` function creates a structure from the specified fields, `Yson::Fr
 
 {% note info %}
 
-<<<<<<< HEAD
-Topic writes go through an [external data source](../../../concepts/datamodel/external_data_source.md). In the example, `ydb_source` is a pre-created external data source; `output_topic` and `input_topic` are topics available through it.
-=======
 Streaming queries can work with [local and external topics](../../../concepts/query_execution/topics.md#local-external-topics).
 
 In the example:
 
 - `ext_source` is a pre-created [`external data source`](../../../concepts/datamodel/external_data_source.md).
 - `input_topic` and `output_topic` are local or external [topics](../../../concepts/datamodel/topic.md).
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 {% endnote %}
 
@@ -70,16 +66,14 @@ In the example:
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- ydb_source — external data source for topics
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
         -- Formation of JSON from individual fields
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        -- Read from topic
-        ydb_source.input_topic
+        ext_source.input_topic -- or local topic input_topic
     WITH (
         FORMAT = json_each_row,  -- Input data format
         SCHEMA = (               -- Input data schema
@@ -113,8 +107,7 @@ DO BEGIN
         Id,
         Name
     FROM
-        -- ydb_source — external data source for topics
-        ydb_source.input_topic
+        input_topic -- or external topic ext_source.input_topic
     WITH (
         FORMAT = json_each_row,  -- Input data format
         SCHEMA = (               -- Input data schema
@@ -139,14 +132,13 @@ CREATE STREAMING QUERY my_streaming_query WITH (
 ) AS
 DO BEGIN
 
-    -- ydb_source — external data source for topics
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        ydb_source.input_topic
+        ext_source.input_topic -- or local topic input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -164,6 +156,6 @@ Other examples: [{#T}](../../../dev/streaming-query/patterns.md).
 ## See also
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
-* {#T}
+* [{#T}](../../../concepts/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

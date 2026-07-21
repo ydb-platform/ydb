@@ -11,13 +11,6 @@ items:
     href: vector_search.md
   - name: Fulltext search
     href: fulltext_search.md
-<<<<<<< HEAD
-=======
-  - name: Hybrid search
-    href: hybrid_search.md
-  - name: Local indexes
-    href: local_indexes.md
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
   - name: Federated query
     include:
       path: federated_query/toc_p.yaml

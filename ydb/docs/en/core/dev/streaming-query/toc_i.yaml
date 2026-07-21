@@ -1,9 +1,5 @@
 items:
-<<<<<<< HEAD
-- name: Common patterns
-=======
 - name: Typical patterns
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
   href: patterns.md
 - name: Writing to tables
   href: table-writing.md
@@ -15,8 +11,3 @@ items:
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
-<<<<<<< HEAD
-=======
-- name: Local and external topics
-  href: local-and-external-topics.md
->>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))

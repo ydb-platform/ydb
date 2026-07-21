@@ -1254,20 +1254,23 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     nodeStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage());
                 }
 
-                /* if (CollectProfileStats(StatsMode)) {
+                auto taskDuration = TDuration::MilliSeconds(
+                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                    : 0);
+                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                const bool newLongest = taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration);
+                if (newLongest) {
+                    CollectStatsByLongTasks = true;
+                    longestTaskDuration = taskDuration;
+                }
+                if (RetainAllTasks) {
+                    // User-facing tracing: keep every task's stats so a span-per-task tree can be built.
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
-                } else */ {
-                    auto taskDuration = TDuration::MilliSeconds(
-                        taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
-                        ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
-                        : 0);
-                    auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                    if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-                        CollectStatsByLongTasks = true;
-                        longestTaskDuration = taskDuration;
-                        stageStats.ComputeActors.clear();
-                        stageStats.ComputeActors[taskId].CopyFrom(stats);
-                    }
+                } else if (newLongest) {
+                    // Default: retain only the single longest task per stage.
+                    stageStats.ComputeActors.clear();
+                    stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
             }
         }

@@ -43,10 +43,10 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
     , Counters(counters)
+    , TraceId(std::move(traceId))
     , InFlightShards(ScanId, *this)
     , InFlightComputes(ComputeActorIds)
     , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown) {
-    Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(TableKind != NKqp::ETableKind::SysView);
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "META:" << meta.DebugString();
@@ -661,7 +661,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
     request->DatabaseName = Database;
     request->ResultSet.emplace_back(std::move(keyDesc));
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, NWilson::TTraceId(TraceId));
 }
 
 void TKqpScanFetcherActor::EnqueueResolveShard(const std::shared_ptr<TShardState>& state) {

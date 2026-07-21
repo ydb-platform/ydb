@@ -234,3 +234,127 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
+<<<<<<< HEAD
+=======
+
+
+class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):
+    # 3 extra spare nodes (10, 11, 12) relative to the base 9-node MIRROR_3_DC topology so that
+    # forbidding one node still leaves enough nodes for a valid, fully-healthy configuration.
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 12
+    rgOffset = 1
+
+    forbidden_node_id = nodes_count
+    allowed_node_ids = sorted(set(range(1, nodes_count + 1)) - {forbidden_node_id})
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": True,
+        "state_storage_self_heal_allowed_nodes": allowed_node_ids,
+        "automatic_state_storage_board_management": True,
+        "state_storage_board_self_heal_allowed_nodes": allowed_node_ids,
+        "automatic_scheme_board_management": True,
+        "scheme_board_self_heal_allowed_nodes": allowed_node_ids,
+    }
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+
+        logger.info("Start SelfHeal with allowed nodes restriction (forbidding node %s) for %s",
+                    self.forbidden_node_id, configName)
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
+        time.sleep(10)
+
+        healed_config = self.do_request_config()
+        node_ids = extract_all_node_ids(healed_config, configName)
+
+        assert_that(len(node_ids) > 0, f"Healed {configName} config has no nodes: {healed_config}")
+        assert_that(self.forbidden_node_id not in node_ids,
+                    f"Forbidden node {self.forbidden_node_id} present in healed {configName} config: {node_ids}")
+        assert_that(node_ids <= set(self.allowed_node_ids),
+                    f"Healed {configName} config uses nodes outside the allowed list: {node_ids - set(self.allowed_node_ids)}")
+
+
+class TestKiKiMRDistConfSelfHealAutomaticManagementDisabled(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": False,
+        "automatic_state_storage_board_management": False,
+        "automatic_scheme_board_management": False,
+    }
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        # Manually push the config into a "bad"/suboptimal state (ReconfigStateStorage is a
+        # direct manual API and is unaffected by AutomaticManagement flags).
+        self.do_bad_config(configName)
+        bad_config = get_ring_group(self.do_request_config(), configName)
+
+        logger.info("Attempting SelfHeal with automatic management disabled for %s", configName)
+        self.check_failed(
+            {"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}},
+            "Current configuration is recommended. Nothing to self-heal.")
+        time.sleep(5)
+
+        # The config must remain completely untouched: self-heal must not have modified it since
+        # automatic management for this subsystem is disabled.
+        unchanged_config = get_ring_group(self.do_request_config(), configName)
+        assert_eq(unchanged_config, bad_config)
+
+
+class TestKiKiMRDistConfSelfHealMixedAutomaticManagement(KiKiMRDistConfSelfHealTest):
+    # Verifies the mixed scenario: automatic management is disabled for one subsystem
+    # (StateStorage) while enabled for the other two (StateStorageBoard, SchemeBoard). Self-heal
+    # must heal the enabled subsystems while leaving the disabled one untouched, exercising the
+    # interaction with the shared usedNodes/nodesToReplace state in SelfHealStateStorage.
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    disabled_config_name = "StateStorage"
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": False,
+        "automatic_state_storage_board_management": True,
+        "automatic_scheme_board_management": True,
+    }
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+        bad_config = get_ring_group(self.do_request_config(), configName)
+
+        logger.info(
+            "Start SelfHeal with mixed automatic management (disabled for %s) for %s",
+            self.disabled_config_name, configName)
+
+        if configName == self.disabled_config_name:
+            self.check_failed(
+                {"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}},
+                "Current configuration is recommended. Nothing to self-heal.")
+            time.sleep(5)
+
+            # The disabled subsystem's config must remain completely untouched, even though the
+            # other subsystems are actively being healed around it.
+            unchanged_config = get_ring_group(self.do_request_config(), configName)
+            assert_eq(unchanged_config, bad_config)
+        else:
+            disabled_before = get_ring_group(self.do_request_config(), self.disabled_config_name)
+            logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
+            time.sleep(10)
+
+            disabled_after = get_ring_group(self.do_request_config(), self.disabled_config_name)
+            assert_eq(disabled_after, disabled_before)
+            rg = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg["NToSelect"], 9)
+            assert_eq(len(rg["Ring"]), 9)
+>>>>>>> 2af5ea3841d (StateStorage self heal fix bugs (#47336))

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "traces/kqp_rbo_trace_log.h"
+#include "verification/rule_application.h"
 
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
@@ -11,6 +12,7 @@
 #include <utility>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NYql {
 
@@ -27,6 +29,36 @@ class IFunctionRegistry;
 } // namespace NMiniKQL
 
 namespace NKikimr::NKqp {
+
+struct TRBORuleApplicationDebugState {
+    void Reset(std::optional<ui64> stopAfter) {
+        StopAfter = stopAfter;
+        Stopped = false;
+        Applications.clear();
+    }
+
+    bool OnApplied(const TString& stageName, const TString& ruleName) {
+        if (!StopAfter) {
+            return false;
+        }
+
+        Applications.push_back(TRBORuleApplicationV1{
+            Applications.size() + 1,
+            stageName,
+            ruleName,
+        });
+        if (Applications.size() != *StopAfter) {
+            return false;
+        }
+
+        Stopped = true;
+        return true;
+    }
+
+    std::optional<ui64> StopAfter;
+    bool Stopped = false;
+    TVector<TRBORuleApplicationV1> Applications;
+};
 
 class TRBOContext {
 public:
@@ -59,6 +91,10 @@ public:
     NOpt::TKqpProviderContext CBOCtx;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
+
+    // Query-local, opt-in diagnostic state.  Failed rule attempts never call
+    // OnApplied, so the contiguous sequence contains committed applications only.
+    TRBORuleApplicationDebugState RuleApplicationDebug;
 
     TRBOTraceLog TraceLog;
 };

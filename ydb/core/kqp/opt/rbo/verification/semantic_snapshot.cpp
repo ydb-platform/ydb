@@ -2661,6 +2661,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureInitial(
         ERBOSemanticSnapshotBoundaryV1::Initial,
         {},
         {},
+        {},
     };
 
     try {
@@ -2712,6 +2713,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
         ERBOSemanticSnapshotBoundaryV1::Final,
         {},
         {},
+        ctx.RuleApplicationDebug.Applications,
     };
 
     try {
@@ -2737,6 +2739,77 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
     }
 
     Deliver(std::move(result));
+}
+
+void TSemanticSnapshotPairCaptureV1::CaptureRuleApplicationPrefix(
+    TOpRoot& root,
+    TRBOContext& ctx,
+    const TVector<TRBORuleApplicationV1>& applications) noexcept
+{
+    if (!Sink) {
+        return;
+    }
+
+    TRBOSemanticSnapshotBoundaryResultV1 result{
+        ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+        {},
+        {},
+        applications,
+    };
+
+    try {
+        bool validApplications = !result.RuleApplications.empty();
+        for (ui64 index = 0; index < result.RuleApplications.size(); ++index) {
+            const auto& point = result.RuleApplications[index];
+            validApplications = validApplications &&
+                point.Ordinal == index + 1 &&
+                !point.StageName.empty() &&
+                !point.RuleName.empty();
+        }
+        if (!validApplications) {
+            result.UnsupportedReason =
+                "Rule-application prefix metadata must be non-empty, contiguous, and have a stage and rule";
+        } else if (!InitialAttempted) {
+            result.UnsupportedReason = "Initial semantic snapshot capture was not attempted";
+        } else if (!Catalog) {
+            result.UnsupportedReason = CatalogFailure.empty()
+                ? TString("Initial semantic snapshot catalog is unavailable")
+                : CatalogFailure;
+        } else {
+            // A committed rule invalidates derived properties.  Rebuild the
+            // minimum semantic caches only after the optimizer has stopped;
+            // this diagnostic path must never perturb later rule matching.
+            root.RecomputeOutputIUsSubtree();
+            if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+                Unsupported("RBO type annotation failed for a rule-application prefix snapshot");
+            }
+            auto snapshot = ExportSemanticSnapshotV1(root, ctx, *Catalog);
+            result.Json = std::move(snapshot.Json);
+            result.UnsupportedReason = std::move(snapshot.UnsupportedReason);
+        }
+    } catch (const std::exception& error) {
+        result.UnsupportedReason = TStringBuilder()
+            << "Rule-application prefix semantic snapshot capture failed closed: "
+            << error.what();
+    } catch (...) {
+        result.UnsupportedReason =
+            "Rule-application prefix semantic snapshot capture failed closed with an unknown exception";
+    }
+
+    Deliver(std::move(result));
+}
+
+std::optional<ui64> TSemanticSnapshotPairCaptureV1::GetRuleApplicationPrefixTarget() const noexcept {
+    if (!Sink) {
+        return std::nullopt;
+    }
+    try {
+        const auto target = Sink->GetRuleApplicationPrefixTarget();
+        return target && *target > 0 ? target : std::nullopt;
+    } catch (...) {
+        // Instrumentation configuration must not alter normal compilation.
+        return std::nullopt;
+    }
 }
 
 void TSemanticSnapshotPairCaptureV1::Deliver(

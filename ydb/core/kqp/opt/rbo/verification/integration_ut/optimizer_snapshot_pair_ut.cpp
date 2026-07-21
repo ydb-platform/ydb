@@ -29,9 +29,19 @@ constexpr const char* TestCluster = "local_ut";
 
 class TRecordingSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
 public:
+    explicit TRecordingSemanticSnapshotSink(
+        std::optional<ui64> ruleApplicationPrefixTarget = std::nullopt)
+        : RuleApplicationPrefixTarget(ruleApplicationPrefixTarget)
+    {
+    }
+
     void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
         std::lock_guard guard(Mutex);
         Results.push_back(std::move(result));
+    }
+
+    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
+        return RuleApplicationPrefixTarget;
     }
 
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Extract() {
@@ -40,6 +50,7 @@ public:
     }
 
 private:
+    const std::optional<ui64> RuleApplicationPrefixTarget;
     std::mutex Mutex;
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
@@ -240,7 +251,8 @@ $round = ($x,$y) -> { return $x; };
 NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
-    ui64 timeoutMs = 10'000)
+    ui64 timeoutMs = 10'000,
+    bool diagnosticRulePrefix = false)
 {
     TTempDir tempDir;
     const auto initialPath = tempDir.Path() / "initial.json";
@@ -257,6 +269,9 @@ NJson::TJsonValue BuildVerificationProblem(
         << "--rows" << "2"
         << "--timeout-ms" << ToString(timeoutMs)
         << "--emit-smt" << formulaPath.GetPath();
+    if (diagnosticRulePrefix) {
+        command << "--diagnostic-rule-prefix";
+    }
 
     const auto solver = TryGetEnv("RBO_Z3");
     if (solver) {
@@ -278,6 +293,52 @@ NJson::TJsonValue BuildVerificationProblem(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
+    Y_UNIT_TEST(RealHostStopsAfterOneCommittedRuleAndExportsItsPrefix) {
+        TKikimrRunner kikimr;
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>(1);
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Key FROM `/Root/KeyValue` LIMIT 1;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT(!prepared.Success());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            results[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
+        UNIT_ASSERT(results[0].RuleApplications.empty());
+        UNIT_ASSERT_VALUES_EQUAL(results[1].RuleApplications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT(!results[1].RuleApplications[0].StageName.empty());
+        UNIT_ASSERT(!results[1].RuleApplications[0].RuleName.empty());
+
+        const auto initial = ParseSnapshot(results[0]);
+        const auto prefix = ParseSnapshot(results[1]);
+        UNIT_ASSERT(initial["stage_graph"].IsNull());
+        UNIT_ASSERT(prefix["stage_graph"].IsNull());
+        const auto verdict = BuildVerificationProblem(
+            results[0],
+            results[1],
+            10'000,
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            TryGetEnv("RBO_Z3") ? "VERIFIED_BOUNDED" : "FORMULA_EMITTED");
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["comparison_scope"].GetStringSafe(),
+            "RULE_APPLICATION_PREFIX");
+    }
+
     Y_UNIT_TEST(RealHostProducesInitialAndFinalSnapshots) {
         TKikimrRunner kikimr;
 

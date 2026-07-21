@@ -181,6 +181,9 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     computedProps = 0;
 
                     ++numMatches;
+                    if (ctx.RuleApplicationDebug.OnApplied(StageName, rule->RuleName)) {
+                        return;
+                    }
                     break;
                 }
             }
@@ -204,6 +207,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
         root.PlanProps.StageGraph.StageCounter = stageCounter;
         TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
         semanticSnapshots.CaptureInitial(root, rboCtx);
+        rboCtx.RuleApplicationDebug.Reset(semanticSnapshots.GetRuleApplicationPrefixTarget());
         SubmitInitialPlanTrace(root, rboCtx);
 
         if (needToLog) {
@@ -222,6 +226,10 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
                 YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
             }
             stage->RunStage(root, rboCtx);
+            if (rboCtx.RuleApplicationDebug.Stopped) {
+                semanticSnapshots.CaptureRuleApplicationPrefix(root, rboCtx, rboCtx.RuleApplicationDebug.Applications);
+                return {};
+            }
             if (needToLog) {
                 YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
             }

@@ -20,6 +20,8 @@ TKqlTransformContext::TKqlTransformContext(const TIntrusivePtr<TKikimrConfigurat
 {}
 
 void TKqlTransformContext::Reset() {
+    // RBOSemanticSnapshotSink is query instrumentation configuration and is
+    // intentionally preserved across per-run state resets.
     ReplyTarget = {};
     QueryStats = {};
     PhysicalQuery = nullptr;

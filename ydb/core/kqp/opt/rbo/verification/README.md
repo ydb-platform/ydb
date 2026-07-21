@@ -5,11 +5,13 @@ This directory contains the standalone bounded-equivalence checker described in
 a bounded input database on which their result bags differ.
 
 The current implementation contains the M1 logical kernel and the first M2 C++
-export seam. `CaptureSemanticSnapshotCatalogV1` records the initial query-level
+export path. `CaptureSemanticSnapshotCatalogV1` records the initial query-level
 catalog once, and `ExportSemanticSnapshotV1` deterministically lowers supported
-logical RBO operators without doing file I/O. StageGraph execution and the
-initial/final optimizer capture hooks remain subsequent work; snapshots that
-contain unsupported physical semantics fail closed.
+logical RBO operators without doing file I/O. An optional sink on
+`TKqlTransformContext` receives the initial snapshot before the first RBO stage
+and the final snapshot immediately before physical generation. StageGraph
+execution remains subsequent work, so the real final snapshot currently arrives
+as an explicit unsupported diagnostic rather than silently dropping its graph.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, and `Utf8`) even when several identities use

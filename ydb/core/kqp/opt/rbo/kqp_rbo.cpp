@@ -1,6 +1,7 @@
 #include "kqp_rbo.h"
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
+#include "verification/semantic_snapshot.h"
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -193,7 +194,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx, IRBOSemanticSnapshotSink* semanticSnapshotSink) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
     int stageCounter = 0;
@@ -201,6 +202,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     for (auto & rootPtr : roots) {
         auto & root = *rootPtr;
         root.PlanProps.StageGraph.StageCounter = stageCounter;
+        TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
+        semanticSnapshots.CaptureInitial(root, rboCtx);
         SubmitInitialPlanTrace(root, rboCtx);
 
         if (needToLog) {
@@ -232,6 +235,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
             live.UnionWith(GetLiveOut(item.Current));
         }
         root.PlanProps.InfoUnitRegistry.FinalizeDisplayNames(live);
+        semanticSnapshots.CaptureFinal(root, rboCtx);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }

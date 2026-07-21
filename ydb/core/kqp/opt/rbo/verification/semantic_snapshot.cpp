@@ -23,6 +23,7 @@
 #include <functional>
 #include <limits>
 #include <string_view>
+#include <utility>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -836,6 +837,100 @@ TSemanticSnapshotExportResult ExportSemanticSnapshotV1(TOpRoot& root, const TRBO
         return result;
     }
     return ExportSemanticSnapshotV1(root, ctx, catalog.Catalog);
+}
+
+TSemanticSnapshotPairCaptureV1::TSemanticSnapshotPairCaptureV1(
+    IRBOSemanticSnapshotSink* sink) noexcept
+    : Sink(sink)
+{
+}
+
+void TSemanticSnapshotPairCaptureV1::CaptureInitial(
+    TOpRoot& root,
+    const TRBOContext& ctx) noexcept
+{
+    if (!Sink) {
+        return;
+    }
+
+    InitialAttempted = true;
+    Catalog.reset();
+    CatalogFailure.clear();
+    TRBOSemanticSnapshotBoundaryResultV1 result{
+        ERBOSemanticSnapshotBoundaryV1::Initial,
+        {},
+        {},
+    };
+
+    try {
+        auto catalog = CaptureSemanticSnapshotCatalogV1(root, ctx);
+        if (!catalog.IsSupported()) {
+            CatalogFailure = std::move(catalog.UnsupportedReason);
+            result.UnsupportedReason = CatalogFailure;
+        } else {
+            Catalog.emplace(std::move(catalog.Catalog));
+            auto snapshot = ExportSemanticSnapshotV1(root, ctx, *Catalog);
+            result.Json = std::move(snapshot.Json);
+            result.UnsupportedReason = std::move(snapshot.UnsupportedReason);
+        }
+    } catch (const std::exception& error) {
+        result.UnsupportedReason = TStringBuilder()
+            << "Initial semantic snapshot capture failed closed: " << error.what();
+        CatalogFailure = result.UnsupportedReason;
+        Catalog.reset();
+    } catch (...) {
+        result.UnsupportedReason = "Initial semantic snapshot capture failed closed with an unknown exception";
+        CatalogFailure = result.UnsupportedReason;
+        Catalog.reset();
+    }
+
+    Deliver(std::move(result));
+}
+
+void TSemanticSnapshotPairCaptureV1::CaptureFinal(
+    TOpRoot& root,
+    const TRBOContext& ctx) noexcept
+{
+    if (!Sink) {
+        return;
+    }
+
+    TRBOSemanticSnapshotBoundaryResultV1 result{
+        ERBOSemanticSnapshotBoundaryV1::Final,
+        {},
+        {},
+    };
+
+    try {
+        if (!InitialAttempted) {
+            result.UnsupportedReason = "Initial semantic snapshot capture was not attempted";
+        } else if (!Catalog) {
+            result.UnsupportedReason = CatalogFailure.empty()
+                ? TString("Initial semantic snapshot catalog is unavailable")
+                : CatalogFailure;
+        } else {
+            auto snapshot = ExportSemanticSnapshotV1(root, ctx, *Catalog);
+            result.Json = std::move(snapshot.Json);
+            result.UnsupportedReason = std::move(snapshot.UnsupportedReason);
+        }
+    } catch (const std::exception& error) {
+        result.UnsupportedReason = TStringBuilder()
+            << "Final semantic snapshot capture failed closed: " << error.what();
+    } catch (...) {
+        result.UnsupportedReason = "Final semantic snapshot capture failed closed with an unknown exception";
+    }
+
+    Deliver(std::move(result));
+}
+
+void TSemanticSnapshotPairCaptureV1::Deliver(
+    TRBOSemanticSnapshotBoundaryResultV1 result) noexcept
+{
+    try {
+        Sink->OnSemanticSnapshot(std::move(result));
+    } catch (...) {
+        // Snapshot instrumentation must never alter query compilation.
+    }
 }
 
 } // namespace NKikimr::NKqp

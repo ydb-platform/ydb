@@ -9,6 +9,8 @@ namespace NKqp {
 
 using namespace NOpt;
 
+class IRBOSemanticSnapshotSink;
+
 enum ERuleProperties: ui32 {
     RequireParents         = 0x01,
     RequireOutputIUs       = 0x02,
@@ -132,7 +134,7 @@ public:
 
     // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
     // and returns a root of the physical program.
-    TExprNode::TPtr Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx);
+    TExprNode::TPtr Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx, IRBOSemanticSnapshotSink* semanticSnapshotSink = nullptr);
 
     // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::unique_ptr<IRBOStage>&& stage) {

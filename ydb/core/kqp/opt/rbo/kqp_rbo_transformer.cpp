@@ -507,7 +507,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     // Optimize all roots once, then replace every result container.
     TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
     TRBOTraceOutput traceOutput(rboCtx);
-    auto optimizedPlan = RBO.Optimize(Roots, rboCtx);
+    const auto semanticSnapshotSink = TransformCtx->RBOSemanticSnapshotSink;
+    auto optimizedPlan = RBO.Optimize(Roots, rboCtx, semanticSnapshotSink.get());
     traceOutput.Flush();
     AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
 

@@ -517,18 +517,20 @@ private:
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
         bool inputUnpaused = false;
 
-        if (batch.empty() && !(allReadsFinished && allRowsProcessed && !hasPendingResults)) {
-            // Checkpointing special case: nothing to return yet, but in-flight requests exists
-            // Return 1 to indicate that
-            replyResultStats.ResultBytesCount++;
-        }
-
-        if (LastFetchStatus == NUdf::EFetchStatus::Yield && allReadsFinished && allRowsProcessed && !hasPendingResults) {
-            if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
-                // No unprocessed data: pop and send watermark
-                maybeWatermark = WatermarksTracker->GetPendingWatermark();
-                WatermarksTracker->PopPendingWatermark();
-                inputUnpaused = true; // we unpaused input, so we should try fetching more data
+        if (allReadsFinished && allRowsProcessed && !hasPendingResults) {
+            if (LastFetchStatus == NUdf::EFetchStatus::Yield) {
+                if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                    // No unprocessed data: pop and send watermark
+                    maybeWatermark = WatermarksTracker->GetPendingWatermark();
+                    WatermarksTracker->PopPendingWatermark();
+                    inputUnpaused = true; // we unpaused input, so we should try fetching more data
+                }
+            }
+        } else {
+            if (batch.empty()) {
+                // Checkpointing special case: nothing to return yet, but in-flight requests exists
+                // Return 1 to indicate this condition (it will propagate by TComputeActorAsyncInputHelper::PollAsyncInput -> TComputeActorAsyncInputHelperSync::AsyncDataPush -> TDqAsyncInputBuffer::Push -> TDqAsyncInputBuffer::IsPending -> TDqSyncComputeActorBase::ReadyToCheckpoint)
+                replyResultStats.ResultBytesCount++;
             }
         }
 

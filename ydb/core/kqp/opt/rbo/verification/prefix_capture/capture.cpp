@@ -9,30 +9,31 @@
 namespace NKikimr::NKqp::NRBOPrefixCapture {
 namespace {
 
-constexpr TStringBuf Protocol = "ydb-rbo-rule-prefix-capture-v1";
+constexpr TStringBuf Protocol = "ydb-rbo-transformation-prefix-capture-v2";
 constexpr TStringBuf InitialSnapshotName = "initial.json";
 constexpr TStringBuf PrefixSnapshotName = "prefix.json";
 constexpr TStringBuf FinalSnapshotName = "final.json";
 
-void ValidateApplications(
-    const TVector<TRBORuleApplicationV1>& applications,
+void ValidateEvents(
+    const TVector<TRBOTransformationEventV1>& events,
     ui64 expectedCount)
 {
-    if (applications.size() != expectedCount) {
+    if (events.size() != expectedCount) {
         ythrow yexception()
-            << "capture has " << applications.size()
-            << " committed applications; expected " << expectedCount;
+            << "capture has " << events.size()
+            << " transformation events; expected " << expectedCount;
     }
-    for (ui64 index = 0; index < applications.size(); ++index) {
-        const auto& application = applications[index];
-        if (application.Ordinal != index + 1 ||
-            application.StageName.empty() ||
-            application.RuleName.empty())
+    for (ui64 index = 0; index < events.size(); ++index) {
+        const auto& event = events[index];
+        if (event.Ordinal != index + 1 ||
+            event.Stage.empty() ||
+            event.Name.empty())
         {
             ythrow yexception()
-                << "committed application " << index + 1
-                << " is not contiguous or has an empty stage/rule";
+                << "transformation event " << index + 1
+                << " is not contiguous or has an empty stage/name";
         }
+        EventKindName(event.Kind);
     }
 }
 
@@ -49,7 +50,7 @@ void ValidateSnapshotResult(
 
 void ValidateOutput(const TCaptureOutput& capture) {
     if (capture.RequestedOrdinal == 0) {
-        ythrow yexception() << "requested rule-application ordinal must be positive";
+        ythrow yexception() << "requested transformation ordinal must be positive";
     }
     if (capture.InitialSnapshot.empty()) {
         ythrow yexception() << "initial snapshot is empty";
@@ -61,13 +62,13 @@ void ValidateOutput(const TCaptureOutput& capture) {
     const bool prefix =
         capture.Status == ECaptureStatus::PrefixCaptured ||
         capture.Status == ECaptureStatus::PrefixUnsupported;
-    const ui64 expectedApplications = prefix
+    const ui64 expectedEvents = prefix
         ? capture.RequestedOrdinal
-        : capture.Applications.size();
-    ValidateApplications(capture.Applications, expectedApplications);
-    if (!prefix && capture.Applications.size() >= capture.RequestedOrdinal) {
+        : capture.Events.size();
+    ValidateEvents(capture.Events, expectedEvents);
+    if (!prefix && capture.Events.size() >= capture.RequestedOrdinal) {
         ythrow yexception()
-            << "completed optimizer reached the requested application ordinal";
+            << "completed optimizer reached the requested transformation ordinal";
     }
 
     const bool supported =
@@ -94,7 +95,7 @@ TCaptureOutput ClassifyCapture(
     TStringBuf preparationIssues)
 {
     if (requestedOrdinal == 0) {
-        ythrow yexception() << "requested rule-application ordinal must be positive";
+        ythrow yexception() << "requested transformation ordinal must be positive";
     }
     if (boundaries.size() != 2) {
         ythrow yexception()
@@ -105,10 +106,10 @@ TCaptureOutput ClassifyCapture(
     auto& initial = boundaries[0];
     auto& candidate = boundaries[1];
     if (initial.Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
-        !initial.RuleApplications.empty())
+        !initial.TransformationEvents.empty())
     {
         ythrow yexception()
-            << "first boundary must be Initial with no rule applications";
+            << "first boundary must be Initial with no transformation events";
     }
     if (!initial.IsSupported()) {
         ythrow yexception()
@@ -118,28 +119,28 @@ TCaptureOutput ClassifyCapture(
     ValidateSnapshotResult(initial, "initial");
 
     const bool prefix = candidate.Boundary ==
-        ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix;
+        ERBOSemanticSnapshotBoundaryV1::TransformationPrefix;
     const bool final = candidate.Boundary ==
         ERBOSemanticSnapshotBoundaryV1::Final;
     if (!prefix && !final) {
         ythrow yexception()
-            << "second boundary must be RuleApplicationPrefix or Final";
+            << "second boundary must be TransformationPrefix or Final";
     }
     if (prefix && preparationSucceeded) {
         ythrow yexception()
-            << "preparation succeeded after an observed rule-prefix stop";
+            << "preparation succeeded after an observed transformation-prefix stop";
     }
     if (final && !preparationSucceeded) {
         ythrow yexception()
-            << "optimizer preparation failed without an observed rule-prefix stop: "
+            << "optimizer preparation failed without an observed transformation-prefix stop: "
             << preparationIssues;
     }
 
-    const ui64 expectedApplications = prefix
+    const ui64 expectedEvents = prefix
         ? requestedOrdinal
-        : candidate.RuleApplications.size();
-    ValidateApplications(candidate.RuleApplications, expectedApplications);
-    if (final && candidate.RuleApplications.size() >= requestedOrdinal) {
+        : candidate.TransformationEvents.size();
+    ValidateEvents(candidate.TransformationEvents, expectedEvents);
+    if (final && candidate.TransformationEvents.size() >= requestedOrdinal) {
         ythrow yexception()
             << "Final boundary reached or exceeded the requested ordinal";
     }
@@ -148,7 +149,7 @@ TCaptureOutput ClassifyCapture(
     TCaptureOutput output;
     output.RequestedOrdinal = requestedOrdinal;
     output.InitialSnapshot = std::move(initial.Json);
-    output.Applications = std::move(candidate.RuleApplications);
+    output.Events = std::move(candidate.TransformationEvents);
     if (candidate.IsSupported()) {
         output.Status = prefix
             ? ECaptureStatus::PrefixCaptured
@@ -178,6 +179,16 @@ TStringBuf StatusName(ECaptureStatus status) noexcept {
     return "UNKNOWN";
 }
 
+TStringBuf EventKindName(ERBOTransformationEventKindV1 kind) {
+    switch (kind) {
+        case ERBOTransformationEventKindV1::RuleApplication:
+            return "RULE_APPLICATION";
+        case ERBOTransformationEventKindV1::AtomicStageCommit:
+            return "ATOMIC_STAGE_COMMIT";
+    }
+    ythrow yexception() << "capture has an unknown transformation event kind";
+}
+
 TString RenderManifest(const TCaptureOutput& capture) {
     ValidateOutput(capture);
 
@@ -187,15 +198,16 @@ TString RenderManifest(const TCaptureOutput& capture) {
     root["status"] = TString(StatusName(capture.Status));
     root["initial_snapshot"] = TString(InitialSnapshotName);
 
-    NJson::TJsonValue applications(NJson::JSON_ARRAY);
-    for (const auto& application : capture.Applications) {
+    NJson::TJsonValue events(NJson::JSON_ARRAY);
+    for (const auto& event : capture.Events) {
         NJson::TJsonValue item(NJson::JSON_MAP);
-        item["ordinal"] = application.Ordinal;
-        item["stage"] = application.StageName;
-        item["rule"] = application.RuleName;
-        applications.AppendValue(std::move(item));
+        item["ordinal"] = event.Ordinal;
+        item["kind"] = TString(EventKindName(event.Kind));
+        item["stage"] = event.Stage;
+        item["name"] = event.Name;
+        events.AppendValue(std::move(item));
     }
-    root["applications"] = std::move(applications);
+    root["events"] = std::move(events);
 
     switch (capture.Status) {
         case ECaptureStatus::PrefixCaptured:

@@ -68,7 +68,9 @@ bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext
 }
 
 TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
-    : IRBOStage(std::move(stageName))
+    : IRBOStage(
+        std::move(stageName),
+        ERBOStageTransformationMode::RuleApplications)
     , Rules(std::move(rules)) {
     for (const auto& r : Rules) {
         Props |= r->Props;
@@ -181,7 +183,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     computedProps = 0;
 
                     ++numMatches;
-                    if (ctx.RuleApplicationDebug.OnApplied(StageName, rule->RuleName)) {
+                    if (ctx.TransformationDebug.OnRuleApplication(StageName, rule->RuleName)) {
                         return;
                     }
                     break;
@@ -207,7 +209,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
         root.PlanProps.StageGraph.StageCounter = stageCounter;
         TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
         semanticSnapshots.CaptureInitial(root, rboCtx);
-        rboCtx.RuleApplicationDebug.Reset(semanticSnapshots.GetRuleApplicationPrefixTarget());
+        rboCtx.TransformationDebug.Reset(semanticSnapshots.GetTransformationPrefixTarget());
         SubmitInitialPlanTrace(root, rboCtx);
 
         if (needToLog) {
@@ -226,8 +228,11 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
                 YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
             }
             stage->RunStage(root, rboCtx);
-            if (rboCtx.RuleApplicationDebug.Stopped) {
-                semanticSnapshots.CaptureRuleApplicationPrefix(root, rboCtx, rboCtx.RuleApplicationDebug.Applications);
+            if (stage->TransformationMode == ERBOStageTransformationMode::AtomicStageCommit) {
+                rboCtx.TransformationDebug.OnAtomicStageCommit(stage->StageName, stage->TransformationName);
+            }
+            if (rboCtx.TransformationDebug.Stopped) {
+                semanticSnapshots.CaptureTransformationPrefix(root, rboCtx, rboCtx.TransformationDebug.Events);
                 return {};
             }
             if (needToLog) {

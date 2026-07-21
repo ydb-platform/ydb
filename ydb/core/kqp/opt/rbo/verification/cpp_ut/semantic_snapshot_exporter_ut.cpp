@@ -205,9 +205,9 @@ public:
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
 
-class TRulePrefixRecordingSink final : public IRBOSemanticSnapshotSink {
+class TTransformationPrefixRecordingSink final : public IRBOSemanticSnapshotSink {
 public:
-    explicit TRulePrefixRecordingSink(ui64 target)
+    explicit TTransformationPrefixRecordingSink(ui64 target)
         : Target(target)
     {
     }
@@ -216,7 +216,7 @@ public:
         Results.push_back(std::move(result));
     }
 
-    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
         return Target;
     }
 
@@ -224,12 +224,12 @@ public:
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
 
-class TThrowingRulePrefixConfigurationSink final : public IRBOSemanticSnapshotSink {
+class TThrowingTransformationPrefixConfigurationSink final : public IRBOSemanticSnapshotSink {
 public:
     void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1) override {
     }
 
-    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
         throw std::runtime_error("test prefix configuration failure");
     }
 };
@@ -299,7 +299,54 @@ private:
 class TCountingStage final : public IRBOStage {
 public:
     explicit TCountingStage(ui32& runs)
-        : IRBOStage(TString("Must not run"))
+        : IRBOStage(
+            TString("Must not run"),
+            ERBOStageTransformationMode::NoSemanticMutation)
+        , Runs(runs)
+    {
+    }
+
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override {
+        Y_UNUSED(root);
+        Y_UNUSED(ctx);
+        ++Runs;
+    }
+
+private:
+    ui32& Runs;
+};
+
+class TAtomicWrapStage final : public IRBOStage {
+public:
+    explicit TAtomicWrapStage(ui32& runs)
+        : IRBOStage(
+            TString("Atomic stage"),
+            ERBOStageTransformationMode::AtomicStageCommit,
+            TString("Wrap root"))
+        , Runs(runs)
+    {
+    }
+
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override {
+        Y_UNUSED(ctx);
+        ++Runs;
+        root.SetInput(MakeIntrusive<TOpMap>(
+            root.GetInput(),
+            root.Pos,
+            TVector<TMapElement>{}));
+    }
+
+private:
+    ui32& Runs;
+};
+
+class TNoOpAtomicStage final : public IRBOStage {
+public:
+    explicit TNoOpAtomicStage(ui32& runs)
+        : IRBOStage(
+            TString("No-op atomic stage"),
+            ERBOStageTransformationMode::AtomicStageCommit,
+            TString("Commit no-op checkpoint"))
         , Runs(runs)
     {
     }
@@ -2938,7 +2985,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "table identity");
     }
 
-    Y_UNIT_TEST(RuleApplicationPrefixUsesTheInitialCatalogAndHasDistinctMetadata) {
+    Y_UNIT_TEST(TransformationPrefixUsesTheInitialCatalogAndHasDistinctMetadata) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
         auto read = MakeRead(ctx, table, "a", {"k"});
@@ -2947,33 +2994,33 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TRecordingSemanticSnapshotSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(root, ctx.RboCtx);
-        const TVector<TRBORuleApplicationV1> applications{
-            {1, "Logical rewrites", "First rule"},
-            {2, "Logical rewrites", "Push filter"},
+        const TVector<TRBOTransformationEventV1> events{
+            {1, ERBOTransformationEventKindV1::RuleApplication, "Logical rewrites", "First rule"},
+            {2, ERBOTransformationEventKindV1::RuleApplication, "Logical rewrites", "Push filter"},
         };
-        capture.CaptureRuleApplicationPrefix(root, ctx.RboCtx, applications);
+        capture.CaptureTransformationPrefix(root, ctx.RboCtx, events);
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
         UNIT_ASSERT(
             sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
-        UNIT_ASSERT(sink.Results[0].RuleApplications.empty());
+        UNIT_ASSERT(sink.Results[0].TransformationEvents.empty());
         UNIT_ASSERT(
             sink.Results[1].Boundary ==
-            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+            ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Ordinal, 1);
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[0].StageName,
+            sink.Results[1].TransformationEvents[0].Stage,
             "Logical rewrites");
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[0].RuleName,
+            sink.Results[1].TransformationEvents[0].Name,
             "First rule");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[1].Ordinal, 2);
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[1].StageName,
+            sink.Results[1].TransformationEvents[1].Stage,
             "Logical rewrites");
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[1].RuleName,
+            sink.Results[1].TransformationEvents[1].Name,
             "Push filter");
 
         const auto initialSnapshot = ParseSupported(sink.Results[0]);
@@ -2989,19 +3036,21 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             prefixTables[0]["name"].GetStringSafe());
     }
 
-    Y_UNIT_TEST(RuleApplicationPrefixConfigurationExceptionsAreContained) {
-        TThrowingRulePrefixConfigurationSink sink;
+    Y_UNIT_TEST(TransformationPrefixConfigurationExceptionsAreContained) {
+        TThrowingTransformationPrefixConfigurationSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
-        UNIT_ASSERT(!capture.GetRuleApplicationPrefixTarget());
+        UNIT_ASSERT(!capture.GetTransformationPrefixTarget());
 
-        TRulePrefixRecordingSink zeroSink(0);
+        TTransformationPrefixRecordingSink zeroSink(0);
         TSemanticSnapshotPairCaptureV1 zeroCapture(&zeroSink);
-        UNIT_ASSERT(!zeroCapture.GetRuleApplicationPrefixTarget());
+        UNIT_ASSERT(!zeroCapture.GetTransformationPrefixTarget());
         TExportTestContext ctx;
-        ctx.RboCtx.RuleApplicationDebug.Reset(
-            zeroCapture.GetRuleApplicationPrefixTarget());
-        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Stage", "Rule"));
-        UNIT_ASSERT(ctx.RboCtx.RuleApplicationDebug.Applications.empty());
+        ctx.RboCtx.TransformationDebug.Reset(
+            zeroCapture.GetTransformationPrefixTarget());
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.OnRuleApplication("Stage", "Rule"));
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.OnAtomicStageCommit("Stage", "Commit"));
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.Stopped);
+        UNIT_ASSERT(ctx.RboCtx.TransformationDebug.Events.empty());
     }
 
     Y_UNIT_TEST(FinalBoundaryCarriesTheCompleteSequenceWhenTargetDoesNotExist) {
@@ -3010,13 +3059,13 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto read = MakeRead(ctx, table, "a", {"k"});
         TOpRoot root(read, TPositionHandle(), {"a.k"});
 
-        TRulePrefixRecordingSink sink(3);
+        TTransformationPrefixRecordingSink sink(3);
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(root, ctx.RboCtx);
-        ctx.RboCtx.RuleApplicationDebug.Reset(
-            capture.GetRuleApplicationPrefixTarget());
-        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("First", "R1"));
-        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Second", "R2"));
+        ctx.RboCtx.TransformationDebug.Reset(
+            capture.GetTransformationPrefixTarget());
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.OnRuleApplication("First", "R1"));
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.OnRuleApplication("Second", "R2"));
         const ui32 finalStage = root.PlanProps.StageGraph.AddSourceStage(
             NYql::EStorageType::RowStorage);
         read->Props.StageId = finalStage;
@@ -3025,17 +3074,17 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
         UNIT_ASSERT(
             sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].StageName, "First");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].RuleName, "R1");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].StageName, "Second");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].RuleName, "R2");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Stage, "First");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Name, "R1");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[1].Stage, "Second");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[1].Name, "R2");
         ParseSupported(sink.Results[1]);
     }
 
-    Y_UNIT_TEST(RuleApplicationStopIsOptimizerWideAndPrecedesEverySuffix) {
+    Y_UNIT_TEST(TransformationStopIsOptimizerWideAndPrecedesEverySuffix) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
         auto read = MakeRead(ctx, table, "a", {"k"});
@@ -3061,22 +3110,22 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             std::move(wrappingRules)));
         optimizer.AddStage(std::make_unique<TCountingStage>(laterStageRuns));
 
-        TRulePrefixRecordingSink sink(3);
+        TTransformationPrefixRecordingSink sink(3);
         const auto output = optimizer.Optimize(root, ctx.RboCtx, &sink);
 
         UNIT_ASSERT(!output);
         UNIT_ASSERT_VALUES_EQUAL(repeatedAttempts, 3);
         UNIT_ASSERT_VALUES_EQUAL(wrapApplications, 1);
         UNIT_ASSERT_VALUES_EQUAL(laterStageRuns, 0);
-        UNIT_ASSERT(ctx.RboCtx.RuleApplicationDebug.Stopped);
+        UNIT_ASSERT(ctx.RboCtx.TransformationDebug.Stopped);
         UNIT_ASSERT_VALUES_EQUAL(
-            ctx.RboCtx.RuleApplicationDebug.Applications.size(),
+            ctx.RboCtx.TransformationDebug.Events.size(),
             3);
         UNIT_ASSERT_VALUES_EQUAL(
-            ctx.RboCtx.RuleApplicationDebug.Applications.back().StageName,
+            ctx.RboCtx.TransformationDebug.Events.back().Stage,
             "Wrapping stage");
         UNIT_ASSERT_VALUES_EQUAL(
-            ctx.RboCtx.RuleApplicationDebug.Applications.back().RuleName,
+            ctx.RboCtx.TransformationDebug.Events.back().Name,
             "Wrap read");
         UNIT_ASSERT(!ctx.RboCtx.ExecutionJson);
         UNIT_ASSERT(!ctx.RboCtx.ExplainJson);
@@ -3087,29 +3136,132 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
         UNIT_ASSERT(
             sink.Results[1].Boundary ==
-            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+            ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Ordinal, 1);
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[0].RuleName,
+            sink.Results[1].TransformationEvents[0].Name,
             "Apply twice");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[1].Ordinal, 2);
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[1].RuleName,
+            sink.Results[1].TransformationEvents[1].Name,
             "Apply twice");
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[2].Ordinal, 3);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[2].Ordinal, 3);
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[2].StageName,
+            sink.Results[1].TransformationEvents[2].Stage,
             "Wrapping stage");
         UNIT_ASSERT_VALUES_EQUAL(
-            sink.Results[1].RuleApplications[2].RuleName,
+            sink.Results[1].TransformationEvents[2].Name,
             "Wrap read");
         const auto prefixSnapshot = ParseSupported(sink.Results[1]);
         UNIT_ASSERT(prefixSnapshot["stage_graph"].IsNull());
         FindNode(prefixSnapshot, "project");
     }
 
-    Y_UNIT_TEST(RuleApplicationPrefixDeliveryFailureDoesNotEscapeOrLoseCatalog) {
+    Y_UNIT_TEST(TransformationTargetsBeforeAtAndAfterAnAtomicStageAreExact) {
+        for (ui64 target = 1; target <= 3; ++target) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+            ui32 firstAttempts = 0;
+            ui32 atomicRuns = 0;
+            ui32 laterApplications = 0;
+            ui32 suffixRuns = 0;
+            TVector<std::unique_ptr<IRule>> firstRules;
+            firstRules.push_back(std::make_unique<TFixedApplicationRule>(
+                "First rule",
+                1,
+                firstAttempts));
+            TVector<std::unique_ptr<IRule>> laterRules;
+            laterRules.push_back(std::make_unique<TWrapReadRule>(laterApplications));
+
+            TRuleBasedOptimizer optimizer;
+            optimizer.AddStage(std::make_unique<TRuleBasedStage>(
+                TString("First stage"),
+                std::move(firstRules)));
+            optimizer.AddStage(std::make_unique<TAtomicWrapStage>(atomicRuns));
+            optimizer.AddStage(std::make_unique<TRuleBasedStage>(
+                TString("Later stage"),
+                std::move(laterRules)));
+            optimizer.AddStage(std::make_unique<TCountingStage>(suffixRuns));
+
+            TTransformationPrefixRecordingSink sink(target);
+            const auto output = optimizer.Optimize(root, ctx.RboCtx, &sink);
+
+            UNIT_ASSERT(!output);
+            UNIT_ASSERT_VALUES_EQUAL(atomicRuns, target >= 2 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(laterApplications, target >= 3 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(suffixRuns, 0);
+            UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+            UNIT_ASSERT(
+                sink.Results[1].Boundary ==
+                ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+            const auto& events = sink.Results[1].TransformationEvents;
+            UNIT_ASSERT_VALUES_EQUAL(events.size(), target);
+            UNIT_ASSERT_VALUES_EQUAL(events[0].Ordinal, 1);
+            UNIT_ASSERT(
+                events[0].Kind == ERBOTransformationEventKindV1::RuleApplication);
+            UNIT_ASSERT_VALUES_EQUAL(events[0].Stage, "First stage");
+            UNIT_ASSERT_VALUES_EQUAL(events[0].Name, "First rule");
+            if (target >= 2) {
+                UNIT_ASSERT_VALUES_EQUAL(events[1].Ordinal, 2);
+                UNIT_ASSERT(
+                    events[1].Kind ==
+                    ERBOTransformationEventKindV1::AtomicStageCommit);
+                UNIT_ASSERT_VALUES_EQUAL(events[1].Stage, "Atomic stage");
+                UNIT_ASSERT_VALUES_EQUAL(events[1].Name, "Wrap root");
+            }
+            if (target == 3) {
+                UNIT_ASSERT_VALUES_EQUAL(events[2].Ordinal, 3);
+                UNIT_ASSERT(
+                    events[2].Kind ==
+                    ERBOTransformationEventKindV1::RuleApplication);
+                UNIT_ASSERT_VALUES_EQUAL(events[2].Stage, "Later stage");
+                UNIT_ASSERT_VALUES_EQUAL(events[2].Name, "Wrap read");
+            }
+
+            const auto prefixSnapshot = ParseSupported(sink.Results[1]);
+            UNIT_ASSERT(prefixSnapshot["stage_graph"].IsNull());
+            if (target == 1) {
+                FindNode(prefixSnapshot, "scan");
+            } else {
+                FindNode(prefixSnapshot, "project");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NoOpAtomicStageStillEmitsACommittedCheckpoint) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        ui32 atomicRuns = 0;
+        ui32 suffixRuns = 0;
+        TRuleBasedOptimizer optimizer;
+        optimizer.AddStage(std::make_unique<TNoOpAtomicStage>(atomicRuns));
+        optimizer.AddStage(std::make_unique<TCountingStage>(suffixRuns));
+
+        TTransformationPrefixRecordingSink sink(1);
+        const auto output = optimizer.Optimize(root, ctx.RboCtx, &sink);
+
+        UNIT_ASSERT(!output);
+        UNIT_ASSERT_VALUES_EQUAL(atomicRuns, 1);
+        UNIT_ASSERT_VALUES_EQUAL(suffixRuns, 0);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        const auto& events = sink.Results[1].TransformationEvents;
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT(
+            events[0].Kind == ERBOTransformationEventKindV1::AtomicStageCommit);
+        UNIT_ASSERT_VALUES_EQUAL(events[0].Stage, "No-op atomic stage");
+        UNIT_ASSERT_VALUES_EQUAL(events[0].Name, "Commit no-op checkpoint");
+        const auto prefixSnapshot = ParseSupported(sink.Results[1]);
+        FindNode(prefixSnapshot, "scan");
+    }
+
+    Y_UNIT_TEST(TransformationPrefixDeliveryFailureDoesNotEscapeOrLoseCatalog) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
         auto read = MakeRead(ctx, table, "a", {"k"});
@@ -3118,20 +3270,24 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TThrowOnceSemanticSnapshotSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(root, ctx.RboCtx);
-        capture.CaptureRuleApplicationPrefix(
+        capture.CaptureTransformationPrefix(
             root,
             ctx.RboCtx,
-            TVector<TRBORuleApplicationV1>{{1, "Stage", "Rule"}});
+            TVector<TRBOTransformationEventV1>{{
+                1,
+                ERBOTransformationEventKindV1::RuleApplication,
+                "Stage",
+                "Rule"}});
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
         UNIT_ASSERT(
             sink.Results[0].Boundary ==
-            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[0].RuleApplications.size(), 1);
+            ERBOSemanticSnapshotBoundaryV1::TransformationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[0].TransformationEvents.size(), 1);
         ParseSupported(sink.Results[0]);
     }
 
-    Y_UNIT_TEST(UnsupportedRuleApplicationPrefixRetainsItsCompleteSequence) {
+    Y_UNIT_TEST(UnsupportedTransformationPrefixRetainsItsCompleteSequence) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
         auto read = MakeRead(ctx, table, "a", {"k"});
@@ -3147,16 +3303,20 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             MakeConstant("Int64", "1", pos, &ctx.ExprCtx),
             EOpPhase::Undefined);
         TOpRoot prefixRoot(limit, pos, {"a.k"});
-        capture.CaptureRuleApplicationPrefix(
+        capture.CaptureTransformationPrefix(
             prefixRoot,
             ctx.RboCtx,
-            TVector<TRBORuleApplicationV1>{{1, "Stage", "Rule"}});
+            TVector<TRBOTransformationEventV1>{{
+                1,
+                ERBOTransformationEventKindV1::RuleApplication,
+                "Stage",
+                "Rule"}});
 
         UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
         UNIT_ASSERT(!sink.Results[1].IsSupported());
         UNIT_ASSERT(sink.Results[1].Json.empty());
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Ordinal, 1);
         UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit count");
     }
 
@@ -3336,8 +3496,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TRecordingSemanticSnapshotSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(initialRoot, ctx.RboCtx);
-        ctx.RboCtx.RuleApplicationDebug.Reset(2);
-        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Stage", "Rule"));
+        ctx.RboCtx.TransformationDebug.Reset(2);
+        UNIT_ASSERT(!ctx.RboCtx.TransformationDebug.OnRuleApplication("Stage", "Rule"));
 
         auto limit = MakeIntrusive<TOpLimit>(
             read,
@@ -3357,8 +3517,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
         UNIT_ASSERT(!sink.Results[1].IsSupported());
         UNIT_ASSERT(sink.Results[1].Json.empty());
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].TransformationEvents[0].Ordinal, 1);
         UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit count");
     }
 

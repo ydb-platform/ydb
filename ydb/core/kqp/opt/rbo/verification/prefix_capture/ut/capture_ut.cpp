@@ -11,33 +11,33 @@ namespace {
 TRBOSemanticSnapshotBoundaryResultV1 Supported(
     ERBOSemanticSnapshotBoundaryV1 boundary,
     TString json,
-    TVector<TRBORuleApplicationV1> applications = {})
+    TVector<TRBOTransformationEventV1> events = {})
 {
     return {
         boundary,
         std::move(json),
         {},
-        std::move(applications),
+        std::move(events),
     };
 }
 
 TRBOSemanticSnapshotBoundaryResultV1 Unsupported(
     ERBOSemanticSnapshotBoundaryV1 boundary,
     TString reason,
-    TVector<TRBORuleApplicationV1> applications)
+    TVector<TRBOTransformationEventV1> events)
 {
     return {
         boundary,
         {},
         std::move(reason),
-        std::move(applications),
+        std::move(events),
     };
 }
 
-TVector<TRBORuleApplicationV1> TwoApplications() {
+TVector<TRBOTransformationEventV1> TwoEvents() {
     return {
-        {1, "First stage", "First rule"},
-        {2, "Second stage", "Second rule"},
+        {1, ERBOTransformationEventKindV1::RuleApplication, "First stage", "First rule"},
+        {2, ERBOTransformationEventKindV1::AtomicStageCommit, "Second stage", "Second commit"},
     };
 }
 
@@ -55,9 +55,9 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
         auto output = ClassifyCapture(2, false, {
             Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial"),
             Supported(
-                ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+                ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
                 "prefix",
-                TwoApplications()),
+                TwoEvents()),
         });
 
         UNIT_ASSERT(output.Status == ECaptureStatus::PrefixCaptured);
@@ -67,27 +67,30 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
         const auto manifest = Manifest(output);
         UNIT_ASSERT_VALUES_EQUAL(
             manifest["protocol"].GetStringSafe(),
-            "ydb-rbo-rule-prefix-capture-v1");
+            "ydb-rbo-transformation-prefix-capture-v2");
         UNIT_ASSERT_VALUES_EQUAL(manifest["requested_ordinal"].GetUIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(manifest["status"].GetStringSafe(), "PREFIX_CAPTURED");
         UNIT_ASSERT_VALUES_EQUAL(manifest["initial_snapshot"].GetStringSafe(), "initial.json");
         UNIT_ASSERT_VALUES_EQUAL(manifest["prefix_snapshot"].GetStringSafe(), "prefix.json");
         UNIT_ASSERT(!manifest.Has("final_snapshot"));
         UNIT_ASSERT(!manifest.Has("unsupported_reason"));
-        const auto& applications = manifest["applications"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(applications.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(applications[0]["ordinal"].GetUIntegerSafe(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(applications[0]["stage"].GetStringSafe(), "First stage");
-        UNIT_ASSERT_VALUES_EQUAL(applications[0]["rule"].GetStringSafe(), "First rule");
+        const auto& events = manifest["events"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]["ordinal"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]["kind"].GetStringSafe(), "RULE_APPLICATION");
+        UNIT_ASSERT_VALUES_EQUAL(events[0]["stage"].GetStringSafe(), "First stage");
+        UNIT_ASSERT_VALUES_EQUAL(events[0]["name"].GetStringSafe(), "First rule");
+        UNIT_ASSERT_VALUES_EQUAL(events[1]["kind"].GetStringSafe(), "ATOMIC_STAGE_COMMIT");
+        UNIT_ASSERT_VALUES_EQUAL(events[1]["name"].GetStringSafe(), "Second commit");
     }
 
     Y_UNIT_TEST(ClassifiesAndRendersUnsupportedPrefix) {
         auto output = ClassifyCapture(2, false, {
             Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial"),
             Unsupported(
-                ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+                ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
                 "temporary CBO tree",
-                TwoApplications()),
+                TwoEvents()),
         });
 
         UNIT_ASSERT(output.Status == ECaptureStatus::PrefixUnsupported);
@@ -108,7 +111,7 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
             Supported(
                 ERBOSemanticSnapshotBoundaryV1::Final,
                 "final",
-                TwoApplications()),
+                TwoEvents()),
         });
 
         UNIT_ASSERT(output.Status == ECaptureStatus::OptimizerComplete);
@@ -125,7 +128,7 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
             Unsupported(
                 ERBOSemanticSnapshotBoundaryV1::Final,
                 "unsupported physical edge",
-                TwoApplications()),
+                TwoEvents()),
         });
 
         UNIT_ASSERT(output.Status == ECaptureStatus::FinalUnsupported);
@@ -151,9 +154,9 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
                     "initial gap",
                     {}),
                 Supported(
-                    ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+                    ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
                     "prefix",
-                    {{1, "Stage", "Rule"}}),
+                    {{1, ERBOTransformationEventKindV1::RuleApplication, "Stage", "Rule"}}),
             }),
             yexception,
             "initial semantic snapshot is unsupported");
@@ -163,17 +166,20 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
                 Supported(
                     ERBOSemanticSnapshotBoundaryV1::Final,
                     "final",
-                    TwoApplications()),
+                    TwoEvents()),
             }, "physical lowering failed"),
             yexception,
-            "without an observed rule-prefix stop");
+            "without an observed transformation-prefix stop");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             ClassifyCapture(2, false, {
                 Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial"),
                 Supported(
-                    ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+                    ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
                     "prefix",
-                    {{1, "Stage", "Rule"}, {3, "Stage", "Rule"}}),
+                    {
+                        {1, ERBOTransformationEventKindV1::RuleApplication, "Stage", "Rule"},
+                        {3, ERBOTransformationEventKindV1::AtomicStageCommit, "Stage", "Commit"},
+                    }),
             }),
             yexception,
             "not contiguous");
@@ -181,9 +187,9 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
             ClassifyCapture(1, true, {
                 Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial"),
                 Supported(
-                    ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix,
+                    ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
                     "prefix",
-                    {{1, "Stage", "Rule"}}),
+                    {{1, ERBOTransformationEventKindV1::RuleApplication, "Stage", "Rule"}}),
             }),
             yexception,
             "preparation succeeded");

@@ -1,4 +1,4 @@
-"""Command line for sequential rule-prefix localization."""
+"""Command line for sequential transformation-prefix localization."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .bisect import Config, LocalizationError, localize
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description="Sequentially localize a new-RBO rule-prefix correctness failure"
+        description="Sequentially localize a new-RBO transformation-prefix failure"
     )
     result.add_argument("--verifier", type=Path, required=True)
     result.add_argument("--solver", type=Path, required=True)
@@ -21,7 +21,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--rows", type=int, default=2)
     result.add_argument("--timeout-ms", type=int, default=10_000)
     result.add_argument("--capture-timeout-seconds", type=int, default=300)
-    result.add_argument("--max-applications", type=int, default=10_000)
+    result.add_argument("--max-events", type=int, default=10_000)
     result.add_argument(
         "capture_command",
         nargs=argparse.REMAINDER,
@@ -44,7 +44,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         rows=options.rows,
         timeout_ms=options.timeout_ms,
         capture_timeout_seconds=options.capture_timeout_seconds,
-        max_applications=options.max_applications,
+        max_events=options.max_events,
     )
     try:
         result = localize(config)

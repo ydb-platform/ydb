@@ -82,7 +82,7 @@ rbo_verifier/verify.py      one counterexample formula and verdict decoding
 ```
 
 The kernel has no YDB client, optimizer tracing, benchmark discovery, or
-rule-bisection logic. The kernel emits inspectable SMT-LIB and invokes an
+transformation-prefix localization logic. The kernel emits inspectable SMT-LIB and invokes an
 explicit Z3-compatible solver executable; it does not import ambient Python
 packages. A pinned Z3 binary will be vendored as a separate build-integration
 step.
@@ -251,16 +251,17 @@ contains enough source-distribution information to verify them.
   a trusted baseline. It uses BulkUpsert for setup so candidate writes do not
   pass through the optimizer under test, rejects observably nondeterministic
   traces, and retains every created namespace for diagnosis.
-- `tools/bisect.py` reruns the optimizer with a true stop-after-application
+- `tools/bisect.py` reruns the optimizer with a true stop-after-transformation
   debug hook and invokes the same formula kernel under an explicit diagnostic
-  rule-prefix boundary contract. Every such verdict is labeled
-  `comparison_scope: RULE_APPLICATION_PREFIX` so it cannot be confused with a
-  whole-optimizer result.
+  transformation-prefix boundary contract. Every such verdict is labeled
+  `comparison_scope: OPTIMIZER_TRANSFORMATION_PREFIX` so it cannot be confused
+  with a whole-optimizer result.
 
-The bisection unit is a dynamic rule-application ordinal, not merely a rule name,
-because stages may iterate to a fixpoint. Prefixes are inspected sequentially:
-equivalence is not monotonic across rule applications, so binary search would
-not soundly identify the first bad transformation.
+The localization unit is a dynamic transformation-event ordinal. Events cover
+both committed rule applications and atomic mutating non-rule stage commits;
+rules may occur repeatedly while a stage iterates to a fixpoint. Prefixes are
+inspected sequentially because equivalence is not monotonic across optimizer
+transformations, so binary search would not soundly identify the first bad one.
 
 ## Validation strategy
 
@@ -369,10 +370,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Separate real-YDB replay tool for deterministic, range-valid inspector
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
   multi-result TPC-DS q14, q23, and q39 remain an explicit replay extension.
-- Explicit diagnostic rule-prefix verifier boundary, committed-rule snapshot
-  hook, strict real-host capture command, and separate sequential localization
-  driver are implemented. Constant folding and hash propagation still need
-  explicit atomic transformation checkpoints before localization is complete.
+- Explicit diagnostic transformation-prefix verifier boundary, committed-rule
+  and atomic-stage snapshot hooks, strict real-host capture command, and
+  separate sequential localization driver are implemented.
 - Formula-construction coverage has a checked-in regression floor. Hermetic
   solver-backed proof policy and replay-confirmed counterexample policy remain.
 

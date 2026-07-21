@@ -20,7 +20,7 @@ struct TCaptureOutput {
     TString InitialSnapshot;
     TString CandidateSnapshot;
     TString UnsupportedReason;
-    TVector<TRBORuleApplicationV1> Applications;
+    TVector<TRBOTransformationEventV1> Events;
 };
 
 TCaptureOutput ClassifyCapture(
@@ -30,6 +30,7 @@ TCaptureOutput ClassifyCapture(
     TStringBuf preparationIssues = {});
 
 TStringBuf StatusName(ECaptureStatus status) noexcept;
+TStringBuf EventKindName(ERBOTransformationEventKindV1 kind);
 TString RenderManifest(const TCaptureOutput& capture);
 
 // These deliberately mirror benchmark_ut input preparation byte-for-byte.

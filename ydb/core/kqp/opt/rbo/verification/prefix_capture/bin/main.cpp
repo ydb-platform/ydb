@@ -34,14 +34,14 @@ struct TOptions {
     TString SchemaPath;
     TString QueryPath;
     TString OutputPath;
-    ui64 Ordinal = 0;
+    ui64 TransformationOrdinal = 0;
     bool BenchmarkColumnStore = false;
 };
 
 class TRecordingSink final : public IRBOSemanticSnapshotSink {
 public:
-    explicit TRecordingSink(ui64 ordinal)
-        : Ordinal(ordinal)
+    explicit TRecordingSink(ui64 transformationOrdinal)
+        : TransformationOrdinal(transformationOrdinal)
     {
     }
 
@@ -50,8 +50,8 @@ public:
         Results.push_back(std::move(result));
     }
 
-    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
-        return Ordinal;
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
+        return TransformationOrdinal;
     }
 
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Take() {
@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    const ui64 Ordinal;
+    const ui64 TransformationOrdinal;
     std::mutex Mutex;
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
@@ -68,7 +68,7 @@ private:
 TOptions ParseOptions(int argc, char** argv) {
     TOptions result;
     NLastGetopt::TOpts options;
-    options.SetTitle("Capture one real new-RBO rule-application prefix");
+    options.SetTitle("Capture one real new-RBO transformation prefix");
     options.SetFreeArgsNum(0);
     options.AddHelpOption('h');
     options.AddLongOption("schema", "YQL schema file to execute")
@@ -85,21 +85,21 @@ TOptions ParseOptions(int argc, char** argv) {
         .NoArgument()
         .SetFlag(&result.BenchmarkColumnStore);
     options.AddLongOption(
-            "rbo-rule-prefix-ordinal",
-            "One-based committed dynamic rule application to capture")
+            "rbo-transformation-prefix-ordinal",
+            "One-based optimizer transformation event to capture")
         .Required()
         .RequiredArgument("N")
-        .StoreResult(&result.Ordinal);
+        .StoreResult(&result.TransformationOrdinal);
     options.AddLongOption(
-            "rbo-rule-prefix-output",
+            "rbo-transformation-prefix-output",
             "New or empty output directory for strict capture artifacts")
         .Required()
         .RequiredArgument("DIR")
         .StoreResult(&result.OutputPath);
     NLastGetopt::TOptsParseResult parsed(&options, argc, argv);
-    if (result.Ordinal == 0) {
+    if (result.TransformationOrdinal == 0) {
         ythrow yexception()
-            << "--rbo-rule-prefix-ordinal must be a positive integer";
+            << "--rbo-transformation-prefix-ordinal must be a positive integer";
     }
     return result;
 }
@@ -282,7 +282,7 @@ int Run(const TOptions& options) {
     if (!NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver)) {
         ythrow yexception() << "cannot create the default YQL module resolver";
     }
-    auto sink = std::make_shared<TRecordingSink>(options.Ordinal);
+    auto sink = std::make_shared<TRecordingSink>(options.TransformationOrdinal);
     auto host = MakeHost(
         runner.GetTestServer(),
         std::move(moduleResolver),
@@ -300,7 +300,7 @@ int Run(const TOptions& options) {
     });
 
     auto capture = ClassifyCapture(
-        options.Ordinal,
+        options.TransformationOrdinal,
         prepared.Success(),
         sink->Take(),
         prepared.Issues().ToString());

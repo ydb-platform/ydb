@@ -156,6 +156,51 @@ class StaticSqlInTest(unittest.TestCase):
                             if expected is not None:
                                 self.assertEqual(_ground(actual.value), expected)
 
+    def test_lossless_mixed_integer_items_match_the_equality_reference(self):
+        cases = (
+            ("Int64", "Int32", (-2, 0, 2), (None, -2, -1, 0, 2)),
+            ("Int32", "Int64", (-2, 0, 2), (None, -2, -1, 0, 2)),
+            (
+                "Uint64",
+                "Uint32",
+                (0, 2, 4_294_967_295),
+                (None, 0, 1, 2, 4_294_967_295),
+            ),
+            (
+                "Int64",
+                "Uint32",
+                (0, 2, 4_294_967_295),
+                (None, -1, 0, 2, 4_294_967_295),
+            ),
+        )
+        for lookup_type, item_type, items, lookup_values in cases:
+            snapshot, expression = _expression(_snapshot(
+                _in(
+                    {"kind": "column", "column": "x"},
+                    [_literal(item_type, item) for item in items],
+                ),
+                scalar_type=lookup_type,
+                nullable=True,
+            ))
+            self.assertTrue(snapshot.output_schema()[0].nullable)
+            for lookup in lookup_values:
+                encoder = Encoder(smt.Script())
+                row_value = (
+                    encoder.null(lookup_type)
+                    if lookup is None
+                    else Value(lookup_type, smt.FALSE, smt.int_value(lookup))
+                )
+                actual = encoder.evaluate(expression, {"x": row_value})
+                expected = _reference(lookup, items)
+                with self.subTest(
+                    lookup_type=lookup_type,
+                    item_type=item_type,
+                    lookup=lookup,
+                ):
+                    self.assertEqual(_ground(actual.is_null), expected is None)
+                    if expected is not None:
+                        self.assertEqual(_ground(actual.value), expected)
+
     def test_argument_position_and_literal_mutations_are_observable(self):
         column = {"kind": "column", "column": "x"}
         one = _literal("Int64", 1)
@@ -206,9 +251,22 @@ class StaticSqlInTest(unittest.TestCase):
 
         mismatched = copy.deepcopy(base)
         mismatched["plan"]["nodes"][1]["columns"][0]["expression"]["items"] = [
-            _literal("Int32", 1)
+            _literal("String", "1")
         ]
-        mutations.append((mismatched, "IN item type mismatch"))
+        mutations.append((mismatched, "not equality-compatible"))
+
+        heterogeneous = copy.deepcopy(base)
+        heterogeneous["plan"]["nodes"][1]["columns"][0]["expression"]["items"] = [
+            _literal("Int32", 1),
+            _literal("Uint32", 2),
+        ]
+        mutations.append((heterogeneous, "IN items must have one type"))
+
+        lossy_integer = copy.deepcopy(base)
+        lossy_integer["plan"]["nodes"][1]["columns"][0]["expression"]["items"] = [
+            _literal("Uint64", 1)
+        ]
+        mutations.append((lossy_integer, "not equality-compatible"))
 
         unknown = copy.deepcopy(base)
         unknown["plan"]["nodes"][1]["columns"][0]["expression"]["null_safe"] = False

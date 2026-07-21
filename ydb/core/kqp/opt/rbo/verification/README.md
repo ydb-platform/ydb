@@ -62,11 +62,13 @@ This narrow rule was added when TPC-DS q88 exposed a spurious witness between
 source arithmetic constants and optimizer-folded literals.
 
 Static `SqlIn` is exact for a deliberately narrow shape: a direct raw tuple or
-`AsList` with 1..512 recursively supported, non-null items whose scalar type is
-identical to the lookup type. It evaluates as the SQL three-valued OR of
-ordinary equalities, so only a nullable lookup can make the Boolean result
-nullable. `ansi`, `warnNoAnsi`, `isCompact`, and `nullsProcessed` normalize to
-the same node under this gate. Dynamic, empty, oversized, nullable, mixed-type,
+`AsList` with 1..512 recursively supported, non-null items of one scalar type.
+That type is identical to the lookup type, or is an integer type using the same
+lossless common-type gate as ordinary equality. It evaluates as the SQL
+three-valued OR of those equalities, so only a nullable lookup can make the
+Boolean result nullable. `ansi`, `warnNoAnsi`, `isCompact`, and
+`nullsProcessed` normalize to the same node under this gate. Dynamic, empty,
+oversized, nullable, heterogeneous-item, lossy or non-integer mixed-type,
 `tableSource`, malformed-option, and unknown-option forms fail closed.
 
 Scalar syntax outside the explicit Boolean, equality, ordering, integer
@@ -278,11 +280,12 @@ final pushed OLAP predicate and requires the normal bounded proof. The benchmark
 test loads the exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
 checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
-solver budget. A nullable-String `IN ('first', 'second')` test exercises the
-restricted static-membership path through the real host and constructs the
-normal obligation. All tests always require strict decoding and SMT construction. Set
-`RBO_Z3` to additionally require `VERIFIED_BOUNDED`; M2b will replace that
-opt-in path with a hermetic solver dependency.
+solver budget. Nullable `String IN ('first', 'second')` and
+`Int64 IN (Int32...)` expressions exercise both static-membership type gates
+through the real host and construct one normal obligation. All tests always
+require strict decoding and SMT construction. Set `RBO_Z3` to additionally
+require `VERIFIED_BOUNDED`; M2b will replace that opt-in path with a hermetic
+solver dependency.
 
 ```bash
 RBO_Z3=/path/to/z3 ./ya make --build relwithdebinfo -tA \

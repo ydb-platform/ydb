@@ -216,6 +216,7 @@ void CreateSqlInColumnTable(TKikimrRunner& kikimr) {
         CREATE TABLE `/Root/RboSqlIn` (
             Id Uint64 NOT NULL,
             S String,
+            N Int64,
             PRIMARY KEY (Id)
         ) WITH (STORE = COLUMN);
     )").GetValueSync();
@@ -693,7 +694,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
-    Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableStringLookup) {
+    Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableLookups) {
         TKikimrRunner kikimr;
         CreateSqlInColumnTable(kikimr);
 
@@ -704,7 +705,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         const TString query = R"(--!syntax_v1
-                SELECT S IN ('first', 'second') AS Matched
+                SELECT
+                    S IN ('first', 'second') AS StringMatched,
+                    N IN (1, 2) AS IntegerMatched
                 FROM `/Root/RboSqlIn`;
             )";
         IKqpHost::TPrepareSettings settings;
@@ -728,16 +731,24 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                 }
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(memberships.size(), 1);
-        const auto& membership = *memberships.front();
-        UNIT_ASSERT_VALUES_EQUAL(membership.GetMapSafe().size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(membership["lookup"]["kind"].GetStringSafe(), "column");
-        const auto& items = membership["items"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(items[0]["type"].GetStringSafe(), "String");
-        UNIT_ASSERT_VALUES_EQUAL(items[0]["value"].GetStringSafe(), "first");
-        UNIT_ASSERT_VALUES_EQUAL(items[1]["type"].GetStringSafe(), "String");
-        UNIT_ASSERT_VALUES_EQUAL(items[1]["value"].GetStringSafe(), "second");
+        UNIT_ASSERT_VALUES_EQUAL(memberships.size(), 2);
+        THashMap<TString, const NJson::TJsonValue*> byItemType;
+        for (const auto* membership : memberships) {
+            UNIT_ASSERT_VALUES_EQUAL(membership->GetMapSafe().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(
+                (*membership)["lookup"]["kind"].GetStringSafe(),
+                "column");
+            const auto& items = (*membership)["items"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+            byItemType.emplace(items[0]["type"].GetStringSafe(), membership);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(byItemType.size(), 2);
+        const auto& stringItems = (*byItemType.at("String"))["items"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(stringItems[0]["value"].GetStringSafe(), "first");
+        UNIT_ASSERT_VALUES_EQUAL(stringItems[1]["value"].GetStringSafe(), "second");
+        const auto& integerItems = (*byItemType.at("Int32"))["items"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(integerItems[0]["value"].GetIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(integerItems[1]["value"].GetIntegerSafe(), 2);
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

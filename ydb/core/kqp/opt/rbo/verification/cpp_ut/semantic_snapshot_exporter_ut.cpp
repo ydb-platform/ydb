@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/verification/semantic_snapshot.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -189,6 +190,115 @@ public:
 
     bool ThrowNext = true;
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
+};
+
+class TRulePrefixRecordingSink final : public IRBOSemanticSnapshotSink {
+public:
+    explicit TRulePrefixRecordingSink(ui64 target)
+        : Target(target)
+    {
+    }
+
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        Results.push_back(std::move(result));
+    }
+
+    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
+        return Target;
+    }
+
+    ui64 Target;
+    TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
+};
+
+class TThrowingRulePrefixConfigurationSink final : public IRBOSemanticSnapshotSink {
+public:
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1) override {
+    }
+
+    std::optional<ui64> GetRuleApplicationPrefixTarget() const override {
+        throw std::runtime_error("test prefix configuration failure");
+    }
+};
+
+class TFixedApplicationRule final : public IRule {
+public:
+    TFixedApplicationRule(TString name, ui32 applications, ui32& attempts)
+        : IRule(std::move(name))
+        , Remaining(applications)
+        , Attempts(attempts)
+    {
+    }
+
+    bool MatchAndApply(
+        TIntrusivePtr<IOperator>& input,
+        TRBOContext& ctx,
+        TPlanProps& props) override
+    {
+        Y_UNUSED(input);
+        Y_UNUSED(ctx);
+        Y_UNUSED(props);
+        ++Attempts;
+        if (Remaining == 0) {
+            return false;
+        }
+        --Remaining;
+        return true;
+    }
+
+private:
+    ui32 Remaining;
+    ui32& Attempts;
+};
+
+class TWrapReadRule final : public ISimplifiedRule {
+public:
+    explicit TWrapReadRule(ui32& applications)
+        : ISimplifiedRule("Wrap read", ERuleProperties::RequireParents)
+        , Applications(applications)
+    {
+    }
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override {
+        return !Applied && input->Kind == EOperator::Source;
+    }
+
+    TIntrusivePtr<IOperator> SimpleMatchAndApply(
+        const TIntrusivePtr<IOperator>& input,
+        TRBOContext& ctx,
+        TPlanProps& props) override
+    {
+        Y_UNUSED(ctx);
+        Y_UNUSED(props);
+        Applied = true;
+        ++Applications;
+        return MakeIntrusive<TOpMap>(
+            input,
+            input->Pos,
+            TVector<TMapElement>{});
+    }
+
+private:
+    ui32& Applications;
+    bool Applied = false;
+};
+
+class TCountingStage final : public IRBOStage {
+public:
+    explicit TCountingStage(ui32& runs)
+        : IRBOStage(TString("Must not run"))
+        , Runs(runs)
+    {
+    }
+
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override {
+        Y_UNUSED(root);
+        Y_UNUSED(ctx);
+        ++Runs;
+    }
+
+private:
+    ui32& Runs;
 };
 
 TVector<TString> Strings(const NJson::TJsonValue& array) {
@@ -2651,6 +2761,228 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "table identity");
     }
 
+    Y_UNIT_TEST(RuleApplicationPrefixUsesTheInitialCatalogAndHasDistinctMetadata) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        const TVector<TRBORuleApplicationV1> applications{
+            {1, "Logical rewrites", "First rule"},
+            {2, "Logical rewrites", "Push filter"},
+        };
+        capture.CaptureRuleApplicationPrefix(root, ctx.RboCtx, applications);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(
+            sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(sink.Results[0].RuleApplications.empty());
+        UNIT_ASSERT(
+            sink.Results[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[0].StageName,
+            "Logical rewrites");
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[0].RuleName,
+            "First rule");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[1].StageName,
+            "Logical rewrites");
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[1].RuleName,
+            "Push filter");
+
+        const auto initialSnapshot = ParseSupported(sink.Results[0]);
+        const auto prefixSnapshot = ParseSupported(sink.Results[1]);
+        UNIT_ASSERT(initialSnapshot["stage_graph"].IsNull());
+        UNIT_ASSERT(prefixSnapshot["stage_graph"].IsNull());
+        const auto& initialTables = initialSnapshot["schema"]["tables"].GetArraySafe();
+        const auto& prefixTables = prefixSnapshot["schema"]["tables"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(initialTables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(prefixTables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            initialTables[0]["name"].GetStringSafe(),
+            prefixTables[0]["name"].GetStringSafe());
+    }
+
+    Y_UNIT_TEST(RuleApplicationPrefixConfigurationExceptionsAreContained) {
+        TThrowingRulePrefixConfigurationSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        UNIT_ASSERT(!capture.GetRuleApplicationPrefixTarget());
+
+        TRulePrefixRecordingSink zeroSink(0);
+        TSemanticSnapshotPairCaptureV1 zeroCapture(&zeroSink);
+        UNIT_ASSERT(!zeroCapture.GetRuleApplicationPrefixTarget());
+        TExportTestContext ctx;
+        ctx.RboCtx.RuleApplicationDebug.Reset(
+            zeroCapture.GetRuleApplicationPrefixTarget());
+        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Stage", "Rule"));
+        UNIT_ASSERT(ctx.RboCtx.RuleApplicationDebug.Applications.empty());
+    }
+
+    Y_UNIT_TEST(FinalBoundaryCarriesTheCompleteSequenceWhenTargetDoesNotExist) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        TRulePrefixRecordingSink sink(3);
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        ctx.RboCtx.RuleApplicationDebug.Reset(
+            capture.GetRuleApplicationPrefixTarget());
+        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("First", "R1"));
+        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Second", "R2"));
+        const ui32 finalStage = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::RowStorage);
+        read->Props.StageId = finalStage;
+        capture.CaptureFinal(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(
+            sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].StageName, "First");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].RuleName, "R1");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].StageName, "Second");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].RuleName, "R2");
+        ParseSupported(sink.Results[1]);
+    }
+
+    Y_UNIT_TEST(RuleApplicationStopIsOptimizerWideAndPrecedesEverySuffix) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        ui32 repeatedAttempts = 0;
+        ui32 wrapApplications = 0;
+        ui32 laterStageRuns = 0;
+        TVector<std::unique_ptr<IRule>> repeatedRules;
+        repeatedRules.push_back(std::make_unique<TFixedApplicationRule>(
+            "Apply twice",
+            2,
+            repeatedAttempts));
+        TVector<std::unique_ptr<IRule>> wrappingRules;
+        wrappingRules.push_back(std::make_unique<TWrapReadRule>(wrapApplications));
+
+        TRuleBasedOptimizer optimizer;
+        optimizer.AddStage(std::make_unique<TRuleBasedStage>(
+            TString("Repeated stage"),
+            std::move(repeatedRules)));
+        optimizer.AddStage(std::make_unique<TRuleBasedStage>(
+            TString("Wrapping stage"),
+            std::move(wrappingRules)));
+        optimizer.AddStage(std::make_unique<TCountingStage>(laterStageRuns));
+
+        TRulePrefixRecordingSink sink(3);
+        const auto output = optimizer.Optimize(root, ctx.RboCtx, &sink);
+
+        UNIT_ASSERT(!output);
+        UNIT_ASSERT_VALUES_EQUAL(repeatedAttempts, 3);
+        UNIT_ASSERT_VALUES_EQUAL(wrapApplications, 1);
+        UNIT_ASSERT_VALUES_EQUAL(laterStageRuns, 0);
+        UNIT_ASSERT(ctx.RboCtx.RuleApplicationDebug.Stopped);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ctx.RboCtx.RuleApplicationDebug.Applications.size(),
+            3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ctx.RboCtx.RuleApplicationDebug.Applications.back().StageName,
+            "Wrapping stage");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ctx.RboCtx.RuleApplicationDebug.Applications.back().RuleName,
+            "Wrap read");
+        UNIT_ASSERT(!ctx.RboCtx.ExecutionJson);
+        UNIT_ASSERT(!ctx.RboCtx.ExplainJson);
+        UNIT_ASSERT(root.GetInput()->Kind == EOperator::Map);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(
+            sink.Results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            sink.Results[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[0].RuleName,
+            "Apply twice");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[1].Ordinal, 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[1].RuleName,
+            "Apply twice");
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[2].Ordinal, 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[2].StageName,
+            "Wrapping stage");
+        UNIT_ASSERT_VALUES_EQUAL(
+            sink.Results[1].RuleApplications[2].RuleName,
+            "Wrap read");
+        const auto prefixSnapshot = ParseSupported(sink.Results[1]);
+        UNIT_ASSERT(prefixSnapshot["stage_graph"].IsNull());
+        FindNode(prefixSnapshot, "project");
+    }
+
+    Y_UNIT_TEST(RuleApplicationPrefixDeliveryFailureDoesNotEscapeOrLoseCatalog) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        TThrowOnceSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        capture.CaptureRuleApplicationPrefix(
+            root,
+            ctx.RboCtx,
+            TVector<TRBORuleApplicationV1>{{1, "Stage", "Rule"}});
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT(
+            sink.Results[0].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::RuleApplicationPrefix);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[0].RuleApplications.size(), 1);
+        ParseSupported(sink.Results[0]);
+    }
+
+    Y_UNIT_TEST(UnsupportedRuleApplicationPrefixRetainsItsCompleteSequence) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        TOpRoot initialRoot(read, pos, {"a.k"});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(initialRoot, ctx.RboCtx);
+        auto limit = MakeIntrusive<TOpLimit>(
+            read,
+            pos,
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot prefixRoot(limit, pos, {"a.k"});
+        capture.CaptureRuleApplicationPrefix(
+            prefixRoot,
+            ctx.RboCtx,
+            TVector<TRBORuleApplicationV1>{{1, "Stage", "Rule"}});
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT(!sink.Results[1].IsSupported());
+        UNIT_ASSERT(sink.Results[1].Json.empty());
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
+        UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit count");
+    }
+
     Y_UNIT_TEST(NullPairSinkDoesNoSnapshotWork) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
@@ -2827,6 +3159,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         TRecordingSemanticSnapshotSink sink;
         TSemanticSnapshotPairCaptureV1 capture(&sink);
         capture.CaptureInitial(initialRoot, ctx.RboCtx);
+        ctx.RboCtx.RuleApplicationDebug.Reset(2);
+        UNIT_ASSERT(!ctx.RboCtx.RuleApplicationDebug.OnApplied("Stage", "Rule"));
 
         auto limit = MakeIntrusive<TOpLimit>(
             read,
@@ -2846,6 +3180,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             sink.Results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
         UNIT_ASSERT(!sink.Results[1].IsSupported());
         UNIT_ASSERT(sink.Results[1].Json.empty());
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results[1].RuleApplications[0].Ordinal, 1);
         UNIT_ASSERT_STRING_CONTAINS(sink.Results[1].UnsupportedReason, "Limit count");
     }
 

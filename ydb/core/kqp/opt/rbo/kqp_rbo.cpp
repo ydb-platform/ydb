@@ -164,6 +164,9 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     computedProps = 0;
 
                     ++numMatches;
+                    if (ctx.RuleApplicationDebug.OnApplied(StageName, rule->RuleName)) {
+                        return;
+                    }
                     break;
                 }
             }
@@ -187,6 +190,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(
 
     TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
     semanticSnapshots.CaptureInitial(root, rboCtx);
+    rboCtx.RuleApplicationDebug.Reset(
+        semanticSnapshots.GetRuleApplicationPrefixTarget());
     SubmitInitialPlanTrace(root, rboCtx);
 
     if (needToLog) {
@@ -205,6 +210,16 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
+        if (rboCtx.RuleApplicationDebug.Stopped) {
+            semanticSnapshots.CaptureRuleApplicationPrefix(
+                root,
+                rboCtx,
+                rboCtx.RuleApplicationDebug.Applications);
+            // A prefix before stage assignment is not a physical program.  A
+            // null result is the existing OptimizeExpr error signal and keeps
+            // this opt-in diagnostic run from executing any suffix or lowering.
+            return {};
+        }
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
         }

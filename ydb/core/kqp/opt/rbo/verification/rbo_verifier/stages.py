@@ -158,23 +158,30 @@ class Evaluator:
         if len(scans) != 1:
             raise StageError(f"source stage {stage.id!r} does not contain exactly one scan")
         scan = scans[0]
-        source_size = len(self.database.relations[scan.table].rows)
-        result: dict[int, Partitions] = {}
-        for output in stage.outputs:
-            relation = evaluator.node(output.node)
-            if len(relation.rows) != source_size:
-                raise StageError(
-                    f"source stage {stage.id!r} changes row cardinality before partitioning"
-                )
-            rows = [[], []]
-            for slot, row in enumerate(relation.rows):
-                task = self.router.source_task(scan.table, slot)
-                rows[0].append(Row(smt.and_(row.present, smt.not_(task)), row.values))
-                rows[1].append(Row(smt.and_(row.present, task), row.values))
-            result[output.index] = Partitions(
-                tuple(Relation(relation.columns, tuple(task_rows)) for task_rows in rows)
+        relation = evaluator.node(scan.id)
+        rows = [[], []]
+        for slot, row in enumerate(relation.rows):
+            task = self.router.source_task(scan.table, slot)
+            rows[0].append(Row(smt.and_(row.present, smt.not_(task)), row.values))
+            rows[1].append(Row(smt.and_(row.present, task), row.values))
+        scan_partitions = tuple(
+            Relation(relation.columns, tuple(task_rows)) for task_rows in rows
+        )
+        evaluators = tuple(
+            RelationEvaluator(
+                self.snapshot,
+                self.database,
+                self.scalar,
+                node_overrides={scan.id: partition},
             )
-        return result
+            for partition in scan_partitions
+        )
+        return {
+            output.index: Partitions(
+                tuple(task_evaluator.node(output.node) for task_evaluator in evaluators)
+            )
+            for output in stage.outputs
+        }
 
     def _connect(
         self,

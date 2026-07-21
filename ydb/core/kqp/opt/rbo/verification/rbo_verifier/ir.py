@@ -32,6 +32,7 @@ JOIN_KINDS = frozenset(
 )
 STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_all", "merge"})
 HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
+AGGREGATE_PHASES = frozenset({"undefined", "intermediate", "final"})
 
 
 class SnapshotError(ValueError):
@@ -122,6 +123,27 @@ class Filter:
 
 
 @dataclass(frozen=True, slots=True)
+class AggregateTrait:
+    input: str
+    function: str
+    output: str
+    output_type: str
+    output_nullable: bool
+    distinct: bool
+    unwrap: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Aggregate:
+    id: str
+    input: str
+    keys: tuple[str, ...]
+    aggregates: tuple[AggregateTrait, ...]
+    phase: str
+    distinct_all: bool
+
+
+@dataclass(frozen=True, slots=True)
 class Join:
     id: str
     left: str
@@ -143,7 +165,7 @@ class UnionAll:
     output: tuple[str, ...]
 
 
-PlanNode: TypeAlias = EmptySource | Scan | Project | Filter | Join | UnionAll
+PlanNode: TypeAlias = EmptySource | Scan | Project | Filter | Aggregate | Join | UnionAll
 
 
 @dataclass(frozen=True, slots=True)
@@ -441,6 +463,50 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             _parse_expr(obj["predicate"], f"{path}.predicate"),
         )
 
+    if operation == "aggregate":
+        _keys(
+            obj,
+            {"id", "op", "input", "keys", "aggregates", "phase", "distinct_all"},
+            path,
+        )
+        keys = tuple(
+            _string(key, f"{path}.keys[{index}]")
+            for index, key in enumerate(_array(obj["keys"], f"{path}.keys"))
+        )
+        aggregates: list[AggregateTrait] = []
+        for index, raw_trait in enumerate(_array(obj["aggregates"], f"{path}.aggregates")):
+            trait_path = f"{path}.aggregates[{index}]"
+            trait = _object(raw_trait, trait_path)
+            _keys(
+                trait,
+                {"input", "function", "output", "type", "nullable", "distinct", "unwrap"},
+                trait_path,
+            )
+            aggregates.append(
+                AggregateTrait(
+                    input=_string(trait["input"], f"{trait_path}.input"),
+                    function=_string(trait["function"], f"{trait_path}.function"),
+                    output=_string(trait["output"], f"{trait_path}.output"),
+                    output_type=_scalar_type(trait["type"], f"{trait_path}.type"),
+                    output_nullable=_bool(trait["nullable"], f"{trait_path}.nullable"),
+                    distinct=_bool(trait["distinct"], f"{trait_path}.distinct"),
+                    unwrap=_bool(trait["unwrap"], f"{trait_path}.unwrap"),
+                )
+            )
+        if not aggregates:
+            _fail(f"{path}.aggregates", "must not be empty")
+        phase = _string(obj["phase"], f"{path}.phase")
+        if phase not in AGGREGATE_PHASES:
+            _fail(f"{path}.phase", f"unsupported aggregate phase {phase!r}")
+        return Aggregate(
+            id=node_id,
+            input=_string(obj["input"], f"{path}.input"),
+            keys=keys,
+            aggregates=tuple(aggregates),
+            phase=phase,
+            distinct_all=_bool(obj["distinct_all"], f"{path}.distinct_all"),
+        )
+
     if operation == "join":
         _keys(obj, {"id", "op", "left", "right", "kind", "predicate"}, path)
         kind = _string(obj["kind"], f"{path}.kind")
@@ -689,10 +755,30 @@ def _nullable_columns(columns: Mapping[str, Column]) -> dict[str, Column]:
     return {name: replace(column, nullable=True) for name, column in columns.items()}
 
 
+def _sum_type(input_type: str) -> str | None:
+    if input_type in {"Int8", "Int16", "Int32", "Int64"}:
+        return "Int64"
+    if input_type in {"Uint8", "Uint16", "Uint32", "Uint64"}:
+        return "Uint64"
+    return None
+
+
+def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_name: str) -> bool:
+    child = nodes.get(node.input)
+    return (
+        node.phase == "final"
+        and isinstance(child, Aggregate)
+        and any(
+            trait.output == input_name and trait.function == "count"
+            for trait in child.aggregates
+        )
+    )
+
+
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
-    if isinstance(node, (Project, Filter)):
+    if isinstance(node, (Project, Filter, Aggregate)):
         return (node.input,)
     if isinstance(node, Join):
         return (node.left, node.right)
@@ -1058,6 +1144,59 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             predicate_type = _infer_expr(node.predicate, result, f"node {node.id!r}.predicate")
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
+
+        elif isinstance(node, Aggregate):
+            input_schema = schema_for(node.input)
+            _unique(node.keys, f"node {node.id!r}.keys")
+            for key in node.keys:
+                if key not in input_schema:
+                    _fail(f"node {node.id!r}.keys", f"column {key!r} is not available")
+
+            output_names = (() if node.distinct_all else node.keys) + tuple(
+                trait.output for trait in node.aggregates
+            )
+            _unique(output_names, f"node {node.id!r} output")
+            result = (
+                {}
+                if node.distinct_all
+                else {key: input_schema[key] for key in node.keys}
+            )
+            for index, trait in enumerate(node.aggregates):
+                trait_path = f"node {node.id!r}.aggregates[{index}]"
+                input_column = input_schema.get(trait.input)
+                if input_column is None:
+                    _fail(trait_path, f"input column {trait.input!r} is not available")
+
+                if trait.function == "count":
+                    if trait.output_type != "Uint64" or trait.output_nullable:
+                        _fail(trait_path, "count output must be non-nullable Uint64")
+                elif trait.function == "sum":
+                    expected_type = _sum_type(input_column.type)
+                    if expected_type is None:
+                        _fail(trait_path, f"sum does not support {input_column.type!r}")
+                    if trait.output_type != expected_type:
+                        _fail(
+                            trait_path,
+                            f"sum output type must be {expected_type!r}, got {trait.output_type!r}",
+                        )
+                    expected_nullable = input_column.nullable
+                    if (
+                        not node.keys
+                        and node.phase != "intermediate"
+                        and not _is_final_count_sum(node, nodes, trait.input)
+                    ):
+                        expected_nullable = True
+                    if trait.output_nullable != expected_nullable:
+                        _fail(
+                            trait_path,
+                            "sum output nullability does not match its input, phase, and keys",
+                        )
+
+                result[trait.output] = Column(
+                    trait.output,
+                    trait.output_type,
+                    trait.output_nullable,
+                )
 
         elif isinstance(node, Join):
             left = schema_for(node.left)

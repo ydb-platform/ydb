@@ -224,7 +224,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
 ### M4: benchmark coverage
 
-- Aggregates, order, Merge, top-sort, limit, and required scalar refinements.
+- Grouped/scalar aggregates, including split intermediate/final execution,
+  NULLs, distinct variants, and exact numeric behavior.
+- Order, Merge, top-sort, limit, and required scalar refinements.
 - TPCH/TPCDS coverage and timeout report.
 - Explicit unsupported-feature inventory.
 

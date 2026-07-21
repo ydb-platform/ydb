@@ -6,7 +6,20 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from . import smt
-from .ir import Column, EmptySource, Filter, Join, PlanNode, Project, Scan, Snapshot, UnionAll, validate_snapshot
+from .ir import (
+    Aggregate,
+    AggregateTrait,
+    Column,
+    EmptySource,
+    Filter,
+    Join,
+    PlanNode,
+    Project,
+    Scan,
+    Snapshot,
+    UnionAll,
+    validate_snapshot,
+)
 from .scalar import Encoder as ScalarEncoder
 from .scalar import SMT_SORT, Value
 
@@ -34,6 +47,10 @@ class WitnessCell:
 class WitnessRow:
     present: smt.Term
     cells: Mapping[str, WitnessCell]
+
+
+class RelationError(ValueError):
+    """A valid snapshot uses relational semantics not modeled by this evaluator."""
 
 
 class Database:
@@ -107,13 +124,14 @@ class Evaluator:
         database: Database,
         scalar: ScalarEncoder,
         edge_inputs: Mapping[tuple[str, int], Relation] | None = None,
+        node_overrides: Mapping[str, Relation] | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.database = database
         self.scalar = scalar
         self.nodes = snapshot.plan.node_map()
         self.schemas = validate_snapshot(snapshot)
-        self.cache: dict[str, Relation] = {}
+        self.cache: dict[str, Relation] = dict(node_overrides or {})
         self.edge_inputs = edge_inputs or {}
 
     def root(self) -> Relation:
@@ -183,6 +201,9 @@ class Evaluator:
                 ),
             )
 
+        if isinstance(node, Aggregate):
+            return self._aggregate(node, self._input(node.id, 0, node.input))
+
         if isinstance(node, Join):
             return self._join(
                 node,
@@ -207,6 +228,103 @@ class Evaluator:
             return Relation(self._columns(node.id), tuple(rows))
 
         raise AssertionError(f"unknown plan node {type(node).__name__}")
+
+    def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
+        if node.distinct_all:
+            raise RelationError("DistinctAll aggregate semantics are not modeled")
+        if any(trait.distinct for trait in node.aggregates):
+            raise RelationError("distinct aggregate semantics are not modeled")
+        if any(trait.unwrap for trait in node.aggregates):
+            raise RelationError("unwrapped aggregate semantics are not modeled")
+        unsupported = sorted(
+            {trait.function for trait in node.aggregates} - {"count", "sum"}
+        )
+        if unsupported:
+            raise RelationError(
+                f"aggregate functions are not modeled: {', '.join(unsupported)}"
+            )
+
+        rows: list[Row] = []
+        if not node.keys:
+            matches = tuple(row.present for row in source.rows)
+            present = smt.or_(*matches) if node.phase == "intermediate" else smt.TRUE
+            rows.append(Row(present, self._aggregate_values(node, source, matches, None)))
+        else:
+            for index, candidate in enumerate(source.rows):
+                matches = tuple(
+                    smt.and_(row.present, self._same_group(node, candidate, row))
+                    for row in source.rows
+                )
+                earlier = tuple(
+                    smt.and_(row.present, self._same_group(node, candidate, row))
+                    for row in source.rows[:index]
+                )
+                present = smt.and_(candidate.present, smt.not_(smt.or_(*earlier)))
+                rows.append(
+                    Row(
+                        present,
+                        self._aggregate_values(node, source, matches, candidate),
+                    )
+                )
+        return Relation(self._columns(node.id), tuple(rows))
+
+    def _aggregate_values(
+        self,
+        node: Aggregate,
+        source: Relation,
+        matches: tuple[smt.Term, ...],
+        candidate: Row | None,
+    ) -> dict[str, Value]:
+        values = (
+            {}
+            if candidate is None
+            else {key: candidate.values[key] for key in node.keys}
+        )
+        for trait in node.aggregates:
+            values[trait.output] = self._aggregate_value(trait, source, matches)
+        return values
+
+    def _aggregate_value(
+        self,
+        trait: AggregateTrait,
+        source: Relation,
+        matches: tuple[smt.Term, ...],
+    ) -> Value:
+        non_null = tuple(
+            smt.and_(matches[index], smt.not_(row.values[trait.input].is_null))
+            for index, row in enumerate(source.rows)
+        )
+        if trait.function == "count":
+            return Value(
+                trait.output_type,
+                smt.FALSE,
+                smt.add(*(smt.ite(guard, smt.ONE, smt.ZERO) for guard in non_null)),
+            )
+        if trait.function == "sum":
+            total = smt.add(
+                *(
+                    smt.ite(
+                        guard,
+                        _unwrap_sum(row.values[trait.input]),
+                        smt.ZERO,
+                    )
+                    for guard, row in zip(non_null, source.rows)
+                )
+            )
+            return Value(
+                trait.output_type,
+                smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
+                _wrap_sum(total, trait.output_type),
+            )
+        raise AssertionError(f"unsupported aggregate function {trait.function!r}")
+
+    def _same_group(self, node: Aggregate, left: Row, right: Row) -> smt.Term:
+        return smt.and_(
+            *(
+                self.scalar.not_distinct(left.values[key], right.values[key])
+                for key in node.keys
+            )
+        )
 
     def _input(self, parent: str, ordinal: int, child: str) -> Relation:
         key = (parent, ordinal)
@@ -285,6 +403,48 @@ class Evaluator:
 
     def _columns(self, node_id: str) -> tuple[Column, ...]:
         return tuple(self.schemas[node_id].values())
+
+
+def _wrap_sum(value: smt.Term, scalar_type: str) -> smt.Term:
+    modulus = 1 << 64
+    if scalar_type == "Uint64":
+        return smt.mod(value, modulus)
+    if scalar_type == "Int64":
+        sign = 1 << 63
+        return smt.add(
+            smt.mod(smt.add(value, smt.int_value(sign)), modulus),
+            smt.int_value(-sign),
+        )
+    raise RelationError(f"sum output type {scalar_type!r} is not modeled")
+
+
+def _unwrap_sum(value: Value) -> smt.Term:
+    """Canonicalize nested partial sums before applying the same final wrap."""
+
+    modulus = smt.int_value(1 << 64)
+    term = value.value
+    if (
+        value.type == "Uint64"
+        and term.operation == "mod"
+        and term.arguments[1] == modulus
+    ):
+        return term.arguments[0]
+    if value.type != "Int64" or term.operation != "+" or len(term.arguments) != 2:
+        return term
+
+    sign = smt.int_value(1 << 63)
+    wrapped, offset = term.arguments
+    if (
+        offset != smt.int_value(-(1 << 63))
+        or wrapped.operation != "mod"
+        or wrapped.arguments[1] != modulus
+    ):
+        return term
+    shifted = wrapped.arguments[0]
+    if shifted.operation != "+" or len(shifted.arguments) != 2:
+        return term
+    raw, shift = shifted.arguments
+    return raw if shift == sign else term
 
 
 def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Term:

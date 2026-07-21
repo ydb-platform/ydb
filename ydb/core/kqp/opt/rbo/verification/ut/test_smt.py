@@ -47,6 +47,13 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.and_(True)  # type: ignore[arg-type]
 
+    def test_integer_modulo_is_typed_and_constant_folded(self):
+        value = smt.symbol("value", smt.INT)
+        self.assertEqual(smt.mod(value, 8).render(), "(mod value 8)")
+        self.assertEqual(smt.mod(smt.int_value(-1), 8), smt.int_value(7))
+        with self.assertRaises(smt.SmtError):
+            smt.mod(value, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

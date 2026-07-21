@@ -15,8 +15,6 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-class TSplittedColumns;
-
 class TDictStats {
 private:
     using TJsonPathAccessorTriePtr = std::shared_ptr<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>;
@@ -33,7 +31,7 @@ private:
         auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto arrView = DataNames->GetView(i);
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, EValueType::BinaryJson, i);
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, OthersExplicitBinaryJson, i);
             AFL_VERIFY(insertResult.IsSuccess())("key_name", TStringBuf(arrView.data(), arrView.size()))
                 ("json_path", ToJsonPath(TStringBuf(arrView.data(), arrView.size())))
                 ("error", insertResult.GetErrorMessage());
@@ -156,7 +154,9 @@ public:
 
     static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
 
-    TSplittedColumns SplitByVolume(const TSettings& settings, const ui32 recordsCount) const;
+    // Selects which keys become separated columns;
+    // the rest fall into the Others store, whose stats are built by the caller.
+    TDictStats SelectSeparatedColumns(const TSettings& settings, const ui32 recordsCount) const;
 
     class TBuilder: TNonCopyable {
     private:
@@ -194,7 +194,7 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetCodecForValueType(GetValueType(index))->GetArrowType());
     }
 
     TRTStats GetRTStats(const ui32 index) const {
@@ -240,25 +240,6 @@ public:
         return result;
     }
 
-    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
-};
-
-class TSplittedColumns {
-private:
-    TDictStats Columns;
-    TDictStats Others;
-
-public:
-    TDictStats ExtractColumns() {
-        return std::move(Columns);
-    }
-    TDictStats ExtractOthers() {
-        return std::move(Others);
-    }
-    TSplittedColumns(TDictStats&& columns, TDictStats&& others)
-        : Columns(std::move(columns))
-        , Others(std::move(others)) {
-    }
 };
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

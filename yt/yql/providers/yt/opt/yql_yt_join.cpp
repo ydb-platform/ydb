@@ -147,9 +147,9 @@ const TStructExprType* MakeOutputJoinColumns(const THashMap<TString, const TType
     return ctx.MakeType<TStructExprType>(resultFields);
 }
 
-const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx) {
+const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx) {
     TTypeAnnotationNode::TListType t = types;
-    const TTypeAnnotationNode* commonType = CommonType(pos, t, ctx);
+    const TTypeAnnotationNode* commonType = CommonType(pos, t, ctx, typesCtx);
     if (commonType && !commonType->IsOptionalOrNull()) {
         NUdf::TCastResultOptions options = 0;
         for (auto type : types) {
@@ -165,13 +165,13 @@ const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<c
 }
 
 TVector<const TTypeAnnotationNode*> UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& left,
-    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx)
+    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx, const TTypeAnnotationContext& typesCtx)
 {
     YQL_ENSURE(left.size() == right.size());
     TVector<const TTypeAnnotationNode*> ret;
     ret.reserve(left.size());
     for (size_t i = 0; i < left.size(); ++i) {
-        ret.push_back(UnifyJoinKeyType(pos, { left[i], right[i] }, ctx));
+        ret.push_back(UnifyJoinKeyType(pos, { left[i], right[i] }, ctx, typesCtx));
     }
 
     return ret;

@@ -111,8 +111,8 @@ private:
                         << "\" internal: " << status.InternalError;
                 }
                 RequestInflight = false;
-                Sleep(std::min(BackoffTimeout, BACKOFF_MAX));
-                BackoffTimeout *= 2;
+                Sleep(BackoffTimeout);
+                BackoffTimeout = std::min(BackoffTimeout + BackoffTimeout, BACKOFF_MAX);
                 UpdateTicket(sync);
             } else {
                 with_lock(Lock) {

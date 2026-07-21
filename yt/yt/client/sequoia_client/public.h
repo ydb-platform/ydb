@@ -12,6 +12,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SequoiaRetriableError)                (6002))
     ((InvalidSequoiaReign)                  (6003))
     ((TransactionActionFailedOnMasterCell)  (6004))
+    ((SequoiaSubtreeTooLarge)               (6005))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

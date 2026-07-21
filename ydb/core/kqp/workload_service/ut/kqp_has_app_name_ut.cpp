@@ -10,6 +10,34 @@ namespace NKikimr::NKqp {
 using namespace NWorkload;
 using namespace NYdb;
 
+namespace {
+
+constexpr TStringBuf USER_SID = "test@user";
+
+void CreatePoolAndClassifier(
+    TIntrusivePtr<IYdbSetup> ydb,
+    const TString& poolId,
+    const TString& classifierName,
+    const TString& appName)
+{
+    ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << USER_SID << R"(`;
+        CREATE RESOURCE POOL )" << poolId << R"( WITH (
+            CONCURRENT_QUERY_LIMIT=0
+        );
+        CREATE RESOURCE POOL CLASSIFIER )" << classifierName << R"( WITH (
+            RESOURCE_POOL=")" << poolId << R"(",
+            HAS_APP_NAME=")" << appName << R"("
+        );
+    )");
+}
+
+TQueryRunnerSettings QuerySettings(const TString& appName) {
+    return TQueryRunnerSettings().PoolId("").UserSID(TString(USER_SID)).ApplicationName(appName);
+}
+
+}  // anonymous namespace
+
 Y_UNIT_TEST_SUITE(TQueryClassifierHasAppName) {
 
     Y_UNIT_TEST(ShouldMatchAppName) {
@@ -44,45 +72,19 @@ Y_UNIT_TEST_SUITE(HasAppNameDdl) {
 
     Y_UNIT_TEST(TestHasAppNameClassifier) {
         auto ydb = TYdbSetupSettings().Create();
-
         const TString& poolId = "app_pool";
-        const TString& userSID = "test@user";
-        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
-            CREATE RESOURCE POOL )" << poolId << R"( WITH (
-                CONCURRENT_QUERY_LIMIT=0
-            );
-            CREATE RESOURCE POOL CLASSIFIER app_classifier WITH (
-                RESOURCE_POOL=")" << poolId << R"(",
-                HAS_APP_NAME="my_app"
-            );
-        )");
+        CreatePoolAndClassifier(ydb, poolId, "app_classifier", "my_app");
 
-        auto matchSettings = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("my_app");
-        WaitForClassifierFail(ydb, matchSettings, poolId);
-
-        auto noMatchSettings = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("other_app");
-        WaitForClassifierSuccess(ydb, noMatchSettings);
+        WaitForClassifierFail(ydb, QuerySettings("my_app"), poolId);
+        WaitForClassifierSuccess(ydb, QuerySettings("other_app"));
     }
 
     Y_UNIT_TEST(TestAlterHasAppName) {
         auto ydb = TYdbSetupSettings().Create();
-
         const TString& poolId = "alter_pool";
-        const TString& userSID = "test@user";
-        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
-            CREATE RESOURCE POOL )" << poolId << R"( WITH (
-                CONCURRENT_QUERY_LIMIT=0
-            );
-            CREATE RESOURCE POOL CLASSIFIER alter_classifier WITH (
-                RESOURCE_POOL=")" << poolId << R"(",
-                HAS_APP_NAME="old_app"
-            );
-        )");
+        CreatePoolAndClassifier(ydb, poolId, "alter_classifier", "old_app");
 
-        auto oldMatch = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("old_app");
-        WaitForClassifierFail(ydb, oldMatch, poolId);
+        WaitForClassifierFail(ydb, QuerySettings("old_app"), poolId);
 
         ydb->ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL CLASSIFIER alter_classifier SET (
@@ -90,11 +92,40 @@ Y_UNIT_TEST_SUITE(HasAppNameDdl) {
             );
         )");
 
-        auto newMatch = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("new_app");
-        WaitForClassifierFail(ydb, newMatch, poolId);
+        WaitForClassifierFail(ydb, QuerySettings("new_app"), poolId);
+        WaitForClassifierSuccess(ydb, QuerySettings("old_app"));
+    }
 
-        auto oldNoMatch = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("old_app");
-        WaitForClassifierSuccess(ydb, oldNoMatch);
+    Y_UNIT_TEST(TestAlterHasAppNameEmptyClearsFilter) {
+        auto ydb = TYdbSetupSettings().Create();
+        const TString& poolId = "empty_pool";
+        CreatePoolAndClassifier(ydb, poolId, "empty_classifier", "old_app");
+
+        WaitForClassifierFail(ydb, QuerySettings("old_app"), poolId);
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER empty_classifier SET (
+                HAS_APP_NAME=""
+            );
+        )");
+
+        WaitForClassifierFail(ydb, QuerySettings("any_app"), poolId);
+        WaitForClassifierFail(ydb, QuerySettings(""), poolId);
+    }
+
+    Y_UNIT_TEST(TestResetHasAppNameClearsFilter) {
+        auto ydb = TYdbSetupSettings().Create();
+        const TString& poolId = "reset_pool";
+        CreatePoolAndClassifier(ydb, poolId, "reset_classifier", "old_app");
+
+        WaitForClassifierFail(ydb, QuerySettings("old_app"), poolId);
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER reset_classifier RESET (HAS_APP_NAME);
+        )");
+
+        WaitForClassifierFail(ydb, QuerySettings("any_app"), poolId);
+        WaitForClassifierFail(ydb, QuerySettings(""), poolId);
     }
 }
 

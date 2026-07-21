@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -459,6 +460,8 @@ namespace NKikimr::NStorage {
             // Runtime configuration of VDisk.
             struct TRuntimeData {
                 TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+                TActorId ActorId;
+                TActorId ServiceId;
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;

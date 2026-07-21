@@ -67,22 +67,24 @@ class IPv6(ClickHouseType):
         """Read IPv6 addresses in native format, always returning IPv6Address objects."""
         fast_ip_v6 = IPv6Address.__new__
         with_scope_id = "_scope_id" in IPv6Address.__slots__
-        new_col = []
+        new_col: list[IPv6Address] = []
         app = new_col.append
         ifb = int.from_bytes
         for _ in range(num_rows):
             int_value = ifb(source.read_bytes(16), "big")
             ipv6 = fast_ip_v6(IPv6Address)
-            ipv6._ip = int_value
+            # Bypass IPv6Address.__init__ for performance; _ip and _scope_id are
+            # the internal representation used by CPython's ipaddress module.
+            ipv6._ip = int_value  # type: ignore[attr-defined]
             if with_scope_id:
-                ipv6._scope_id = None
+                ipv6._scope_id = None  # type: ignore[attr-defined]
             app(ipv6)
         return new_col
 
     @staticmethod
     def _read_binary_str(source: ByteSource, num_rows: int) -> list[str]:
         """Read IPv6 addresses in string format, always returning IPv6Address strings."""
-        new_col = []
+        new_col: list[str] = []
         app = new_col.append
         tov6 = socket.inet_ntop
         af6 = socket.AF_INET6

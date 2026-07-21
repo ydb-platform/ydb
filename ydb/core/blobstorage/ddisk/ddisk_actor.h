@@ -219,6 +219,17 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr InMemoryCacheSize;
                 NMonitoring::THistogramPtr WriteBatchSize;
             } PersistentBuffer;
+
+            struct {
+                // External (non-internal) TEvWritePersistentBuffer requests received with no Checksums
+                // attached at all. Checksum validation is opt-in, so this tracks how far we are from being
+                // able to make it mandatory.
+                NMonitoring::TDynamicCounters::TCounterPtr WritesWithoutChecksums;
+                // Sender-supplied checksum mismatches detected on TEvWrite / TEvWritePersistentBuffer(s),
+                // i.e. rejections with TReplyStatus::CORRUPTED. Covers both the DDisk data path and the
+                // PersistentBuffer path, so it lives in its own subsystem rather than under PersistentBuffer.
+                NMonitoring::TDynamicCounters::TCounterPtr ChecksumMismatch;
+            } Checksums;
         };
 
         TCounters Counters;
@@ -742,6 +753,9 @@ namespace NKikimr::NDDisk {
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
+                // Sender-supplied per-MinSectorSize-block payload checksums for this record, in order.
+                // Empty when the write carried no checksums. See TPersistentBuffer::TRecord::PayloadChecksums.
+                std::vector<ui64> PayloadChecksums;
 
                 TRope JoinData(ui32 sectorSize);
             };
@@ -802,7 +816,7 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors, const std::vector<ui64>& payloadChecksums);
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
@@ -811,7 +825,12 @@ namespace NKikimr::NDDisk {
 
         bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
-        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr ev);
+        // ev is taken by reference (not TPtr by value, unlike its sibling above): TPtr is a TAutoPtr
+        // with ownership-transferring copy semantics, so a by-value parameter here would null out the
+        // caller's ev as soon as this is invoked -- including on the "doesn't fit, fall back" (false)
+        // return path, where Handle(TEvWritePersistentBuffer) still needs a valid ev afterwards to retry
+        // via ProcessPersistentBufferWrite.
+        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr& ev);
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);

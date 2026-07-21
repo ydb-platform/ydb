@@ -874,8 +874,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             auto join = joinFinder.Find({"t1", "t2", "t3"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
-            UNIT_ASSERT(join.LhsShuffled);
-            UNIT_ASSERT(!join.RhsShuffled);
+            UNIT_ASSERT(!join.LhsShuffled);
+            UNIT_ASSERT(join.RhsShuffled);
         }
 
         UNIT_ASSERT(resultSets.size() == 1);

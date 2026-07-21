@@ -55,6 +55,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
         bool WaitSave = false;
         bool QueryStatsChanged = true; // We should update status once execution was started
         bool AstSaved = false;
+        TInstant SuspendUntil;
 
         void UpdateChanged(const std::optional<TString>& from, const TString& to) {
             if (QueryStatsChanged) {
@@ -234,6 +235,7 @@ private:
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvKqp::TEvCancelQueryResponse, Handle);
         sFunc(TEvents::TEvPoison, Finish);
+        sFunc(TEvents::TEvWakeup, ContinueExecute);
     )
 
     void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
@@ -353,8 +355,10 @@ private:
 
         const auto astSaved = ev->Get()->AstSaved;
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_N("Script progress updated " << ev->Sender << ", fail: " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             SaveProgressState.QueryStatsChanged = true;
+            SaveProgressState.SuspendUntil = TInstant::Now() + TDuration::Seconds(1);
+            Schedule(SaveProgressState.SuspendUntil, new TEvents::TEvWakeup());
+            LOG_N("Script progress updated " << ev->Sender << ", fail: " << status << ", suspend until: " << SaveProgressState.SuspendUntil << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
             LOG_T("Script progress updated " << ev->Sender << ", ast saved: " << astSaved);
             SaveProgressState.AstSaved = SaveProgressState.AstSaved || astSaved;
@@ -594,7 +598,7 @@ private:
             return SaveResultsMeta();
         }
 
-        if (SaveProgressState.QueryStatsChanged) {
+        if (SaveProgressState.QueryStatsChanged && SaveProgressState.SuspendUntil <= TInstant::Now()) {
             return UpdateScriptProgress();
         }
 

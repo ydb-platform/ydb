@@ -340,9 +340,9 @@ message TFeatureFlags {
     optional bool EnableExportInParquet = 293 [default = false];
     optional bool EnableCutHistory = 294 [default = false];
     optional bool DisableOldSecretCreation = 295 [default = false];
-    optional bool EnableColumnshardInterval = 296 [default = false];
-    optional bool EnableColumnshardUuid = 297 [default = false];
-    optional bool EnableColumnshardDyNumber = 298 [default = false];
+    optional bool EnableColumnshardInterval = 296 [default = true];
+    optional bool EnableColumnshardUuid = 297 [default = true];
+    optional bool EnableColumnshardDyNumber = 298 [default = true];
     optional bool EnableDataShardDirectPartImport = 299 [default = false];
     // For test purposes only, may cause persistent system failure if enabled
     optional bool BsControllerRestartBeforeCompatibilityInfoUpdate = 300 [default = false];
@@ -353,5 +353,7 @@ message TFeatureFlags {
     // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
     // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
-    optional bool EnableSharedReadingStructuredJsonParsing = 303 [default = false];
+    optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
+    optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
+    optional bool EnableSharedReadingStructuredJsonParsing = 305 [default = false];
 }

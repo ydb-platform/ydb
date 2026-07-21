@@ -75,9 +75,9 @@ def prevent_empty_migrations(writer_fn: Callable) -> Callable:
         if not directives:
             return
         config = context.config
-        if getattr(config.cmd_opts, "autogenerate", False):
+        if config is not None and getattr(config.cmd_opts, "autogenerate", False):
             script = directives[0]
-            if script.upgrade_ops.is_empty():
+            if script.upgrade_ops is not None and script.upgrade_ops.is_empty():
                 directives.clear()
                 return
         writer_fn(context, revision, directives)

@@ -1,5 +1,7 @@
 PY2TEST()
 
+SUBSCRIBER(g:python-contrib)
+
 SRCDIR(contrib/deprecated/python/enum34/enum)
 
 TEST_SRCS(

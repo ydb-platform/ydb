@@ -743,6 +743,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 break;
             default:
                 YDB_LOG_ERROR("[Import] HeadObject request failed",
+                    {"logPrefix", LogPrefix()},
+                    {"error", result});
+                return RetryOrFinish(result.GetError());
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
@@ -791,6 +794,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": file is corrupted";
             YDB_LOG_ERROR("[Import] Import data file is corrupted",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
+            return Finish(false, error);
+        }
+
+        if (Checksum) {
             HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
             this->Become(&TThis::StateDownloadChecksum);
         } else {
@@ -799,7 +808,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
+        const auto& info = ev->Get()->Info;
         YDB_LOG_DEBUG("[Import] Received S3 download info",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
         if (!info.DataETag) {
             this->Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
                 ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState

@@ -6,9 +6,20 @@ sums line coverage across files matching each prefix. Deduplicates files by
 their source-relative path (the same source file may appear multiple times
 via different build_root prefixes when linked into multiple binaries).
 
-Test sources are excluded: paths under `/ut/` and files named `*_ut.*`.
-Counting coverage of the tests themselves inflates the metric (near-100%
-on UT files) and is not useful for tracking product-code coverage.
+What is counted:
+  - Product sources under the given prefixes (apps/ydb, ydb_cli, workload).
+  - Line counts come from llvm-cov `summary.lines` (instrumentable lines).
+
+What is excluded:
+  - Unit-test sources: paths under `/ut/` and files named `*_ut.*`.
+    Counting those inflates the metric (UT files are often near-100%).
+
+What this is NOT:
+  - Not ya HTML "project" row (that uses a different filter pipeline).
+  - Not region/branch coverage unless you change the metric below.
+
+Optional `--group name=prefix1,prefix2` rolls several prefixes into one
+bucket (e.g. cli = apps/ydb + ydb_cli) without changing per-prefix rows.
 
 Also provides `list-binaries` to parse ya's build_clang_coverage_report.log
 (keeps that logic out of action.yaml — unindented heredocs break the YAML
@@ -19,6 +30,10 @@ Output JSON schema (default / aggregate mode):
         "overall": {"line_pct": float, "covered": int, "total": int},
         "per_prefix": {
             "<prefix>/": {"line_pct": float, "covered": int, "total": int},
+            ...
+        },
+        "per_group": {
+            "<name>": {"line_pct": float, "covered": int, "total": int},
             ...
         }
     }
@@ -65,10 +80,50 @@ def list_binaries_from_ya_log(ya_log_path):
         yield path
 
 
-def aggregate(files, prefixes):
+def _pct(bucket):
+    return round(100.0 * bucket["covered"] / bucket["total"], 2) if bucket["total"] else 0.0
+
+
+def _as_result(bucket):
+    return {
+        "line_pct": _pct(bucket),
+        "covered": bucket["covered"],
+        "total": bucket["total"],
+    }
+
+
+def parse_group(spec):
+    """Parse `name=prefix1,prefix2` into (name, [prefixes])."""
+    if "=" not in spec:
+        raise argparse.ArgumentTypeError(
+            f"--group must be name=prefix1,prefix2 (got {spec!r})"
+        )
+    name, prefixes = spec.split("=", 1)
+    name = name.strip()
+    parts = [p.strip() for p in prefixes.split(",") if p.strip()]
+    if not name or not parts:
+        raise argparse.ArgumentTypeError(
+            f"--group must be name=prefix1,prefix2 (got {spec!r})"
+        )
+    return name, parts
+
+
+def aggregate(files, prefixes, groups=None):
     overall = {"covered": 0, "total": 0}
     per_prefix = {p: {"covered": 0, "total": 0} for p in prefixes}
     seen = set()
+    groups = groups or []
+    # Map prefix -> group names that include it (a prefix may belong to several).
+    prefix_to_groups = {p: [] for p in prefixes}
+    per_group = {name: {"covered": 0, "total": 0} for name, _ in groups}
+    for name, group_prefixes in groups:
+        for p in group_prefixes:
+            if p not in prefix_to_groups:
+                raise SystemExit(
+                    f"group {name!r} references unknown prefix {p!r}; "
+                    f"known: {list(prefixes)}"
+                )
+            prefix_to_groups[p].append(name)
 
     for entry in files:
         path = entry["filename"]
@@ -86,25 +141,23 @@ def aggregate(files, prefixes):
         seen.add(rel)
 
         lines = entry["summary"]["lines"]
-        overall["covered"] += lines["covered"]
-        overall["total"] += lines["count"]
-        per_prefix[matched]["covered"] += lines["covered"]
-        per_prefix[matched]["total"] += lines["count"]
+        covered = lines["covered"]
+        total = lines["count"]
+        overall["covered"] += covered
+        overall["total"] += total
+        per_prefix[matched]["covered"] += covered
+        per_prefix[matched]["total"] += total
+        for gname in prefix_to_groups[matched]:
+            per_group[gname]["covered"] += covered
+            per_group[gname]["total"] += total
 
-    def pct(a):
-        return round(100.0 * a["covered"] / a["total"], 2) if a["total"] else 0.0
-
-    return {
-        "overall": {
-            "line_pct": pct(overall),
-            "covered": overall["covered"],
-            "total": overall["total"],
-        },
-        "per_prefix": {
-            p: {"line_pct": pct(a), "covered": a["covered"], "total": a["total"]}
-            for p, a in per_prefix.items()
-        },
+    result = {
+        "overall": _as_result(overall),
+        "per_prefix": {p: _as_result(a) for p, a in per_prefix.items()},
     }
+    if groups:
+        result["per_group"] = {name: _as_result(a) for name, a in per_group.items()}
+    return result
 
 
 def cmd_list_binaries(args):
@@ -122,7 +175,8 @@ def cmd_aggregate(args):
     data = json.loads(result.stdout)
     files = data["data"][0]["files"]
 
-    summary = aggregate(files, args.prefix)
+    groups = [parse_group(g) for g in (args.group or [])]
+    summary = aggregate(files, args.prefix, groups=groups)
     with open(args.output, "w") as f:
         json.dump(summary, f, indent=2)
     return 0
@@ -148,6 +202,11 @@ def main():
     )
     parser.add_argument(
         "--prefix", action="append", help="Source-path prefix to aggregate (repeatable)"
+    )
+    parser.add_argument(
+        "--group",
+        action="append",
+        help="Roll-up bucket name=prefix1,prefix2 (repeatable; prefixes must be listed in --prefix)",
     )
     parser.add_argument("--output", help="Output JSON path")
 

@@ -6,7 +6,8 @@ Supports two JSON schemas:
 Legacy (SDK): {"line_pct": <float>}
 Extended (CLI): {
     "overall": {"line_pct": <float>, ...},
-    "per_prefix": {"<prefix>/": {"line_pct": <float>, ...}, ...}
+    "per_prefix": {"<prefix>/": {"line_pct": <float>, ...}, ...},
+    "per_group": {"cli"|"workload": {"line_pct": <float>, ...}, ...}
 }
 
 The `extract` subcommand parses ya's HTML report and emits the legacy schema.
@@ -45,10 +46,34 @@ def get_per_prefix(data):
     return data.get("per_prefix") or {}
 
 
+def get_per_group(data):
+    return data.get("per_group") or {}
+
+
 def cmd_extract(args):
     with open(args.out_json, "w", encoding="utf-8") as f:
         json.dump({"line_pct": line_pct_from_html(args.report_dir)}, f)
     return 0
+
+
+def _format_detail_block(title, cur_map, base_map):
+    if not cur_map:
+        return []
+    lines = ["", title]
+    width = max(len(p) for p in cur_map)
+    for key, cur_data in cur_map.items():
+        cur_pct = cur_data["line_pct"]
+        base_pct = base_map.get(key, {}).get("line_pct", 0.0)
+        delta = round(cur_pct - base_pct, 2)
+        sign = "+" if delta > 0 else ("" if delta < 0 else "±")
+        covered = cur_data.get("covered")
+        total = cur_data.get("total")
+        counts = f"  [{covered}/{total}]" if covered is not None and total is not None else ""
+        lines.append(
+            f"  {key.ljust(width)}  {cur_pct:>6.2f}% (baseline: {base_pct:>6.2f}%)  "
+            f"[{sign}{delta:.2f}]{counts}"
+        )
+    return lines
 
 
 def cmd_check(args):
@@ -65,21 +90,24 @@ def cmd_check(args):
         f"{args.label} line coverage: {cur_overall:.2f}% (baseline: {base_overall:.2f}%, "
         f"tolerance: {args.tolerance}pp) — {'OK' if ok else 'REGRESSED'}"
     ]
+    if "overall" in current and "covered" in current["overall"]:
+        o = current["overall"]
+        lines.append(f"  overall lines: {o['covered']}/{o['total']}")
 
-    cur_per_prefix = get_per_prefix(current)
-    base_per_prefix = get_per_prefix(baseline)
-    if cur_per_prefix:
-        lines.append("")
-        lines.append("Details by directory:")
-        width = max(len(p) for p in cur_per_prefix)
-        for prefix, cur_data in cur_per_prefix.items():
-            cur_pct = cur_data["line_pct"]
-            base_pct = base_per_prefix.get(prefix, {}).get("line_pct", 0.0)
-            delta = round(cur_pct - base_pct, 2)
-            sign = "+" if delta > 0 else ("" if delta < 0 else "±")
-            lines.append(
-                f"  {prefix.ljust(width)}  {cur_pct:>6.2f}% (baseline: {base_pct:>6.2f}%)  [{sign}{delta:.2f}]"
-            )
+    lines.extend(
+        _format_detail_block(
+            "Details by group:",
+            get_per_group(current),
+            get_per_group(baseline),
+        )
+    )
+    lines.extend(
+        _format_detail_block(
+            "Details by directory:",
+            get_per_prefix(current),
+            get_per_prefix(baseline),
+        )
+    )
 
     print("\n".join(lines), file=sys.stderr)
     return 0 if ok else 1

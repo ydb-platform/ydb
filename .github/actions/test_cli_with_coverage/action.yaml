@@ -38,13 +38,22 @@ runs:
         trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
         echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
-        # ydb/apps/ydb has a trailing slash in the regex to avoid matching ydb/apps/ydbd.
-        # PY3TEST integration tests in ydb/tests/functional/ydb_cli DO contribute
-        # coverage (verified: LLVM_PROFILE_FILE is inherited by CLI subprocess,
-        # profraws land in the suite's coverage.tar). Kept in the target list.
-        # --keep-temps preserves build_root binaries so we can rerun llvm-cov
-        # ourselves to produce per-directory breakdown (ya's report only gives
-        # one overall number).
+        # Instrumentation scope is COVERAGE_TARGET_REGEXP (ya selective clang
+        # coverage). Trailing slash on ydb/apps/ydb/ avoids matching ydb/apps/ydbd.
+        #
+        # Do NOT pass --coverage-prefix-filter here:
+        # 1) ya overwrites COVERAGE_TARGET_REGEXP with coverage_prefix_filter
+        #    (devtools/ya/test/opts/__init__.py). Multiple --coverage-prefix-filter
+        #    values use SetValueHook → last wins, so we used to instrument only
+        #    ydb/library/workload and skip product ydb_cli libraries.
+        # 2) Report-side prefix filter uses str.startswith, not regex
+        #    (library/python/testing/coverage_utils.make_filter), so an OR string
+        #    would match nothing in HTML. Per-directory numbers come from
+        #    aggregate_cli_coverage.py instead.
+        #
+        # PY3TEST in ydb/tests/functional/ydb_cli still contributes: CLI
+        # subprocess inherits LLVM_PROFILE_FILE; profraws land in coverage.tar.
+        # --keep-temps keeps instrumented binaries for our llvm-cov re-export.
         run_cli_coverage() {
           local out_dir="$1"
           mkdir -p "$out_dir"
@@ -52,9 +61,6 @@ runs:
             -tA --build profile
             --clang-coverage --coverage-report
             -DCOVERAGE_TARGET_REGEXP='ydb/apps/ydb/|ydb/public/lib/ydb_cli|ydb/library/workload'
-            --coverage-prefix-filter=ydb/apps/ydb/
-            --coverage-prefix-filter=ydb/public/lib/ydb_cli
-            --coverage-prefix-filter=ydb/library/workload
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
             --keep-temps
@@ -122,6 +128,8 @@ runs:
             --prefix ydb/apps/ydb/ \
             --prefix ydb/public/lib/ydb_cli/ \
             --prefix ydb/library/workload/ \
+            --group "cli=ydb/apps/ydb/,ydb/public/lib/ydb_cli/" \
+            --group "workload=ydb/library/workload/" \
             --output "$json_out"
         }
 

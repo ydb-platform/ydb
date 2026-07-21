@@ -24,6 +24,7 @@
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 
+#include <exception>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -242,7 +243,7 @@ NJson::TJsonValue JsonIds(const TVector<ui32>& ids) {
 }
 
 bool ParseJson(const TString& text, NJson::TJsonValue& value) {
-    return !text.empty() && NJson::ReadJsonTree(text, &value, true);
+    return !text.empty() && NJson::ReadJsonTree(text, &value, false);
 }
 
 int ExpectedExit(TStringBuf status) {
@@ -260,6 +261,7 @@ struct TOutcome {
     TString Status;
     TString Layer;
     TString Reason;
+    TVector<std::pair<TString, TString>> UnsupportedReasons;
     bool Fatal = false;
 };
 
@@ -284,7 +286,34 @@ TOutcome HarnessError(
     return outcome;
 }
 
+NJson::TJsonValue PreserveArtifacts(
+    TStringBuf suiteSlug,
+    ui32 queryId,
+    const TRBOSemanticSnapshotBoundaryResultV1& initial,
+    const TRBOSemanticSnapshotBoundaryResultV1& final,
+    const TFsPath& formulaPath)
+{
+    const TString stem = TStringBuilder()
+        << suiteSlug << "_q" << queryId;
+    NJson::TJsonValue artifacts(NJson::JSON_MAP);
+
+    const TString initialName = stem + ".initial.json";
+    const TString finalName = stem + ".final.json";
+    TFileOutput((GetOutputPath() / initialName).GetPath()).Write(initial.Json);
+    TFileOutput((GetOutputPath() / finalName).GetPath()).Write(final.Json);
+    artifacts["initial_snapshot"] = initialName;
+    artifacts["final_snapshot"] = finalName;
+
+    if (formulaPath.Exists()) {
+        const TString formulaName = stem + ".smt2";
+        formulaPath.CopyTo((GetOutputPath() / formulaName).GetPath(), true);
+        artifacts["formula"] = formulaName;
+    }
+    return artifacts;
+}
+
 TOutcome RunVerifier(
+    TStringBuf suiteSlug,
     ui32 queryId,
     ui64 prepareMs,
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
@@ -315,10 +344,11 @@ TOutcome RunVerifier(
     command.Run();
     const ui64 verifyMs = (TInstant::Now() - started).MilliSeconds();
 
-    NJson::TJsonValue verdict;
-    if (!ParseJson(command.GetOutput(), verdict) &&
-        !ParseJson(command.GetError(), verdict))
-    {
+    NJson::TJsonValue stdoutVerdict;
+    NJson::TJsonValue stderrVerdict;
+    const bool stdoutJson = ParseJson(command.GetOutput(), stdoutVerdict);
+    const bool stderrJson = ParseJson(command.GetError(), stderrVerdict);
+    if (!stdoutJson && !stderrJson) {
         return HarnessError(
             queryId,
             prepareMs,
@@ -329,6 +359,16 @@ TOutcome RunVerifier(
                 << "; stdout=" << command.GetOutput()
                 << "; stderr=" << command.GetError());
     }
+    if (stdoutJson && stderrJson) {
+        return HarnessError(
+            queryId,
+            prepareMs,
+            2,
+            "verifier returned JSON on both stdout and stderr");
+    }
+    NJson::TJsonValue verdict = stdoutJson
+        ? std::move(stdoutVerdict)
+        : std::move(stderrVerdict);
     if (!verdict.IsMap() || !verdict.Has("status") ||
         !verdict["status"].IsString())
     {
@@ -364,6 +404,10 @@ TOutcome RunVerifier(
     if (verdict.Has("reason") && verdict["reason"].IsString()) {
         outcome.Reason = verdict["reason"].GetStringSafe();
     }
+    if (status == "UNSUPPORTED") {
+        outcome.UnsupportedReasons.emplace_back(
+            outcome.Layer, outcome.Reason);
+    }
     outcome.Fatal = status == "COUNTEREXAMPLE" ||
         status == "SCHEMA_MISMATCH" || status == "SOLVER_ERROR";
     outcome.Json["query_id"] = queryId;
@@ -374,6 +418,16 @@ TOutcome RunVerifier(
     outcome.Json["verify_ms"] = verifyMs;
     outcome.Json["capture_count"] = 2;
     outcome.Json["verdict"] = std::move(verdict);
+    if (status == "COUNTEREXAMPLE" || status == "UNKNOWN" ||
+        status == "SCHEMA_MISMATCH" || status == "SOLVER_ERROR")
+    {
+        try {
+            outcome.Json["artifacts"] = PreserveArtifacts(
+                suiteSlug, queryId, initial, final, formulaPath);
+        } catch (const std::exception& error) {
+            outcome.Json["artifact_error"] = error.what();
+        }
+    }
     return outcome;
 }
 
@@ -389,9 +443,16 @@ TOutcome ClassifyQuery(
     auto host = MakeHost(kikimr.GetTestServer(), moduleResolver, sink);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-
     const TInstant started = TInstant::Now();
-    const auto prepared = host->SyncPrepareDataQuery(Query(suite, queryId), settings);
+    // Literal folding and other preparation paths assume a real actor
+    // activation context, just as the production KQP request path provides.
+    const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+        host,
+        query = Query(suite, queryId),
+        settings
+    ] {
+        return host->SyncPrepareDataQuery(query, settings);
+    });
     const ui64 prepareMs = (TInstant::Now() - started).MilliSeconds();
     const auto captures = sink->Take();
 
@@ -425,10 +486,16 @@ TOutcome ClassifyQuery(
     if (!initial.IsSupported() || !final.IsSupported()) {
         TOutcome outcome;
         outcome.Status = "UNSUPPORTED";
-        outcome.Layer = !initial.IsSupported() ? "initial_export" : "final_export";
-        outcome.Reason = !initial.IsSupported()
-            ? initial.UnsupportedReason
-            : final.UnsupportedReason;
+        if (!initial.IsSupported()) {
+            outcome.UnsupportedReasons.emplace_back(
+                "initial_export", initial.UnsupportedReason);
+        }
+        if (!final.IsSupported()) {
+            outcome.UnsupportedReasons.emplace_back(
+                "final_export", final.UnsupportedReason);
+        }
+        outcome.Layer = outcome.UnsupportedReasons.front().first;
+        outcome.Reason = outcome.UnsupportedReasons.front().second;
         outcome.Json["query_id"] = queryId;
         outcome.Json["status"] = outcome.Status;
         outcome.Json["layer"] = outcome.Layer;
@@ -442,6 +509,7 @@ TOutcome ClassifyQuery(
     }
 
     return RunVerifier(
+        suite.Slug,
         queryId,
         prepareMs,
         initial,
@@ -469,16 +537,30 @@ void RunCoverage(const TSuite& suite) {
 
     for (const ui32 queryId : selected) {
         Cerr << "Checking " << suite.Name << " q" << queryId << Endl;
-        TOutcome outcome = ClassifyQuery(
-            kikimr,
-            moduleResolver,
-            suite,
-            queryId,
-            timeoutMs,
-            solver);
+        TOutcome outcome;
+        try {
+            outcome = ClassifyQuery(
+                kikimr,
+                moduleResolver,
+                suite,
+                queryId,
+                timeoutMs,
+                solver);
+        } catch (const std::exception& error) {
+            outcome = HarnessError(
+                queryId,
+                0,
+                0,
+                TStringBuilder() << "classification threw: " << error.what());
+        } catch (...) {
+            outcome = HarnessError(
+                queryId, 0, 0, "classification threw a non-standard exception");
+        }
         ++summary[outcome.Status];
         if (outcome.Status == "UNSUPPORTED") {
-            unsupported[{outcome.Layer, outcome.Reason}].push_back(queryId);
+            for (const auto& reason : outcome.UnsupportedReasons) {
+                unsupported[reason].push_back(queryId);
+            }
         } else if (outcome.Status == "OPTIMIZER_FAILURE") {
             optimizerFailures[outcome.Reason].push_back(queryId);
         }

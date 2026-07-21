@@ -267,7 +267,7 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;

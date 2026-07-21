@@ -33,7 +33,7 @@ class Array(ClickHouseType):
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
         return self.element_type.read_column_prefix(source, ctx)
 
-    def _data_size(self, sample: Sequence) -> int:
+    def _data_size(self, sample: Collection[Any]) -> int:
         if len(sample) == 0:
             return 8
         total = 0
@@ -139,7 +139,7 @@ class Tuple(ClickHouseType):
             column = e_type.read_column_data(source, num_rows, ctx, read_state[ix])
             columns.append(column)
         if e_names and self.read_format(ctx) != "tuple":
-            dicts = [{} for _ in range(num_rows)]
+            dicts: list[dict[str, Any]] = [{} for _ in range(num_rows)]
             for ix, x in enumerate(dicts):
                 for y, key in enumerate(e_names):
                     x[key] = columns[y][ix]
@@ -163,7 +163,7 @@ class Tuple(ClickHouseType):
 
     def convert_dict_insert(self, column: Sequence) -> Sequence:
         names = self.element_names
-        col = [[] for _ in names]
+        col: list[list[Any]] = [[] for _ in names]
         for x in column:
             for ix, name in enumerate(names):
                 col[ix].append(x.get(name))

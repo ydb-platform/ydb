@@ -2,6 +2,9 @@
 
 #include "private.h"
 
+#include <library/cpp/yt/logging/tagged_payload.h>
+#include <library/cpp/yt/logging/structured_payload.h>
+
 #include <yt/yt/core/json/json_writer.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -18,9 +21,9 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPlainTextLogFormatter::TPlainTextLogFormatter(bool enableSourceLocation)
-    : TLogFormatterBase(enableSourceLocation)
-    , EventFormatter_(enableSourceLocation)
+TPlainTextLogFormatter::TPlainTextLogFormatter(TPlainTextLogFormatterOptions options)
+    : TLogFormatterBase(TLogFormatterBaseOptions{.EnableSourceLocation = options.EnableSourceLocation})
+    , EventFormatter_(options.EnableSourceLocation)
 { }
 
 i64 TPlainTextLogFormatter::WriteFormatted(IOutputStream* outputStream, const TLogEvent& event)
@@ -45,34 +48,32 @@ void TPlainTextLogFormatter::WriteLogReopenSeparator(IOutputStream* outputStream
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLogFormatterBase::TLogFormatterBase(bool enableSourceLocation)
-    : EnableSourceLocation_(enableSourceLocation)
+TLogFormatterBase::TLogFormatterBase(TLogFormatterBaseOptions options)
+    : Options_(std::move(options))
 { }
 
 bool TLogFormatterBase::IsSourceLocationEnabled() const
 {
-    return EnableSourceLocation_;
+    return Options_.EnableSourceLocation;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStructuredLogFormatter::TStructuredLogFormatter(
-    ELogFormat format,
-    THashMap<std::string, INodePtr> commonFields,
-    bool enableSourceLocation,
-    bool enableSystemFields,
-    bool enableHostField,
-    NJson::TJsonFormatConfigPtr jsonFormat,
-    EYsonFormat ysonFormat)
-    : TLogFormatterBase(enableSourceLocation)
-    , Format_(format)
-    , CommonFields_(std::move(commonFields))
-    , EnableSystemFields_(enableSystemFields)
-    , EnableHostField_(enableHostField)
-    , JsonFormat_(!jsonFormat && (Format_ == ELogFormat::Json)
-        ? New<NJson::TJsonFormatConfig>()
-        : std::move(jsonFormat))
-    , YsonFormat_(ysonFormat)
+namespace {
+
+TStructuredLogFormatterOptions NormalizeStructuredOptions(TStructuredLogFormatterOptions options)
+{
+    if (!options.JsonFormat && options.Format == ELogFormat::Json) {
+        options.JsonFormat = New<NJson::TJsonFormatConfig>();
+    }
+    return options;
+}
+
+} // namespace
+
+TStructuredLogFormatter::TStructuredLogFormatter(TStructuredLogFormatterOptions options)
+    : TLogFormatterBase(TLogFormatterBaseOptions{.EnableSourceLocation = options.EnableSourceLocation})
+    , Options_(NormalizeStructuredOptions(std::move(options)))
 { }
 
 i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEvent& event)
@@ -84,17 +85,17 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
     auto countingStream = TCountingOutput(stream);
     std::unique_ptr<IFlushableYsonConsumer> consumer;
 
-    switch (Format_) {
+    switch (Options_.Format) {
         case ELogFormat::Json:
-            YT_VERIFY(JsonFormat_);
-            consumer = NJson::CreateJsonConsumer(&countingStream, EYsonType::Node, JsonFormat_);
+            YT_VERIFY(Options_.JsonFormat);
+            consumer = NJson::CreateJsonConsumer(&countingStream, EYsonType::Node, Options_.JsonFormat);
             break;
         case ELogFormat::Yson:
             consumer = std::make_unique<TYsonWriter>(
                 &countingStream,
-                YsonFormat_,
+                Options_.YsonFormat,
                 EYsonType::Node,
-                /*enableRaw*/ YsonFormat_ == EYsonFormat::Binary);
+                /*enableRaw*/ Options_.YsonFormat == EYsonFormat::Binary);
             break;
         default:
             YT_ABORT();
@@ -105,23 +106,40 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
 
     BuildYsonFluently(consumer.get())
         .BeginMap()
-            .DoFor(CommonFields_, [] (auto fluent, auto item) {
+            .DoFor(Options_.CommonFields, [] (auto fluent, auto item) {
                 fluent.Item(item.first).Value(item.second);
             })
-            .DoIf(event.MessageKind == ELogMessageKind::Structured, [&] (auto fluent) {
-                fluent.Items(TYsonString(event.MessageRef, EYsonType::MapFragment));
+            .DoIf(std::holds_alternative<TStructuredLogEventPayload>(event.Payload), [&] (auto fluent) {
+                fluent.Items(TYsonString(GetYsonFromStructuredPayload(std::get<TStructuredLogEventPayload>(event.Payload))));
             })
-            .DoIf(event.MessageKind == ELogMessageKind::Unstructured, [&] (auto fluent) {
-                fluent.Item("message").Value(event.MessageRef.ToStringBuf());
+            .DoIf(std::holds_alternative<TTaggedLogEventPayload>(event.Payload), [&] (auto fluent) {
+                const auto& taggedPayload = std::get<TTaggedLogEventPayload>(event.Payload);
+                if (Options_.EnableNativeTags) {
+                    TTaggedPayloadReader reader(taggedPayload);
+                    auto message = reader.ReadMessage();
+                    auto firstTag = reader.TryReadTag();
+                    fluent
+                        .Item("message").Value(message)
+                        .DoIf(firstTag.has_value(), [&] (auto fluent) {
+                            fluent.Item("tags").DoMap([&] (auto fluent) {
+                                for (auto tag = firstTag; tag; tag = reader.TryReadTag()) {
+                                    fluent.Item(tag->Key).Value(tag->Value);
+                                }
+                            });
+                        });
+                } else {
+                    // Fold the tags into the message: |Message (Key: Value, ...)|.
+                    fluent.Item("message").Value(FormatTaggedPayload(taggedPayload));
+                }
             })
-            .DoIf(EnableSystemFields_, [&] (auto fluent) {
+            .DoIf(Options_.EnableSystemFields, [&] (auto fluent) {
                 fluent
                     .Item("instant").Value(dateTimeBuffer.GetBuffer())
                     .Item("level").Value(FormatEnum(event.Level))
                     .Item("category").Value(event.Category->Name);
             })
             // TODO(achulkov2): The presence of different system fields should be controller by a flag enum instead of multiple boolean options.
-            .DoIf(EnableHostField_, [&] (auto fluent) {
+            .DoIf(Options_.EnableHostField, [&] (auto fluent) {
                 fluent.Item("host").Value(NNet::GetLocalHostName());
             })
             .DoIf(event.Family == ELogFamily::PlainText, [&] (auto fluent) {
@@ -139,7 +157,7 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
         .EndMap();
     consumer->Flush();
 
-    if (Format_ == ELogFormat::Yson) {
+    if (Options_.Format == ELogFormat::Yson) {
         // In order to obtain proper list fragment, we must manually insert trailing semicolon in each line.
         countingStream.Write(';');
     }

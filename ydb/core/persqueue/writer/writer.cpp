@@ -178,7 +178,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         NKikimrPQ::TWriteId proto;
         auto* deferred = proto.MutableDeferredPublicationApi();
         deferred->SetIntPublicationId(Opts.DeferredPublish->IntPublicationId);
-        deferred->SetExtPublicationId(Opts.DeferredPublish->ExtPublicationId);
+        if (Opts.DeferredPublish->ExtPublicationId) {
+            deferred->SetExtPublicationId(*Opts.DeferredPublish->ExtPublicationId);
+        }
         return TWriteId(std::move(proto));
     }
 

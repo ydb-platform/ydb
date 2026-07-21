@@ -92,8 +92,8 @@ TMaybe<NPQ::TDeferredPublishWriterOpts> TWriteRequestInfoImpl<TEvWrite>::GetDefe
         return NPQ::TDeferredPublishWriterOpts{
             deferredPublish.int_publication_id(),
             deferredPublish.has_ext_publication_id()
-                ? deferredPublish.ext_publication_id()
-                : TString{},
+                ? TMaybe<TString>(deferredPublish.ext_publication_id())
+                : Nothing(),
         };
     }
 }

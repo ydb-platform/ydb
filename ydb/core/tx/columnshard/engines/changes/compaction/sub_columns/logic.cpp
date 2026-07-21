@@ -27,12 +27,8 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     AFL_VERIFY(stats.size());
     AFL_VERIFY(statRecordsCount);
     auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
-    auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
-    ResultColumnStats = splitted.ExtractColumns();
+    ResultColumnStats = commonStats.SelectSeparatedColumns(GetSettings(), statRecordsCount);
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
-    //    YDB_LOG_ERROR("",
-    //          {"columns", ResultColumnStats->DebugJson()},
-    //          {"others", splitted.ExtractOthers().DebugJson()});
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();

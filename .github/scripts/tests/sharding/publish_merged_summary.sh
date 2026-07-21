@@ -48,6 +48,19 @@ if [[ -n "$PUBLIC_DIR_URL" ]]; then
   if [[ "${INCLUDE_PLAN_ARTIFACTS:-}" == "1" ]]; then
     nav_args+=(--include-plan)
   fi
+  # After merge, try_1/shard_*.json is gone — pass shard count explicitly
+  # (or let render_artifacts_nav read merged/meta.txt).
+  if [[ -n "${SHARD_COUNT:-}" ]]; then
+    nav_args+=(--shard-count "$SHARD_COUNT")
+  elif [[ -n "$TRIES_DIR" && -f "$TRIES_DIR/meta.txt" ]]; then
+    meta_n=$(grep -E '^shard_reports=' "$TRIES_DIR/meta.txt" | head -1 | cut -d= -f2 || true)
+    if [[ -n "$meta_n" ]]; then
+      nav_args+=(--shard-count "$meta_n")
+    fi
+  fi
+  if [[ -n "${SHARD_IDS:-}" ]]; then
+    nav_args+=(--shard-ids "$SHARD_IDS")
+  fi
   python3 .github/scripts/tests/sharding/render_artifacts_nav.py "${nav_args[@]}"
   echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
 fi

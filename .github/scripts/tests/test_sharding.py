@@ -783,13 +783,14 @@ class RenderArtifactsNavTest(unittest.TestCase):
                 include_build=True,
                 include_plan=True,
             )
-            self.assertIn('href="build/"', html)
-            self.assertIn('href="plan/"', html)
-            self.assertIn('href="shard_0/"', html)
-            self.assertIn('href="shard_1/"', html)
-            self.assertIn('href="try_1/"', html)
-            self.assertIn('href="try_2/"', html)
-            self.assertIn('href="final/"', html)
+            # S3-safe links (folder/index.html), not bare trailing-slash dirs.
+            self.assertIn('href="build/index.html"', html)
+            self.assertIn('href="plan/index.html"', html)
+            self.assertIn('href="shard_0/index.html"', html)
+            self.assertIn('href="shard_1/index.html"', html)
+            self.assertIn('href="try_1/index.html"', html)
+            self.assertIn('href="try_2/index.html"', html)
+            self.assertIn('href="final/index.html"', html)
             self.assertIn("<table", html)
             self.assertNotIn("<h2>Merged</h2>", html)
 
@@ -800,8 +801,38 @@ class RenderArtifactsNavTest(unittest.TestCase):
             include_build=True,
             include_plan=False,
         )
-        self.assertIn('href="build/"', html)
-        self.assertNotIn('href="plan/"', html)
+        self.assertIn('href="build/index.html"', html)
+        self.assertNotIn("plan/index.html", html)
+
+    def test_render_root_index_from_shard_count_after_merge(self):
+        """After merge, only try_*/report.json remains — use shard_count/meta."""
+        with tempfile.TemporaryDirectory() as tmp:
+            merged = Path(tmp)
+            (merged / "try_1").mkdir()
+            (merged / "try_1" / "report.json").write_text('{"results":[]}', encoding="utf-8")
+            (merged / "meta.txt").write_text("shard_reports=3\n", encoding="utf-8")
+            html = render_nav_html(
+                base_url="https://s3.example/run/x86-64",
+                tries_dir=merged,
+                include_build=True,
+                include_plan=True,
+            )
+            self.assertIn('href="shard_0/index.html"', html)
+            self.assertIn('href="shard_1/index.html"', html)
+            self.assertIn('href="shard_2/index.html"', html)
+            self.assertIn('href="try_1/index.html"', html)
+
+    def test_render_root_index_explicit_shard_count(self):
+        html = render_nav_html(
+            base_url="https://s3.example/run/x86-64",
+            tries_dir=None,
+            include_build=False,
+            include_plan=False,
+            shard_count=2,
+        )
+        self.assertIn('href="shard_0/index.html"', html)
+        self.assertIn('href="shard_1/index.html"', html)
+        self.assertIn('href="final/index.html"', html)
 
 
 class RunnerCapacityTest(unittest.TestCase):

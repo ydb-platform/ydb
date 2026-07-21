@@ -618,6 +618,7 @@ jobs:
           SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
           INCLUDE_BUILD_ARTIFACTS: "1"
           INCLUDE_PLAN_ARTIFACTS: "1"
+          SHARD_COUNT: ${{ steps.merge.outputs.shard_count }}
         run: |
           set -eux
           bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/final_report.json merged

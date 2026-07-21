@@ -36,6 +36,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     VerificationError,
     build_logical_kernel_problem_for_tests,
     build_problem,
+    build_rule_prefix_problem,
     solve,
 )
 
@@ -839,6 +840,16 @@ class BoundaryContractTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "test comparisons require stage_graph:null"):
             build_logical_kernel_problem_for_tests(logical, staged, 1)
 
+    def test_rule_prefix_contract_accepts_logical_or_complete_staged_rhs(self):
+        logical = passthrough_stage_snapshot()
+        staged = passthrough_stage_snapshot({"kind": "map"})
+        self.assertIsInstance(build_rule_prefix_problem(logical, logical, 1), Problem)
+        self.assertIsInstance(build_rule_prefix_problem(logical, staged, 1), Problem)
+        with self.assertRaisesRegex(
+            VerificationError, "rule-prefix comparison requires a logical initial"
+        ):
+            build_rule_prefix_problem(staged, logical, 1)
+
     def test_cli_enforces_boundary_roles(self):
         logical = passthrough_stage_snapshot()
         errors = io.StringIO()
@@ -852,6 +863,29 @@ class BoundaryContractTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn('"status": "UNSUPPORTED"', errors.getvalue())
         self.assertIn("final snapshot", errors.getvalue())
+
+    def test_cli_labels_the_explicit_rule_prefix_scope(self):
+        logical = passthrough_stage_snapshot()
+        output = io.StringIO()
+        problem = Problem(smt.Script(), {})
+        with (
+            mock.patch.object(cli, "load_snapshot", side_effect=[logical, logical]),
+            mock.patch.object(
+                cli, "build_rule_prefix_problem", return_value=problem
+            ) as builder,
+            mock.patch.object(cli.Path, "write_text"),
+            redirect_stdout(output),
+        ):
+            exit_code = cli.main([
+                "initial.json",
+                "prefix.json",
+                "--diagnostic-rule-prefix",
+                "--emit-smt",
+                "unused.smt2",
+            ])
+        self.assertEqual(exit_code, 0)
+        self.assertIn('"comparison_scope": "RULE_APPLICATION_PREFIX"', output.getvalue())
+        builder.assert_called_once_with(logical, logical, 2, 10_000)
 
 
 class _MissingFunction(Exception):

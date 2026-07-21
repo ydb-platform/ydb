@@ -146,6 +146,31 @@ def build_logical_kernel_problem_for_tests(
     )
 
 
+def build_rule_prefix_problem(
+    before: Snapshot,
+    after: Snapshot,
+    row_bound: int,
+    timeout_ms: int | None = None,
+) -> Problem:
+    """Build the explicitly diagnostic initial-to-rule-prefix obligation."""
+
+    if before.stage_graph is not None:
+        raise VerificationError(
+            "rule-prefix comparison requires a logical initial snapshot"
+        )
+    return _build_problem(
+        before,
+        after,
+        row_bound,
+        timeout_ms,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
+
 def _build_problem(
     before: Snapshot,
     after: Snapshot,

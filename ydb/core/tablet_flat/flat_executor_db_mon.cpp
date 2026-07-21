@@ -1,25 +1,96 @@
 #include "flat_executor.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/stream/hex.h>
+#include <util/string/ascii.h>
 #include <util/string/escape.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+namespace {
+
+static constexpr TDuration DbMonRequestTimeout = TDuration::Seconds(60);
+static constexpr TStringBuf DbMonRequestDeadlineHeader = "x-ydb-monitoring-deadline-us";
+
+TStringBuf GetDbMonRequestHeader(const NMon::TEvRemoteHttpInfo& request, TStringBuf name) {
+    if (request.ExtendedQuery) {
+        for (const auto& header : request.ExtendedQuery->GetHeaders()) {
+            if (AsciiEqualsIgnoreCase(header.GetName(), name)) {
+                return header.GetValue();
+            }
+        }
+    }
+    return {};
+}
+
+TInstant GetDbMonRequestDeadline(const NMon::TEvRemoteHttpInfo::TPtr& event) {
+    const TStringBuf deadlineUs = GetDbMonRequestHeader(*event->Get(), DbMonRequestDeadlineHeader);
+    const ui64 deadlineValue = FromStringWithDefault<ui64>(deadlineUs);
+    if (deadlineValue) {
+        return TInstant::MicroSeconds(deadlineValue);
+    }
+    return TAppData::TimeProvider->Now() + DbMonRequestTimeout;
+}
+
+}
+
 class TExecutor::TTxExecutorDbMon : public TTransactionBase<TExecutor> {
 public:
     NMon::TEvRemoteHttpInfo::TPtr Event;
 
-    TTxExecutorDbMon(NMon::TEvRemoteHttpInfo::TPtr& event, TSelf *executor)
+    TTxExecutorDbMon(NMon::TEvRemoteHttpInfo::TPtr& event, TSelf *executor, TInstant deadline)
         : TBase(executor)
         , Event(event)
+        , Deadline(deadline)
     {}
 
+private:
+    TInstant Deadline;
+    ssize_t RowsScanned = 0;
+    ui64 TotalDataSteps = 0;
+    std::optional<TSerializedCellVec> LastSeenKey;
+    TVector<TString> RenderedRows;
+
+    // We check for timeout every TimeoutCheckRows rows, so that we don't check too often and don't check too rarely.
+    static constexpr ui64 TimeoutCheckRows = 256;
+    static constexpr ui64 OffsetScanPrechargeBytes = 16 * 1024 * 1024;
+
+private:
+    bool IsTimedOut() const {
+        return TAppData::TimeProvider->Now() >= Deadline;
+    }
+
+    static TVector<TRawTypeValue> MakeRawKey(const NTable::TScheme::TTableInfo& tableInfo, TConstArrayRef<TCell> cells) {
+        TVector<TRawTypeValue> key;
+        key.reserve(cells.size());
+
+        auto itColumn = tableInfo.KeyColumns.begin();
+        for (const auto& cell : cells) {
+            Y_ENSURE(itColumn != tableInfo.KeyColumns.end());
+            const NTable::TColumn& columnInfo = tableInfo.Columns.find(*itColumn)->second;
+            if (cell.IsNull()) {
+                key.emplace_back();
+            } else {
+                key.emplace_back(cell.Data(), cell.Size(), columnInfo.PType.GetTypeId());
+            }
+            ++itColumn;
+        }
+
+        return key;
+    }
+
+public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+        if (IsTimedOut()) {
+            return true;
+        }
+
         TStringStream str;
         {
             const auto &scheme = txc.DB.GetScheme();
@@ -122,6 +193,30 @@ public:
                     if (cgi.Get("Lookup") == "Exact") {
                         lookup = NTable::ELookup::ExactMatch;
                     }
+                    const bool disableOffsetScanResume = cgi.Has("DisableOffsetScanResume");
+                    const bool disableOffsetScanPrecharge = cgi.Has("DisableOffsetScanPrecharge");
+                    if (disableOffsetScanResume) {
+                        LastSeenKey.reset();
+                        RowsScanned = 0;
+                        RenderedRows.clear();
+                    }
+                    const bool canResumeByKey = lookup != NTable::ELookup::ExactMatch && !tableInfo->KeyColumns.empty();
+                    if (LastSeenKey && (LastSeenKey->GetCells().size() != tableInfo->KeyColumns.size())) {
+                        // LastSeenKey is captured from iterator GetKey() after a successful step.
+                        // It must always be a full primary key for the same table.
+                        // Better stop here in this case.
+                        Y_ABORT("Cannot resume offset scan because key size changed: %" PRISZT " vs %" PRISZT,
+                            LastSeenKey->GetCells().size(), tableInfo->KeyColumns.size());
+                    }
+                    if (LastSeenKey && !canResumeByKey) {
+                        LastSeenKey.reset();
+                        RowsScanned = 0;
+                        RenderedRows.clear();
+                    }
+                    if (LastSeenKey && canResumeByKey) {
+                        key = MakeRawKey(*tableInfo, LastSeenKey->GetCells());
+                        lookup = NTable::ELookup::GreaterThan;
+                    }
                     auto result = txc.DB.Iterate(tableId, key, columns, lookup);
                     str << "<table class='table table-sortable'>";
                     str << "<thead>";
@@ -140,122 +235,178 @@ public:
                     rowOffset = Max<ssize_t>(rowOffset, 0);
                     ssize_t rowLimit = FromStringWithDefault<ssize_t>(cgi.Get("MaxRows"), 1000);
                     rowLimit = Max<ssize_t>(rowLimit, 1);
-                    ssize_t rowCount = 0;
-                    while (result->Next(NTable::ENext::Data) == NTable::EReady::Data && rowCount < rowOffset + rowLimit) {
-                            ++rowCount;
-                            if (rowCount > rowOffset) {
-                                str << "<tr>";
+                    const ssize_t rowsEnd = rowLimit > Max<ssize_t>() - rowOffset
+                        ? Max<ssize_t>()
+                        : rowOffset + rowLimit;
+                    ssize_t rowCount = RowsScanned;
+
+                    auto rememberIteratorKey = [&] {
+                        const auto lastKey = result->GetKey().Cells();
+                        if (lastKey) {
+                            LastSeenKey.emplace(lastKey);
+                        }
+                    };
+
+                    auto doPrecharge = [&] {
+                        if (disableOffsetScanPrecharge) {
+                            return;
+                        }
+
+                        TVector<TRawTypeValue> prechargeKey;
+                        const auto lastKey = result->GetKey().Cells();
+                        if (lastKey) {
+                            prechargeKey = MakeRawKey(*tableInfo, lastKey);
+                        } else if (LastSeenKey) {
+                            prechargeKey = MakeRawKey(*tableInfo, LastSeenKey->GetCells());
+                        } else {
+                            prechargeKey = key;
+                        }
+
+                        txc.DB.Precharge(tableId, prechargeKey, {}, columns, 0, 0, OffsetScanPrechargeBytes);
+                    };
+
+                    while (rowCount < rowsEnd && result->Next(NTable::ENext::Data) == NTable::EReady::Data) {
+                        ++TotalDataSteps;
+                        ++RowsScanned;
+                        rowCount = RowsScanned;
+                        if (TotalDataSteps % TimeoutCheckRows == 0 && IsTimedOut()) {
+                            return true;
+                        }
+                        if (rowCount > rowOffset) {
+                            TStringStream rowStr;
+                            {
+                                auto& row = rowStr;
+                                row << "<tr>";
                                 TDbTupleRef tuple = result->GetValues();
                                 for (size_t i = 0; i < columns.size(); ++i) {
                                     const void *data = tuple.Columns[i].Data();
                                     ui32 size = tuple.Columns[i].Size();
-                                    str << "<td>";
+                                    row << "<td>";
                                     if (data == nullptr) {
-                                        str << "<i>&lt;null&gt;</i>";
+                                        row << "<i>&lt;null&gt;</i>";
                                     } else {
                                         switch(tuple.Types[i].GetTypeId()) {
                                         case NScheme::NTypeIds::Int8:
-                                            str << *(i8*)data;
+                                            row << *(i8*)data;
                                             break;
                                         case NScheme::NTypeIds::Int16:
-                                            str << *(i16*)data;
+                                            row << *(i16*)data;
                                             break;
                                         case NScheme::NTypeIds::Uint16:
-                                            str << *(ui16*)data;
+                                            row << *(ui16*)data;
                                             break;
                                         case NScheme::NTypeIds::Int32:
-                                            str << *(i32*)data;
+                                            row << *(i32*)data;
                                             break;
                                         case NScheme::NTypeIds::Uint32:
-                                            str << *(ui32*)data;
+                                            row << *(ui32*)data;
                                             break;
                                         case NScheme::NTypeIds::Int64:
-                                            str << *(i64*)data;
+                                            row << *(i64*)data;
                                             break;
                                         case NScheme::NTypeIds::Uint64:
-                                            str << *(ui64*)data;
+                                            row << *(ui64*)data;
                                             break;
                                         case NScheme::NTypeIds::Byte:
-                                            str << (ui32)*(ui8*)data;
+                                            row << (ui32)*(ui8*)data;
                                             break;
                                         case NScheme::NTypeIds::Bool:
-                                            str << *(bool*)data;
+                                            row << *(bool*)data;
                                             break;
                                         case NScheme::NTypeIds::Double:
-                                            str << *(double*)data;
+                                            row << *(double*)data;
                                             break;
                                         case NScheme::NTypeIds::Float:
-                                            str << *(float*)data;
+                                            row << *(float*)data;
                                             break;
                                         case NScheme::NTypeIds::Date:
-                                            str << *(ui16*)data;
+                                            row << *(ui16*)data;
                                             break;
                                         case NScheme::NTypeIds::Datetime:
-                                            str << *(ui32*)data;
+                                            row << *(ui32*)data;
                                             break;
                                         case NScheme::NTypeIds::Timestamp:
-                                            str << *(ui64*)data;
+                                            row << *(ui64*)data;
                                             break;
                                         case NScheme::NTypeIds::Interval:
-                                            str << *(i64*)data;
+                                            row << *(i64*)data;
                                             break;
                                         case NScheme::NTypeIds::Date32:
-                                            str << *(i32*)data;
+                                            row << *(i32*)data;
                                             break;
                                         case NScheme::NTypeIds::Datetime64:
                                         case NScheme::NTypeIds::Timestamp64:
                                         case NScheme::NTypeIds::Interval64:
-                                            str << *(i64*)data;
+                                            row << *(i64*)data;
                                             break;
                                         case NScheme::NTypeIds::PairUi64Ui64:
-                                            str << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")";
+                                            row << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")";
                                             break;
                                         case NScheme::NTypeIds::String:
                                         case NScheme::NTypeIds::String4k:
                                         case NScheme::NTypeIds::String2m:
-                                            str << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024))));
+                                            row << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024))));
                                             break;
                                         case NScheme::NTypeIds::ActorId:
-                                            str << *(TActorId*)data;
+                                            row << *(TActorId*)data;
                                             break;
                                         case NScheme::NTypeIds::Utf8:
                                         case NScheme::NTypeIds::Json:
-                                            str << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
+                                            row << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
                                             break;
                                         case NScheme::NTypeIds::JsonDocument: {
                                             const auto json = NBinaryJson::SerializeToJson(TStringBuf((const char*)data, size));
-                                            str << "(JsonDocument) " << EncodeHtmlPcdata(json);
+                                            row << "(JsonDocument) " << EncodeHtmlPcdata(json);
                                             break;
                                         }
                                         case NScheme::NTypeIds::DyNumber: {
                                             const auto number = NDyNumber::DyNumberToString(TStringBuf((const char*)data, size));
-                                            str << "(DyNumber) " << number;
+                                            row << "(DyNumber) " << number;
                                             break;
                                         }
                                         case NScheme::NTypeIds::Decimal: {
-                                            tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), str);
+                                            tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), row);
                                             break;
                                         }
                                         case NScheme::NTypeIds::Pg: {
                                             auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
-                                            str << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
+                                            row << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
                                             break;
                                         }
                                         default:
-                                            str << "<i>unknown type " << NScheme::TypeName(tuple.Types[i]) << "</i>";
+                                            row << "<i>unknown type " << NScheme::TypeName(tuple.Types[i]) << "</i>";
                                             break;
                                         }
                                     }
-                                    str << "</td>";
+                                    row << "</td>";
                                 }
-                                str << "</tr>";
+                                row << "</tr>";
                             }
+                            RenderedRows.push_back(rowStr.Str());
+                        }
                     }
-                    str << "</tbody>";
-                    str << "</table>";
 
-                    if (result->Last() == NTable::EReady::Page)
+                    rememberIteratorKey();
+
+                    if (IsTimedOut()) {
+                        return true;
+                    }
+
+                    if (result->Last() == NTable::EReady::Page) {
+                        doPrecharge();
                         return false;
+                    }
+
+                    // More rows?
+                    const auto moreRowsReady = result->Next(NTable::ENext::Data);
+                    if (IsTimedOut()) {
+                        return true;
+                    }
+                    if (moreRowsReady == NTable::EReady::Page) {
+                        rememberIteratorKey();
+                        doPrecharge();
+                        return false;
+                    }
 
                     auto fnPrintLink = [this, &str, tableId, &cgi] (ssize_t offset, ssize_t limit, TString caption) {
                         str << "<a href='db?TabletID=" << Self->TabletId()
@@ -271,6 +422,12 @@ public:
                             << "'>" << caption << "</a>";
                     };
 
+                    for (const auto& row : RenderedRows) {
+                        str << row;
+                    }
+                    str << "</tbody>";
+                    str << "</table>";
+
                     // Prev rows?
                     if (rowOffset > 0) {
                         ssize_t off = Max<ssize_t>(0, rowOffset - rowLimit);
@@ -279,15 +436,20 @@ public:
                         str << "<br>";
                     }
 
-                    // More rows?
-                    if (result->Next(NTable::ENext::Data) != NTable::EReady::Gone) {
+                    if (moreRowsReady != NTable::EReady::Gone) {
                         fnPrintLink(rowCount, rowLimit, Sprintf("Next %" PRISZT " rows", rowLimit));
                         str << "<br>";
                     }
 
                     fnPrintLink(0, 1000000000, "All");
+                    if (cgi.Has("TraceOffsetScan")) {
+                        str << "<!-- DbMonOffsetScanDataSteps=" << TotalDataSteps << " -->";
+                    }
                 }
             }
+        }
+        if (IsTimedOut()) {
+            return true;
         }
         ctx.Send(Event->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         return true;
@@ -297,7 +459,7 @@ public:
 };
 
 void TExecutor::RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const {
-    const_cast<TExecutor*>(this)->Execute(new TTxExecutorDbMon(ev, const_cast<TExecutor*>(this)), ctx);
+    const_cast<TExecutor*>(this)->Execute(new TTxExecutorDbMon(ev, const_cast<TExecutor*>(this), GetDbMonRequestDeadline(ev)), ctx);
 }
 
 

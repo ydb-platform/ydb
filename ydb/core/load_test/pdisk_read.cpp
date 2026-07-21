@@ -265,7 +265,8 @@ public:
                 ui64 requestIdx = NewTRequestInfo((ui32)DataBuffer.size(), chunkIdx, TAppData::TimeProvider->Now());
                 SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                             chunkIdx, 0u, new NPDisk::TEvChunkWrite::TAlignedParts(TString(DataBuffer)),
-                            reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
+                            reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob,
+                            TWriteSource::GroupWriteLoadActor, Sequential));
                 ++ChunkWrite_RequestsSent;
             }
         } else {
@@ -443,7 +444,7 @@ public:
         ++Lsn;
         SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound,
                 TLogSignature::SignatureHugeLogoBlob, record, TRcBuf(logRecord), seg,
-                reinterpret_cast<void*>(requestIdx)));
+                reinterpret_cast<void*>(requestIdx), TWriteSource::GroupWriteLoadActor));
         ++LogInFlight;
     }
 

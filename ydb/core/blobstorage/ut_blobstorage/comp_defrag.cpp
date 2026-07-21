@@ -1600,4 +1600,74 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT(edge0Result && edge0Result->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
     }
 
+    Y_UNIT_TEST(CompBrokerReleasesTokenWhenResultIsUndelivered) {
+        TTestEnvCompBroker env(1, 8, 1);
+
+        constexpr ui32 pdiskId = Max<ui32>() - 1;
+        const TGroupId groupId = env.GroupInfos[0]->GroupID;
+        const TVDiskIdShort vdiskId(env.GroupInfos[0]->GetVDiskId(0));
+        const TActorId brokerId = MakeBlobStorageCompBrokerID();
+
+        const TActorId deadOwner = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(brokerId, deadOwner,
+            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, 1.0)), deadOwner.NodeId());
+        env.Env.Runtime->DestroyActor(deadOwner);
+        env.Env.Sim(TDuration::Seconds(1));
+
+        const TActorId nextOwner = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(brokerId, nextOwner,
+            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, 1.0)), nextOwner.NodeId());
+
+        auto result = env.Env.WaitForEdgeActorEvent<TEvCompactionTokenResult>(
+            nextOwner, false, env.Env.Now() + TDuration::Seconds(30));
+        UNIT_ASSERT_C(result, "expected the next owner to receive the token after an undelivered result");
+
+        env.Env.Runtime->Send(new IEventHandle(brokerId, nextOwner,
+            new TEvReleaseCompactionToken(pdiskId, groupId, vdiskId, true)), nextOwner.NodeId());
+    }
+
+    Y_UNIT_TEST(CompactionContinuesWhenCompBrokerIsUnavailable) {
+        TTestEnvCompBroker env(1, 8, 1);
+
+        env.WriteDataToAllGroups(3000, 100_KB);
+
+        const TActorId vdiskActorId = env.GroupInfos[0]->GetActorId(0);
+        const TGroupId groupId = env.GroupInfos[0]->GroupID;
+        const TVDiskIdShort vdiskId(env.GroupInfos[0]->GetVDiskId(0));
+        TActorId compactionActorId;
+        ui32 tokenResults = 0;
+        env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCompactionTokenResult) {
+                const auto* msg = ev->Get<TEvCompactionTokenResult>();
+                if (msg->GroupId == groupId && msg->VDiskId == vdiskId) {
+                    if (!compactionActorId) {
+                        compactionActorId = ev->Recipient;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(compactionActorId, ev->Recipient);
+                    ++tokenResults;
+                }
+            }
+            return true;
+        };
+
+        env.StabilizeWithCompaction();
+        UNIT_ASSERT_C(tokenResults > 0, "expected the VDisk to receive a token while the broker is available");
+        const ui32 tokenResultsBeforeBrokerShutdown = tokenResults;
+
+        const TActorId edge = env.Env.Runtime->AllocateEdgeActor(vdiskActorId.NodeId(), __FILE__, __LINE__);
+        // Unregister the compaction broker service on the target VDisk node.
+        env.Env.Runtime->WrapInActorContext(edge, [] {
+            TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageCompBrokerID(), TActorId());
+        });
+
+        env.Env.Runtime->Send(new IEventHandle(vdiskActorId, edge,
+            TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL)),
+            vdiskActorId.NodeId());
+
+        auto result = env.Env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(
+            edge, false, env.Env.Now() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(result, "expected compaction to continue when the compaction broker is unavailable");
+        UNIT_ASSERT_VALUES_EQUAL(tokenResults, tokenResultsBeforeBrokerShutdown);
+    }
+
 }

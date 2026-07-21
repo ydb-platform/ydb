@@ -218,4 +218,10 @@ message TFeatureFlags {
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
     optional bool EnableReplication = 217 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
+    // Disables accumulating the SSD-system component of FileStore (filesystem) space into the
+    // owning domain's allocated counter. FileStore shards are resized to the final filesystem
+    // size (up to petabytes), with thousands of shards the per-domain ui64 counter can overflow.
+    // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
+    // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
+    optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
 }

@@ -27,6 +27,12 @@ public:
         std::cerr << "==== TMockDiscovery server started on port " << discoveryPort << std::endl;
     }
 
+    ~TMockDiscoveryService() {
+        if (Server) {
+            Server->Shutdown();
+        }
+    }
+
     void SetGoodEndpoints(ITopicTestSetup& fixture) {
         std::lock_guard lock(Lock);
         std::cerr << "==== TMockDiscovery set good endpoint nodes " << std::endl;

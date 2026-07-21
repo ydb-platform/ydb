@@ -323,6 +323,29 @@ private:
             return;
         }
 
+        if (!featureFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
+            for (const auto& object : PatchedObjects) {
+                const auto& configMap = object.GetConfigJson().GetMap();
+                if (configMap.count("has_full_scan") || configMap.count("has_path") ||
+                        configMap.count("has_stream") || configMap.count("has_app_name")) {
+                    FailAndPassAway("Advanced resource pool classifier properties are disabled. "
+                        "Please contact your system administrator to enable it");
+                    return;
+                }
+            }
+        }
+
+        if (!featureFlags.GetEnableRejectActionInResourcePoolClassifiers()) {
+            for (const auto& object : PatchedObjects) {
+                const auto& configMap = object.GetConfigJson().GetMap();
+                if (configMap.count("action")) {
+                    FailAndPassAway("Resource pool classifier action property is disabled. "
+                        "Please contact your system administrator to enable it");
+                    return;
+                }
+            }
+        }
+
         FeatureFlagChecked = true;
         ValidateExistence();
         ValidatePools();

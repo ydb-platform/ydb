@@ -302,6 +302,8 @@ private:
         featureFlags.SetEnableResourcePoolsCounters(true);
         featureFlags.SetEnableStreamingQueries(Settings_.EnableStreamingQueries_);
         featureFlags.SetEnableResourcePoolsScheduler(Settings_.EnableResourcePoolsScheduler_);
+        featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(Settings_.EnableHasPredicatesInResourcePoolClassifiers_);
+        featureFlags.SetEnableRejectActionInResourcePoolClassifiers(Settings_.EnableRejectActionInResourcePoolClassifiers_);
 
         auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
         queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);

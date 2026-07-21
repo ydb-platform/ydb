@@ -276,6 +276,13 @@ Before treating optimizer findings as credible:
 4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage dashboard;
    report unsupported features separately from failures.
 
+Independent exhaustive concrete references now cover EmptySource,
+scan/project/filter, logical UnionAll, root projection, and every admitted join
+kind, including NULL/absence payload independence and duplicate multiplicity.
+Separate concrete references cover aggregate, Limit, Sort/Merge, and pushed OLAP
+filter semantics. StageGraph connection combinations remain the largest
+independent-reference gap.
+
 The first useful bound is two row slots per referenced table and two tasks.
 Larger bounds are query-specific because multiway joins grow rapidly.
 

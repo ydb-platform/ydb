@@ -7,6 +7,7 @@ from ydb.core.kqp.opt.rbo.verification.inspector.plan import (
     render_expression,
     render_node,
     render_snapshot,
+    snapshot_digest,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import ir
 
@@ -333,6 +334,13 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
     def test_absent_stage_graph_is_explicit(self):
         rendered = render_snapshot(replace(_stage_snapshot(), stage_graph=None))
         self.assertTrue(rendered.endswith("stage_graph none\n"))
+
+    def test_semantic_digest_is_stable_and_field_sensitive(self):
+        snapshot = _stage_snapshot()
+        digest = snapshot_digest(snapshot)
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(digest, snapshot_digest(snapshot))
+        self.assertNotEqual(digest, snapshot_digest(replace(snapshot, stage_graph=None)))
 
 
 if __name__ == "__main__":

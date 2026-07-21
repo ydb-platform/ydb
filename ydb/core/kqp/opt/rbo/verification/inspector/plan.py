@@ -7,6 +7,7 @@ expression, operator, or StageGraph connection.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable, Iterable
 from typing import TypeVar
@@ -19,6 +20,12 @@ T = TypeVar("T")
 
 class InspectionError(ValueError):
     """The in-memory snapshot contains a variant this renderer cannot show."""
+
+
+def snapshot_digest(snapshot: ir.Snapshot) -> str:
+    """Digest the complete normalized semantic rendering used for inspection."""
+
+    return hashlib.sha256(render_snapshot(snapshot).encode("utf-8")).hexdigest()
 
 
 def _quote(value: str) -> str:

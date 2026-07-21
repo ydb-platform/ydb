@@ -1,6 +1,10 @@
+import hashlib
 import io
+import json
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 from ydb.core.kqp.opt.rbo.verification.inspector import cli
@@ -48,6 +52,33 @@ class CliTest(unittest.TestCase):
             )
         self.assertEqual(exit_code, 1)
         self.assertIn('"status": "SCHEMA_MISMATCH"', errors.getvalue())
+
+    def test_query_file_digest_is_added_to_replayable_trace(self):
+        prepared = mock.Mock()
+        prepared.solve.return_value = {"status": "COUNTEREXAMPLE", "inputs": {}}
+        with tempfile.TemporaryDirectory() as directory:
+            query = Path(directory) / "query.yql"
+            query.write_bytes(b"SELECT 1;\r\n")
+            output = io.StringIO()
+            with (
+                mock.patch.object(cli, "load_snapshot", side_effect=[object(), object()]),
+                mock.patch.object(cli, "prepare", return_value=prepared),
+                redirect_stdout(output),
+            ):
+                exit_code = cli.main([
+                    "witness",
+                    "before.json",
+                    "after.json",
+                    "--query",
+                    str(query),
+                    "--solver",
+                    "z3",
+                ])
+        self.assertEqual(exit_code, 1)
+        result = json.loads(output.getvalue())
+        self.assertEqual(
+            result["inputs"]["query_sha256"], hashlib.sha256(b"SELECT 1;\r\n").hexdigest()
+        )
 
 
 if __name__ == "__main__":

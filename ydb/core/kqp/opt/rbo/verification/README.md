@@ -9,9 +9,9 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
-M4. A separate normalized-plan and concrete-counterexample inspector is also
-implemented. Hermetic solver packaging, real-YDB replay, and rule bisection
-remain future milestones.
+M4. Separate normalized-plan, concrete-counterexample inspection, and isolated
+real-YDB replay tools are also implemented. Hermetic solver packaging and rule
+bisection remain future milestones.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -316,6 +316,7 @@ operator, stage task, connection input, and compared root boundary:
 ```bash
 ydb/core/kqp/opt/rbo/verification/inspect_bin/kqp_rbo_inspect \
   witness initial.snapshot.json final.snapshot.json \
+  --query exact-query.yql \
   --solver /path/to/z3 --rows 2 --timeout-ms 10000
 ```
 
@@ -326,9 +327,85 @@ nondeterministic outcomes, and the exact root mismatch are requested together
 from one SAT model. All enabled outcomes are printed; absent rows omit their
 meaningless payloads. Trace extraction fails closed above 100,000 unique terms.
 Enabling the read-only observers without aliases is regression-tested to leave
-the normal SMT-LIB obligation byte-for-byte unchanged.
+the normal SMT-LIB obligation byte-for-byte unchanged. Every trace carries
+SHA-256 digests of the complete normalized before/after snapshots; supplying
+`--query` also binds the exact query bytes and is mandatory for real replay.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/inspect_ut 2>&1 | tail
+```
+
+## Real-YDB counterexample replay
+
+`kqp_rbo_replay` consumes the inspector's version-one concrete trace and runs
+the exact witness against two isolated YDB targets. The baseline target must
+have the legacy optimizer enabled; the candidate must have the new RBO enabled
+with fallback disabled. For parity with the benchmark host, use identical
+settings except for `enable_new_rbo`:
+
+```yaml
+table_service_config:
+  enable_new_rbo: true # false on the baseline target
+  enable_fallback_to_yql_optimizer: false
+  allow_olap_data_query: true
+  default_lang_ver: 202602
+  default_cost_based_optimization_level: 2
+  backport_mode: All
+query_service_config:
+  script_result_rows_limit: 0
+  script_result_size_limit: 0
+```
+
+The query file must contain the exact text used for snapshot capture. In
+particular, TPC-DS replay includes the benchmark's `$to_decimal`,
+`$to_decimal_max_precision`, and `$round` compatibility definitions.
+
+```bash
+ydb/core/kqp/opt/rbo/verification/replay_bin/kqp_rbo_replay \
+  initial.snapshot.json final.snapshot.json concrete-trace.json query.yql \
+  --ydb /path/to/ydb \
+  --baseline-endpoint grpc://baseline-host:2136 \
+  --baseline-database /Root/baseline \
+  --candidate-endpoint grpc://candidate-host:2136 \
+  --candidate-database /Root/candidate
+```
+
+Before connecting, the tool strictly validates both snapshots, the trace and
+witness shape, primary keys, source integer/Date/Decimal ranges, table identity
+encoding, storage inference, exact backtick-quoted source paths, result schema,
+and observable determinism. It accepts exactly one top-level result query; the
+current TPC-DS sources q14, q23, and q39 contain two result queries and fail
+closed until replay gains an explicit multi-result contract. It returns
+`INCONCLUSIVE_NONDETERMINISM` when the bounded model admits more than one
+distinct result for either side.
+
+Each target receives a fresh `_rbo_replay_<128-bit-id>` namespace containing
+reduced two-partition tables. Rows are loaded with the CLI BulkUpsert import
+path, not an SQL write that would exercise the optimizer under test. Explain is
+then run through QueryService. The current new-RBO statistics shape is required
+on the candidate, the legacy/absent shape on the baseline, and every candidate
+CBO tree must be optimized; this also detects transparent fallback to the old
+optimizer. Results use `json-base64-array`, preserve binary strings and
+duplicates, and are compared as a sequence or bag according to the initial
+snapshot contract.
+
+`REAL_RESULT_DIVERGENCE` means the two real executions differed, while
+`NOT_REPRODUCED` means this concrete realization did not differ; neither result
+claims unbounded equivalence. The first is strong evidence of an optimizer
+correctness problem, but it is not attributed to the supplied symbolic trace
+without reproducing that exact final StageGraph. The reduced catalog does not
+reproduce indexes, statistics, or every physical table setting, and the
+external CLI cannot recapture the final semantic snapshot, so output explicitly
+records `trace_plan_reproduced: false`. Column-store sources use two hash
+partitions. Row-store synthesis currently fails closed unless the leading
+primary-key column is `Uint32` or `Uint64`, the types for which YDB supports
+auditable two-way `UNIFORM_PARTITIONS` creation.
+
+Replay namespaces are deliberately retained for diagnosis and are printed in
+the JSON result. The tool never deletes an existing or generated YDB object.
+
+```bash
+./ya make --build relwithdebinfo -tA \
+  ydb/core/kqp/opt/rbo/verification/replay_ut 2>&1 | tail
 ```

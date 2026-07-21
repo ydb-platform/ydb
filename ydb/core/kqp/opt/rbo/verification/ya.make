@@ -20,6 +20,7 @@ RECURSE_FOR_TESTS(
     cpp_ut
     inspect_ut
     integration_ut
+    replay_ut
     ut
 )
 
@@ -27,4 +28,6 @@ RECURSE(
     bin
     inspect_bin
     inspector
+    replay
+    replay_bin
 )

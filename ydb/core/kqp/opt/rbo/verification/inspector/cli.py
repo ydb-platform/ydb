@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -28,6 +29,11 @@ def parser() -> argparse.ArgumentParser:
     witness.add_argument("--timeout-ms", type=int, default=10_000)
     witness.add_argument("--solver", type=Path)
     witness.add_argument("--emit-smt", type=Path)
+    witness.add_argument(
+        "--query",
+        type=Path,
+        help="bind the trace to the exact query file required by real-YDB replay",
+    )
     return result
 
 
@@ -62,6 +68,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             }
         else:
             result = prepared.solve(options.solver, options.timeout_ms)
+        if options.query is not None:
+            result.setdefault("inputs", {})["query_sha256"] = hashlib.sha256(
+                options.query.read_bytes()
+            ).hexdigest()
     except SchemaMismatch as error:
         return _error("SCHEMA_MISMATCH", str(error), exit_code=1)
     except (SnapshotError, VerificationError, InspectionError) as error:

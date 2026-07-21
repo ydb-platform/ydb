@@ -1,0 +1,63 @@
+pan: ltl formula safety_freed_vslot_has_no_owner
+Depth=      10 States=       11 Transitions=       11 Memory=   128.293
+Depth=      20 States=       21 Transitions=       21 Memory=   128.293
+Depth=      30 States=       31 Transitions=       31 Memory=   128.293
+Depth=      40 States=       41 Transitions=       41 Memory=   128.293
+Depth=      50 States=       53 Transitions=       53 Memory=   128.293
+Depth=      60 States=      200 Transitions=      232 Memory=   128.391
+Depth=      70 States=      503 Transitions=      586 Memory=   128.488
+Depth=      80 States=      842 Transitions=      972 Memory=   128.684
+Depth=      90 States= 1.24e+03 Transitions= 1.43e+03 Memory=   128.879
+Depth=     100 States= 1.62e+03 Transitions= 1.84e+03 Memory=   129.074
+Depth=     110 States= 2.06e+03 Transitions= 2.33e+03 Memory=   129.270
+Depth=     120 States= 2.39e+03 Transitions= 2.68e+03 Memory=   129.367
+Depth=     130 States= 2.69e+03 Transitions= 2.98e+03 Memory=   129.562
+Depth=     140 States= 2.99e+03 Transitions= 3.28e+03 Memory=   129.660
+Depth=     150 States= 3.29e+03 Transitions= 3.58e+03 Memory=   129.855
+Depth=     160 States= 3.59e+03 Transitions= 3.88e+03 Memory=   129.953
+Depth=     170 States= 3.89e+03 Transitions= 4.18e+03 Memory=   130.051
+Depth=     180 States= 4.28e+03 Transitions=  4.6e+03 Memory=   130.246
+Depth=     190 States=  4.8e+03 Transitions= 5.15e+03 Memory=   130.539	t=     0.02 R=   2e+05
+Depth=     200 States= 5.39e+03 Transitions= 5.80e+03 Memory=   130.734	t=     0.02 R=   3e+05
+Depth=     210 States= 5.87e+03 Transitions= 6.36e+03 Memory=   131.027	t=     0.02 R=   3e+05
+Depth=     220 States= 6.33e+03 Transitions=  6.9e+03 Memory=   131.223	t=     0.02 R=   3e+05
+Depth=     230 States= 6.73e+03 Transitions= 7.34e+03 Memory=   131.418	t=     0.02 R=   3e+05
+Depth=     240 States= 7.09e+03 Transitions= 7.71e+03 Memory=   131.516	t=     0.02 R=   4e+05
+Depth=     250 States= 7.46e+03 Transitions= 8.14e+03 Memory=   131.711	t=     0.02 R=   4e+05
+Depth=     260 States= 7.91e+03 Transitions= 8.66e+03 Memory=   131.906	t=     0.02 R=   4e+05
+Depth=     270 States= 8.28e+03 Transitions= 9.04e+03 Memory=   132.102	t=     0.02 R=   4e+05
+Depth=     280 States= 8.62e+03 Transitions= 9.41e+03 Memory=   132.297	t=     0.02 R=   4e+05
+Depth=     290 States= 8.98e+03 Transitions= 9.82e+03 Memory=   132.395	t=     0.03 R=   3e+05
+Depth=     300 States= 9.42e+03 Transitions= 1.03e+04 Memory=   132.590	t=     0.03 R=   3e+05
+Depth=     310 States= 9.62e+03 Transitions= 1.06e+04 Memory=   132.688	t=     0.03 R=   3e+05
+Depth=     320 States= 9.72e+03 Transitions= 1.07e+04 Memory=   132.785	t=     0.03 R=   3e+05
+
+(Spin Version 6.5.2 -- 6 December 2019)
+	+ Breadth-First Search
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	+ (safety_freed_vslot_has_no_owner)
+	assertion violations	+ (if within scope of claim)
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	- (disabled by never claim)
+
+State-vector 516 byte, depth reached 323, errors: 0
+     9721 states, stored
+	     974 nominal states (stored-atomic)
+      964 states, matched
+    10685 transitions (= stored+matched)
+     8747 atomic steps
+hash conflicts:         0 (resolved)
+
+Stats on memory usage (in Megabytes):
+    5.043	equivalent memory usage for states (stored*(State-vector + overhead))
+    4.794	actual memory usage for states (compression: 95.06%)
+	state-vector as stored = 489 byte + 28 byte overhead
+  128.000	memory used for hash table (-w24)
+  132.785	total actual memory usage
+
+
+
+pan: elapsed time 0.03 seconds
+pan: rate 324033.33 states/second

@@ -1,0 +1,53 @@
+pan: ltl formula safety_freed_vslot_has_no_owner
+Depth=      10 States=       11 Transitions=       11 Memory=   128.293
+Depth=      20 States=       21 Transitions=       21 Memory=   128.293
+Depth=      30 States=      109 Transitions=      116 Memory=   128.293
+Depth=      40 States=      475 Transitions=      527 Memory=   128.488
+Depth=      50 States=  1.2e+03 Transitions= 1.34e+03 Memory=   128.879
+Depth=      60 States= 1.95e+03 Transitions=  2.2e+03 Memory=   129.270
+Depth=      70 States= 3.27e+03 Transitions= 3.74e+03 Memory=   129.953
+Depth=      80 States= 6.37e+03 Transitions= 7.53e+03 Memory=   131.516
+Depth=      90 States= 1.25e+04 Transitions=  1.5e+04 Memory=   134.543	t=     0.02 R=   6e+05
+Depth=     100 States= 1.97e+04 Transitions= 2.36e+04 Memory=   137.961	t=     0.03 R=   7e+05
+Depth=     110 States= 2.59e+04 Transitions= 3.07e+04 Memory=   140.891	t=     0.04 R=   6e+05
+Depth=     120 States= 3.07e+04 Transitions= 3.65e+04 Memory=   143.039	t=     0.05 R=   6e+05
+Depth=     130 States= 3.44e+04 Transitions=  4.1e+04 Memory=   144.699	t=     0.05 R=   7e+05
+Depth=     140 States= 3.76e+04 Transitions=  4.5e+04 Memory=   146.164	t=     0.08 R=   5e+05
+Depth=     150 States= 4.04e+04 Transitions= 4.83e+04 Memory=   147.531	t=     0.08 R=   5e+05
+Depth=     160 States= 4.28e+04 Transitions= 5.12e+04 Memory=   148.605	t=     0.08 R=   5e+05
+Depth=     170 States= 4.42e+04 Transitions= 5.28e+04 Memory=   149.191	t=     0.08 R=   6e+05
+Depth=     180 States= 4.48e+04 Transitions= 5.35e+04 Memory=   149.484	t=     0.08 R=   6e+05
+Depth=     190 States= 4.52e+04 Transitions=  5.4e+04 Memory=   149.680	t=     0.09 R=   5e+05
+Depth=     200 States= 4.57e+04 Transitions= 5.45e+04 Memory=   149.973	t=     0.09 R=   5e+05
+Depth=     210 States= 4.58e+04 Transitions= 5.47e+04 Memory=   149.973	t=     0.09 R=   5e+05
+Depth=     220 States= 4.59e+04 Transitions= 5.47e+04 Memory=   149.973	t=     0.09 R=   5e+05
+
+(Spin Version 6.5.2 -- 6 December 2019)
+	+ Breadth-First Search
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	+ (safety_freed_vslot_has_no_owner)
+	assertion violations	+ (if within scope of claim)
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	- (disabled by never claim)
+
+State-vector 532 byte, depth reached 221, errors: 0
+    45858 states, stored
+	    7567 nominal states (stored-atomic)
+     8883 states, matched
+    54741 transitions (= stored+matched)
+    38291 atomic steps
+hash conflicts:         8 (resolved)
+
+Stats on memory usage (in Megabytes):
+   24.491	equivalent memory usage for states (stored*(State-vector + overhead))
+   22.016	actual memory usage for states (compression: 89.89%)
+	state-vector as stored = 475 byte + 28 byte overhead
+  128.000	memory used for hash table (-w24)
+  149.973	total actual memory usage
+
+
+
+pan: elapsed time 0.09 seconds
+pan: rate 509533.33 states/second

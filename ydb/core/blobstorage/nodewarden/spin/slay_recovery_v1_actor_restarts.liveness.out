@@ -1,0 +1,30 @@
+pan: ltl formula live_delete_eventually_frees_vslot
+
+(Spin Version 6.5.2 -- 6 December 2019)
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	+ (live_delete_eventually_frees_vslot)
+	assertion violations	+ (if within scope of claim)
+	acceptance   cycles 	+ (fairness enabled)
+	invalid end states	- (disabled by never claim)
+
+State-vector 548 byte, depth reached 275, errors: 0
+    14383 states, stored (61687 visited)
+   102285 states, matched
+   163972 transitions (= visited+matched)
+   422074 atomic steps
+hash conflicts:        25 (resolved)
+
+Stats on memory usage (in Megabytes):
+    7.901	equivalent memory usage for states (stored*(State-vector + overhead))
+    6.559	actual memory usage for states (compression: 83.02%)
+	state-vector as stored = 450 byte + 28 byte overhead
+  128.000	memory used for hash table (-w24)
+    0.107	memory used for DFS stack (-m2000)
+  134.650	total actual memory usage
+
+
+
+pan: elapsed time 0.16 seconds
+pan: rate 385543.75 states/second

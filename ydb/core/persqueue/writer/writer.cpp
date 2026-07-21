@@ -318,7 +318,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        YDB_LOG_DEBUG("Dump LOGPREFIX, sessionId, txId, writeId",
+        YDB_LOG_DEBUG("",
             {"logPrefix", LOG_PREFIX},
             {"sessionId", Opts.SessionId},
             {"txId", Opts.TxId},

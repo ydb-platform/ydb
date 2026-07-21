@@ -8,6 +8,8 @@
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -58,7 +60,9 @@ NActors::IActor* CreateKafkaCreateTopicsActor(
 }
 
 void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D(InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -168,7 +172,14 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
 
+<<<<<<< HEAD
 KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status) << " " << eventPtr->ErrorMessage);
+=======
+    YDB_LOG_DEBUG("Create topics actor. Topic's response received",
+        {LogPrefix()},
+        {"path", eventPtr->Path},
+        {"status", std::to_string(eventPtr->Status)});
+>>>>>>> c0bf532526b ([YDB_LOG] Migrate ydb/core/kafka_proxy (#43285))
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

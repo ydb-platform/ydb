@@ -30,7 +30,6 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectDisabled
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
-ydb/core/kqp/ut/olap/storage KqpOlapDictionary.GroupBySomeDictionaryWithCompaction
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
@@ -46,9 +45,6 @@ ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-4_to_prestable-26-4-COLUMN]
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-3-1_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_stable-26-3-1]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-3-1]

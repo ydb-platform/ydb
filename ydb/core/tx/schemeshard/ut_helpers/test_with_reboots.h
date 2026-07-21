@@ -151,7 +151,7 @@ public:
             }                                                                \
         }                                                                    \
         TTestRegistration##N() {                                             \
-            names.reserve(2 * (REBOOT_BUCKETS + PIPE_RESET_BUCKETS));        \
+            names.reserve(4 * (REBOOT_BUCKETS + PIPE_RESET_BUCKETS));        \
             AddVariant<false, false>("-" #OPT1 "-" #OPT2);                   \
             AddVariant<false, true>("-" #OPT1 "+" #OPT2);                    \
             AddVariant<true, false>("+" #OPT1 "-" #OPT2);                    \

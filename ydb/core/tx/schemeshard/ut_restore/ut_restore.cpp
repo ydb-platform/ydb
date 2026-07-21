@@ -224,7 +224,7 @@ namespace {
         const auto numWidth = ToString(count).size();
 
         for (ui32 i = 1; i <= count; ++i) {
-            // make the string keys ordered lexigraphically.
+            // make the string keys ordered lexicographically.
             const auto keyValue = keyPrefix
                 ? TStringBuilder() << keyPrefix << LeftPad(i, numWidth, '0')
                 : TStringBuilder() << i;

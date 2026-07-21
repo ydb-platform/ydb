@@ -22,6 +22,7 @@ SRCS(
     kqp_rbo_lookup_join.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    verification/semantic_snapshot.cpp
     analysis/logical_liveness.cpp
     logical_renames.cpp
     rebind_consumers.cpp
@@ -57,4 +58,7 @@ PEERDIR(
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+    verification/cpp_ut
+)

@@ -12,6 +12,8 @@ items:
     path: documentation/toc_p.yaml
 - name: Ядро
   items:
+  - name: Рекомендации по безопасности Developer UI
+    href: core/developer-ui-security-guidelines.md
   - name: Общая схема
     href: general-schema.md
   - name: Распределённое хранилище

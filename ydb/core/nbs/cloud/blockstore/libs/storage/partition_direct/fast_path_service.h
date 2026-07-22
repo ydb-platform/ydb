@@ -58,6 +58,14 @@ private:
     // across all DBGs. 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
+    // Last persistent-buffer barrier lsn sent to each distinct pbuffer endpoint
+    // (keyed by its service actor id). The tablet-wide barrier reaches an
+    // endpoint through every DBG that shares it, so this deduplicates the
+    // sends: each endpoint receives the barrier once per advance. Guarded
+    // because DBGs consult it from their own executor threads.
+    TAdaptiveLock PBufferBarrierLock;
+    TMap<NActors::TActorId, ui64> LastSentBarrierByPBuffer;
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -117,6 +125,10 @@ public:
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;
+
+    bool TryAdvancePBufferBarrier(
+        const NActors::TActorId& pbufferServiceId,
+        ui64 lsn) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

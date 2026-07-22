@@ -1102,6 +1102,16 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    // The barrier is tablet-wide; the same lsn reaches this pbuffer endpoint
+    // through every DBG that shares it. Send it once per advance so DDisk is
+    // not asked to move a barrier it already holds.
+    if (!Service->TryAdvancePBufferBarrier(
+            PBufferConnections[hostIndex].HostConnection.GetServiceId(),
+            lsn))
+    {
+        return;
+    }
+
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
 

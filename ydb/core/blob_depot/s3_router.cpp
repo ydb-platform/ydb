@@ -9,6 +9,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <util/string/cast.h>
 #include <util/string/strip.h>
 
 namespace NKikimr::NBlobDepot {
@@ -75,7 +76,10 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
+        static constexpr ui16 S3PortNum = 4080;
+
         NKikimrBlobDepot::TS3BackendSettings Settings;
+        TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
@@ -106,7 +110,21 @@ namespace NKikimr::NBlobDepot {
                 InnerWrapperId = {};
             }
             auto* mutableSettings = Settings.MutableSettings();
-            mutableSettings->SetEndpoint(endpoint);
+            if (BalancerEnabled() && endpoint != OriginalEndpoint) {
+                mutableSettings->SetEndpoint(OriginalEndpoint);
+                mutableSettings->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+                TStringBuf host = endpoint;
+                ui16 port = S3PortNum;
+                if (TStringBuf h, p; host.TrySplit(':', h, p)) {
+                    host = h;
+                    TryFromString(p, port);
+                }
+
+                mutableSettings->SetProxyHost(TString(host));
+                mutableSettings->SetProxyPort(port);
+            } else {
+                mutableSettings->SetEndpoint(endpoint);
+            }
             auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(
                 AppData()->AwsClientConfig, *mutableSettings);
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
@@ -127,7 +145,7 @@ namespace NKikimr::NBlobDepot {
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
-            const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost() << "/";
+            const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost();
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
@@ -158,8 +176,14 @@ namespace NKikimr::NBlobDepot {
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
                 TString endpoint = TString(StripString(msg.Response->Body));
-                if (!endpoint.empty() && endpoint != CurrentEndpoint) {
-                    BuildInnerWrapper(endpoint);
+                if (!endpoint.empty()) {
+                    if (!endpoint.Contains(':')) {
+                        endpoint += TStringBuf(":") + ToString(S3PortNum);
+                    }
+
+                    if (endpoint != CurrentEndpoint) {
+                        BuildInnerWrapper(endpoint);
+                    }
                 }
             }
             ScheduleNextRefresh();
@@ -183,6 +207,7 @@ namespace NKikimr::NBlobDepot {
 
         void Bootstrap() {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
+            OriginalEndpoint = endpoint;
             BuildInnerWrapper(endpoint);
             if (BalancerEnabled()) {
                 IssueBalancerRequest();

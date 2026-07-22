@@ -14,7 +14,13 @@ SRCS(
     factories.h
     factories.cpp
     grpc_servers_manager.h
-    kikimr_services_initializers.cpp
+    kikimr_services_initializers_basic.cpp
+    kikimr_services_initializers_tablet.cpp
+    kikimr_services_initializers_grpc_viewer.cpp
+    kikimr_services_initializers_pq_memory.cpp
+    kikimr_services_initializers_kqp_column.cpp
+    kikimr_services_initializers_cms_config.cpp
+    kikimr_services_initializers_fq_misc.cpp
     kikimr_services_initializers.h
     main.h
     main.cpp

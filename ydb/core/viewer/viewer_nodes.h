@@ -2,7 +2,9 @@
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include "viewer_helper.h"
+#include "viewer_tabletinfo.h"
 #include "wb_group.h"
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
 

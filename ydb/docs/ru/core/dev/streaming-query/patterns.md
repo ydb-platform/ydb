@@ -2,30 +2,26 @@
 
 В этом разделе собраны минимальные примеры [потоковых запросов](../../concepts/streaming-query/streaming-query.md) для наиболее распространённых сценариев. Сначала описан базовый шаблон чтения данных из топика, затем — варианты полноценной работы с данными: обработка данных и запись результатов в топик в формате JSON, в топик в виде строки и в таблицу. Каждый пример можно использовать как отправную точку для собственных задач.
 
+В примерах ниже используются [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics). Обозначения:
+
+- `ext_source` — заранее созданный [`external data source`](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — топик, откуда читаются данные;
+- `output_topic` — топик, куда записываются результаты;
+- `output_table` — таблица {{ ydb-short-name }}, куда записываются результаты.
+
+
 ## Чтение данных из топика {#topic-read}
 
-Чтение данных из топика выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` указывает формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы. Этот шаблон используется во всех последующих примерах.
+Чтение структурированных сообщений выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` задаёт формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы.
 
-{% note info %}
-
-Работа с топиками выполняется через [external data source](../../concepts/datamodel/external_data_source.md).
-
-В примерах:
-
-- `ydb_source` — заранее созданный `external data source`;
-- `input_topic` - топик, откуда производится чтение данных;
-- `output_topic` - топик, куда производится запись результатов;
-- `output_table` — таблица {{ydb-short-name}}, куда производится запись результатов.
-
-{% endnote %}
-
-Следующий фрагмент показывает чтение событий из топика в формате JSON. Он используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
+Следующий фрагмент используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
 
 ```yql
 SELECT
-    *
+    Id,
+    Name
 FROM
-    ydb_source.input_topic
+    topic_name  -- локальный топик; для внешнего: ext_source.topic_name
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -37,6 +33,8 @@ WITH (
 
 Подробнее о форматах: [{#T}](streaming-query-formats.md).
 
+Этот шаблон используется во всех последующих примерах.
+
 ## Запись в топик (JSON) {#topic-json}
 
 Запрос читает события из входного топика, формирует JSON-объект из отдельных полей и записывает результат в выходной топик. Функция `AsStruct` создаёт структуру из указанных полей, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
@@ -45,15 +43,14 @@ WITH (
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
--- ydb_source — external data source для работы с топиками
-INSERT INTO ydb_source.output_topic
+INSERT INTO ext_source.output_topic -- или локальный топик output_topic
 SELECT
     -- Формирование JSON из отдельных полей
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
         AsStruct(Id AS id, Name AS name)
     ))))
 FROM
-    ydb_source.input_topic
+    input_topic -- или внешний топик ext_source.input_topic
 WITH (
     FORMAT = json_each_row,  -- Формат входных данных
     SCHEMA = (               -- Схема входных данных
@@ -81,12 +78,11 @@ END DO
 CREATE STREAMING QUERY write_utf8_example AS
 DO BEGIN
 
--- ydb_source — external data source для работы с топиками
-INSERT INTO ydb_source.output_topic
+INSERT INTO output_topic -- или внешний топик ext_source.output_topic
 SELECT
     Name
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- или локальный топик input_topic
 WITH (
     FORMAT = json_each_row,  -- Формат входных данных
     SCHEMA = (               -- Схема входных данных
@@ -120,8 +116,7 @@ SELECT
     Id,
     Name
 FROM
-    -- ydb_source — external data source для работы с топиками
-    ydb_source.input_topic
+    ext_source.input_topic -- или локальный топик input_topic
 WITH (
     FORMAT = json_each_row,  -- Формат входных данных
     SCHEMA = (               -- Схема входных данных
@@ -137,5 +132,6 @@ END DO
 
 ## См. также
 
+- [Локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics)
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

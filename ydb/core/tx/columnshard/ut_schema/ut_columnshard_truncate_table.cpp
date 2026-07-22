@@ -91,15 +91,14 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        // Reading at a pre-truncate snapshot must be rejected (barrier = first table version = truncate)
+        // Reading at a pre-truncate snapshot returns empty result (same guarantee as DropTable).
+        // The mapping now points to the new empty InternalPathId, so any snapshot sees an empty table.
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(reader.IsError());
-            UNIT_ASSERT(!reader.GetErrors().empty());
-            UNIT_ASSERT_STRING_CONTAINS(reader.GetErrors()[0].message(), "snapshot too old for path mapping");
+            UNIT_ASSERT(!reader.IsError());
         }
 
         // After truncation, reading at truncate snapshot should return no data

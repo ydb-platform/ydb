@@ -408,12 +408,6 @@ public:   //IPathIdTranslator
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
     virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
-    // Appear / last truncate barrier for the current mapping: CopyVersion if set, else min TableVersionInfo.
-    std::optional<NOlap::TSnapshot> GetPathMappingValidFromOptional(
-        const TSchemeShardLocalPathId schemeShardLocalPathId) const;
-    // True if a read at `snapshot` may use the current mapping (snapshot >= derived ValidFrom).
-    bool IsPathMappingValidAt(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& snapshot) const;
-
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,

@@ -76,34 +76,6 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     }
 }
 
-std::optional<NOlap::TSnapshot> TTablesManager::GetPathMappingValidFromOptional(
-    const TSchemeShardLocalPathId schemeShardLocalPathId) const {
-    const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
-    if (!internalPathId) {
-        return std::nullopt;
-    }
-    const auto* table = Tables.FindPtr(*internalPathId);
-    if (!table) {
-        return std::nullopt;
-    }
-    if (const auto copyVersion = table->GetCopyVersionOptional(schemeShardLocalPathId)) {
-        return *copyVersion;
-    }
-    if (table->GetVersions().empty()) {
-        return std::nullopt;
-    }
-    return *table->GetVersions().begin();
-}
-
-bool TTablesManager::IsPathMappingValidAt(
-    const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& snapshot) const {
-    const auto validFrom = GetPathMappingValidFromOptional(schemeShardLocalPathId);
-    if (!validFrom) {
-        return true;
-    }
-    return !(snapshot < *validFrom);
-}
-
 std::optional<NOlap::TSnapshot> TTablesManager::GetCopyVersionOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false)) {
         if (const auto* table = Tables.FindPtr(*internalPathId)) {

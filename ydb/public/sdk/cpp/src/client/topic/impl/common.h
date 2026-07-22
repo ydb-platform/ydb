@@ -145,13 +145,17 @@ inline size_t ProtoMetadataItemFieldSize(ui32 fieldNumber, const std::pair<std::
     return ProtoMessageFieldSize(fieldNumber, itemSize);
 }
 
+inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const TTransactionId& tx) {
+    const size_t txSize = ProtoStringFieldSize(1, tx.TxId.size())
+        + ProtoStringFieldSize(2, tx.SessionId.size());
+    return ProtoMessageFieldSize(fieldNumber, txSize);
+}
+
 inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const std::optional<TTransactionId>& tx) {
     if (!tx) {
         return 0;
     }
-    const size_t txSize = ProtoStringFieldSize(1, tx->TxId.size())
-        + ProtoStringFieldSize(2, tx->SessionId.size());
-    return ProtoMessageFieldSize(fieldNumber, txSize);
+    return ProtoTransactionIdentityFieldSize(fieldNumber, *tx);
 }
 
 inline size_t ProtoDeferredPublishIdentityFieldSize(ui32 fieldNumber, const TDeferredPublication& deferred) {
@@ -166,7 +170,7 @@ template <typename TMessage>
 inline size_t ProtoWriteRequestContextFieldSize(const TMessage& message) {
     if constexpr (requires { message.WriteContext; }) {
         if (auto* tx = std::get_if<TTransactionId>(&message.WriteContext)) {
-            return ProtoTransactionIdentityFieldSize(3, std::optional<TTransactionId>(*tx));
+            return ProtoTransactionIdentityFieldSize(3, *tx);
         }
         if (auto* deferred = std::get_if<TDeferredPublication>(&message.WriteContext)) {
             return ProtoDeferredPublishIdentityFieldSize(9, *deferred);

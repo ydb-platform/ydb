@@ -1479,6 +1479,10 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     }
 
     auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
+        return;
+    }
     UpdateTokenInProgress = true;
     try {
         authInfo.Subscribe([cbContext = SelfContext](const auto& future) {

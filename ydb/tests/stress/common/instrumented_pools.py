@@ -210,11 +210,16 @@ class InstrumentedSessionPool(ydb.SessionPool):
         if operation_name is None:
             operation_name = 'session_pool_operation'
 
-        # Parent signature: (callee, retry_settings=None, *args, **kwargs)
-        if 'retry_settings' in kwargs:
+        # Parent signature: (callee, retry_settings=None, *args, **kwargs).
+        # Prefer positional retry_settings; only inject a keyword when it was omitted.
+        if args:
+            args = (maybe_extended_retry_settings(args[0]),) + args[1:]
+        elif 'retry_settings' in kwargs:
             kwargs['retry_settings'] = maybe_extended_retry_settings(kwargs['retry_settings'])
-        elif extended_retries_enabled():
-            kwargs['retry_settings'] = extended_retry_settings()
+        else:
+            resolved = maybe_extended_retry_settings(None)
+            if resolved is not None:
+                kwargs['retry_settings'] = resolved
 
         if not self.enable_metrics:
             return super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publish_limits.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/datetime/base.h>
@@ -12,7 +13,7 @@
 
 namespace NYdb::inline Dev::NTopic::NDeferredPublish {
 
-constexpr size_t MaxExtPublicationIdLength = 2048;
+constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
 struct TBeginPublicationSettings : public TOperationRequestSettings<TBeginPublicationSettings> {
     using TSelf = TBeginPublicationSettings;

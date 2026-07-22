@@ -2,6 +2,7 @@
 
 #include "codecs.h"
 #include "counters.h"
+#include "deferred_publish_limits.h"
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"
@@ -200,7 +201,7 @@ concept Serializable =
 
 //! Deferred publication identity for StreamWrite.
 struct TDeferredPublication {
-    static constexpr size_t MaxExtPublicationIdLength = 2048;
+    static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
     uint64_t IntPublicationId = 0;
     std::optional<std::string> ExtPublicationId;

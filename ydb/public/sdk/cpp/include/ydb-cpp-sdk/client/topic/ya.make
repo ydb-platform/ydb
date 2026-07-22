@@ -11,6 +11,7 @@ SRCS(
     codecs.h
     control_plane.h
     counters.h
+    deferred_publish_limits.h
     errors.h
     events_common.h
     executor.h

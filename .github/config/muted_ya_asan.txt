@@ -648,6 +648,9 @@ ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/actors/interconnect/ut InterconnectDirectSession.DoesNotReceiveUnexpectedReplies
 ydb/library/actors/interconnect/ut InterconnectDirectSession.ReceivesExpectedReplies
 ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
+ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
+ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
+ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout

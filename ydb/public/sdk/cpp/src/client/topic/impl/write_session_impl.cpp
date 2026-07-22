@@ -700,12 +700,11 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         TDeferredPublishAckTracker::For(DbDriverState.get()).OnAck(intPublicationId);
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
                  LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", intPublicationId=" << intPublicationId);
+        return;
     }
 
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
-        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=?");
         return;
     }
 

@@ -727,6 +727,25 @@ TExprNode::TPtr MakeOlapFilterProcess(
         filter.Ptr());
 }
 
+TExprNode::TPtr MakeOlapFilterChain(
+    TExportTestContext& ctx,
+    TExprNode::TListType conditions)
+{
+    const auto pos = TPositionHandle();
+    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+    TExprNode::TPtr input = argument;
+    for (auto& condition : conditions) {
+        input = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(TExprBase(std::move(input)))
+            .Condition(TExprBase(std::move(condition)))
+            .Done().Ptr();
+    }
+    return ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {argument}),
+        std::move(input));
+}
+
 TExprNode::TPtr MakeOlapComparisonCondition(
     TExportTestContext& ctx,
     TStringBuf operation,
@@ -941,6 +960,69 @@ NJson::TJsonValue ExportMapExpression(
     return columns.back()["expression"];
 }
 
+TExprNode::TPtr WideBooleanAnd(TExportTestContext& ctx, size_t nodes) {
+    UNIT_ASSERT(nodes >= 2);
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    TExprNode::TListType arguments;
+    arguments.reserve(nodes - 1);
+    for (size_t index = 1; index < nodes; ++index) {
+        arguments.push_back(TypedLiteral(ctx, "Bool", "true", boolType));
+    }
+    return TypedCallable(ctx, "And", std::move(arguments), boolType);
+}
+
+TExprNode::TPtr ExponentialSharedAnd(TExportTestContext& ctx, size_t levels) {
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    auto result = TypedLiteral(ctx, "Bool", "true", boolType);
+    for (size_t level = 0; level < levels; ++level) {
+        result = TypedCallable(ctx, "And", {result, result}, boolType);
+    }
+    return result;
+}
+
+TExprNode::TPtr DeepBooleanNot(TExportTestContext& ctx, size_t depth) {
+    UNIT_ASSERT(depth >= 1);
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    auto result = TypedLiteral(ctx, "Bool", "true", boolType);
+    for (size_t level = 1; level < depth; ++level) {
+        result = TypedCallable(ctx, "Not", {std::move(result)}, boolType);
+    }
+    return result;
+}
+
+TExprNode::TPtr WideOlapAnd(
+    TExportTestContext& ctx,
+    size_t comparisons,
+    size_t booleanLeaves)
+{
+    TVector<TExprBase> arguments;
+    arguments.reserve(comparisons + booleanLeaves);
+    for (size_t index = 0; index < comparisons; ++index) {
+        arguments.emplace_back(MakeOlapComparisonCondition(ctx, "eq", "k", "0"));
+    }
+    for (size_t index = 0; index < booleanLeaves; ++index) {
+        arguments.emplace_back(TypedLiteral(
+            ctx,
+            "Bool",
+            "true",
+            ScalarType(ctx, NUdf::EDataSlot::Bool)));
+    }
+    return Build<TKqpOlapAnd>(ctx.ExprCtx, TPositionHandle())
+        .Add(arguments)
+        .Done().Ptr();
+}
+
+TExprNode::TPtr DeepOlapNot(TExportTestContext& ctx, size_t depth) {
+    UNIT_ASSERT(depth >= 2);
+    auto result = MakeOlapComparisonCondition(ctx, "eq", "k", "0");
+    for (size_t level = 2; level < depth; ++level) {
+        result = Build<TKqpOlapNot>(ctx.ExprCtx, TPositionHandle())
+            .Value(TExprBase(std::move(result)))
+            .Done().Ptr();
+    }
+    return result;
+}
+
 TString ExportDeterministicPlan() {
     TExportTestContext ctx;
     const auto& table = AddTable(ctx, "/Root/A", {
@@ -989,6 +1071,219 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             ExportDeterministicStageGraph(),
             ExportDeterministicStageGraph());
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditEnforcesExpandedNodeBoundary) {
+        {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                WideBooleanAnd(ctx, 1024));
+            UNIT_ASSERT_VALUES_EQUAL(expression["args"].GetArraySafe().size(), 1023);
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                WideBooleanAnd(ctx, 1025));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Exact scalar expression exceeds the node audit limit");
+        }
+        {
+            TExportTestContext ctx;
+            auto shared = WideBooleanAnd(ctx, 512);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(ctx, "And", {shared, shared}, boolType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Exact scalar expression exceeds the node audit limit");
+        }
+        {
+            TExportTestContext ctx;
+            const auto pos = TPositionHandle();
+            auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+            auto expression = ctx.ExprCtx.NewLambda(
+                pos,
+                ctx.ExprCtx.NewArguments(pos, {argument}),
+                ExponentialSharedAnd(ctx, 32));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TExpression(
+                    std::move(expression),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Exact scalar expression exceeds the node audit limit");
+        }
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditEnforcesDepthBoundary) {
+        {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                DeepBooleanNot(ctx, 128));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "not");
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                DeepBooleanNot(ctx, 129));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Exact scalar expression exceeds the depth audit limit");
+        }
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditResetsForSeparateProjectionRoots) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/BudgetRoots", {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        const auto pos = TPositionHandle();
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("first"),
+                    TExpression(
+                        WideBooleanAnd(ctx, 1024),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("second"),
+                    TExpression(
+                        WideBooleanAnd(ctx, 1024),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+            });
+        TOpRoot root(map, pos, {"first", "second"});
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(columns[1]["expression"]["args"].GetArraySafe().size(), 1023);
+        UNIT_ASSERT_VALUES_EQUAL(columns[2]["expression"]["args"].GetArraySafe().size(), 1023);
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditCoversAssembledOlapPredicate) {
+        const auto exportPredicate = [](bool exceedLimit) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapBudget", {{"k", "Int32", true}});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            // Each equality contributes three normalized nodes.  The two
+            // filter roots contain 512 and 511/512 nodes; their assembled AND
+            // therefore contains exactly 1024/1025 nodes.
+            read->OlapFilterLambda = MakeOlapFilterChain(
+                ctx,
+                {
+                    WideOlapAnd(ctx, 170, 1),
+                    WideOlapAnd(ctx, 170, exceedLimit ? 1 : 0),
+                });
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto accepted = exportPredicate(false);
+        UNIT_ASSERT_C(accepted.IsSupported(), accepted.UnsupportedReason);
+        const auto rejected = exportPredicate(true);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            rejected.UnsupportedReason,
+            "Exact scalar expression exceeds the node audit limit");
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditEnforcesOlapDepthBoundary) {
+        const auto exportPredicate = [](size_t depth) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapDepth", {{"k", "Int32", true}});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx,
+                DeepOlapNot(ctx, depth));
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto accepted = exportPredicate(128);
+        UNIT_ASSERT_C(accepted.IsSupported(), accepted.UnsupportedReason);
+        const auto rejected = exportPredicate(129);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            rejected.UnsupportedReason,
+            "Exact scalar expression exceeds the depth audit limit");
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditCoversSynthesizedJoinPredicate) {
+        const auto exportJoin = [](size_t keyCount) {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/JoinBudgetLeft", {{"k", "Int32", true}});
+            AddTable(ctx, "/Root/JoinBudgetRight", {{"k", "Int32", true}});
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinBudgetLeft"),
+                "a",
+                {"k"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinBudgetRight"),
+                "b",
+                {"k"});
+            TVector<std::pair<TInfoUnit, TInfoUnit>> keys;
+            keys.reserve(keyCount);
+            for (size_t index = 0; index < keyCount; ++index) {
+                keys.emplace_back(TInfoUnit("a.k"), TInfoUnit("b.k"));
+            }
+            const auto pos = TPositionHandle();
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                pos,
+                "Inner",
+                std::move(keys));
+            TOpRoot root(join, pos, {"a.k", "b.k"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        // One synthesized AND plus 341 three-node key equalities is 1024.
+        const auto accepted = exportJoin(341);
+        UNIT_ASSERT_C(accepted.IsSupported(), accepted.UnsupportedReason);
+        const auto rejected = exportJoin(342);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            rejected.UnsupportedReason,
+            "Exact scalar expression exceeds the node audit limit");
     }
 
     Y_UNIT_TEST(ExportsSchemaScanAndExactMapProjection) {

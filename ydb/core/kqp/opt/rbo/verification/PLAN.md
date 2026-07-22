@@ -215,6 +215,20 @@ are emitted as ordered UF arguments. Source positions, allocations, IU names,
 and DAG sharing are deliberately absent. The exporter caps this representation
 at 256 expanded nodes, nesting depth 64, and 64 KiB.
 
+Independently of that hidden opaque-fingerprint budget, every complete
+normalized scalar expression tree is capped at 1,024 expanded node occurrences
+and structural depth 128, with the root at depth one. Repeated source-DAG uses
+count once per emitted occurrence. Each scan or filter predicate, projection
+expression, limit count, and offset is a separate root; all generated join keys
+and residuals share the final synthesized join predicate budget, and every
+pushed OLAP filter shares the final assembled scan-predicate budget. C++ charges
+normalized occurrences before expansion, guards source recursion, and audits
+the completed JSON iteratively; Python independently charges the same tree
+while parsing. The C++ recursion ceiling is intentionally conservative when a
+source wrapper normalizes away. The exact normalized budget still admits the
+514-node full 512-item static-`IN` form with leaf lookup and items, while the
+64-live-`IfPresent` binding limit remains separate.
+
 Version-one `String` and `Utf8` values share one exact bounded integer-rank
 quotient of YDB's unsigned UTF-8/raw-byte lexicographic order, without collation
 or Unicode normalization. This keeps Z3 string theory and parsing outside the
@@ -678,10 +692,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
   before allocating its 32768-pair join matrix.
-- A shared expanded-node/depth budget for every exact scalar tree remains a
-  follow-up. Opaque trees already have node/depth limits and `IfPresent` has a
-  64-live-binding limit, but other exact recursion still relies on the compiler
-  AST boundary; the global budget must continue to admit the 512-item `IN` gate.
+- A shared expanded-node/depth budget now caps every complete exact scalar tree
+  at 1,024 normalized occurrences and depth 128. Independent C++ and Python
+  checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG
+  occurrences, per-projection resets, assembled OLAP filters, synthesized join
+  predicates, decoder recursion, and the unchanged 512-item `IN` and
+  64-live-`IfPresent` limits. Opaque fingerprints retain their independent
+  256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3 and
   q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a fixed
   60-second per-query budget. The complete current-code run recorded 131 ms of

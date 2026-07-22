@@ -1,9 +1,14 @@
 import copy
+import tempfile
 import unittest
+from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     MAX_BOUND_DEPTH,
+    MAX_EXPR_DEPTH,
+    MAX_EXPR_NODES,
     SnapshotError,
+    load_snapshot,
     parse_snapshot,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import INTEGER_TYPES
@@ -174,12 +179,131 @@ def if_snapshot():
     return value
 
 
+def boolean_expression_with_nodes(nodes):
+    if nodes == 1:
+        return {"kind": "column", "column": "a.flag"}
+    return {
+        "kind": "and",
+        "args": [
+            {"kind": "column", "column": "a.flag"}
+            for _ in range(nodes - 1)
+        ],
+    }
+
+
+def boolean_expression_with_depth(depth):
+    expression = {"kind": "column", "column": "a.flag"}
+    for _ in range(depth - 1):
+        expression = {"kind": "not", "arg": expression}
+    return expression
+
+
 class SnapshotTest(unittest.TestCase):
     def test_valid_snapshot_has_inferred_root_schema(self):
         snapshot = parse_snapshot(minimal_snapshot())
         self.assertEqual([(column.name, column.type, column.nullable) for column in snapshot.output_schema()], [
             ("a.k", "Int64", False)
         ])
+
+    def test_expression_expanded_node_budget_has_exact_boundary(self):
+        accepted = minimal_snapshot()
+        accepted["plan"]["nodes"][1]["predicate"] = boolean_expression_with_nodes(
+            MAX_EXPR_NODES
+        )
+        parse_snapshot(accepted)
+
+        rejected = minimal_snapshot()
+        rejected["plan"]["nodes"][1]["predicate"] = boolean_expression_with_nodes(
+            MAX_EXPR_NODES + 1
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "expanded expression node count exceeds the audit limit of 1024",
+        ):
+            parse_snapshot(rejected)
+
+    def test_expression_structural_depth_budget_has_exact_boundary(self):
+        accepted = minimal_snapshot()
+        accepted["plan"]["nodes"][1]["predicate"] = boolean_expression_with_depth(
+            MAX_EXPR_DEPTH
+        )
+        parse_snapshot(accepted)
+
+        rejected = minimal_snapshot()
+        rejected["plan"]["nodes"][1]["predicate"] = boolean_expression_with_depth(
+            MAX_EXPR_DEPTH + 1
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "expression structural depth exceeds the audit limit of 128",
+        ):
+            parse_snapshot(rejected)
+
+    def test_expression_node_budget_is_shared_by_sibling_subtrees(self):
+        value = minimal_snapshot()
+        subtree_nodes = MAX_EXPR_NODES // 2
+        value["plan"]["nodes"][1]["predicate"] = {
+            "kind": "and",
+            "args": [
+                boolean_expression_with_nodes(subtree_nodes),
+                boolean_expression_with_nodes(subtree_nodes),
+            ],
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "expanded expression node count exceeds the audit limit of 1024",
+        ):
+            parse_snapshot(value)
+
+    def test_expression_budget_resets_between_complete_roots(self):
+        value = minimal_snapshot()
+        scan = value["plan"]["nodes"][0]
+        value["plan"]["nodes"] = [
+            scan,
+            {
+                "id": "filter",
+                "op": "filter",
+                "input": "scan",
+                "predicate": boolean_expression_with_nodes(MAX_EXPR_NODES),
+            },
+            {
+                "id": "project",
+                "op": "project",
+                "input": "filter",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "first",
+                        "expression": boolean_expression_with_nodes(MAX_EXPR_NODES),
+                    },
+                    {
+                        "output": "second",
+                        "expression": boolean_expression_with_nodes(MAX_EXPR_NODES),
+                    },
+                ],
+            },
+            {
+                "id": "limit",
+                "op": "limit",
+                "input": "project",
+                "count": {"kind": "literal", "type": "Uint64", "value": 10},
+                "offset": {"kind": "literal", "type": "Uint64", "value": 1},
+                "phase": "undefined",
+            },
+        ]
+        value["plan"]["root"] = "limit"
+        value["plan"]["output"] = ["first", "second"]
+        parse_snapshot(value)
+
+    def test_deep_json_file_fails_with_snapshot_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "deep.json"
+            path.write_text("[" * 10000 + "0" + "]" * 10000, encoding="utf-8")
+            with self.assertRaisesRegex(
+                SnapshotError,
+                "JSON nesting exceeds the decoder limit",
+            ):
+                load_snapshot(path)
 
     def test_legacy_v1_scan_without_pushdowns_defaults_to_none(self):
         value = minimal_snapshot()

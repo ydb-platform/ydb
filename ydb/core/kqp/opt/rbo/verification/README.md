@@ -272,6 +272,19 @@ repeated values retain their meaning. Positions, allocations, and DAG sharing
 do not affect identity. The representation fails closed above 256 expanded
 nodes, depth 64, or 64 KiB.
 
+Every complete normalized scalar tree has a separate 1,024-expanded-node and
+128-level structural-depth budget, with its root at level one. Repeated source
+DAG uses count as separate emitted occurrences. A scan or filter predicate,
+each projection, and each literal count or offset reset the budget; generated
+join-key equalities and residuals share one synthesized join-predicate budget,
+while chained pushed OLAP filters share one assembled scan-predicate budget.
+The C++ exporter charges before expansion, guards source recursion, and then
+audits the completed normalized JSON iteratively. The Python parser
+independently enforces the same contract and turns excessive JSON decoder
+nesting into a normal fail-closed error; replay's strict loader does likewise.
+The opaque fingerprint limits above, the 512-item static-`IN` limit, and the
+64-live-`IfPresent` binding limit remain independent.
+
 The chosen final boundary is immediately before `ConvertToPhysical`. Therefore
 the verifier does not prove physical lowering, task construction, or execution.
 In particular, the current lowering does not visibly preserve

@@ -227,7 +227,130 @@ NJson::TJsonValue ColumnExpr(TStringBuf name) {
     return value;
 }
 
+constexpr size_t MaxExactScalarNodes = 1024;
+constexpr size_t MaxExactScalarDepth = 128;
 constexpr size_t MaxIfPresentBindingDepth = 64;
+
+class TExactScalarBudget {
+public:
+    void Charge(size_t depth, size_t count = 1) {
+        if (count == 0) {
+            return;
+        }
+        if (depth > MaxExactScalarDepth) {
+            Unsupported(TStringBuilder()
+                << "Exact scalar expression exceeds the depth audit limit of "
+                << MaxExactScalarDepth);
+        }
+        if (count > MaxExactScalarNodes - Nodes) {
+            Unsupported(TStringBuilder()
+                << "Exact scalar expression exceeds the node audit limit of "
+                << MaxExactScalarNodes);
+        }
+        Nodes += count;
+    }
+
+private:
+    size_t Nodes = 0;
+};
+
+void AuditExactScalarExpression(const NJson::TJsonValue& root) {
+    struct TPending {
+        const NJson::TJsonValue* Expression;
+        size_t Depth;
+    };
+
+    // Count normalized Expr occurrences only: IR metadata is not a node, while
+    // repeated JSON children are distinct occurrences even if the source was a DAG.
+    TVector<TPending> pending{{&root, 1}};
+    size_t nodes = 0;
+    while (!pending.empty()) {
+        const auto current = pending.back();
+        pending.pop_back();
+
+        if (current.Depth > MaxExactScalarDepth) {
+            Unsupported(TStringBuilder()
+                << "Exact scalar expression exceeds the depth audit limit of "
+                << MaxExactScalarDepth);
+        }
+        if (++nodes > MaxExactScalarNodes) {
+            Unsupported(TStringBuilder()
+                << "Exact scalar expression exceeds the node audit limit of "
+                << MaxExactScalarNodes);
+        }
+
+        const auto& expression = *current.Expression;
+        if (!expression.IsMap() || !expression["kind"].IsString()) {
+            Unsupported("Exact scalar expression has malformed normalized IR");
+        }
+        const TString kind = expression["kind"].GetStringSafe();
+        const auto push = [&](const NJson::TJsonValue& child) {
+            pending.push_back({&child, current.Depth + 1});
+        };
+        const auto pushArray = [&](TStringBuf field) {
+            const auto& children = expression[field];
+            if (!children.IsArray()) {
+                Unsupported("Exact scalar expression has malformed normalized IR");
+            }
+            const size_t remaining = MaxExactScalarNodes - nodes;
+            if (pending.size() > remaining ||
+                children.GetArraySafe().size() > remaining - pending.size())
+            {
+                Unsupported(TStringBuilder()
+                    << "Exact scalar expression exceeds the node audit limit of "
+                    << MaxExactScalarNodes);
+            }
+            for (const auto& child : children.GetArraySafe()) {
+                push(child);
+            }
+        };
+
+        if (kind == "column" || kind == "bound" || kind == "void" ||
+            kind == "literal" || kind == "null")
+        {
+            continue;
+        }
+        if (kind == "and" || kind == "or") {
+            pushArray("args");
+            continue;
+        }
+        if (kind == "not" || kind == "exists" || kind == "cast_decimal") {
+            push(expression["arg"]);
+            continue;
+        }
+        if (kind == "in") {
+            push(expression["lookup"]);
+            pushArray("items");
+            continue;
+        }
+        if (kind == "eq" || kind == "lt" || kind == "lte" || kind == "gt" ||
+            kind == "gte" || kind == "add" || kind == "sub" || kind == "mul" ||
+            kind == "div")
+        {
+            push(expression["left"]);
+            push(expression["right"]);
+            continue;
+        }
+        if (kind == "if") {
+            push(expression["condition"]);
+            push(expression["then"]);
+            push(expression["else"]);
+            continue;
+        }
+        if (kind == "if_present") {
+            push(expression["optional"]);
+            push(expression["present"]);
+            push(expression["missing"]);
+            continue;
+        }
+        if (kind == "opaque") {
+            pushArray("args");
+            continue;
+        }
+        Unsupported(TStringBuilder()
+            << "Exact scalar expression has unknown normalized kind " << kind);
+    }
+}
 
 NJson::TJsonValue BoundExpr(size_t depth) {
     auto value = JsonMap();
@@ -1201,13 +1324,18 @@ public:
         EncodeRoot(node, fingerprint);
     }
 
-    NJson::TJsonValue Export(const TExprNode& node) {
+    NJson::TJsonValue Export(
+        const TExprNode& node,
+        TExactScalarBudget& budget,
+        size_t argumentDepth)
+    {
         bool nullable = false;
         const TString resultType = ScalarTypeName(node, &nullable);
 
         TStringBuilder fingerprint;
         EncodeRoot(node, fingerprint);
 
+        budget.Charge(argumentDepth, ExternalArguments.size());
         auto args = JsonArray();
         for (const auto& argument : ExternalArguments) {
             args.AppendValue(argument.IsBound
@@ -1407,8 +1535,18 @@ NJson::TJsonValue ExportExprNode(
     const TExprNode& node,
     const TExprNode* rowArgument,
     const THashSet<TString>& visibleColumns,
-    const TVector<const TExprNode*>& boundArguments)
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
 {
+    if (sourceDepth > MaxExactScalarDepth) {
+        Unsupported(TStringBuilder()
+            << "Exact scalar expression exceeds the depth audit limit of "
+            << MaxExactScalarDepth);
+    }
+    budget.Charge(normalizedDepth);
+
     if (node.IsArgument()) {
         const auto it = std::find(boundArguments.begin(), boundArguments.end(), &node);
         if (it == boundArguments.end()) {
@@ -1455,7 +1593,10 @@ NJson::TJsonValue ExportExprNode(
             *argument,
             rowArgument,
             visibleColumns,
-            boundArguments));
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1));
     }
 
     if (node.IsCallable("If")) {
@@ -1472,17 +1613,26 @@ NJson::TJsonValue ExportExprNode(
             *signature.Condition,
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["then"] = ExportExprNode(
             *signature.Then,
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["else"] = ExportExprNode(
             *signature.Else,
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -1528,17 +1678,26 @@ NJson::TJsonValue ExportExprNode(
             *signature.Optional,
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["present"] = ExportExprNode(
             *signature.Present,
             rowArgument,
             visibleColumns,
-            presentBindings);
+            presentBindings,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["missing"] = ExportExprNode(
             *signature.Missing,
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -1692,6 +1851,7 @@ NJson::TJsonValue ExportExprNode(
         CheckScalarSafetyMetadata(payload);
         CheckScalarSafetyMetadata(settings);
 
+        budget.Charge(normalizedDepth + 1); // Emitted bound lookup.
         auto items = JsonArray();
         for (size_t index = 1; index < values.ChildrenSize(); ++index) {
             const auto& item = *values.Child(index);
@@ -1703,7 +1863,10 @@ NJson::TJsonValue ExportExprNode(
                 item,
                 rowArgument,
                 visibleColumns,
-                boundArguments));
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
         }
 
         auto result = JsonMap();
@@ -1735,7 +1898,10 @@ NJson::TJsonValue ExportExprNode(
             *node.Child(0),
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["type"] = resultType;
         result["nullable"] = false;
         return result;
@@ -1842,7 +2008,10 @@ NJson::TJsonValue ExportExprNode(
                 item,
                 rowArgument,
                 visibleColumns,
-                boundArguments));
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
         }
 
         const auto& options = *node.Child(2);
@@ -1881,7 +2050,10 @@ NJson::TJsonValue ExportExprNode(
             *node.Child(1),
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         result["items"] = std::move(items);
         return result;
     }
@@ -1898,7 +2070,10 @@ NJson::TJsonValue ExportExprNode(
                 *child,
                 rowArgument,
                 visibleColumns,
-                boundArguments));
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
         }
         result["args"] = std::move(args);
         return result;
@@ -1914,13 +2089,21 @@ NJson::TJsonValue ExportExprNode(
             *node.Child(0),
             rowArgument,
             visibleColumns,
-            boundArguments);
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
         return result;
     }
 
     if (node.IsCallable({"==", "!=", "<", "<=", ">", ">=", "IsNotDistinctFrom"})) {
         CheckComparisonCallable(node, true);
         const bool equality = node.IsCallable({"==", "!=", "IsNotDistinctFrom"});
+        const bool negated = node.IsCallable("!=");
+        if (negated) {
+            budget.Charge(normalizedDepth + 1); // Inner equality below Not.
+        }
+        const size_t childDepth = normalizedDepth + (negated ? 2 : 1);
 
         static const THashMap<TString, TString> Kinds = {
             {"<", "lt"},
@@ -1930,12 +2113,16 @@ NJson::TJsonValue ExportExprNode(
         };
         auto result = BinaryExpr(
             equality ? TStringBuf("eq") : TStringBuf(Kinds.at(TString(node.Content()))),
-            ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
-            ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
+            ExportExprNode(
+                *node.Child(0), rowArgument, visibleColumns, boundArguments,
+                budget, childDepth, sourceDepth + 1),
+            ExportExprNode(
+                *node.Child(1), rowArgument, visibleColumns, boundArguments,
+                budget, childDepth, sourceDepth + 1));
         if (node.IsCallable("IsNotDistinctFrom")) {
             result["null_safe"] = true;
         }
-        return node.IsCallable("!=") ? NotExpr(std::move(result)) : std::move(result);
+        return negated ? NotExpr(std::move(result)) : std::move(result);
     }
 
     if (node.IsCallable({"+", "-", "*"}) && node.ChildrenSize() == 2) {
@@ -1974,8 +2161,12 @@ NJson::TJsonValue ExportExprNode(
             }
             auto result = BinaryExpr(
                 kind,
-                ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
-                ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
+                ExportExprNode(
+                    *node.Child(0), rowArgument, visibleColumns, boundArguments,
+                    budget, normalizedDepth + 1, sourceDepth + 1),
+                ExportExprNode(
+                    *node.Child(1), rowArgument, visibleColumns, boundArguments,
+                    budget, normalizedDepth + 1, sourceDepth + 1));
             result["type"] = resultType;
             result["nullable"] = resultNullable;
             return result;
@@ -1995,8 +2186,12 @@ NJson::TJsonValue ExportExprNode(
         const TStringBuf kind = node.IsCallable("DecimalMul") ? "mul" : "div";
         auto result = BinaryExpr(
             kind,
-            ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
-            ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
+            ExportExprNode(
+                *node.Child(0), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1),
+            ExportExprNode(
+                *node.Child(1), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1));
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
@@ -2005,20 +2200,14 @@ NJson::TJsonValue ExportExprNode(
     return TOpaqueExpressionEncoder(
         rowArgument,
         visibleColumns,
-        boundArguments).Export(node);
+        boundArguments).Export(node, budget, normalizedDepth + 1);
 }
 
-NJson::TJsonValue ExportExprNode(
-    const TExprNode& node,
-    const TExprNode* rowArgument,
-    const THashSet<TString>& visibleColumns)
-{
-    return ExportExprNode(node, rowArgument, visibleColumns, {});
-}
-
-NJson::TJsonValue ExportExpr(
+NJson::TJsonValue ExportExprWithBudget(
     const TExpression& expression,
-    const THashSet<TString>& visibleColumns)
+    const THashSet<TString>& visibleColumns,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth)
 {
     if (!expression.Node || !expression.Node->IsLambda() || expression.Node->ChildrenSize() != 2) {
         Unsupported("RBO expression is not a one-body lambda");
@@ -2032,7 +2221,21 @@ NJson::TJsonValue ExportExpr(
     return ExportExprNode(
         *expression.GetExpressionBody(),
         arguments->Child(0),
-        visibleColumns);
+        visibleColumns,
+        {},
+        budget,
+        normalizedDepth,
+        1);
+}
+
+NJson::TJsonValue ExportExpr(
+    const TExpression& expression,
+    const THashSet<TString>& visibleColumns)
+{
+    TExactScalarBudget budget;
+    auto result = ExportExprWithBudget(expression, visibleColumns, budget, 1);
+    AuditExactScalarExpression(result);
+    return result;
 }
 
 using TOlapColumnMap = THashMap<TString, TString>;
@@ -2040,7 +2243,10 @@ using TOlapColumnMap = THashMap<TString, TString>;
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext = false);
+    bool positiveFilterContext,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth);
 
 NJson::TJsonValue OlapColumnExpr(
     TStringBuf physicalName,
@@ -2082,7 +2288,10 @@ void CheckOlapBoolOpType(const TExprNode& node) {
 NJson::TJsonValue ExportOlapBinary(
     const TKqpOlapFilterBinaryOp& operation,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext)
+    bool positiveFilterContext,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
 {
     const auto& node = operation.Ref();
     if (node.ChildrenSize() != 3 && node.ChildrenSize() != 4) {
@@ -2106,7 +2315,9 @@ NJson::TJsonValue ExportOlapBinary(
         // that equivalence remains a congruence through AND/OR.  It is not
         // valid in value-sensitive positions such as NOT or exists/empty, so
         // recursive callers carry the positive-filter context explicitly.
-        return ExportOlapScalar(operation.Left().Ptr(), columns, true);
+        return ExportOlapScalar(
+            operation.Left().Ptr(), columns, true,
+            budget, normalizedDepth, sourceDepth + 1);
     }
 
     TStringBuf kind;
@@ -2118,16 +2329,29 @@ NJson::TJsonValue ExportOlapBinary(
         Unsupported(TStringBuilder() << "Unsupported OLAP binary operation " << op);
     }
 
+    const bool negated = op == "neq";
+    budget.Charge(normalizedDepth);
+    if (negated) {
+        budget.Charge(normalizedDepth + 1); // Inner equality below Not.
+    }
+    const size_t childDepth = normalizedDepth + (negated ? 2 : 1);
     auto result = BinaryExpr(
         kind,
-        ExportOlapScalar(operation.Left().Ptr(), columns),
-        ExportOlapScalar(operation.Right().Ptr(), columns));
-    return op == "neq" ? NotExpr(std::move(result)) : std::move(result);
+        ExportOlapScalar(
+            operation.Left().Ptr(), columns, false,
+            budget, childDepth, sourceDepth + 1),
+        ExportOlapScalar(
+            operation.Right().Ptr(), columns, false,
+            budget, childDepth, sourceDepth + 1));
+    return negated ? NotExpr(std::move(result)) : std::move(result);
 }
 
 NJson::TJsonValue ExportOlapUnary(
     const TKqpOlapFilterUnaryOp& operation,
-    const TOlapColumnMap& columns)
+    const TOlapColumnMap& columns,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
 {
     const auto& node = operation.Ref();
     if (node.ChildrenSize() != 2) {
@@ -2144,52 +2368,76 @@ NJson::TJsonValue ExportOlapUnary(
         Unsupported(TStringBuilder() << "Unsupported OLAP unary operation " << op);
     }
 
-    auto result = ExistsExpr(ExportOlapScalar(operation.Arg().Ptr(), columns));
-    return op == "empty" ? NotExpr(std::move(result)) : std::move(result);
+    const bool negated = op == "empty";
+    budget.Charge(normalizedDepth);
+    if (negated) {
+        budget.Charge(normalizedDepth + 1); // Exists below Not.
+    }
+    auto result = ExistsExpr(ExportOlapScalar(
+        operation.Arg().Ptr(), columns, false,
+        budget, normalizedDepth + (negated ? 2 : 1), sourceDepth + 1));
+    return negated ? NotExpr(std::move(result)) : std::move(result);
 }
 
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext)
+    bool positiveFilterContext,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
 {
+    if (sourceDepth > MaxExactScalarDepth) {
+        Unsupported(TStringBuilder()
+            << "Exact scalar expression exceeds the depth audit limit of "
+            << MaxExactScalarDepth);
+    }
     if (!node) {
         Unsupported("OLAP predicate contains a null expression node");
     }
 
     if (node->IsAtom()) {
+        budget.Charge(normalizedDepth);
         return OlapColumnExpr(node->Content(), columns);
     }
 
     if (node->IsCallable("Decimal")) {
+        budget.Charge(normalizedDepth);
         return DecimalLiteralExpr(*node);
     }
 
     if (node->IsCallable({"SafeCast", "Convert"}) &&
         ParseCanonicalDecimalType(ScalarTypeName(*node)))
     {
+        budget.Charge(normalizedDepth);
         return DecimalConstantCastExpr(*node);
     }
 
     if (node->IsCallable() && IsSupportedType(node->Content())) {
+        budget.Charge(normalizedDepth);
         return LiteralExpr(*node);
     }
 
     if (const auto maybeUnary = TMaybeNode<TKqpOlapFilterUnaryOp>(node)) {
-        return ExportOlapUnary(maybeUnary.Cast(), columns);
+        return ExportOlapUnary(
+            maybeUnary.Cast(), columns, budget, normalizedDepth, sourceDepth);
     }
 
     if (const auto maybeBinary = TMaybeNode<TKqpOlapFilterBinaryOp>(node)) {
         return ExportOlapBinary(
             maybeBinary.Cast(),
             columns,
-            positiveFilterContext);
+            positiveFilterContext,
+            budget,
+            normalizedDepth,
+            sourceDepth);
     }
 
     if (const auto maybeAnd = TMaybeNode<TKqpOlapAnd>(node)) {
         if (maybeAnd.Ref().ChildrenSize() == 0) {
             Unsupported("KqpOlapAnd has no arguments");
         }
+        budget.Charge(normalizedDepth);
         auto result = JsonMap();
         result["kind"] = "and";
         auto args = JsonArray();
@@ -2197,7 +2445,10 @@ NJson::TJsonValue ExportOlapScalar(
             args.AppendValue(ExportOlapScalar(
                 child,
                 columns,
-                positiveFilterContext));
+                positiveFilterContext,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
         }
         result["args"] = std::move(args);
         return result;
@@ -2207,6 +2458,7 @@ NJson::TJsonValue ExportOlapScalar(
         if (maybeOr.Ref().ChildrenSize() == 0) {
             Unsupported("KqpOlapOr has no arguments");
         }
+        budget.Charge(normalizedDepth);
         auto result = JsonMap();
         result["kind"] = "or";
         auto args = JsonArray();
@@ -2214,7 +2466,10 @@ NJson::TJsonValue ExportOlapScalar(
             args.AppendValue(ExportOlapScalar(
                 child,
                 columns,
-                positiveFilterContext));
+                positiveFilterContext,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
         }
         result["args"] = std::move(args);
         return result;
@@ -2224,7 +2479,10 @@ NJson::TJsonValue ExportOlapScalar(
         if (maybeNot.Ref().ChildrenSize() != 1) {
             Unsupported("Malformed KqpOlapNot");
         }
-        return NotExpr(ExportOlapScalar(maybeNot.Cast().Value().Ptr(), columns));
+        budget.Charge(normalizedDepth);
+        return NotExpr(ExportOlapScalar(
+            maybeNot.Cast().Value().Ptr(), columns, false,
+            budget, normalizedDepth + 1, sourceDepth + 1));
     }
 
     Unsupported(TStringBuilder()
@@ -2246,35 +2504,58 @@ NJson::TJsonValue ExportOlapPredicate(
         Unsupported("OLAP process does not have exactly one flow argument");
     }
     const auto* rowArgument = arguments->Child(0);
-    TVector<NJson::TJsonValue> predicates;
+    TVector<TExprNode::TPtr> conditions;
 
-    std::function<void(const TExprNode::TPtr&)> visit = [&](const TExprNode::TPtr& node) {
+    auto node = lambda->ChildPtr(1);
+    while (node.Get() != rowArgument) {
         if (!node) {
             Unsupported("OLAP process contains a null operation");
         }
-        if (node.Get() == rowArgument) {
-            return;
-        }
         if (const auto maybeFilter = TMaybeNode<TKqpOlapFilter>(node)) {
             const auto filter = maybeFilter.Cast();
-            visit(filter.Input().Ptr());
-            predicates.push_back(ExportOlapScalar(
-                filter.Condition().Ptr(),
-                columns,
-                true));
-            return;
+            // Two or more pushed filters add one synthetic AND, so 1,023
+            // one-node conditions are the largest possibly admissible chain.
+            if (conditions.size() >= MaxExactScalarNodes - 1) {
+                Unsupported(TStringBuilder()
+                    << "Exact scalar expression exceeds the node audit limit of "
+                    << MaxExactScalarNodes);
+            }
+            conditions.push_back(filter.Condition().Ptr());
+            node = filter.Input().Ptr();
+            continue;
         }
         Unsupported(TStringBuilder()
             << "Unsupported OLAP process operation "
             << (node->IsCallable() ? node->Content() : TStringBuf("<non-callable>")));
-    };
-    visit(lambda->ChildPtr(1));
+    }
 
-    if (predicates.empty()) {
+    std::reverse(conditions.begin(), conditions.end());
+
+    if (conditions.empty()) {
         Unsupported("OLAP process contains no filter operation");
     }
+    const bool combined = conditions.size() > 1;
+    TExactScalarBudget budget;
+    if (combined) {
+        budget.Charge(1); // Synthetic conjunction of pushed filters.
+    }
+    const size_t conditionDepth = combined ? 2 : 1;
+    TVector<NJson::TJsonValue> predicates;
+    predicates.reserve(conditions.size());
+    for (const auto& condition : conditions) {
+        predicates.push_back(ExportOlapScalar(
+            condition,
+            columns,
+            true,
+            budget,
+            conditionDepth,
+            1));
+    }
+
     if (predicates.size() == 1) {
-        return std::move(predicates.front());
+        auto result = std::move(predicates.front());
+        AuditExactScalarExpression(result);
+        return result;
     }
 
     auto result = JsonMap();
@@ -2284,6 +2565,7 @@ NJson::TJsonValue ExportOlapPredicate(
         args.AppendValue(std::move(predicate));
     }
     result["args"] = std::move(args);
+    AuditExactScalarExpression(result);
     return result;
 }
 
@@ -2800,28 +3082,40 @@ private:
                 auto visibleNames = leftNames;
                 visibleNames.insert(rightNames.begin(), rightNames.end());
 
+                const size_t conjunctCount =
+                    join.JoinKeys.size() + join.JoinFilters.size();
+                TExactScalarBudget budget;
+                const bool combined = conjunctCount > 1;
+                if (combined) {
+                    budget.Charge(1); // Synthetic conjunction of join conditions.
+                }
+                const size_t conjunctDepth = combined ? 2 : 1;
                 auto conjuncts = JsonArray();
-                size_t conjunctCount = 0;
                 for (const auto& [left, right] : join.JoinKeys) {
                     const TString leftName = left.GetFullName();
                     const TString rightName = right.GetFullName();
                     if (!leftNames.contains(leftName) || !rightNames.contains(rightName)) {
                         Unsupported(TStringBuilder() << "Join key is absent from its declared input");
                     }
+                    budget.Charge(conjunctDepth); // Synthetic equality.
+                    budget.Charge(conjunctDepth + 1, 2); // Key columns.
                     auto equality = JsonMap();
                     equality["kind"] = "eq";
                     equality["left"] = ColumnExpr(leftName);
                     equality["right"] = ColumnExpr(rightName);
                     conjuncts.AppendValue(std::move(equality));
-                    ++conjunctCount;
                 }
                 for (const auto& filter : join.JoinFilters) {
-                    conjuncts.AppendValue(ExportExpr(filter, visibleNames));
-                    ++conjunctCount;
+                    conjuncts.AppendValue(ExportExprWithBudget(
+                        filter,
+                        visibleNames,
+                        budget,
+                        conjunctDepth));
                 }
 
                 NJson::TJsonValue predicate;
                 if (conjunctCount == 0) {
+                    budget.Charge(1);
                     predicate = TrueExpr();
                 } else if (conjunctCount == 1) {
                     predicate = std::move(conjuncts[0]);
@@ -2830,6 +3124,7 @@ private:
                     predicate["kind"] = "and";
                     predicate["args"] = std::move(conjuncts);
                 }
+                AuditExactScalarExpression(predicate);
                 node["op"] = "join";
                 node["left"] = children[0];
                 node["right"] = children[1];

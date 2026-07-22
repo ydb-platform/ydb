@@ -400,6 +400,13 @@ class JsonTest(unittest.TestCase):
             with self.assertRaisesRegex(ReplayError, "duplicate"):
                 load_json(path)
 
+    def test_strict_loader_translates_decoder_recursion_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text("[" * 10000 + "0" + "]" * 10000, encoding="utf-8")
+            with self.assertRaisesRegex(ReplayError, "invalid JSON"):
+                load_json(path)
+
 
 class QueryRewriteTest(unittest.TestCase):
     def test_rewrites_only_code_identifiers(self):

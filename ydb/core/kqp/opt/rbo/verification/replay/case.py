@@ -64,7 +64,7 @@ def load_json(path: str | Path) -> Any:
                 object_pairs_hook=object_pairs,
                 parse_constant=invalid_constant,
             )
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError) as error:
         raise ReplayError(f"{path}: invalid JSON: {error}") from error
 
 

@@ -212,6 +212,7 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/dynamic_channel_pool_provider.cpp
     rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp

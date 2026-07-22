@@ -476,8 +476,8 @@ namespace NInterconnect::NRdma {
 
     class TMemPoolBase: public IMemPool {
     public:
-        TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
-            : Ctxs(GetAllCtxs())
+        TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter, bool emulateRegistration = false)
+            : Ctxs(emulateRegistration ? NInterconnect::NRdma::NLinkMgr::TCtxsMap{} : GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
@@ -630,7 +630,7 @@ namespace NInterconnect::NRdma {
     class TDummyMemPool: public TMemPoolBase {
     public:
         TDummyMemPool()
-            : TMemPoolBase(-1, MakeCounters(nullptr))
+            : TMemPoolBase(-1, MakeCounters(nullptr), /* emulateRegistration=*/true)
         {}
 
         TMemRegionPtr AllocImpl(int size, ui32) noexcept override {

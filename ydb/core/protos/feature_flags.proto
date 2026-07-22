@@ -345,4 +345,6 @@ message TFeatureFlags {
     optional bool EnableColumnshardDyNumber = 298 [default = false];
     optional bool EnableDataShardDirectPartImport = 299 [default = false];
     optional bool EnableIdmPermissionsManagement = 301 [default = false];
+    optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
+    optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
 }

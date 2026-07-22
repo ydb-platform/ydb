@@ -12,8 +12,8 @@
 #include "dsproxy_strategy_get_min_iops_block.h"
 #include "dsproxy_strategy_get_min_iops_mirror.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 
 namespace NKikimr {
 
@@ -30,7 +30,7 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
         case NKikimrBlobStorage::TChecksumType::NoChecksum:
             return true;
         case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
-            return result.HasChecksum() && result.GetChecksum() == TDiskBlob::CalculateChecksum(resultBuffer);
+            return result.HasChecksum() && result.GetChecksum() == CalculateXxh3Hash(resultBuffer.Begin(), resultBuffer.GetSize()).second;
         case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlobAndLogoBlobId:
             return false;
         default:

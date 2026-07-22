@@ -1,5 +1,5 @@
 #include "query_base.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 using namespace NKikimrServices;
@@ -253,13 +253,13 @@ namespace NKikimr {
                             }
                             void operator()(TRcBuf&& buffer) const {
                                 TRope data(std::move(buffer));
-                                const ui64 checksum = TDiskBlob::CalculateChecksum(data);
+                                const ui64 checksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
                             void operator()(const TRope& data) const {
                                 TRope resultData(data);
-                                const ui64 checksum = TDiskBlob::CalculateChecksum(resultData);
+                                const ui64 checksum = CalculateXxh3Hash(resultData.Begin(), resultData.GetSize()).second;
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(resultData), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }

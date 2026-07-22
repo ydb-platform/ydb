@@ -1,5 +1,5 @@
 #include "vdisk_events.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
@@ -38,7 +38,8 @@ namespace NKikimr {
 
     void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer, bool checksumming) {
         if (checksumming) {
-            Record.SetChecksum(TDiskBlob::CalculateChecksum(buffer));
+            Record.SetChecksum(CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second);
+            Record.SetChecksumType(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
         }
         AddPayload(std::move(buffer));
     }
@@ -47,7 +48,8 @@ namespace NKikimr {
             bool checksumming) {
         TRope rope(buffer);
         if (checksumming) {
-            item->SetChecksum(TDiskBlob::CalculateChecksum(rope));
+            item->SetChecksum(CalculateXxh3Hash(rope.Begin(), rope.GetSize()).second);
+            item->SetChecksumType(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
         }
         AddPayload(std::move(rope));
         Y_DEBUG_ABORT_UNLESS(Record.ItemsSize() == GetPayloadCount());

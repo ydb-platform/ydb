@@ -18,6 +18,7 @@
 #include "skeleton_block_and_get.h"
 #include "skeleton_shred.h"
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
@@ -444,6 +445,15 @@ namespace NKikimr {
             SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
         }
 
+        void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
+                        const TActorContext &ctx, TInstant now, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
+                        const TBatchedVec<TString> &errorReasons) {
+            using namespace NErrBuilder;
+            std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr,
+                    SelfVDiskId, statuses, errorReasons, Db->GetVDiskIncarnationGuid(), GInfo));
+            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
+        }
+
         void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
@@ -457,6 +467,7 @@ namespace NKikimr {
         struct TVPutInfo {
             TRope Buffer;
             std::optional<ui64> Checksum;
+            std::optional<NKikimrBlobStorage::TChecksumType> ChecksumType;
             TLogoBlobID BlobId;
             TIngress Ingress;
             TLsnSeg Lsn;
@@ -470,10 +481,12 @@ namespace NKikimr {
             TWriteSource WriteSource;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer, std::optional<ui64> checksum,
+                    std::optional<NKikimrBlobStorage::TChecksumType> checksumType,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                     TWriteSource writeSource, NWilson::TTraceId traceId, bool issueKeepFlag, bool ignoreBlock)
                 : Buffer(std::move(buffer))
                 , Checksum(checksum)
+                , ChecksumType(checksumType)
                 , BlobId(blobId)
                 , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
@@ -558,6 +571,7 @@ namespace NKikimr {
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
                 TLogoBlobID id, const TRope& buffer, const std::optional<ui64>& checksum,
+                const std::optional<NKikimrBlobStorage::TChecksumType>& checksumType,
                 bool ignoreBlock, bool issueKeepFlag,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier)
@@ -614,8 +628,43 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
+            if (!checksum) {
+                if (checksumType && *checksumType != NKikimrBlobStorage::TChecksumType::NoChecksum) {
+                    YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum type is set without checksum;",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"evPrefix", evPrefix},
+                        {"id", id},
+                        {"checksumType", static_cast<ui32>(*checksumType)},
+                        {"marker", "BSVS46"});
+                    return {NKikimrProto::ERROR, "checksum type without checksum"};
+                }
+            }
+
             if (checksum) {
-                const ui64 calculatedChecksum = TDiskBlob::CalculateChecksum(buffer);
+                const auto effectiveChecksumType = checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
+                switch (effectiveChecksumType) {
+                    case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
+                        break;
+
+                    case NKikimrBlobStorage::TChecksumType::NoChecksum:
+                        YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum is set with NoChecksum type;",
+                            {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                            {"evPrefix", evPrefix},
+                            {"id", id},
+                            {"marker", "BSVS47"});
+                        return {NKikimrProto::ERROR, "checksum with NoChecksum type"};
+
+                    default:
+                        YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Unsupported buffer checksum type;",
+                            {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                            {"evPrefix", evPrefix},
+                            {"id", id},
+                            {"checksumType", static_cast<ui32>(effectiveChecksumType)},
+                            {"marker", "BSVS48"});
+                        return {NKikimrProto::ERROR, "unsupported checksum type"};
+                }
+
+                const ui64 calculatedChecksum = CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
                 if (*checksum != calculatedChecksum) {
                     YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -678,7 +727,8 @@ namespace NKikimr {
                 auto &item = *record.MutableItems(itemIdx);
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), item.HasChecksum() ?
-                    std::make_optional(item.GetChecksum()) : std::nullopt, item.MutableExtraBlockChecks(),
+                    std::make_optional(item.GetChecksum()) : std::nullopt, item.HasChecksumType() ?
+                    std::make_optional(item.GetChecksumType()) : std::nullopt, item.MutableExtraBlockChecks(),
                     WriteSourceFromProto(item.GetWriteSourceOp()),
                     item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId(), item.GetIssueKeepFlag(),
                     item.GetIgnoreBlock());
@@ -709,7 +759,7 @@ namespace NKikimr {
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
-                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer, info.Checksum,
+                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer, info.Checksum, info.ChecksumType,
                         ignoreBlock, info.IssueKeepFlag, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
                 }
 
@@ -732,18 +782,21 @@ namespace NKikimr {
             }
 
             TBatchedVec<NKikimrProto::EReplyStatus> statuses;
+            TBatchedVec<TString> errorReasons;
             for (auto &info : putsInfo) {
                 if (info.HullStatus.Postponed) {
                     statuses.push_back(NKikimrProto::OK);
+                    errorReasons.push_back(TString());
                 } else {
                     statuses.push_back(info.HullStatus.Status);
+                    errorReasons.push_back(info.HullStatus.ErrorReason);
                 }
             }
             if (!lsnCount && !hasPostponed) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_VDISK_PUT, "TEvVMultiPut: all items have errors",
                     {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
                     {"marker", "BSVS09"});
-                ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses);
+                ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses, errorReasons);
                 return;
             }
 
@@ -753,7 +806,7 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvMultiLog> evLogs = std::make_unique<NPDisk::TEvMultiLog>();
             ui64 cookie = ev->Cookie;
 
-            IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
+            IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, errorReasons, oosStatus, ev,
                     SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid(), VCtx);
             NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
             ActiveActors.Insert(vMultiPutActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -840,7 +893,8 @@ namespace NKikimr {
             LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer(), record.HasChecksum() ? std::make_optional(record.GetChecksum()) :
-                std::nullopt, record.MutableExtraBlockChecks(),
+                std::nullopt, record.HasChecksumType() ? std::make_optional(record.GetChecksumType()) : std::nullopt,
+                record.MutableExtraBlockChecks(),
                 WriteSourceFromProto(record.GetWriteSourceOp()),
                 std::move(ev->TraceId), record.GetIssueKeepFlag(), record.GetIgnoreBlock());
 
@@ -872,7 +926,8 @@ namespace NKikimr {
                 return;
             }
 
-            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, info.Buffer, info.Checksum, ignoreBlock, info.IssueKeepFlag,
+            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, info.Buffer, info.Checksum, info.ChecksumType,
+                ignoreBlock, info.IssueKeepFlag,
                 info.ExtraBlockChecks, ev->Get()->RewriteBlob ? nullptr : &info.WrittenBeyondBarrier);
             if (info.HullStatus.Status != NKikimrProto::OK) {
                 ReplyError(info.HullStatus, ev, ctx, now);

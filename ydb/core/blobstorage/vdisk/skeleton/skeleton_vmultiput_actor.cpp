@@ -17,7 +17,7 @@ namespace NKikimr {
                 ui32 StatusFlags = 0;
                 bool Received = false;
                 bool HasCookie = false;
-                bool WrittenBeyondBarrier;
+                bool WrittenBeyondBarrier = false;
 
                 TString ToString() const {
                     return TStringBuilder()
@@ -49,7 +49,7 @@ namespace NKikimr {
 
         public:
             TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
-                    TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
+                    const TBatchedVec<TString> &errorReasons, TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
                     TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
                     ui64 incarnationGuid, TIntrusivePtr<TVDiskContext>& vCtx)
                 : TActorBootstrapped()
@@ -64,8 +64,10 @@ namespace NKikimr {
                 , VCtx(vCtx)
             {
                 Y_VERIFY_S(statuses.size() == Items.size(), VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(errorReasons.size() == Items.size(), VCtx->VDiskLogPrefix);
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     Items[idx].Status = statuses[idx];
+                    Items[idx].ErrorReason = errorReasons[idx];
                 }
             }
 
@@ -164,10 +166,10 @@ namespace NKikimr {
     } // NPrivate
 
     IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
-            TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
+            const TBatchedVec<TString> &errorReasons, TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
             TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
             ui64 incarnationGuid, TIntrusivePtr<TVDiskContext>& vCtx) {
-        return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, oosStatus, ev,
+        return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, errorReasons, oosStatus, ev,
                 skeletonFrontIDPtr, counterPtr, incarnationGuid, vCtx);
     }
 

@@ -3,9 +3,9 @@
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 
@@ -239,8 +239,10 @@ void TestDsProxyGetChecksum(bool wrongData, NKikimrBlobStorage::TChecksumType ch
         const TString vdiskResponsePartData = makePartData(vdiskResponseData);
         result->SetBufferData(vdiskResponsePartData);
         result->SetSize(result->GetBufferData().size());
-        const ui64 originalDataChecksum = TDiskBlob::CalculateChecksum(TRope(correctPartData));
-        const ui64 mockedDataChecksum = TDiskBlob::CalculateChecksum(TRope(vdiskResponsePartData));
+        const TRope correctPartRope(correctPartData);
+        const TRope vdiskResponsePartRope(vdiskResponsePartData);
+        const ui64 originalDataChecksum = CalculateXxh3Hash(correctPartRope.Begin(), correctPartRope.GetSize()).second;
+        const ui64 mockedDataChecksum = CalculateXxh3Hash(vdiskResponsePartRope.Begin(), vdiskResponsePartRope.GetSize()).second;
 
         if (checksumValue == "Missing") {
             // Nothing to set.

@@ -10,6 +10,8 @@
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -166,13 +168,9 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-<<<<<<< HEAD
-        LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
-=======
         YDB_LOG_DEBUG(errorMessage,
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"replyErrorAndDie", errorCode});
->>>>>>> e560084e95c ([YDB_LOG] Migrate ydb/core/persqueue/prqb (#45807))
+            {"errorCode", errorCode});
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }

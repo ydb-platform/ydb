@@ -445,7 +445,7 @@ public:
         const auto& filePath = topicsIt->second.Path;
         Y_ENSURE(filePath);
 
-        return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));
+        return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr | EOpenMode::TEnum::ForAppend | EOpenMode::TEnum::OpenAlways));
     }
 
     TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset, const TCommitOffsetSettings& settings) final {

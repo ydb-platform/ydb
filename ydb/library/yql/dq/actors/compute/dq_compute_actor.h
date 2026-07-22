@@ -16,8 +16,22 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 namespace NYql {
 namespace NDq {
+
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace NDqComputeMemoryLimitsEnv {
+    inline ui64 GetChunkSizeLimit() {
+        static const ui64 value = []() -> ui64 {
+            ui64 v = 0;
+            return TryFromString<ui64>(GetEnv("YDB_TEST_DQ_COMPUTE_CHUNK_SIZE_LIMIT"), v) ? v : (48ULL * 1024 * 1024);
+        }();
+        return value;
+    }
+}
 
 namespace TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
@@ -378,7 +392,7 @@ struct TComputeMemoryLimits {
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
     ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-    ui64 ChunkSizeLimit = 48_MB;
+    ui64 ChunkSizeLimit = NDqComputeMemoryLimitsEnv::GetChunkSizeLimit();
     TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer and DqOutputChannel
     TMaybe<size_t> BufferPageAllocSize;
 

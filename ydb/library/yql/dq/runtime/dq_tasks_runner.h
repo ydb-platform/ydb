@@ -26,6 +26,8 @@
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/cast.h>
+#include <util/system/env.h>
 #include <util/system/types.h>
 
 namespace NActors {
@@ -230,10 +232,21 @@ struct TDqTaskRunnerSettings {
     TVector<TString> ReadRanges;
 };
 
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace NDqTaskRunnerMemoryLimitsEnv {
+    inline ui32 GetChunkSizeLimit() {
+        static const ui32 value = []() -> ui32 {
+            ui32 v = 0;
+            return TryFromString<ui32>(GetEnv("YDB_TEST_DQ_TASK_RUNNER_CHUNK_SIZE_LIMIT"), v) ? v : (48u * 1024u * 1024u);
+        }();
+        return value;
+    }
+}
+
 struct TDqTaskRunnerMemoryLimits {
     ui32 ChannelBufferSize = 0;
     ui32 OutputChunkMaxSize = 0;
-    ui32 ChunkSizeLimit = 48_MB;
+    ui32 ChunkSizeLimit = NDqTaskRunnerMemoryLimitsEnv::GetChunkSizeLimit();
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;

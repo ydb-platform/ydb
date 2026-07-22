@@ -396,8 +396,8 @@ message ImportDataRequest {
     // - sorted by primary key;
     // - all keys must be from the same partition;
     // - table has no global secondary indexes;
-    // - size of serialized data is limited to 16 MB.
-    bytes data = 3 [(length).le = 16777216];
+    // - size of serialized data is limited to 20 MB.
+    bytes data = 3 [(length).le = 20971520];
     oneof format {
         // Result of `ydb tools dump`
         YdbDumpFormat ydb_dump = 4;

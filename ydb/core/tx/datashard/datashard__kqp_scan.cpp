@@ -1,6 +1,8 @@
 #include "datashard_impl.h"
 #include "range_ops.h"
+#include <util/string/cast.h>
 #include <util/string/vector.h>
+#include <util/system/env.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -464,7 +466,12 @@ private:
                 << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
                 << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
-            if (sendBytes >= 48_MB) {
+            // TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+            static const ui64 sendBytesLimit = []() -> ui64 {
+                ui64 v = 0;
+                return TryFromString<ui64>(GetEnv("YDB_TEST_KQP_SCAN_SEND_BYTES_LIMIT"), v) ? v : (48ULL * 1024 * 1024);
+            }();
+            if (sendBytes >= sendBytesLimit) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
                 if (finish) {
                     bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,

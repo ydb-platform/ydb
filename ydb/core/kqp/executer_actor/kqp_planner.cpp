@@ -6,6 +6,8 @@
 #include <ydb/core/base/appdata.h>
 
 #include <util/generic/set.h>
+#include <util/string/cast.h>
+#include <util/system/env.h>
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
@@ -16,6 +18,14 @@ using namespace NActors;
 
 namespace NKikimr::NKqp {
 
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace {
+    ui64 EnvUi64(const char* name, ui64 def) {
+        ui64 v = 0;
+        return TryFromString<ui64>(GetEnv(name), v) ? v : def;
+    }
+}
+
 #define LOG_T(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
@@ -23,7 +33,7 @@ namespace NKikimr::NKqp {
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
-static std::atomic<ui64> MaxTaskSize = 48_MB;
+static std::atomic<ui64> MaxTaskSize = EnvUi64("YDB_TEST_KQP_MAX_TASK_SIZE", 48_MB);
 
 void SetMaxTaskSize(ui64 size) {
     MaxTaskSize.store(size, std::memory_order_relaxed);

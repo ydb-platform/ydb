@@ -283,12 +283,12 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                     }
 
                     const auto& cell = ValueCells.GetCells().at(i);
-                    if (cell.Size() > NLimits::MaxWriteValueSize) {
+                    if (cell.Size() > NLimits::MaxWriteValueSize()) {
                         AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                             NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                             TStringBuilder() << "Value cell is too big"
                                 << ": actual " << cell.Size() << " bytes"
-                                << ", limit " << NLimits::MaxWriteValueSize << " bytes");
+                                << ", limit " << NLimits::MaxWriteValueSize() << " bytes");
                         return false;
                     }
 

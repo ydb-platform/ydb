@@ -175,7 +175,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     if (col.Operation == TKeyDesc::EColumnOperation::Set ||
                         col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
                     {
-                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
+                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize()) {
                             TString err = TStringBuilder()
                                 << "Transaction write column value of " << col.ImmediateUpdateSize
                                 << " bytes is larger than the allowed threshold";

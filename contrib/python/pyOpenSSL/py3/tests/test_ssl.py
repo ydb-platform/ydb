@@ -9,6 +9,7 @@ import datetime
 import gc
 import select
 import sys
+import time
 import uuid
 from errno import (
     EAFNOSUPPORT,
@@ -26,42 +27,50 @@ from socket import (
     AF_INET6,
     MSG_PEEK,
     SHUT_RDWR,
-    error,
+    gaierror,
     socket,
 )
 from sys import getfilesystemencoding, platform
 from typing import Union
-from warnings import simplefilter
 from weakref import ref
 
+import flaky
+import pytest
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-
-import flaky
-
 from pretend import raiser
 
-import pytest
-
 from OpenSSL import SSL
+from OpenSSL._util import ffi as _ffi
+from OpenSSL._util import lib as _lib
+from OpenSSL.crypto import (
+    FILETYPE_PEM,
+    TYPE_RSA,
+    X509,
+    PKey,
+    X509Store,
+    dump_certificate,
+    dump_privatekey,
+    get_elliptic_curves,
+    load_certificate,
+    load_privatekey,
+)
+
+with pytest.warns(DeprecationWarning):
+    from OpenSSL.crypto import X509Extension
+
 from OpenSSL.SSL import (
-    Connection,
-    Context,
     DTLS_METHOD,
-    Error,
     MODE_RELEASE_BUFFERS,
     NO_OVERLAPPING_PROTOCOLS,
-    OPENSSL_VERSION_NUMBER,
     OP_COOKIE_EXCHANGE,
     OP_NO_COMPRESSION,
     OP_NO_QUERY_MTU,
-    OP_NO_SSLv2,
-    OP_NO_SSLv3,
     OP_NO_TICKET,
     OP_SINGLE_DH_USE,
+    OPENSSL_VERSION_NUMBER,
     RECEIVED_SHUTDOWN,
     SENT_SHUTDOWN,
     SESS_CACHE_BOTH,
@@ -72,11 +81,6 @@ from OpenSSL.SSL import (
     SESS_CACHE_NO_INTERNAL_STORE,
     SESS_CACHE_OFF,
     SESS_CACHE_SERVER,
-    SSLEAY_BUILT_ON,
-    SSLEAY_CFLAGS,
-    SSLEAY_DIR,
-    SSLEAY_PLATFORM,
-    SSLEAY_VERSION,
     SSL_CB_ACCEPT_EXIT,
     SSL_CB_ACCEPT_LOOP,
     SSL_CB_ALERT,
@@ -93,45 +97,41 @@ from OpenSSL.SSL import (
     SSL_ST_ACCEPT,
     SSL_ST_CONNECT,
     SSL_ST_MASK,
-    SSLeay_version,
-    SSLv23_METHOD,
-    Session,
-    SysCallError,
+    SSLEAY_BUILT_ON,
+    SSLEAY_CFLAGS,
+    SSLEAY_DIR,
+    SSLEAY_PLATFORM,
+    SSLEAY_VERSION,
     TLS1_1_VERSION,
     TLS1_2_VERSION,
     TLS1_3_VERSION,
     TLS_METHOD,
-    TLSv1_1_METHOD,
-    TLSv1_2_METHOD,
-    TLSv1_METHOD,
     VERIFY_CLIENT_ONCE,
     VERIFY_FAIL_IF_NO_PEER_CERT,
     VERIFY_NONE,
     VERIFY_PEER,
+    Connection,
+    Context,
+    Error,
+    OP_NO_SSLv2,
+    OP_NO_SSLv3,
+    Session,
+    SSLeay_version,
+    SSLv23_METHOD,
+    SysCallError,
+    TLSv1_1_METHOD,
+    TLSv1_2_METHOD,
+    TLSv1_METHOD,
     WantReadError,
     WantWriteError,
     ZeroReturnError,
     _make_requires,
 )
-from OpenSSL._util import ffi as _ffi, lib as _lib
-from OpenSSL.crypto import (
-    FILETYPE_PEM,
-    PKey,
-    TYPE_RSA,
-    X509,
-    X509Extension,
-    X509Store,
-    dump_certificate,
-    dump_privatekey,
-    get_elliptic_curves,
-    load_certificate,
-    load_privatekey,
-)
 
 try:
     from OpenSSL.SSL import (
-        SSL_ST_INIT,
         SSL_ST_BEFORE,
+        SSL_ST_INIT,
         SSL_ST_OK,
         SSL_ST_RENEGOTIATE,
     )
@@ -153,7 +153,6 @@ from .test_crypto import (
 )
 from .util import NON_ASCII, WARNING_TYPE_EXPECTED, is_consistent_type
 
-
 # openssl dhparam 2048 -out dh-2048.pem
 dhparam = """\
 -----BEGIN DH PARAMETERS-----
@@ -170,7 +169,7 @@ i5s5yYK7a/0eWxxRr2qraYaUj8RwDpH9CwIBAg==
 def socket_any_family():
     try:
         return socket(AF_INET)
-    except error as e:
+    except OSError as e:
         if e.errno == EAFNOSUPPORT:
             return socket(AF_INET6)
         raise
@@ -359,11 +358,10 @@ def interact_in_memory(client_conn, server_conn):
 
         # Copy stuff from each side's send buffer to the other side's
         # receive buffer.
-        for (read, write) in [
+        for read, write in [
             (client_conn, server_conn),
             (server_conn, client_conn),
         ]:
-
             # Give the side a chance to generate some more bytes, or succeed.
             try:
                 data = read.recv(2**16)
@@ -642,7 +640,7 @@ class TestContext:
         key = PKey()
         key.generate_key(TYPE_RSA, 1024)
 
-        with open(pemfile, "wt") as pem:
+        with open(pemfile, "w") as pem:
             pem.write(dump_privatekey(FILETYPE_PEM, key).decode("ascii"))
 
         ctx = Context(SSLv23_METHOD)
@@ -1140,23 +1138,30 @@ class TestContext:
 
         self._load_verify_locations_test(None, capath)
 
-    def test_load_verify_directory_bytes_capath(self, tmpfile):
+    @pytest.mark.parametrize(
+        "pathtype",
+        [
+            "ascii_path",
+            pytest.param(
+                "unicode_path",
+                marks=pytest.mark.skipif(
+                    platform == "win32",
+                    reason="Unicode paths not supported on Windows",
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("argtype", ["bytes_arg", "unicode_arg"])
+    def test_load_verify_directory_capath(self, pathtype, argtype, tmpfile):
         """
         `Context.load_verify_locations` accepts a directory name as a `bytes`
         instance and uses the certificates within for verification purposes.
         """
-        self._load_verify_directory_locations_capath(
-            tmpfile + NON_ASCII.encode(getfilesystemencoding())
-        )
-
-    def test_load_verify_directory_unicode_capath(self, tmpfile):
-        """
-        `Context.load_verify_locations` accepts a directory name as a `unicode`
-        instance and uses the certificates within for verification purposes.
-        """
-        self._load_verify_directory_locations_capath(
-            tmpfile.decode(getfilesystemencoding()) + NON_ASCII
-        )
+        if pathtype == "unicode_path":
+            tmpfile += NON_ASCII.encode(getfilesystemencoding())
+        if argtype == "unicode_arg":
+            tmpfile = tmpfile.decode(getfilesystemencoding())
+        self._load_verify_directory_locations_capath(tmpfile)
 
     def test_load_verify_locations_wrong_args(self):
         """
@@ -1172,7 +1177,7 @@ class TestContext:
     @pytest.mark.skipif(
         not platform.startswith("linux"),
         reason="Loading fallback paths is a linux-specific behavior to "
-        "accommodate pyca/cryptography manylinux1 wheels",
+        "accommodate pyca/cryptography manylinux wheels",
     )
     def test_fallback_default_verify_paths(self, monkeypatch):
         """
@@ -1265,7 +1270,10 @@ class TestContext:
         )
 
         client = socket_any_family()
-        client.connect(("encrypted.google.com", 443))
+        try:
+            client.connect(("encrypted.google.com", 443))
+        except gaierror:
+            pytest.skip("cannot connect to encrypted.google.com")
         clientSSL = Connection(context, client)
         clientSSL.set_connect_state()
         clientSSL.set_tlsext_host_name(b"encrypted.google.com")
@@ -1717,7 +1725,7 @@ class TestContext:
         """
         context = Context(SSLv23_METHOD)
         with pytest.raises(TypeError):
-            context.set_tlsext_use_srtp(str("SRTP_AES128_CM_SHA1_80"))
+            context.set_tlsext_use_srtp("SRTP_AES128_CM_SHA1_80")
 
     def test_set_tlsext_use_srtp_invalid_profile(self):
         """
@@ -1776,7 +1784,7 @@ class TestServerNameCallback:
         if callback is not None:
             referrers = get_referrers(callback)
             if len(referrers) > 1:  # pragma: nocover
-                pytest.fail("Some references remain: %r" % (referrers,))
+                pytest.fail(f"Some references remain: {referrers!r}")
 
     def test_no_servername(self):
         """
@@ -2364,7 +2372,7 @@ class TestConnection:
         # 2.6: https://github.com/pytest-dev/pytest/issues/988
         try:
             clientSSL.connect((loopback_address(client), 1))
-        except error as e:
+        except OSError as e:
             exc = e
         assert exc.args[0] == ECONNREFUSED
 
@@ -2380,10 +2388,6 @@ class TestConnection:
         clientSSL.connect((loopback_address(port), port.getsockname()[1]))
         # XXX An assertion?  Or something?
 
-    @pytest.mark.skipif(
-        platform == "darwin",
-        reason="connect_ex sometimes causes a kernel panic on OS X 10.6.4",
-    )
     def test_connect_ex(self):
         """
         If there is a connection error, `Connection.connect_ex` returns the
@@ -2706,7 +2710,7 @@ class TestConnection:
         if callback is not None:  # pragma: nocover
             referrers = get_referrers(callback)
             if len(referrers) > 1:
-                pytest.fail("Some references remain: %r" % (referrers,))
+                pytest.fail(f"Some references remain: {referrers!r}")
 
     def test_get_session_unconnected(self):
         """
@@ -2762,7 +2766,7 @@ class TestConnection:
         ctx = Context(TLSv1_2_METHOD)
         ctx.use_privatekey(key)
         ctx.use_certificate(cert)
-        ctx.set_session_id("unity-test")
+        ctx.set_session_id(b"unity-test")
 
         def makeServer(socket):
             server = Connection(ctx, socket)
@@ -2838,23 +2842,24 @@ class TestConnection:
         """
         client_socket, server_socket = socket_pair()
         # Fill up the client's send buffer so Connection won't be able to write
-        # anything.  Only write a single byte at a time so we can be sure we
+        # anything. Start by sending larger chunks (Windows Socket I/O is slow)
+        # and continue by writing a single byte at a time so we can be sure we
         # completely fill the buffer.  Even though the socket API is allowed to
         # signal a short write via its return value it seems this doesn't
         # always happen on all platforms (FreeBSD and OS X particular) for the
         # very last bit of available buffer space.
-        msg = b"x"
-        for i in range(1024 * 1024 * 64):
-            try:
-                client_socket.send(msg)
-            except error as e:
-                if e.errno == EWOULDBLOCK:
-                    break
-                raise
-        else:
-            pytest.fail(
-                "Failed to fill socket buffer, cannot test BIO want write"
-            )
+        for msg in [b"x" * 65536, b"x"]:
+            for i in range(1024 * 1024 * 64):
+                try:
+                    client_socket.send(msg)
+                except OSError as e:
+                    if e.errno == EWOULDBLOCK:
+                        break
+                    raise  # pragma: no cover
+            else:  # pragma: no cover
+                pytest.fail(
+                    "Failed to fill socket buffer, cannot test BIO want write"
+                )
 
         ctx = Context(SSLv23_METHOD)
         conn = Connection(ctx, client_socket)
@@ -3117,9 +3122,8 @@ class TestConnectionSend:
         """
         server, client = loopback()
         with pytest.warns(DeprecationWarning) as w:
-            simplefilter("always")
             count = server.send(b"xy".decode("ascii"))
-            assert "{0} for buf is no longer accepted, use bytes".format(
+            assert "{} for buf is no longer accepted, use bytes".format(
                 WARNING_TYPE_EXPECTED
             ) == str(w[-1].message)
         assert count == 2
@@ -3325,9 +3329,8 @@ class TestConnectionSendall:
         """
         server, client = loopback()
         with pytest.warns(DeprecationWarning) as w:
-            simplefilter("always")
             server.sendall(b"x".decode("ascii"))
-            assert "{0} for buf is no longer accepted, use bytes".format(
+            assert "{} for buf is no longer accepted, use bytes".format(
                 WARNING_TYPE_EXPECTED
             ) == str(w[-1].message)
         assert client.recv(1) == b"x"
@@ -3753,13 +3756,16 @@ class TestMemoryBIO:
         """
         If the connection is lost before an orderly SSL shutdown occurs,
         `OpenSSL.SSL.SysCallError` is raised with a message of
-        "Unexpected EOF".
+        "Unexpected EOF" (or WSAECONNRESET on Windows).
         """
         server_conn, client_conn = loopback()
         client_conn.sock_shutdown(SHUT_RDWR)
         with pytest.raises(SysCallError) as err:
             server_conn.recv(1024)
-        assert err.value.args == (-1, "Unexpected EOF")
+        if platform == "win32":
+            assert err.value.args == (10054, "WSAECONNRESET")
+        else:
+            assert err.value.args == (-1, "Unexpected EOF")
 
     def _check_client_ca_list(self, func):
         """
@@ -4370,10 +4376,11 @@ class TestDTLS:
     # new versions of OpenSSL, this is unnecessary, but harmless, because the
     # DTLS state machine treats it like a network hiccup that duplicated a
     # packet, which DTLS is robust against.
-    def test_it_works_at_all(self):
-        # arbitrary number larger than any conceivable handshake volley
-        LARGE_BUFFER = 65536
 
+    # Arbitrary number larger than any conceivable handshake volley.
+    LARGE_BUFFER = 65536
+
+    def test_it_works_at_all(self):
         s_ctx = Context(DTLS_METHOD)
 
         def generate_cookie(ssl):
@@ -4404,7 +4411,7 @@ class TestDTLS:
 
         def pump_membio(label, source, sink):
             try:
-                chunk = source.bio_read(LARGE_BUFFER)
+                chunk = source.bio_read(self.LARGE_BUFFER)
             except WantReadError:
                 return False
             # I'm not sure this check is needed, but I'm not sure it's *not*
@@ -4484,3 +4491,39 @@ class TestDTLS:
             assert 0 < c.get_cleartext_mtu() < 500
         except NotImplementedError:  # OpenSSL 1.1.0 and earlier
             pass
+
+    def test_timeout(self, monkeypatch):
+        c_ctx = Context(DTLS_METHOD)
+        c = Connection(c_ctx)
+
+        # No timeout before the handshake starts.
+        assert c.DTLSv1_get_timeout() is None
+        assert c.DTLSv1_handle_timeout() is False
+
+        # Start handshake and check there is data to send.
+        c.set_connect_state()
+        try:
+            c.do_handshake()
+        except SSL.WantReadError:
+            pass
+        assert c.bio_read(self.LARGE_BUFFER)
+
+        # There should now be an active timeout.
+        seconds = c.DTLSv1_get_timeout()
+        assert seconds is not None
+
+        # Handle the timeout and check there is data to send.
+        time.sleep(seconds)
+        assert c.DTLSv1_handle_timeout() is True
+        assert c.bio_read(self.LARGE_BUFFER)
+
+        # After the maximum number of allowed timeouts is reached,
+        # DTLSv1_handle_timeout will return -1.
+        #
+        # Testing this directly is prohibitively time consuming as the timeout
+        # duration is doubled on each retry, so the best we can do is to mock
+        # this condition.
+        monkeypatch.setattr(_lib, "DTLSv1_handle_timeout", lambda x: -1)
+
+        with pytest.raises(Error):
+            c.DTLSv1_handle_timeout()

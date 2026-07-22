@@ -1,5 +1,6 @@
 import os
 import socket
+import typing
 from errno import errorcode
 from functools import partial, wraps
 from itertools import chain, count
@@ -8,18 +9,32 @@ from weakref import WeakValueDictionary
 
 from OpenSSL._util import (
     UNSPECIFIED as _UNSPECIFIED,
+)
+from OpenSSL._util import (
     exception_from_error_queue as _exception_from_error_queue,
+)
+from OpenSSL._util import (
     ffi as _ffi,
+)
+from OpenSSL._util import (
     lib as _lib,
+)
+from OpenSSL._util import (
     make_assert as _make_assert,
+)
+from OpenSSL._util import (
     no_zero_allocator as _no_zero_allocator,
+)
+from OpenSSL._util import (
     path_bytes as _path_bytes,
+)
+from OpenSSL._util import (
     text_to_bytes_and_warn as _text_to_bytes_and_warn,
 )
 from OpenSSL.crypto import (
     FILETYPE_PEM,
-    PKey,
     X509,
+    PKey,
     X509Name,
     X509Store,
     _PassphraseHelper,
@@ -123,6 +138,7 @@ __all__ = [
     "Session",
     "Context",
     "Connection",
+    "X509VerificationCodes",
 ]
 
 
@@ -216,6 +232,12 @@ try:
 except AttributeError:
     pass
 
+try:
+    OP_LEGACY_SERVER_CONNECT = _lib.SSL_OP_LEGACY_SERVER_CONNECT
+    __all__.append("OP_LEGACY_SERVER_CONNECT")
+except AttributeError:
+    pass
+
 OP_ALL = _lib.SSL_OP_ALL
 
 VERIFY_PEER = _lib.SSL_VERIFY_PEER
@@ -249,6 +271,113 @@ SSL_CB_CONNECT_LOOP = _lib.SSL_CB_CONNECT_LOOP
 SSL_CB_CONNECT_EXIT = _lib.SSL_CB_CONNECT_EXIT
 SSL_CB_HANDSHAKE_START = _lib.SSL_CB_HANDSHAKE_START
 SSL_CB_HANDSHAKE_DONE = _lib.SSL_CB_HANDSHAKE_DONE
+
+
+class X509VerificationCodes:
+    """
+    Success and error codes for X509 verification, as returned by the
+    underlying ``X509_STORE_CTX_get_error()`` function and passed by pyOpenSSL
+    to verification callback functions.
+
+    See `OpenSSL Verification Errors
+    <https://www.openssl.org/docs/manmaster/man3/X509_verify_cert_error_string.html#ERROR-CODES>`_
+    for details.
+    """
+
+    OK = _lib.X509_V_OK
+    ERR_UNABLE_TO_GET_ISSUER_CERT = _lib.X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+    ERR_UNABLE_TO_GET_CRL = _lib.X509_V_ERR_UNABLE_TO_GET_CRL
+    ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE = (
+        _lib.X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE
+    )
+    ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE = (
+        _lib.X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE
+    )
+    ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY = (
+        _lib.X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY
+    )
+    ERR_CERT_SIGNATURE_FAILURE = _lib.X509_V_ERR_CERT_SIGNATURE_FAILURE
+    ERR_CRL_SIGNATURE_FAILURE = _lib.X509_V_ERR_CRL_SIGNATURE_FAILURE
+    ERR_CERT_NOT_YET_VALID = _lib.X509_V_ERR_CERT_NOT_YET_VALID
+    ERR_CERT_HAS_EXPIRED = _lib.X509_V_ERR_CERT_HAS_EXPIRED
+    ERR_CRL_NOT_YET_VALID = _lib.X509_V_ERR_CRL_NOT_YET_VALID
+    ERR_CRL_HAS_EXPIRED = _lib.X509_V_ERR_CRL_HAS_EXPIRED
+    ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD = (
+        _lib.X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD
+    )
+    ERR_ERROR_IN_CERT_NOT_AFTER_FIELD = (
+        _lib.X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD
+    )
+    ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD = (
+        _lib.X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD
+    )
+    ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD = (
+        _lib.X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD
+    )
+    ERR_OUT_OF_MEM = _lib.X509_V_ERR_OUT_OF_MEM
+    ERR_DEPTH_ZERO_SELF_SIGNED_CERT = (
+        _lib.X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+    )
+    ERR_SELF_SIGNED_CERT_IN_CHAIN = _lib.X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+    ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = (
+        _lib.X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+    )
+    ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE = (
+        _lib.X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+    )
+    ERR_CERT_CHAIN_TOO_LONG = _lib.X509_V_ERR_CERT_CHAIN_TOO_LONG
+    ERR_CERT_REVOKED = _lib.X509_V_ERR_CERT_REVOKED
+    ERR_INVALID_CA = _lib.X509_V_ERR_INVALID_CA
+    ERR_PATH_LENGTH_EXCEEDED = _lib.X509_V_ERR_PATH_LENGTH_EXCEEDED
+    ERR_INVALID_PURPOSE = _lib.X509_V_ERR_INVALID_PURPOSE
+    ERR_CERT_UNTRUSTED = _lib.X509_V_ERR_CERT_UNTRUSTED
+    ERR_CERT_REJECTED = _lib.X509_V_ERR_CERT_REJECTED
+    ERR_SUBJECT_ISSUER_MISMATCH = _lib.X509_V_ERR_SUBJECT_ISSUER_MISMATCH
+    ERR_AKID_SKID_MISMATCH = _lib.X509_V_ERR_AKID_SKID_MISMATCH
+    ERR_AKID_ISSUER_SERIAL_MISMATCH = (
+        _lib.X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH
+    )
+    ERR_KEYUSAGE_NO_CERTSIGN = _lib.X509_V_ERR_KEYUSAGE_NO_CERTSIGN
+    ERR_UNABLE_TO_GET_CRL_ISSUER = _lib.X509_V_ERR_UNABLE_TO_GET_CRL_ISSUER
+    ERR_UNHANDLED_CRITICAL_EXTENSION = (
+        _lib.X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION
+    )
+    ERR_KEYUSAGE_NO_CRL_SIGN = _lib.X509_V_ERR_KEYUSAGE_NO_CRL_SIGN
+    ERR_UNHANDLED_CRITICAL_CRL_EXTENSION = (
+        _lib.X509_V_ERR_UNHANDLED_CRITICAL_CRL_EXTENSION
+    )
+    ERR_INVALID_NON_CA = _lib.X509_V_ERR_INVALID_NON_CA
+    ERR_PROXY_PATH_LENGTH_EXCEEDED = _lib.X509_V_ERR_PROXY_PATH_LENGTH_EXCEEDED
+    ERR_KEYUSAGE_NO_DIGITAL_SIGNATURE = (
+        _lib.X509_V_ERR_KEYUSAGE_NO_DIGITAL_SIGNATURE
+    )
+    ERR_PROXY_CERTIFICATES_NOT_ALLOWED = (
+        _lib.X509_V_ERR_PROXY_CERTIFICATES_NOT_ALLOWED
+    )
+    ERR_INVALID_EXTENSION = _lib.X509_V_ERR_INVALID_EXTENSION
+    ERR_INVALID_POLICY_EXTENSION = _lib.X509_V_ERR_INVALID_POLICY_EXTENSION
+    ERR_NO_EXPLICIT_POLICY = _lib.X509_V_ERR_NO_EXPLICIT_POLICY
+    ERR_DIFFERENT_CRL_SCOPE = _lib.X509_V_ERR_DIFFERENT_CRL_SCOPE
+    ERR_UNSUPPORTED_EXTENSION_FEATURE = (
+        _lib.X509_V_ERR_UNSUPPORTED_EXTENSION_FEATURE
+    )
+    ERR_UNNESTED_RESOURCE = _lib.X509_V_ERR_UNNESTED_RESOURCE
+    ERR_PERMITTED_VIOLATION = _lib.X509_V_ERR_PERMITTED_VIOLATION
+    ERR_EXCLUDED_VIOLATION = _lib.X509_V_ERR_EXCLUDED_VIOLATION
+    ERR_SUBTREE_MINMAX = _lib.X509_V_ERR_SUBTREE_MINMAX
+    ERR_UNSUPPORTED_CONSTRAINT_TYPE = (
+        _lib.X509_V_ERR_UNSUPPORTED_CONSTRAINT_TYPE
+    )
+    ERR_UNSUPPORTED_CONSTRAINT_SYNTAX = (
+        _lib.X509_V_ERR_UNSUPPORTED_CONSTRAINT_SYNTAX
+    )
+    ERR_UNSUPPORTED_NAME_SYNTAX = _lib.X509_V_ERR_UNSUPPORTED_NAME_SYNTAX
+    ERR_CRL_PATH_VALIDATION_ERROR = _lib.X509_V_ERR_CRL_PATH_VALIDATION_ERROR
+    ERR_HOSTNAME_MISMATCH = _lib.X509_V_ERR_HOSTNAME_MISMATCH
+    ERR_EMAIL_MISMATCH = _lib.X509_V_ERR_EMAIL_MISMATCH
+    ERR_IP_ADDRESS_MISMATCH = _lib.X509_V_ERR_IP_ADDRESS_MISMATCH
+    ERR_APPLICATION_VERIFICATION = _lib.X509_V_ERR_APPLICATION_VERIFICATION
+
 
 # Taken from https://golang.org/src/crypto/x509/root_linux.go
 _CERTIFICATE_FILE_LOCATIONS = [
@@ -689,7 +818,7 @@ class Context:
                    not be used.
     """
 
-    _methods = {
+    _methods: typing.ClassVar[typing.Dict] = {
         SSLv23_METHOD: (_lib.TLS_method, None),
         TLSv1_METHOD: (_lib.TLS_method, TLS1_VERSION),
         TLSv1_1_METHOD: (_lib.TLS_method, TLS1_1_VERSION),
@@ -847,9 +976,9 @@ class Context:
             the ``openssl@1.1`` `Homebrew <https://brew.sh>`_ formula installed
             in the default location.
         *   Windows will not work.
-        *   manylinux1 cryptography wheels will work on most common Linux
+        *   manylinux cryptography wheels will work on most common Linux
             distributions in pyOpenSSL 17.1.0 and above.  pyOpenSSL detects the
-            manylinux1 wheel and attempts to load roots via a fallback path.
+            manylinux wheel and attempts to load roots via a fallback path.
 
         :return: None
         """
@@ -874,13 +1003,13 @@ class Context:
             default_dir = _ffi.string(_lib.X509_get_default_cert_dir())
             default_file = _ffi.string(_lib.X509_get_default_cert_file())
             # Now we check to see if the default_dir and default_file are set
-            # to the exact values we use in our manylinux1 builds. If they are
+            # to the exact values we use in our manylinux builds. If they are
             # then we know to load the fallbacks
             if (
                 default_dir == _CRYPTOGRAPHY_MANYLINUX_CA_DIR
                 and default_file == _CRYPTOGRAPHY_MANYLINUX_CA_FILE
             ):
-                # This is manylinux1, let's load our fallback paths
+                # This is manylinux, let's load our fallback paths
                 self._fallback_default_verify_paths(
                     _CERTIFICATE_FILE_LOCATIONS, _CERTIFICATE_PATH_LOCATIONS
                 )
@@ -899,7 +1028,7 @@ class Context:
     def _fallback_default_verify_paths(self, file_path, dir_path):
         """
         Default verify paths are based on the compiled version of OpenSSL.
-        However, when pyca/cryptography is compiled as a manylinux1 wheel
+        However, when pyca/cryptography is compiled as a manylinux wheel
         that compiled location can potentially be wrong. So, like Go, we
         will try a predefined set of paths and attempt to load roots
         from there.
@@ -1259,8 +1388,8 @@ class Context:
             for ca_name in certificate_authorities:
                 if not isinstance(ca_name, X509Name):
                     raise TypeError(
-                        "client CAs must be X509Name objects, not %s "
-                        "objects" % (type(ca_name).__name__,)
+                        "client CAs must be X509Name objects, not {} "
+                        "objects".format(type(ca_name).__name__)
                     )
                 copy = _lib.X509_NAME_dup(ca_name._name)
                 _openssl_assert(copy != _ffi.NULL)
@@ -1663,8 +1792,7 @@ class Connection:
         """
         if self._socket is None:
             raise AttributeError(
-                "'%s' object has no attribute '%s'"
-                % (self.__class__.__name__, name)
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
             )
         else:
             return getattr(self._socket, name)
@@ -1916,7 +2044,6 @@ class Connection:
         buf = _text_to_bytes_and_warn("buf", buf)
 
         with _ffi.from_buffer(buf) as data:
-
             left_to_send = len(buf)
             total_sent = 0
 
@@ -2159,6 +2286,37 @@ class Connection:
             raise WantReadError()
         if result < 0:
             self._raise_ssl_error(self._ssl, result)
+
+    def DTLSv1_get_timeout(self):
+        """
+        Determine when the DTLS SSL object next needs to perform internal
+        processing due to the passage of time.
+
+        When the returned number of seconds have passed, the
+        :meth:`DTLSv1_handle_timeout` method needs to be called.
+
+        :return: The time left in seconds before the next timeout or `None`
+            if no timeout is currently active.
+        """
+        ptv_sec = _ffi.new("time_t *")
+        ptv_usec = _ffi.new("long *")
+        if _lib.Cryptography_DTLSv1_get_timeout(self._ssl, ptv_sec, ptv_usec):
+            return ptv_sec[0] + (ptv_usec[0] / 1000000)
+        else:
+            return None
+
+    def DTLSv1_handle_timeout(self):
+        """
+        Handles any timeout events which have become pending on a DTLS SSL
+        object.
+
+        :return: `True` if there was a pending timeout, `False` otherwise.
+        """
+        result = _lib.DTLSv1_handle_timeout(self._ssl)
+        if result < 0:
+            self._raise_ssl_error(self._ssl, result)
+        else:
+            return bool(result)
 
     def bio_shutdown(self):
         """

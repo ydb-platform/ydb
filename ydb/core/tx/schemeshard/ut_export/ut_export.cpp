@@ -1257,16 +1257,21 @@ namespace {
         }
 
         void VerifyColumnTableS3ExportHasData(const TString& destinationPrefix) {
-            const TString prefix = destinationPrefix.StartsWith('/') ? destinationPrefix : "/" + destinationPrefix;
+            const TString prefix = destinationPrefix.empty()
+                ? TString()
+                : (destinationPrefix.StartsWith('/') ? destinationPrefix : "/" + destinationPrefix);
+
             UNIT_ASSERT(HasS3File(prefix + "/scheme.pb"));
+
             bool hasDataFile = false;
             for (const auto& [path, content] : S3Mock().GetData()) {
-                if (path.StartsWith(prefix + "/") && path.Contains("data") && !content.empty()) {
+                // "metadata.json" contains "data" as a substring, so match a data-path component instead.
+                if (path.StartsWith(prefix + "/") && path.Contains("/data") && !content.empty()) {
                     hasDataFile = true;
                     break;
                 }
             }
-            UNIT_ASSERT(hasDataFile);
+            UNIT_ASSERT_C(hasDataFile, "Expected at least one non-empty data file under '" << (prefix.empty() ? "/" : prefix) << "'");
         }
 
         ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {

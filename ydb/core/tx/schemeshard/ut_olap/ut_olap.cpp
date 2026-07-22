@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -3343,5 +3344,45 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+    }
+
+    Y_UNIT_TEST(DropReadOnlyCopyColumnTableCounter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        static constexpr auto counterName = "SchemeShard/ColumnTables";
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckSimpleCounter(runtime, counterName, 0);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        CheckSimpleCounter(runtime, counterName, 1);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckSimpleCounter(runtime, counterName, 3);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy1", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 2);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy2", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 1);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 0);
     }
 }

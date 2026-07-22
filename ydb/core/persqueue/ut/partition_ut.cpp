@@ -318,7 +318,8 @@ protected:
                            const TString& consumer,
                            ui64 begin,
                            ui64 end,
-                           const TActorId& suppPartitionId = {});
+                           const TActorId& suppPartitionId = {},
+                           bool killReadSession = false);
     void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = TCalcPredicateMatcher::EmptyMatcher());
 
     void SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options = {});
@@ -1132,13 +1133,14 @@ void TPartitionFixture::SendCalcPredicate(ui64 step,
                                           const TString& consumer,
                                           ui64 begin,
                                           ui64 end,
-                                          const TActorId& suppPartitionId)
+                                          const TActorId& suppPartitionId,
+                                          bool killReadSession)
 {
     auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
     if (suppPartitionId) {
         event->SupportivePartitionActor = suppPartitionId;
     } else {
-        event->AddOperation(consumer, begin, end);
+        event->AddOperation(consumer, begin, end, false, killReadSession);
     }
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -2381,6 +2383,63 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
+}
+
+Y_UNIT_TEST_F(KillReadSessionFailsPendingHasData, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end, .PlanStep=step, .TxId=10000});
+    CreateSession(client, session);
+
+    {
+        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        event->Record.SetPartition(partition.InternalPartitionId);
+        event->Record.SetOffset(end);
+        event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
+        event->Record.SetCookie(hasDataCookie);
+        event->Record.SetClientId(client);
+        event->Record.SetSessionId(session);
+        ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    UNIT_ASSERT_C(
+        !Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::MilliSeconds(100)),
+        "HasData must stay pending while offset == EndOffset");
+
+    SendCalcPredicate(step, txId, client, 0, 2, {}, true);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+    SendCommitTx(step, txId);
+
+    bool gotSessionInvalidated = false;
+    bool gotCommitDone = false;
+    while (!gotSessionInvalidated || !gotCommitDone) {
+        TAutoPtr<IEventHandle> handle;
+        auto events = Ctx->Runtime->GrabEdgeEvents<
+            TEvPersQueue::TEvHasDataInfoResponse,
+            TEvKeyValue::TEvRequest,
+            TEvPQ::TEvTxDone>(handle, TDuration::Seconds(5));
+
+        if (auto* response = std::get<TEvPersQueue::TEvHasDataInfoResponse*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+            UNIT_ASSERT(response->Record.GetSessionInvalidated());
+            gotSessionInvalidated = true;
+        } else if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        } else if (auto* done = std::get<TEvPQ::TEvTxDone*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(done->TxId, txId);
+            gotCommitDone = true;
+        } else {
+            UNIT_FAIL("timeout waiting for SessionInvalidated HasData response and TxDone");
+        }
+    }
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)

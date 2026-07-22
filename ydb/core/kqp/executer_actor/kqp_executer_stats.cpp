@@ -1259,18 +1259,19 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
                     : 0);
                 auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                const bool newLongest = taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration);
-                if (newLongest) {
+                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
                     CollectStatsByLongTasks = true;
                     longestTaskDuration = taskDuration;
-                }
-                if (RetainAllTasks) {
-                    // User-facing tracing: keep every task's stats so a span-per-task tree can be built.
-                    stageStats.ComputeActors[taskId].CopyFrom(stats);
-                } else if (newLongest) {
-                    // Default: retain only the single longest task per stage.
                     stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
+                }
+                if (CollectTraceTaskStats) {
+                    auto& stageTasks = TraceTaskStats[taskStats.GetStageId()];
+                    if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
+                        taskIt->second.CopyFrom(stats);
+                    } else if (stageTasks.size() < MaxUserTraceTasksPerStage) {
+                        stageTasks[taskId].CopyFrom(stats);
+                    }
                 }
             }
         }

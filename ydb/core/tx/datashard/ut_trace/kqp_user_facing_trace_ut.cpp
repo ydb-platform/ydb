@@ -9,8 +9,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 // User-facing tracing: the user channel emits its own curated tree (separate trace-id) with
-// user-language phases (Execute -> Prepare/Run). Execution spans are live from the executer; the
-// dev Wilson tree must stay unaffected, and nothing is emitted when the user channel is off.
+// user-language phases (Execute -> Prepare/Run). The whole tree is rendered post-hoc by the
+// session at reply time from engine-recorded timings (single renderer, kqp_user_facing_tracing.cpp);
+// the dev Wilson tree must stay unaffected, and nothing is emitted when the user channel is off.
 namespace NKikimr {
 
 using namespace Tests;
@@ -81,8 +82,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         // Dev and user channels are independent trees (distinct trace-ids).
         UNIT_ASSERT_VALUES_EQUAL(2, uploader->Traces.size());
 
-        auto* userRoot = FindRootChild(*uploader, "UPSERT");
-        UNIT_ASSERT_C(userRoot, "user-facing root span missing");
+        auto* userRoot = FindRootChild(*uploader, "UPSERT /Root/table-1");
+        UNIT_ASSERT_C(userRoot, "user-facing root span missing, traces: " << uploader->PrintTraces());
         UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
 
         // Live executer phase in the user tree: Execute groups a Prepare (resolve) node and a Run node.
@@ -116,7 +117,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size()); // dev only
-        UNIT_ASSERT_C(!FindRootChild(*uploader, "UPSERT"), "user tree emitted with channel off");
+        UNIT_ASSERT_C(!FindRootChild(*uploader, "UPSERT /Root/table-1"), "user tree emitted with channel off");
         UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
     }
 }

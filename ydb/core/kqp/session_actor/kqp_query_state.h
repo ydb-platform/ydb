@@ -2,7 +2,6 @@
 
 #include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
-#include "kqp_user_facing_tracing.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -105,22 +104,9 @@ public:
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
 
-        // User-facing channel: own trace-id (=> separate tree from Wilson/dev), decided at
-        // the grpc proxy; empty unless the user channel sampled this request.
-        NWilson::TTraceId userTraceId = RequestEv->GetUserFacingWilsonTraceId();
-        if (userTraceId && AppData()) {
-            UserSpan = NWilson::TSpan(
-                TWilsonKqp::KqpSession, std::move(userTraceId),
-                UserFacingRootSpanName(RequestEv->GetQuery(), NKikimrKqp::EQueryAction_Name(QueryAction)),
-                NWilson::EFlags::AUTO_END);
-            if (UserSpan) {
-                UserSpan.Attribute("ydb.tracing.layer", TString("user"));
-                UserSpan.Attribute("db.system.name", TString("ydb"));
-                UserSpan.Attribute("db.namespace", AppData()->TenantName);
-                UserSpan.Attribute("db.operation.name", NKikimrKqp::EQueryAction_Name(QueryAction));
-                UserSpan.Attribute("db.query.text", RequestEv->GetQuery()); // TODO: parameterize (raw text is PII)
-            }
-        }
+        // User-facing channel: own trace-id (=> separate tree from Wilson/dev), decided at the
+        // grpc proxy; empty unless sampled. No live span — the whole tree renders at reply time.
+        UserFacingTraceId = RequestEv->GetUserFacingWilsonTraceId();
 
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
@@ -205,7 +191,11 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
-    NWilson::TSpan UserSpan; // user-facing channel root, own trace (separate from Wilson/dev)
+    NWilson::TTraceId UserFacingTraceId; // user-facing channel root context; spans render at reply
+    // Snapshotted at compile time — the compiled query is per-statement and gone by reply time.
+    TString UserFacingRootName;
+    TInstant CompileWallStart; // real compile window (see MarkCompileStart); zero on cache hit
+    TInstant CompileWallEnd;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

@@ -226,11 +226,7 @@ private:
             (count, nShardScans),
             (trace_id, TraceId()));
 
-        if (UserPrepareSpan) {
-            UserPrepareSpan.EndOk();
-        }
-        ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::ScanExecuterRunTasks, TWilsonKqp::KqpSession, "RunTasks", "Run");
-        UserRunTasksTraceId = ExecuterStateSpan.User().GetTraceId();
+        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ScanExecuterRunTasks, "RunTasks", EUserTracePhase::RunTasks);
         ExecuteScanTx();
 
         if (CheckExecutionComplete()) {

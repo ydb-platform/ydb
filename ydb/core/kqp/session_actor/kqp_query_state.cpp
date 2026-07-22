@@ -1,4 +1,5 @@
 #include "kqp_query_state.h"
+#include "kqp_user_facing_tracing.h"
 
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -167,6 +168,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
         "Unexpected prepared query version: " << compiledVersion);
 
     PreparedQuery = CompileResult->PreparedQuery;
+    UpdateUserFacingRootSpanName(*this);
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }

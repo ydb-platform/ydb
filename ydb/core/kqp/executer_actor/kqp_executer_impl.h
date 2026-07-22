@@ -3,8 +3,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
-#include <ydb/core/kqp/common/kqp_tracing_span.h>
-#include "kqp_executer_user_trace.h"
+#include <ydb/core/kqp/common/kqp_user_trace_data.h>
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -146,9 +145,7 @@ public:
         , UserToken(userToken)
         , FormatsSettings(std::move(formatsSettings))
         , Counters(counters)
-        , ExecuterSpan(
-            NWilson::TSpan(spanVerbosity, std::move(Request.TraceId), spanName),
-            NWilson::TSpan(TWilsonKqp::KqpSession, std::move(Request.UserFacingTraceId), "Execute", NWilson::EFlags::AUTO_END))
+        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
@@ -164,11 +161,6 @@ public:
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
-
-        // Captured now because the live Execute span is ended before stage stats finalize (in PassAway).
-        UserExecuteTraceId = ExecuterSpan.User().GetTraceId();
-        // User-only "Prepare" groups the pre-run operational phases; the dev tree keeps them flat.
-        UserPrepareSpan = ExecuterSpan.User().CreateChild(TWilsonKqp::KqpSession, "Prepare", NWilson::EFlags::AUTO_END);
 
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
@@ -186,11 +178,15 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
-        // Retain every task's stats only when the user-facing channel sampled this query, so the
-        // per-task span tree is populated without imposing that cost on ordinary FULL-stats queries.
-        Stats->RetainAllTasks = static_cast<bool>(ExecuterSpan.User());
+        Stats->CollectTraceTaskStats = Request.CollectUserTraceData;
 
         StartTime = TAppData::TimeProvider->Now();
+        if (Request.CollectUserTraceData) {
+            UserTraceData = std::make_unique<TUserTraceExecutionData>();
+            // Wall clock, not TimeProvider: span timestamps must be on the same clock Wilson
+            // uses, and the simulated test clock can stand still across handlers.
+            UserTraceData->Timeline.Execute.Start = TInstant::Now();
+        }
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -337,7 +333,7 @@ protected:
             KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
-            ExecuterStateSpan = MakePrepareChild(TWilsonKqp::ExecuterShardsResolve, TWilsonKqp::KqpSession, "WaitForShardsResolve", "ResolveShards");
+            ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve", EUserTracePhase::ResolveShards);
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -1104,7 +1100,7 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = MakePrepareChild(TWilsonKqp::ExecuterTableResolve, TWilsonKqp::KqpSession, "WaitForTableResolve", "ResolveTables");
+        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EUserTracePhase::ResolveTables);
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false,
             ExecuterStateSpan.GetTraceId());
@@ -1429,7 +1425,7 @@ protected:
             .StatsMode = Request.StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
-            .ExecuterSpan =  ExecuterSpan.Dev(),
+            .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
             .ExecuterRetriesConfig = ExecuterRetriesConfig,
             .MkqlMemoryLimit = Request.MkqlMemoryLimit,
@@ -1662,13 +1658,30 @@ protected:
     }
 
 protected:
-    // Operational phase whose dev span stays under Execute but whose user span nests under the
-    // user-only "Prepare" group (keeps engine-jargon phases one drill-down deeper for the user).
-    TSpanBundle MakePrepareChild(ui8 devVerbosity, ui8 userVerbosity, const TString& devName,
-            const TString& userName, NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
-        return TSpanBundle(
-            ExecuterSpan.Dev().CreateChild(devVerbosity, devName, flags),
-            UserPrepareSpan.CreateChild(userVerbosity, userName, flags));
+    // Operational phase: a dev child span plus a user-trace timeline stamp (the session renders
+    // the user-facing phase from the timeline, see kqp_user_facing_tracing.cpp).
+    NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EUserTracePhase userPhase,
+            NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
+        BeginUserPhase(userPhase);
+        return ExecuterSpan.CreateChild(devVerbosity, devName, flags);
+    }
+
+    // Phase windows chain: beginning a phase closes the previous one, the last one closes at
+    // response fill. Handler latency between phases lands in the earlier window — a phase's end
+    // is "when the executer moved on", which is what the user-facing timeline should show anyway.
+    void BeginUserPhase(EUserTracePhase phase) {
+        EndUserPhase();
+        if (UserTraceData) {
+            CurrentUserPhase = phase;
+            UserTraceData->Timeline.Phase(phase).Start = TInstant::Now();
+        }
+    }
+
+    void EndUserPhase() {
+        if (UserTraceData && CurrentUserPhase != EUserTracePhase::Count) {
+            UserTraceData->Timeline.Phase(CurrentUserPhase).End = TInstant::Now();
+        }
+        CurrentUserPhase = EUserTracePhase::Count;
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -1703,8 +1716,13 @@ protected:
                 ui64 cycleCount = GetCycleCountFast();
                 Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
-                EmitUserStagePhases(UserRunTasksTraceId ? UserRunTasksTraceId : UserExecuteTraceId,
-                    response.GetResult().GetStats());
+                if (UserTraceData) {
+                    EndUserPhase();
+                    // Stamped after the last phase's end so children never overflow Execute.
+                    UserTraceData->Timeline.Execute.End = TInstant::Now();
+                    UserTraceData->TaskStats = std::move(Stats->TraceTaskStats);
+                    ResponseEv->UserTraceData = std::move(UserTraceData);
+                }
 
                 if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;
@@ -1924,11 +1942,12 @@ protected:
 
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    TSpanBundle ExecuterSpan;
-    TSpanBundle ExecuterStateSpan;
-    NWilson::TTraceId UserExecuteTraceId;  // user Execute span context (fallback parent for stage spans)
-    NWilson::TTraceId UserRunTasksTraceId; // user Run span context; stage spans nest under it as a category
-    NWilson::TSpan UserPrepareSpan;        // user-only grouping of the pre-run phases (resolve/snapshot)
+    NWilson::TSpan ExecuterSpan;
+    NWilson::TSpan ExecuterStateSpan;
+    // User-facing trace source data (timeline + per-task stats); null unless the user channel
+    // sampled the query. Shipped to the session in TEvTxResponse at response fill.
+    std::unique_ptr<TUserTraceExecutionData> UserTraceData;
+    EUserTracePhase CurrentUserPhase = EUserTracePhase::Count;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     ui64 LastTaskId = 0;

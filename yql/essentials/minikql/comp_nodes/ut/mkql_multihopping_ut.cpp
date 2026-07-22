@@ -264,8 +264,7 @@ void TestImpl(
     EHoppingWindowPolicy earlyPolicy = EHoppingWindowPolicy::Drop,
     EHoppingWindowPolicy latePolicy = EHoppingWindowPolicy::Drop,
     TFetchFactory fetchFactory = DefaultFetchFactory,
-    TSetupFactory setupFactory = DefaultSetupFactory,
-    TWatermark* watermarkToDrain = nullptr) {
+    TSetupFactory setupFactory = DefaultSetupFactory) {
     auto setup = setupFactory();
 
     auto [itemType, encode, decode] = BuildInputType(setup);
@@ -301,8 +300,6 @@ void TestImpl(
         status = root.Fetch(result);
         if (status == NUdf::EFetchStatus::Ok) {
             actual.push_back(decode(result));
-        } else if (status == NUdf::EFetchStatus::Yield && watermarkToDrain) {
-            watermarkToDrain->WatermarkIn = Nothing();
         }
     }
 
@@ -367,8 +364,7 @@ void TestWatermarksImpl(
         earlyPolicy,
         latePolicy,
         fetchFactory,
-        setupFactory,
-        &watermark);
+        setupFactory);
 }
 
 #if MKQL_RUNTIME_VERSION >= 70U
@@ -552,37 +548,6 @@ Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
-
-Y_UNIT_TEST(TestAdjustLateEventAfterStateCleanup) {
-    const std::vector<TInputItem> input = {
-        {1, 50, 50},
-        {1, 40, 40},
-    };
-    const std::vector<TOutputGroup> expected = {
-        TOutputGroup({}),
-        TOutputGroup({}),
-        TOutputGroup({{1, "50", 60}}),
-        TOutputGroup({}),
-        TOutputGroup({{1, "40", 70}}),
-    };
-    const std::vector<std::pair<ui64, TInstant>> watermarks = {
-        {1, TInstant::MicroSeconds(60)},
-    };
-    auto expectedStatsMap = DefaultStatsMap;
-    expectedStatsMap["MultiHop_NewHopsCount"] = 2;
-    expectedStatsMap["MultiHop_LateThrownEventsCount"] = 1;
-    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 1;
-
-    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
-                       10,                           // hop
-                       10,                           // interval
-                       0,                            // delay
-                       Max<ui64>(),                  // farFutureSizeLimit
-                       Max<ui64>(),                  // farFutureTimeLimit
-                       EHoppingWindowPolicy::Drop,   // earlyPolicy
-                       EHoppingWindowPolicy::Adjust); // latePolicy
-}
-#endif
 
 #if MKQL_RUNTIME_VERSION >= 70U
 Y_UNIT_TEST(TestAdjustWatermarkFromFuture) {

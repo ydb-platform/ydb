@@ -1,15 +1,25 @@
 #include "shard_writer.h"
 #include "common/error_codes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tablet/tablet_pipe_client_cache.h>
-
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_events.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 
 #include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NEvWrite {
+
+namespace {
+
+bool IsCsFlowControlEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+}
+
+}   // namespace
 
     TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
                                           std::shared_ptr<TCSUploadCounters> counters)
@@ -95,6 +105,8 @@ namespace NKikimr::NEvWrite {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
+        ReportTabletLocationToFlowControl(ShardId, ev->Sender.NodeId());
+
         const auto ydbStatus = msg->GetStatus();
         if (ydbStatus == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
             if (RetryBySubscription) {
@@ -147,6 +159,8 @@ namespace NKikimr::NEvWrite {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->TabletId == ShardId);
+
+        ReportTabletLocationInvalidatedToFlowControl(ShardId);
 
         if (RetryWriteRequest(true)) {
             return;
@@ -207,5 +221,21 @@ namespace NKikimr::NEvWrite {
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
 
         TBase::PassAway();
+    }
+
+    void TShardWriter::ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId) {
+        if (!IsCsFlowControlEnabled()) {
+            return;
+        }
+        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvTabletLocationUpdated(tabletId, nodeId));
+    }
+
+    void TShardWriter::ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId) {
+        if (!IsCsFlowControlEnabled()) {
+            return;
+        }
+        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvTabletLocationInvalidated(tabletId));
     }
 }

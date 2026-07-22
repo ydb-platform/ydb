@@ -207,6 +207,9 @@ private:
             ActorSpan.GetTraceId());
     }
 
+    void ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId);
+    void ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId);
+
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,

@@ -1,5 +1,6 @@
 #include "overload_manager_service.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
@@ -11,6 +12,18 @@ namespace {
 
 std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{ 0 };
 std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
+
+bool IsCsFlowControlEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl();
+}
+
+void PublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status) {
+    if (!IsCsFlowControlEnabled()) {
+        return;
+    }
+    auto& context = NActors::TActorContext::AsActorContext();
+    context.Send(TOverloadManagerServiceOperator::MakeServiceId(), new TEvPublishNodeOverloadStatus(status));
+}
 
 }   // namespace
 
@@ -49,12 +62,16 @@ std::unique_ptr<NActors::IActor> TOverloadManagerServiceOperator::CreateService(
 }
 
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {
-    if ((force || ResourcesStatus.load() != EResourcesStatus::Ok) &&
+    const auto previousStatus = ResourcesStatus.load();
+    if ((force || previousStatus != EResourcesStatus::Ok) &&
         WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
         WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
         ResourcesStatus = EResourcesStatus::Ok;
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(MakeServiceId(), new NOverload::TEvOverloadResourcesReleased());
+        if (previousStatus != EResourcesStatus::Ok) {
+            PublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY);
+        }
     }
 }
 
@@ -67,8 +84,10 @@ EResourcesStatus TOverloadManagerServiceOperator::RequestResources(ui64 writesCo
     auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
     if (resWritesInFlight >= GetShardWritesInFlyLimit()) {
         ResourcesStatus = EResourcesStatus::WritesInFlyLimitReached;
+        PublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
     } else if (resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
         ResourcesStatus = EResourcesStatus::WritesSizeInFlyLimitReached;
+        PublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
     }
 
     return EResourcesStatus::Ok;

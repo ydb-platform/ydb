@@ -11,7 +11,10 @@ private:
     using TSelf = TFlowControlManagerServiceOperator;
 
 public:
-    static NActors::TActorId MakeServiceId();
+    static NActors::TActorId MakeServiceId(ui32 nodeId) {
+        return NActors::TActorId(nodeId, "FlowCtrlMng");
+    }
+
     static std::unique_ptr<NActors::IActor> CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 
     static void StartLongTxWrite(const TActorContext& ctx, TLongTxWrite&& longTxWrite);

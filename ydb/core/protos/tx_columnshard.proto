@@ -387,6 +387,18 @@ message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
 }
 
+// Sent by OverloadManager to FlowControlManagers when local node overload status changes
+message TEvNodeOverloadStatus {
+    optional uint32 NodeId = 1;
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_OVERLOADED = 1;
+        STATUS_READY = 2;
+    }
+    optional EStatus Status = 2;
+    optional uint64 Generation = 3;
+}
+
 message TCompletedBackupTransaction {
     optional uint64 TxId = 1;
     optional TShardOpResult OpResult = 2;

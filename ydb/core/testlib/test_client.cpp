@@ -1292,7 +1292,7 @@ namespace Tests {
         {
             auto actor = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::CreateService(appData.Counters);
             const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+            Runtime->RegisterService(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

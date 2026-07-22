@@ -1237,7 +1237,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({1}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 19}));
+            std::set<ui32>({3, 5, 6, 10, 14, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 19}));
@@ -1433,6 +1433,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TMap<ui32, TString> statuses = {
             {1, "UNSUPPORTED"},
             {3, "FORMULA_EMITTED"},
+            {5, "FORMULA_EMITTED"},
+            {6, "FORMULA_EMITTED"},
+            {10, "FORMULA_EMITTED"},
+            {14, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
         };
 
@@ -1461,6 +1465,53 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
         UNIT_ASSERT(regressed.Violations.front().Contains(
             "q1 regressed before verifier entry with status UNSUPPORTED"));
+    }
+
+    Y_UNIT_TEST(PolicyPinsTpchShiftedDatesAtFormulaConstruction) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const TMap<ui32, TString> statuses = {
+            {1, "UNSUPPORTED"},
+            {3, "FORMULA_EMITTED"},
+            {5, "FORMULA_EMITTED"},
+            {6, "FORMULA_EMITTED"},
+            {10, "FORMULA_EMITTED"},
+            {14, "FORMULA_EMITTED"},
+            {19, "FORMULA_EMITTED"},
+        };
+        const auto current = EvaluateCoveragePolicy(
+            policy,
+            Tpch,
+            selected,
+            statuses,
+            OutcomeIds(statuses),
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(current.VerifierEntryFloorEnforced);
+        UNIT_ASSERT(current.FormulaFloorEnforced);
+        UNIT_ASSERT(current.Violations.empty());
+        UNIT_ASSERT(
+            current.FormulaEmittedQueries ==
+            std::set<ui32>({3, 5, 6, 10, 14, 19}));
+
+        for (const ui32 queryId : {5, 6, 10, 14}) {
+            auto regressedStatuses = statuses;
+            regressedStatuses[queryId] = "UNSUPPORTED";
+            const auto regressed = EvaluateCoveragePolicy(
+                policy,
+                Tpch,
+                selected,
+                regressedStatuses,
+                OutcomeIds(regressedStatuses),
+                ECoverageMode::FormulaDashboard);
+            UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
+            const TString expected = TStringBuilder()
+                << "q" << queryId
+                << " regressed from FORMULA_EMITTED to UNSUPPORTED";
+            UNIT_ASSERT(regressed.Violations.front().Contains(expected));
+        }
     }
 
     Y_UNIT_TEST(PolicyVerifierEntryFloorAcceptsDeeperOutcomes) {

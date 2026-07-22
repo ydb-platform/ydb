@@ -822,6 +822,23 @@ enum class EDirectDateIntervalShape {
     NullableInterval,
 };
 
+enum class EDateTime2ShiftShape {
+    Exact,
+    WrongSplitUserType,
+    WrongShiftUserType,
+    WrongMakeDateUserType,
+    WrongSplitReturnDescriptor,
+    WrongShiftReturnDescriptor,
+    WrongMakeDateArgumentDescriptor,
+    WrongSplitSettings,
+    WrongShiftSettings,
+    WrongMakeDateSettings,
+    WrongSplitFlags,
+    WrongShiftFlags,
+    WrongMakeDateFlags,
+    WrongLambdaBinder,
+};
+
 TExprNode::TPtr VoidValue(TExportTestContext& ctx) {
     return TypedCallable(
         ctx,
@@ -837,6 +854,119 @@ TExprNode::TPtr VoidTypeDescriptor(TExportTestContext& ctx) {
         "VoidType",
         {},
         ctx.ExprCtx.MakeType<TTypeExprType>(voidType));
+}
+
+TExprNode::TPtr ResourceTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf tag,
+    const TTypeAnnotationNode* resourceType)
+{
+    return TypedCallable(
+        ctx,
+        "ResourceType",
+        {ctx.ExprCtx.NewAtom(TPositionHandle(), tag)},
+        ctx.ExprCtx.MakeType<TTypeExprType>(resourceType));
+}
+
+TExprNode::TPtr OptionalTypeDescriptor(
+    TExportTestContext& ctx,
+    TExprNode::TPtr item,
+    const TTypeAnnotationNode* optionalType)
+{
+    return TypedCallable(
+        ctx,
+        "OptionalType",
+        {std::move(item)},
+        ctx.ExprCtx.MakeType<TTypeExprType>(optionalType));
+}
+
+TExprNode::TPtr TupleTypeDescriptor(
+    TExportTestContext& ctx,
+    TExprNode::TListType items,
+    const TTypeAnnotationNode* tupleType)
+{
+    return TypedCallable(
+        ctx,
+        "TupleType",
+        std::move(items),
+        ctx.ExprCtx.MakeType<TTypeExprType>(tupleType));
+}
+
+TExprNode::TPtr EmptyStructTypeDescriptor(
+    TExportTestContext& ctx,
+    const TTypeAnnotationNode* structType)
+{
+    return TypedCallable(
+        ctx,
+        "StructType",
+        {},
+        ctx.ExprCtx.MakeType<TTypeExprType>(structType));
+}
+
+const TCallableExprType* UdfCallableType(
+    TExportTestContext& ctx,
+    const TTypeAnnotationNode* resultType,
+    std::initializer_list<std::pair<const TTypeAnnotationNode*, ui64>> arguments)
+{
+    TVector<TCallableExprType::TArgumentInfo> infos;
+    infos.reserve(arguments.size());
+    for (const auto& [type, flags] : arguments) {
+        TCallableExprType::TArgumentInfo info;
+        info.Type = type;
+        info.Flags = flags;
+        infos.push_back(std::move(info));
+    }
+    return ctx.ExprCtx.MakeType<TCallableExprType>(
+        resultType,
+        std::move(infos),
+        0,
+        TStringBuf());
+}
+
+struct TUdfArgumentDescriptor {
+    TExprNode::TPtr Type;
+    std::optional<ui64> Flags;
+};
+
+TExprNode::TPtr CallableTypeDescriptor(
+    TExportTestContext& ctx,
+    TExprNode::TPtr resultType,
+    TVector<TUdfArgumentDescriptor> arguments,
+    const TTypeAnnotationNode* callableType)
+{
+    TExprNode::TListType children = {
+        ctx.ExprCtx.NewList(TPositionHandle(), {}),
+        ctx.ExprCtx.NewList(TPositionHandle(), {std::move(resultType)}),
+    };
+    for (auto& argument : arguments) {
+        TExprNode::TListType settings = {std::move(argument.Type)};
+        if (argument.Flags) {
+            settings.push_back(ctx.ExprCtx.NewAtom(TPositionHandle(), ""));
+            settings.push_back(ctx.ExprCtx.NewAtom(
+                TPositionHandle(), ToString(*argument.Flags)));
+        }
+        children.push_back(ctx.ExprCtx.NewList(
+            TPositionHandle(), std::move(settings)));
+    }
+    return TypedCallable(
+        ctx,
+        "CallableType",
+        std::move(children),
+        ctx.ExprCtx.MakeType<TTypeExprType>(callableType));
+}
+
+TExprNode::TPtr UdfSettings(
+    TExportTestContext& ctx,
+    std::initializer_list<TStringBuf> settings)
+{
+    TExprNode::TListType children;
+    children.reserve(settings.size());
+    for (const TStringBuf setting : settings) {
+        children.push_back(ctx.ExprCtx.NewList(
+            TPositionHandle(),
+            {ctx.ExprCtx.NewAtom(TPositionHandle(), setting)}));
+    }
+    return ctx.ExprCtx.NewList(TPositionHandle(), std::move(children));
 }
 
 const TCallableExprType* IntervalFromDaysCallableType(
@@ -1103,6 +1233,233 @@ TExprNode::TPtr TypedDirectDateInterval(
             : shape == EDirectDateIntervalShape::WrongResultType
                 ? optionalDatetimeType
                 : optionalDateType);
+}
+
+TExprNode::TPtr TypedDateTime2Shift(
+    TExportTestContext& ctx,
+    TStringBuf shiftCallable,
+    TStringBuf date,
+    TStringBuf shift,
+    EDateTime2ShiftShape shape = EDateTime2ShiftShape::Exact)
+{
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(
+        ctx, NUdf::EDataSlot::Date, true);
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* resourceType =
+        ctx.ExprCtx.MakeType<TResourceExprType>("DateTime2.TM");
+    const auto* optionalResourceType =
+        ctx.ExprCtx.MakeType<TOptionalExprType>(resourceType);
+    const ui64 autoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+
+    const auto makeUserType = [&ctx](
+        std::initializer_list<
+            std::pair<TStringBuf, const TTypeAnnotationNode*>> arguments)
+    {
+        TTypeAnnotationNode::TListType argumentTypes;
+        TExprNode::TListType argumentDescriptors;
+        for (const auto& [name, type] : arguments) {
+            argumentTypes.push_back(type);
+            argumentDescriptors.push_back(DataTypeDescriptor(ctx, name, type));
+        }
+
+        const auto* argumentsType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            std::move(argumentTypes));
+        const auto* emptyStructType = ctx.ExprCtx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{});
+        const auto* emptyTupleType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{});
+        const auto* userType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                argumentsType,
+                emptyStructType,
+                emptyTupleType,
+            });
+
+        return TupleTypeDescriptor(
+            ctx,
+            {
+                TupleTypeDescriptor(
+                    ctx,
+                    std::move(argumentDescriptors),
+                    argumentsType),
+                EmptyStructTypeDescriptor(ctx, emptyStructType),
+                TupleTypeDescriptor(ctx, {}, emptyTupleType),
+            },
+            userType);
+    };
+
+    const auto* splitCallableType = UdfCallableType(
+        ctx, resourceType, {{dateType, autoMap}});
+    const auto* splitCachedResultType =
+        shape == EDateTime2ShiftShape::WrongSplitReturnDescriptor
+            ? dateType
+            : resourceType;
+    const ui64 splitCachedFlags =
+        shape == EDateTime2ShiftShape::WrongSplitFlags ? 0 : autoMap;
+    const auto* splitCachedCallableType = UdfCallableType(
+        ctx, splitCachedResultType, {{dateType, splitCachedFlags}});
+    auto splitCallableDescriptor = CallableTypeDescriptor(
+        ctx,
+        shape == EDateTime2ShiftShape::WrongSplitReturnDescriptor
+            ? DataTypeDescriptor(ctx, "Date", dateType)
+            : ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+        {{
+            DataTypeDescriptor(ctx, "Date", dateType),
+            splitCachedFlags,
+        }},
+        splitCachedCallableType);
+    auto split = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "DateTime2.Split"),
+            VoidValue(ctx),
+            shape == EDateTime2ShiftShape::WrongSplitUserType
+                ? makeUserType({{"Int32", int32Type}})
+                : makeUserType({{"Date", dateType}}),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            std::move(splitCallableDescriptor),
+            VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            shape == EDateTime2ShiftShape::WrongSplitSettings
+                ? UdfSettings(ctx, {"strict", "blocks"})
+                : UdfSettings(ctx, {"blocks", "strict"}),
+        },
+        splitCallableType);
+    auto splitApply = TypedCallable(
+        ctx,
+        "Apply",
+        {
+            std::move(split),
+            TypedLiteral(ctx, "Date", date, dateType),
+        },
+        resourceType);
+
+    const auto* shiftCallableType = UdfCallableType(
+        ctx,
+        optionalResourceType,
+        {{resourceType, autoMap}, {int32Type, 0}});
+    const TTypeAnnotationNode* shiftCachedResultType =
+        shape == EDateTime2ShiftShape::WrongShiftReturnDescriptor
+            ? static_cast<const TTypeAnnotationNode*>(resourceType)
+            : static_cast<const TTypeAnnotationNode*>(optionalResourceType);
+    const ui64 shiftCachedResourceFlags =
+        shape == EDateTime2ShiftShape::WrongShiftFlags ? 0 : autoMap;
+    const auto* shiftCachedCallableType = UdfCallableType(
+        ctx,
+        shiftCachedResultType,
+        {{resourceType, shiftCachedResourceFlags}, {int32Type, 0}});
+    auto shiftCallableDescriptor = CallableTypeDescriptor(
+        ctx,
+        shape == EDateTime2ShiftShape::WrongShiftReturnDescriptor
+            ? ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType)
+            : OptionalTypeDescriptor(
+                ctx,
+                ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+                optionalResourceType),
+        {
+            {
+                ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+                shiftCachedResourceFlags,
+            },
+            {DataTypeDescriptor(ctx, "Int32", int32Type), std::nullopt},
+        },
+        shiftCachedCallableType);
+    auto shiftUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                TStringBuilder() << "DateTime2." << shiftCallable),
+            VoidValue(ctx),
+            shape == EDateTime2ShiftShape::WrongShiftUserType
+                ? makeUserType({{"Date", dateType}})
+                : makeUserType({
+                    {"Date", dateType},
+                    {"Int32", int32Type},
+                }),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            std::move(shiftCallableDescriptor),
+            VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            shape == EDateTime2ShiftShape::WrongShiftSettings
+                ? UdfSettings(ctx, {"blocks"})
+                : UdfSettings(ctx, {"strict"}),
+        },
+        shiftCallableType);
+    auto shifted = TypedCallable(
+        ctx,
+        "Apply",
+        {
+            std::move(shiftUdf),
+            std::move(splitApply),
+            TypedLiteral(ctx, "Int32", shift, int32Type),
+        },
+        optionalResourceType);
+
+    const auto* makeDateCallableType = UdfCallableType(
+        ctx, dateType, {{resourceType, autoMap}});
+    const auto* makeDateCachedArgumentType =
+        shape == EDateTime2ShiftShape::WrongMakeDateArgumentDescriptor
+            ? dateType
+            : resourceType;
+    const ui64 makeDateCachedFlags =
+        shape == EDateTime2ShiftShape::WrongMakeDateFlags ? 0 : autoMap;
+    const auto* makeDateCachedCallableType = UdfCallableType(
+        ctx,
+        dateType,
+        {{makeDateCachedArgumentType, makeDateCachedFlags}});
+    auto makeDateCallableDescriptor = CallableTypeDescriptor(
+        ctx,
+        DataTypeDescriptor(ctx, "Date", dateType),
+        {{
+            shape == EDateTime2ShiftShape::WrongMakeDateArgumentDescriptor
+                ? DataTypeDescriptor(ctx, "Date", dateType)
+                : ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+            makeDateCachedFlags,
+        }},
+        makeDateCachedCallableType);
+    auto makeDate = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "DateTime2.MakeDate"),
+            VoidValue(ctx),
+            shape == EDateTime2ShiftShape::WrongMakeDateUserType
+                ? DataTypeDescriptor(ctx, "Date", dateType)
+                : VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            std::move(makeDateCallableDescriptor),
+            VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            shape == EDateTime2ShiftShape::WrongMakeDateSettings
+                ? UdfSettings(ctx, {"strict"})
+                : UdfSettings(ctx, {"blocks", "strict"}),
+        },
+        makeDateCallableType);
+
+    auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "tm");
+    argument->SetTypeAnn(resourceType);
+    TExprNode::TPtr makeDateArgument = argument;
+    if (shape == EDateTime2ShiftShape::WrongLambdaBinder) {
+        makeDateArgument = ctx.ExprCtx.NewArgument(TPositionHandle(), "tm");
+        makeDateArgument->SetTypeAnn(resourceType);
+    }
+    auto makeDateApply = TypedCallable(
+        ctx,
+        "Apply",
+        {std::move(makeDate), std::move(makeDateArgument)},
+        dateType);
+    return TypedCallable(
+        ctx,
+        "Map",
+        {
+            std::move(shifted),
+            TypedUnaryLambda(ctx, argument, std::move(makeDateApply)),
+        },
+        optionalDateType);
 }
 
 TExprNode::TPtr MakeOlapFilterProcess(
@@ -2812,6 +3169,108 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_C(!result.IsSupported(), testCase.Value);
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason, testCase.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(FoldsExactDateTime2CalendarShiftShapes) {
+        struct TCase {
+            TString Callable;
+            TString Date;
+            TString Shift;
+            ui16 Expected;
+        };
+        const TVector<TCase> cases = {
+            // TPC-H q5/q6/q12 and q14 ShiftYears constants.
+            {"ShiftYears", "8766", "1", 9131},
+            {"ShiftYears", "9374", "1", 9740},
+
+            // TPC-H q10 ShiftMonths constant.
+            {"ShiftMonths", "8674", "3", 8766},
+
+            // Runtime calendar shifts clamp the day to the target month.
+            {"ShiftYears", "11016", "1", 11381},
+            {"ShiftMonths", "8796", "1", 8824},
+
+            // Exercise C++'s negative remainder and year-decrement branch.
+            {"ShiftMonths", "8796", "-1", 8765},
+        };
+
+        for (const auto& testCase : cases) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedDateTime2Shift(
+                    ctx,
+                    testCase.Callable,
+                    testCase.Date,
+                    testCase.Shift));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["value"].GetUIntegerSafe(), testCase.Expected);
+        }
+    }
+
+    Y_UNIT_TEST(DateTime2CalendarShiftOutsideDateDomainBecomesTypedNull) {
+        for (const auto& [date, shift] : {
+            std::pair<TStringBuf, TStringBuf>{"49672", "1"},
+            std::pair<TStringBuf, TStringBuf>{"0", "-1"},
+        }) {
+            for (const TString callable : {"ShiftYears", "ShiftMonths"}) {
+                TExportTestContext ctx;
+                const auto expression = ExportMapExpression(
+                    ctx,
+                    "a",
+                    TypedDateTime2Shift(ctx, callable, date, shift));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["kind"].GetStringSafe(), "null");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["type"].GetStringSafe(), "Date");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DateTime2CalendarShiftGateFailsClosed) {
+        const TVector<EDateTime2ShiftShape> malformedShapes = {
+            EDateTime2ShiftShape::WrongSplitUserType,
+            EDateTime2ShiftShape::WrongShiftUserType,
+            EDateTime2ShiftShape::WrongMakeDateUserType,
+            EDateTime2ShiftShape::WrongSplitReturnDescriptor,
+            EDateTime2ShiftShape::WrongShiftReturnDescriptor,
+            EDateTime2ShiftShape::WrongMakeDateArgumentDescriptor,
+            EDateTime2ShiftShape::WrongSplitSettings,
+            EDateTime2ShiftShape::WrongShiftSettings,
+            EDateTime2ShiftShape::WrongMakeDateSettings,
+            EDateTime2ShiftShape::WrongSplitFlags,
+            EDateTime2ShiftShape::WrongShiftFlags,
+            EDateTime2ShiftShape::WrongMakeDateFlags,
+            EDateTime2ShiftShape::WrongLambdaBinder,
+        };
+        for (const auto shape : malformedShapes) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDateTime2Shift(
+                    ctx, "ShiftYears", "8766", "1", shape));
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+
+        for (const auto& [callable, shift] : {
+            std::pair<TStringBuf, TStringBuf>{"ShiftYears", "4096"},
+            std::pair<TStringBuf, TStringBuf>{"ShiftYears", "-4096"},
+            std::pair<TStringBuf, TStringBuf>{"ShiftMonths", "49152"},
+            std::pair<TStringBuf, TStringBuf>{"ShiftMonths", "-49152"},
+        }) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDateTime2Shift(ctx, callable, "8766", shift));
+            UNIT_ASSERT_C(!result.IsSupported(), callable);
         }
     }
 

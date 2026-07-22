@@ -752,7 +752,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and reports `SOLVER_ERROR` after the external solver exceeds its 15.0-second
   deadline; that focused `ya` experiment fails on the status as designed. The
   proof floor remains ten. Before restricted stored-String `Concat` was added,
-  q5, q80, and q84 stopped at that callable; other deeper blockers include
+  TPC-DS q5, q80, and q84 stopped at that callable; other deeper blockers include
   `Double` for q21, a noncanonical dynamic Date fold for q72, and verifier-side
   Decimal-SUM headroom for q77.
 - Direct numeric Date/Interval normalization accepts only an exact non-null
@@ -786,10 +786,36 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Focused tests cover the
   grammar, provenance failures, and all ten join kinds; a real-host
   initial/final one-Olap-occurrence obligation is `VERIFIED_BOUNDED`, and a
-  two-Olap-occurrence case fails closed. q5 now reaches the Decimal-SUM headroom
+  two-Olap-occurrence case fails closed. TPC-DS q5 now reaches the Decimal-SUM headroom
   gate and q80 reaches the 82,944-pair grouped-aggregate construction cap. q84
   has two Olap String occurrences and therefore stops at the allocation-totality
-  gate. The formula slice remains 23/121 (19.0%) and the proof floor remains ten.
+  gate. At that milestone the formula slice remained 23/121 (19.0%) and the
+  proof floor remained ten.
+- Constant DateTime2 calendar-shift normalization admits only the exact
+  optional-Date `Map(Shift(Split(Date), Int32), MakeDate)` tree generated for
+  `ShiftYears` and `ShiftMonths`. Date, Int32, `DateTime2.TM`, callable and
+  cached descriptors, UDF user types, Void fields, settings, AutoMap flags,
+  optionality, unary lambda shape, and binder identity must all match the
+  reviewed normalized form. One five-row reviewed signature table covers
+  `IntervalFromDays`, `Split`, both shifts, and `MakeDate`; shared validators
+  enforce their normalized UDF envelopes, cached types, and `Apply` nodes.
+  MiniKQL Date split/make tables reproduce leap-day
+  and month-end clamping plus the runtime signed month quotient/remainder
+  sequence. Potential wrap of TM's unsigned 12-bit year field fails closed; a
+  valid shifted calendar value outside the Date domain becomes typed NULL.
+  Synthetic result, boundary, mutation, binder, and wrap tests plus a real-host
+  pushed-filter proof cover the gate. The complete TPCH dashboard now emits
+  formulas for q5, q6, q10, and q14 after 170/113,378, 55/222, 108/7,886, and
+  53/267 ms of preparation/verifier work, respectively. q12 passes the shift
+  fold but remains unsupported on unordered scalar children at both snapshot
+  boundaries. This raises TPCH formula coverage to 6/22 and total formula
+  coverage to 27/121 (22.3%). Focused solver experiments leave the proof floor
+  unchanged: q5 is `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier
+  work and the 65-second external-process watchdog, q10 is `UNKNOWN` after
+  142/74,871 ms, and q6/q14 produce symbolic counterexamples after 54/788 and
+  87/1,046 ms. Inspection indicates verifier false positives caused by
+  equivalent predicate/Decimal lowerings receiving distinct opaque forms;
+  neither is replay-confirmed or evidence of an optimizer bug.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -838,7 +864,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   split-state, wrong-shuffle, type, and phase-nullability tests. Focused TPC-DS
   q74 passes its former aggregate blocker and reaches the 65,536-pair join
   matching preflight after 463 ms of preparation and 375 ms of verifier work.
-  It changes neither the 23/121 formula slice nor the ten-query proof floor.
+  It changed neither the then-current formula slice nor the proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial plan compared its nullable `Int64` directly with
   `Int32` membership constants; the final plan used an opaque
@@ -876,16 +902,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 23-query formula floor must keep constructing SMT, and the
+  the verifier, the 27-query formula floor must keep constructing SMT, and the
   ten-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete current-code formula-only dashboard emits TPCH q3
-  and q19 (2/22) and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
+  2026-07-22 complete current-code formula-only dashboard emits TPCH q3, q5,
+  q6, q10, q14, and q19 (6/22) and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
   q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for
-  23/121 workload queries (19.0%). TPCH has 17 unsupported and three
+  27/121 workload queries (22.3%). TPCH has 13 unsupported and three
   optimizer-failure results; TPC-DS has 49 unsupported and 29 optimizer-failure
   results. Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.

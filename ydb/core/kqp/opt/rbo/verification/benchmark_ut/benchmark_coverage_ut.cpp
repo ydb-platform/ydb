@@ -1242,7 +1242,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({3, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
-            std::set<ui32>({65}));
+            std::set<ui32>({5, 65, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({3, 15, 19, 37, 40, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
@@ -1362,6 +1362,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TMap<ui32, TString> statuses = {
             {1, "FORMULA_EMITTED"},
             {3, "FORMULA_EMITTED"},
+            {5, "UNSUPPORTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
             {37, "FORMULA_EMITTED"},
@@ -1377,6 +1378,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
+            {80, "UNSUPPORTED"},
             {82, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
             {90, "FORMULA_EMITTED"},
@@ -1395,8 +1397,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
         UNIT_ASSERT(!evaluation.ProofFloorEnforced);
         UNIT_ASSERT(evaluation.Violations.empty());
-        UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(65));
-        UNIT_ASSERT(!evaluation.FormulaEmittedQueries.contains(65));
+        for (const ui32 queryId : {5, 65, 80}) {
+            UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
+            UNIT_ASSERT(!evaluation.FormulaEmittedQueries.contains(queryId));
+        }
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
             std::set<ui32>({1, 3, 15, 19, 37, 40, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
@@ -1405,10 +1409,15 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             report["required_verifier_entry_queries"].GetArraySafe().size(),
-            1);
-        UNIT_ASSERT_VALUES_EQUAL(
-            report["required_verifier_entry_queries"][0].GetUIntegerSafe(),
-            65);
+            3);
+        size_t index = 0;
+        for (const ui32 queryId :
+             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(
+                report["required_verifier_entry_queries"][index++].GetUIntegerSafe(),
+                queryId);
+        }
         UNIT_ASSERT_VALUES_EQUAL(
             report["verifier_entry_queries"].GetArraySafe().size(),
             statuses.size());
@@ -1429,7 +1438,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
 
         for (const TString status : {"FORMULA_EMITTED", "VERIFIED_BOUNDED"}) {
-            statuses[65] = status;
+            for (const ui32 queryId :
+                 policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
+            {
+                statuses[queryId] = status;
+            }
             const auto evaluation = EvaluateCoveragePolicy(
                 policy,
                 Tpcds,
@@ -1439,11 +1452,15 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 ECoverageMode::FormulaDashboard);
             UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
             UNIT_ASSERT(evaluation.Violations.empty());
-            UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(65));
-            if (status == "FORMULA_EMITTED") {
-                UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(65));
-            } else {
-                UNIT_ASSERT(evaluation.VerifiedBoundedQueries.contains(65));
+            for (const ui32 queryId :
+                 policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
+            {
+                UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
+                if (status == "FORMULA_EMITTED") {
+                    UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(queryId));
+                } else {
+                    UNIT_ASSERT(evaluation.VerifiedBoundedQueries.contains(queryId));
+                }
             }
         }
     }
@@ -1461,7 +1478,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         {
             statuses[queryId] = "FORMULA_EMITTED";
         }
-        statuses[65] = "UNSUPPORTED";
+        for (const ui32 queryId :
+             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
+        {
+            statuses[queryId] = "UNSUPPORTED";
+        }
         auto verifierEntries = OutcomeIds(statuses);
         verifierEntries.erase(65);
 
@@ -1510,6 +1531,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         const TMap<ui32, TString> statuses = {
             {3, "FORMULA_EMITTED"},
+            {5, "UNSUPPORTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
             {37, "FORMULA_EMITTED"},
@@ -1525,6 +1547,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
+            {80, "UNSUPPORTED"},
             {82, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
             {90, "FORMULA_EMITTED"},

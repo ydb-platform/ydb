@@ -15,8 +15,9 @@ partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
 optional Decimal, exact Decimal semantics for comparison, integral casts,
 arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
 parts of M4. The exporter also exactly folds the reviewed constant
-String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape and erases
-the corresponding direct Date-literal OLAP `just` wrapper.
+String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
+the corresponding direct Date-literal OLAP `just` wrapper, and admits the
+reviewed catalog-bounded stored-String `Concat` shape.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -34,8 +35,8 @@ and q99: 23/121 workload queries (19.0%). Formula emission means that both
 snapshots were modeled and SMT was constructed; it is not a solver proof. The
 checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55,
-q90, q93, and q96: ten obligations (8.3%
-of the workload). Focused q19 took 116 ms to prepare and 851 ms to prove.
+q90, q93, and q96: ten obligations (8.3% of the workload). Focused q19 took
+116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
@@ -47,9 +48,11 @@ experiment failed on that status as designed. All three are formula-covered,
 not proved, and not part of the proof floor. None is evidence of an optimizer
 correctness bug.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
-for TPC-DS q65: both snapshots must continue to export and reach the verifier.
-Its current unsupported `avg` result is deliberately not counted as a formula;
-later formula or proof results satisfy the same depth floor automatically.
+for TPC-DS q5, q65, and q80: both snapshots must continue to export and reach
+the verifier. Their current verifier-side results stop at Decimal-SUM headroom,
+unsupported aggregate `avg`, and the 82,944-pair grouped-aggregate construction
+cap, respectively; none is counted as a formula. Later formula or proof results
+satisfy the same depth floor automatically.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -192,8 +195,8 @@ arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just` and
-`Coalesce`; `SafeCast`; non-failing `Convert`; and `Substring` in the exact
-workload shape described below. The same audit
+`Coalesce`; `SafeCast`; non-failing `Convert`; `Substring`; and stored-String
+`Concat` in the exact workload shapes described below. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
 parent may contain it. YQL has no complete generic totality or determinism flag,
 so all other callables fail closed rather than relying on a denylist. This
@@ -207,6 +210,52 @@ literal converted to `Uint32`; that conversion exception is confined to those
 two direct bound positions. The canonical fingerprint retains both bounds and
 the String column is the only external function argument. Other arities,
 `Utf8`, nullable or dynamic bounds, and out-of-range conversions fail closed.
+
+The reviewed `Concat` shape is confined to the body root of a Map expression
+and returns exactly non-null `String`. It is a binary tree whose leaves are
+canonical String literals, non-null stored String members, or exactly
+`Coalesce(nullable stored String member, String(""))`. At least one and at most
+two stored-member occurrences are required; repeated occurrences count
+separately. Generic or nested-parent `Concat`, `Utf8`, computed strings,
+nonempty nullable fallbacks, and every other leaf fail closed. The entire tree
+is encoded as one opaque function: its canonical fingerprint retains tree
+shape, literal bytes, argument order, and repeated uses, while IU names are
+alpha-normalized. Consequently this rule can prove only syntax-preserving
+uses of the same total function; reassociation or another semantic rewrite may
+cause a false counterexample, never a false proof.
+
+Stored-member provenance begins only at catalog-confirmed Datashard or Olap
+tables and excludes system views, generated values, and external sources. It
+survives Map pass-through/rename, Filter, Limit, Sort, aggregate group keys,
+and the value-preserving sides of joins and UnionAll. Outer and exclusion joins
+widen the affected side to nullable; semi/anti joins drop the absent side; and
+UnionAll ORs catalog-derived nullability from both inputs. The final Member
+annotation must equal that carried nullability, so stale intermediate type
+annotations cannot manufacture provenance.
+
+Totality is justified by representation, storage, and allocation bounds, not
+by assuming Concat cannot fail. Datashard caps a stored value at 16 MiB through
+`NDataShard::NLimits::MaxWriteValueSize`. Column-store String values reach
+MiniKQL as Arrow `BinaryType`; its validated signed 32-bit offsets bound one
+logical cell by `INT32_MAX` bytes independently of compression. The auditor
+charges the bound carried by each stored occurrence plus exact literal bytes.
+It also requires the complete result to stay below the largest `ui32` size for
+which MiniKQL's `newSize + newSize / 2` allocation capacity cannot wrap. Thus
+one Olap occurrence plus the audited literals is safe, while two generic Olap
+occurrences fail closed. The authoritative implementations are
+`ydb/core/tx/datashard/const.h`,
+`ydb/core/tx/datashard/datashard_write_operation.cpp`,
+`ydb/core/tx/datashard/datashard_common_upload.cpp`,
+`ydb/core/formats/arrow/switch/switch_type.h`,
+`yql/essentials/public/udf/arrow/dispatch_traits.h`,
+`contrib/libs/apache/arrow/cpp/src/arrow/type.h`,
+`contrib/libs/apache/arrow/cpp/src/arrow/array/validate.cc`, and
+`yql/essentials/minikql/mkql_string_util.cpp`.
+
+This gate moves q5 and q80 past snapshot export to the deeper Decimal-SUM
+headroom and 82,944-pair grouped-aggregate construction checks. q84 has two
+Olap String occurrences, so it fails the allocation-totality gate. The formula
+slice therefore remains 23/121 (19.0%) and the proof floor remains ten.
 
 An explicit `cast_integral` node models only partial integer `SafeCast`: the
 source is any exact signed or unsigned 8/16/32/64-bit integer expression, and
@@ -279,14 +328,17 @@ is introduced. At the pushed-OLAP boundary, `just` is erased only around a
 direct, valid, non-null Date literal; nullable, malformed, dynamic, or non-Date
 arguments fail closed.
 
-This exact fold moves TPC-DS q37, q40, and q82 through formula construction.
-The complete current-code dashboard therefore covers 23/121 queries (19.0%);
-the solver proof floor remains ten. q37 and q82 are `UNKNOWN` at a 60-second
-solver budget. A separate non-gating q40 scaling experiment retained a
+This exact fold moved TPC-DS q37, q40, and q82 through formula construction.
+At that milestone the dashboard covered 23/121 queries (19.0%). q37 and q82
+are `UNKNOWN` at a 60-second solver budget. A separate non-gating q40 scaling
+experiment retained a
 97,319,076-byte formula but reported `SOLVER_ERROR` after the external solver
 exceeded its 15.0-second process deadline; it is neither a proof nor a
-counterexample. q5, q80, and q84 now expose unsupported `Concat`; q21 exposes
-`Double`; q72 still has a dynamic Date-fold
+counterexample. Before restricted stored-String `Concat` was added, q5, q80,
+and q84 stopped at the generic callable. q5 and q80 now have the deeper outcomes
+described above, while q84 remains unsupported on its two-cell allocation
+bound. The current dashboard covers 23/121 queries and the proof floor remains
+ten. q21 exposes `Double`; q72 still has a dynamic Date-fold
 `SafeCast(Optional<Date>)` mismatch; and q77 passes export but fails the
 verifier's Decimal-SUM headroom gate.
 

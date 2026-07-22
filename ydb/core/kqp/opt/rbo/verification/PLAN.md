@@ -429,7 +429,9 @@ Implementation sequence:
 20. M4: exact constant String/Utf8-to-Date plus-or-minus
     `DateTime2.IntervalFromDays` normalization and direct Date-literal OLAP
     `just` erasure;
-21. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+21. M4: provenance- and allocation-bounded stored-String `Concat` at a Map-body
+    root;
+22. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -742,16 +744,42 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `[0, 49673)` becomes typed Date NULL. The related pushed-OLAP `just` is erased
   only around a direct valid non-null Date literal. Runtime-oracle, structural
   mutation, Date/day boundary, and real-host pushed-filter tests cover the
-  complete gate without adding Interval to the snapshot IR. This moves TPC-DS
+  complete gate without adding Interval to the snapshot IR. This moved TPC-DS
   q37, q40, and q82 through formula construction, for 21/99 TPC-DS and 23/121
-  total workload formulas (19.0%). Formula construction is not a proof. q37 and
-  q82 return `UNKNOWN` at a 60-second solver budget. A separate non-gating q40
-  scaling experiment retains a 97,319,076-byte formula and reports
-  `SOLVER_ERROR` after the external solver exceeds its 15.0-second deadline;
-  that focused `ya` experiment fails on the status as designed. The proof floor
-  remains ten. Current deeper blockers include `Concat` for q5/q80/q84,
+  total workload formulas (19.0%) at that milestone. Formula construction is
+  not a proof. q37 and q82 return `UNKNOWN` at a 60-second solver budget. A
+  separate non-gating q40 scaling experiment retains a 97,319,076-byte formula
+  and reports `SOLVER_ERROR` after the external solver exceeds its 15.0-second
+  deadline; that focused `ya` experiment fails on the status as designed. The
+  proof floor remains ten. Before restricted stored-String `Concat` was added,
+  q5, q80, and q84 stopped at that callable; other deeper blockers include
   `Double` for q21, a noncanonical dynamic Date fold for q72, and verifier-side
   Decimal-SUM headroom for q77.
+- Restricted stored-String `Concat` is admitted only at a Map-body root as a
+  binary non-null String tree. Its leaves are canonical String literals, one or
+  two catalog-backed stored String occurrences, or exactly
+  `Coalesce(nullable member, String(""))`; every other placement, type, leaf,
+  or fallback fails closed. Provenance begins only at catalog-confirmed
+  Datashard and Olap tables, excludes system views and generated or computed
+  values, and follows Map pass-through/rename, Filter, Limit, Sort, aggregate
+  group keys, value-preserving join sides, and UnionAll. Outer/exclusion joins
+  widen the affected side, semi/anti joins drop the absent side, UnionAll ORs
+  nullability from both inputs, and the final Member annotation must match that
+  carried catalog nullability. The auditor carries Datashard's enforced 16 MiB
+  value cap or the `INT32_MAX` logical-cell bound imposed by Olap's validated
+  Arrow `BinaryType` representation, charges it per occurrence plus exact
+  literal bytes, and proves that MiniKQL's `ui32` allocation-growth calculation
+  cannot wrap. One generic Olap occurrence can pass when its exact literals fit
+  the remaining allocation headroom; any two generic Olap occurrences fail
+  closed. Only then does it encode the whole syntax tree as one opaque function
+  whose fingerprint retains structure, literal bytes, order, and repetition.
+  Focused tests cover the
+  grammar, provenance failures, and all ten join kinds; a real-host
+  initial/final one-Olap-occurrence obligation is `VERIFIED_BOUNDED`, and a
+  two-Olap-occurrence case fails closed. q5 now reaches the Decimal-SUM headroom
+  gate and q80 reaches the 82,944-pair grouped-aggregate construction cap. q84
+  has two Olap String occurrences and therefore stops at the allocation-totality
+  gate. The formula slice remains 23/121 (19.0%) and the proof floor remains ten.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -837,20 +865,20 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
-  enforce three monotonic depths: TPC-DS q65 must reach the verifier, the
-  23-query formula floor must keep constructing SMT, and the ten-query
-  hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
+  enforce three monotonic depths: TPC-DS q5, q65, and q80 must reach the
+  verifier, the 23-query formula floor must keep constructing SMT, and the
+  ten-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
   2026-07-22 complete current-code formula-only dashboard emits TPCH q3
   and q19 (2/22) and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
-  q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for 23/121
-  workload queries (19.0%). TPCH has 17 unsupported and three optimizer-failure
-  results; TPC-DS has 49 unsupported and 29 optimizer-failure results. Formula
-  emission confirms end-to-end model coverage at two rows per referenced table
-  and two tasks; it is not a proof by itself.
+  q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for
+  23/121 workload queries (19.0%). TPCH has 17 unsupported and three
+  optimizer-failure results; TPC-DS has 49 unsupported and 29 optimizer-failure
+  results. Formula emission confirms end-to-end model coverage at two rows per
+  referenced table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed

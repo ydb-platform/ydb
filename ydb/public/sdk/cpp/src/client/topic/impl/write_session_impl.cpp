@@ -114,7 +114,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -1587,11 +1586,53 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
     auto credentialsProvider = DbDriverState->GetCredentialsProvider();
-    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
-    auto token = credentialsProvider->GetAuthInfo();
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
+        return;
+    }
+    UpdateTokenInProgress = true;
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
     if (token == PrevToken) {
         return;
     }

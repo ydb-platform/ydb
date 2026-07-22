@@ -47,6 +47,11 @@ bool IsRetryable(EStatus status) {
         status == EStatus::CLIENT_CANCELLED || status == EStatus::CLIENT_DISCOVERY_FAILED ||
         status == EStatus::CLIENT_LIMITS_REACHED;
 }
+
+bool IsRetryableOperation(EStatus status) {
+    return status == EStatus::ABORTED || status == EStatus::UNAVAILABLE || status == EStatus::OVERLOADED ||
+        status == EStatus::TIMEOUT || status == EStatus::SESSION_BUSY;
+}
 }
 
 class TLoginCredentialsProvider : public ICredentialsProvider, public std::enable_shared_from_this<TLoginCredentialsProvider> {
@@ -180,7 +185,8 @@ void TLoginCredentialsProvider::FinishRequest(
     const auto& responseValue = response ? *response : emptyResponse;
     const auto operationStatus = static_cast<EStatus>(responseValue.operation().status());
     if (!status.Ok() || operationStatus != EStatus::SUCCESS) {
-        if (!status.Ok() && IsRetryable(status.Status)) {
+        if ((!status.Ok() && IsRetryable(status.Status)) ||
+            (status.Ok() && IsRetryableOperation(operationStatus))) {
             std::lock_guard lock(Mutex_);
             Requesting_ = false;
             TokenRequestAt_ = TInstant::Now() + TDuration::Seconds(1);

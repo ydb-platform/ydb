@@ -7,6 +7,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -25,13 +26,51 @@ public:
 };
 
 using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>;
-
 class ICoreFacility;
+
+// Implementation detail for SDK credentials factories. Symbols in NCredentials::NDetail are not
+// part of the public YDB C++ SDK API and may change or be removed without notice.
+namespace NCredentials::NDetail {
+
+using TCredentialsProviderCreator = std::function<TCredentialsProviderPtr()>;
+
+class TOwningFacilityCredentialsProvider final : public ICredentialsProvider {
+public:
+    TOwningFacilityCredentialsProvider(std::shared_ptr<ICoreFacility> facility,
+                                       TCredentialsProviderPtr inner,
+                                       bool forwardAsync = false)
+        : Facility_(std::move(facility))
+        , Inner_(std::move(inner))
+        , ForwardAsync_(forwardAsync)
+    {}
+
+    std::string GetAuthInfo() const override {
+        return Inner_->GetAuthInfo();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        return ForwardAsync_ ? Inner_->GetAuthInfoAsync() : ICredentialsProvider::GetAuthInfoAsync();
+    }
+
+    bool IsValid() const override {
+        return Inner_->IsValid();
+    }
+
+private:
+    // Reverse destruction keeps Facility_ alive while Inner_ stops.
+    std::shared_ptr<ICoreFacility> Facility_;
+    TCredentialsProviderPtr Inner_;
+    const bool ForwardAsync_;
+};
+
+} // namespace NCredentials::NDetail
+
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
     // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
+    // The facility must outlive the returned provider.
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
     }

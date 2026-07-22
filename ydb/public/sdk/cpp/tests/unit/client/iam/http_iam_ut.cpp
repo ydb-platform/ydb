@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_http_mock_server.h>
 
@@ -67,7 +68,8 @@ TEST(IamCredentialsProvider, RetriesTransientError) {
     TIamHost params = MakeMetadataParams(server.Port);
     params.RefreshPeriod = TDuration::MilliSeconds(100);
 
-    auto provider = CreateIamCredentialsProviderFactory(params)->CreateProvider();
+    auto facility = CreateSimpleCoreFacility();
+    auto provider = CreateIamCredentialsProviderFactory(params)->CreateProvider(facility);
     EXPECT_EQ(provider->GetAuthInfo(), "old-token");
 
     const int countBeforeRefresh = server.GetRequestCount();

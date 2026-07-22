@@ -121,6 +121,10 @@ The explicit scalar core initially contains:
   recursively supported, non-null expressions of one item type; that type is
   identical to the lookup or uses the same lossless common-integer gate as
   ordinary equality, evaluated as the SQL three-valued OR of that equality;
+- exact `Exists`, scalar `If`, and unary `IfPresent`; optional payloads use
+  lexically scoped de Bruijn bindings, and the optimizer's exact
+  identity-key/Void-payload `(One, Auto)` static `ToDict` membership shape is
+  normalized to the same explicit `in` node;
 - filter truth conversion.
 
 The static-`IN` result must be `Bool` and nullable exactly when its lookup is
@@ -129,6 +133,21 @@ only under that semantic gate. `tableSource`, dynamic, empty, oversized,
 nullable-item, heterogeneous-item, lossy or non-integer mixed-type,
 malformed-option, unknown-option, and duplicate-option forms fail closed.
 Decimal membership is deliberately outside this static-`IN` subset.
+
+`Exists(x)` returns non-null `Bool(!x.is_null)`. Scalar `If` requires a
+`Bool`/`Optional<Bool>` condition and branch scalar types matching the result;
+its result is nullable exactly when the condition or either branch is nullable,
+and a NULL condition produces NULL without selecting a branch. Unary
+`IfPresent` requires exactly one `Optional<Data>` input and a one-argument
+handler whose argument is the corresponding non-null Data value. Both branches
+exactly match the result type and nullability. Snapshot `bound(depth)` nodes are
+valid only inside the handler subtree, with depth zero naming the nearest
+handler. Nested scopes are alpha-normalized by depth, and no more than 64
+handler bindings may be live. The special new-RBO
+membership normalization admits only
+`Contains(ToDict(List(items), x -> x, x -> Void(), (One, Auto)), bound)` with
+1..512 non-null exact-type items; generic dictionaries and `Contains` remain
+unsupported.
 
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
@@ -167,7 +186,7 @@ integer is never admitted on the left at this boundary.
 YQL does not expose a complete determinism-and-totality annotation. The v1 C++
 exporter therefore uses a reviewed positive list for opaque subtrees: integer
 `+`, `-`, and `*` forms that do not meet the structural gate; scalar
-comparisons; `Just`, `Exists`, `Coalesce`, and `If`; `SafeCast`; and `Convert`
+comparisons; `Just` and `Coalesce`; `SafeCast`; and `Convert`
 only when YQL's cast analysis says it cannot fail. Unknown callables, UDF/PG
 calls, generic division, strict casts, `Unwrap`, free variables, position-aware
 or unordered nodes, and side-effecting/CSE-unsafe nodes fail closed.
@@ -276,8 +295,8 @@ equality makes two NaNs a sort tie. One order item retains one exact canonical
 different Decimal identities. NULL placement continues to use the pre-physical
 snapshot's explicit `nulls_first` field. Generic division, casts outside the
 exact integral-`SafeCast` and constant-normalization gates,
-dynamic or otherwise non-core `IN`, and aggregate functions other than the
-bounded `sum` below remain unsupported.
+dynamic or otherwise non-core `IN`, and aggregate functions outside the
+modeled subset below remain unsupported.
 
 `sum(Decimal(p,s))` widens inputs, partial state, and result to
 `Decimal(35,s)`. MiniKQL/DQ combines them with saturating `AggrAdd`, which is not
@@ -575,8 +594,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   resource caps, deferred sealing, and quantified-choice fail-closed behavior.
   A focused run moves TPC-DS q42 and q50 through formula construction and proves
   q42. The remaining former String blockers now reach deeper construction caps
-  (q4, q11, q25, q29, q46, q64, and q91), nullable Decimal `SafeCast` (q65),
-  `IfPresent` (q68), or a final OLAP non-callable (q76).
+  (q4, q11, q25, q29, q46, q64, q68, and q91), nullable Decimal `SafeCast`
+  (q65), or a final OLAP non-callable (q76).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -591,6 +610,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   dictionary-path heterogeneity rejection, mutation and boundary tests, and a
   real-host query with nullable String and `Int64` lookups cover the gate and
   prove the normal obligation with the hermetic solver.
+- Exact `Exists`, scalar `If`, and unary `IfPresent` are compositional scalar
+  nodes. `IfPresent` uses lexically scoped de Bruijn bindings, and the one
+  optimizer-generated identity-key/Void-payload `ToDict` membership shape is
+  normalized to explicit `in`. Type, nullability, scoping, lambda, dictionary,
+  and safety gates fail closed. TPCH q19 passes both real-host boundaries,
+  emits a formula, and is `VERIFIED_BOUNDED`; TPC-DS q68 now passes export and
+  reaches the Merge construction gate with 32,640 candidate-row pairs, above
+  the 16,384-pair cap.
 - Decimal literals are tagged as finite, negative infinity, positive infinity,
   or NaN; source and opaque values use the exact legal typed domain. Ordinary
   equality/order, exact-type null-safe equality, Decimal/Decimal and
@@ -634,23 +661,28 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete post-String-order formula-only dashboard emits TPCH q3
-  (1/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93, and
-  q96 (12/99), for 13/121 workload queries (10.7%). Formula emission confirms
+  2026-07-22 complete post-conditional formula-only dashboard emits TPCH q3 and
+  q19 (2/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93,
+  and q96 (12/99), for 14/121 workload queries (11.6%). Formula emission confirms
   end-to-end model coverage at two rows per referenced table and two tasks; it
   is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
   before allocating its 32768-pair join matrix.
+- A shared expanded-node/depth budget for every exact scalar tree remains a
+  follow-up. Opaque trees already have node/depth limits and `IfPresent` has a
+  64-live-binding limit, but other exact recursion still relies on the compiler
+  AST boundary; the global budget must continue to admit the 512-item `IN` gate.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a fixed 60-second
-  per-query budget. The complete current-code run recorded 131 ms of preparation
-  and 11,845 ms of verification for TPCH q3, and 95 ms of preparation and
-  15,210 ms of verification for q42. q48 recorded 179 ms of
+  q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a fixed
+  60-second per-query budget. The complete current-code run recorded 131 ms of
+  preparation and 11,845 ms of verification for TPCH q3; focused q19 recorded
+  116 ms of preparation and 851 ms of verification; q42 recorded 95 ms of
+  preparation and 15,210 ms of verification. q48 recorded 179 ms of
   preparation and 2,997 ms of verification in a proof-floor run; that run also
   recorded 227 ms of q90 preparation and 7,299 ms of verification. These are
-  nine curated proofs (7.4% of the workload). q50 emits a formula but its solver
+  ten curated proofs (8.3% of the workload). q50 emits a formula but its solver
   experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. q61's 1,572,871-byte
   formula and q88 both return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of
@@ -685,7 +717,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the nine curated workload proofs have separate
+- Formula construction and the ten curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

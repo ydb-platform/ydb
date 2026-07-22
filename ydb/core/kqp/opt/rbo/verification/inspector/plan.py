@@ -56,6 +56,11 @@ def render_expression(expression: ir.Expr) -> str:
     kind = expression.kind
     if kind == "column":
         return f"column({_quote(str(_required(expression.column, 'column')))})"
+    if kind == "bound":
+        depth = _required(expression.depth, "depth")
+        if type(depth) is not int or depth < 0:
+            raise InspectionError("expression field 'depth' is not a non-negative integer")
+        return f"bound(depth={depth})"
     if kind == "void":
         return "void()"
     if kind == "literal":
@@ -73,6 +78,10 @@ def render_expression(expression: ir.Expr) -> str:
         if len(expression.args) != 1:
             raise InspectionError("not expression does not have exactly one argument")
         return f"not(arg={render_expression(expression.args[0])})"
+    if kind == "exists":
+        if len(expression.args) != 1:
+            raise InspectionError("exists expression does not have exactly one argument")
+        return f"exists(arg={render_expression(expression.args[0])})"
     if kind == "in":
         if not 2 <= len(expression.args) <= ir.MAX_STATIC_IN_ITEMS + 1:
             raise InspectionError(
@@ -113,6 +122,32 @@ def render_expression(expression: ir.Expr) -> str:
             raise InspectionError("expression field 'nullable' is not Boolean")
         return (
             f"cast_decimal(arg={render_expression(expression.args[0])}, "
+            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
+        )
+    if kind == "if":
+        if len(expression.args) != 3:
+            raise InspectionError("if expression does not have exactly three arguments")
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"if(condition={render_expression(expression.args[0])}, "
+            f"then={render_expression(expression.args[1])}, "
+            f"else={render_expression(expression.args[2])}, "
+            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
+        )
+    if kind == "if_present":
+        if len(expression.args) != 3:
+            raise InspectionError("if_present expression does not have exactly three arguments")
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"if_present(optional={render_expression(expression.args[0])}, "
+            f"present={render_expression(expression.args[1])}, "
+            f"missing={render_expression(expression.args[2])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
     if kind == "opaque":

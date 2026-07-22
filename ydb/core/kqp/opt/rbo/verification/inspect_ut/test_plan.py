@@ -30,6 +30,7 @@ class ExpressionRendererTest(unittest.TestCase):
         two = _literal(2)
         cases = (
             (_column('a."x"'), 'column("a.\\\"x\\\"")'),
+            (ir.Expr(kind="bound", depth=2), "bound(depth=2)"),
             (ir.Expr(kind="void", result_type="Void", nullable=False), "void()"),
             (
                 _literal("line\n", "String"),
@@ -51,6 +52,7 @@ class ExpressionRendererTest(unittest.TestCase):
             ),
             (ir.Expr(kind="or", args=(one,)), 'or(args=[literal(type="Int64", value=1)])'),
             (ir.Expr(kind="not", args=(one,)), 'not(arg=literal(type="Int64", value=1))'),
+            (ir.Expr(kind="exists", args=(_column(),)), 'exists(arg=column("x"))'),
             (
                 ir.Expr(kind="in", args=(_column("x"), one, two)),
                 'in(lookup=column("x"), items=[literal(type="Int64", value=1), '
@@ -118,6 +120,37 @@ class ExpressionRendererTest(unittest.TestCase):
             ),
             (
                 ir.Expr(
+                    kind="if",
+                    args=(
+                        _column("condition"),
+                        _literal(1),
+                        _literal(0),
+                    ),
+                    result_type="Int64",
+                    nullable=True,
+                ),
+                'if(condition=column("condition"), '
+                'then=literal(type="Int64", value=1), '
+                'else=literal(type="Int64", value=0), '
+                'type="Int64", nullable=true)',
+            ),
+            (
+                ir.Expr(
+                    kind="if_present",
+                    args=(
+                        _column("optional"),
+                        ir.Expr(kind="bound", depth=0),
+                        _literal(0),
+                    ),
+                    result_type="Int64",
+                    nullable=False,
+                ),
+                'if_present(optional=column("optional"), present=bound(depth=0), '
+                'missing=literal(type="Int64", value=0), '
+                'type="Int64", nullable=false)',
+            ),
+            (
+                ir.Expr(
                     kind="opaque",
                     args=(_column(),),
                     result_type="Bool",
@@ -141,6 +174,23 @@ class ExpressionRendererTest(unittest.TestCase):
             render_expression(ir.Expr(kind="in", args=(_column(),)))
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):
             render_expression(ir.Expr(kind="cast_decimal", args=()))
+        with self.assertRaisesRegex(InspectionError, "exactly one argument"):
+            render_expression(ir.Expr(kind="exists", args=()))
+        with self.assertRaisesRegex(InspectionError, "non-negative integer"):
+            render_expression(ir.Expr(kind="bound", depth=-1))
+        with self.assertRaisesRegex(InspectionError, "exactly three arguments"):
+            render_expression(ir.Expr(kind="if", args=()))
+        with self.assertRaisesRegex(InspectionError, "exactly three arguments"):
+            render_expression(ir.Expr(kind="if_present", args=()))
+        with self.assertRaisesRegex(InspectionError, "not Boolean"):
+            render_expression(
+                ir.Expr(
+                    kind="if_present",
+                    args=(_column(), _literal(), _literal()),
+                    result_type="Int64",
+                    nullable=0,
+                )
+            )
 
 
 class OperatorRendererTest(unittest.TestCase):

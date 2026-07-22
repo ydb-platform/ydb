@@ -9,7 +9,8 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, exact
-String/Utf8 comparison and ordering, exact Decimal
+`Exists`/`If`/unary `IfPresent`, exact String/Utf8 comparison and ordering,
+exact Decimal
 comparison/integral-cast/arithmetic/ordering/SUM, and
 benchmark-dashboard parts of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
@@ -22,11 +23,12 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The 2026-07-22 complete post-String-order formula-only dashboard establishes
-formula construction for TPCH q3 and TPC-DS q3, q42, q48, q50, q52, q55, q61,
-q71, q88, q90, q93, and q96: 13/121 workload queries (10.7%). The checked-in
-solver proof floor returns `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q42,
-q48, q52, q55, q90, q93, and q96: nine obligations (7.4% of the workload).
+The 2026-07-22 complete post-conditional formula-only dashboard establishes
+formula construction for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52,
+q55, q61, q71, q88, q90, q93, and q96: 14/121 workload queries (11.6%). The
+checked-in solver proof floor returns `VERIFIED_BOUNDED` for TPCH q3 and q19
+plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96: ten obligations (8.3%
+of the workload). Focused q19 took 116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q61 and q88 are
@@ -154,12 +156,24 @@ Boolean result nullable. `ansi`, `warnNoAnsi`, `isCompact`, and
 oversized, nullable, heterogeneous-item, lossy or non-integer mixed-type,
 `tableSource`, malformed-option, and unknown-option forms fail closed.
 
+`Exists` is the exact non-null presence test for one scalar value. `If` models
+MiniKQL's lazy branch selection, including NULL propagation from an optional
+Boolean condition. Unary `IfPresent` binds the non-null payload of exactly one
+`Optional<Data>` input; the snapshot represents nested handlers with lexical
+de Bruijn depths, so argument names and allocations cannot affect identity.
+At most 64 handler bindings may be live at once.
+The new RBO's lowered static-membership form is normalized to the same `in`
+node only for `Contains(ToDict(List(...), identity, Void, (One, Auto)), bound)`
+inside that handler. Every item must be non-null, have the bound value's exact
+type, and pass the ordinary recursive scalar audit. Other lambdas, dictionary
+settings, payloads, lookups, and generic `Contains` remain unsupported.
+
 Scalar syntax outside the explicit Boolean, equality, ordering, integer
 arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
-current reviewed opaque families are scalar comparisons; `Just`, `Exists`,
-`Coalesce`, and `If`; `SafeCast`; and non-failing `Convert`. The same audit
+current reviewed opaque families are scalar comparisons; `Just` and
+`Coalesce`; `SafeCast`; and non-failing `Convert`. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
 parent may contain it. YQL has no complete generic totality or determinism flag,
 so all other callables fail closed rather than relying on a denylist. This
@@ -301,7 +315,7 @@ literals, equality, ordinary ordering, Sort, and Merge. Decimal has exact
 literals, its legal typed domain, and the comparison and arithmetic semantics
 above, plus exact raw-code Sort/TopSort/Merge ordering. Generic division, casts
 outside the exact integral-`SafeCast` and constant normalization gates, and
-aggregate functions other than the bounded `sum` below remain unsupported.
+aggregate functions outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, and
 Decimal `sum`, including NULL grouping and inputs and optimizer-generated

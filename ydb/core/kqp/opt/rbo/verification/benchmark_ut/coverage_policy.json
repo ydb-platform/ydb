@@ -6,8 +6,8 @@
   "suites": {
     "TPCH_YQL": {
       "query_count": 22,
-      "required_formula_queries": [3],
-      "required_verified_queries": [3]
+      "required_formula_queries": [3, 19],
+      "required_verified_queries": [3, 19]
     },
     "TPCDS_YQL": {
       "query_count": 99,

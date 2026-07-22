@@ -489,6 +489,17 @@ TExprNode::TPtr TypedCallable(
     return result;
 }
 
+TExprNode::TPtr TypedUnaryLambda(
+    TExportTestContext& ctx,
+    const TExprNode::TPtr& argument,
+    TExprNode::TPtr body)
+{
+    return ctx.ExprCtx.NewLambda(
+        TPositionHandle(),
+        ctx.ExprCtx.NewArguments(TPositionHandle(), {argument}),
+        std::move(body));
+}
+
 TExprNode::TPtr SqlInOptions(
     TExportTestContext& ctx,
     std::initializer_list<TStringBuf> names)
@@ -542,6 +553,122 @@ TExprNode::TPtr TypedSqlIn(
 TExprNode::TPtr DataTypeDescriptor(
     TExportTestContext& ctx,
     TStringBuf typeName,
+    const TTypeAnnotationNode* type);
+
+TExprNode::TPtr DecimalDataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf precision,
+    TStringBuf scale,
+    const TTypeAnnotationNode* type);
+
+enum class EStaticSetIfPresentShape {
+    Exact,
+    NonIdentityKey,
+    NonVoidPayload,
+    ReversedSettings,
+    DecimalItems,
+};
+
+TExprNode::TPtr TypedStaticSetIfPresent(
+    TExportTestContext& ctx,
+    EStaticSetIfPresentShape shape)
+{
+    const bool decimalItems = shape == EStaticSetIfPresentShape::DecimalItems;
+    const auto* itemType = decimalItems
+        ? ctx.ExprCtx.MakeType<TDataExprParamsType>(
+            NUdf::EDataSlot::Decimal,
+            "5",
+            "2")
+        : ScalarType(ctx, NUdf::EDataSlot::String);
+    const auto* optionalItemType = ctx.ExprCtx.MakeType<TOptionalExprType>(itemType);
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    const auto* voidType = ctx.ExprCtx.MakeType<TVoidExprType>();
+    const auto* listType = ctx.ExprCtx.MakeType<TListExprType>(itemType);
+    const auto* dictType = ctx.ExprCtx.MakeType<TDictExprType>(itemType, voidType);
+
+    auto itemDescriptor = decimalItems
+        ? DecimalDataTypeDescriptor(ctx, "5", "2", itemType)
+        : DataTypeDescriptor(ctx, "String", itemType);
+    auto listDescriptor = TypedCallable(
+        ctx,
+        "ListType",
+        {std::move(itemDescriptor)},
+        ctx.ExprCtx.MakeType<TTypeExprType>(listType));
+    TExprNode::TListType valuesChildren;
+    valuesChildren.push_back(std::move(listDescriptor));
+    if (decimalItems) {
+        valuesChildren.push_back(TypedDecimalLiteral(
+            ctx, "1.00", "5", "2", itemType));
+        valuesChildren.push_back(TypedDecimalLiteral(
+            ctx, "2.00", "5", "2", itemType));
+    } else {
+        valuesChildren.push_back(TypedLiteral(ctx, "String", "AIR", itemType));
+        valuesChildren.push_back(TypedLiteral(ctx, "String", "AIR REG", itemType));
+    }
+    auto values = TypedCallable(
+        ctx,
+        "List",
+        std::move(valuesChildren),
+        listType);
+
+    auto keyArgument = ctx.ExprCtx.NewArgument(TPositionHandle(), "key");
+    keyArgument->SetTypeAnn(itemType);
+    TExprNode::TPtr keyBody = keyArgument;
+    if (shape == EStaticSetIfPresentShape::NonIdentityKey) {
+        keyBody = TypedLiteral(ctx, "String", "constant-key", itemType);
+    }
+
+    auto payloadArgument = ctx.ExprCtx.NewArgument(TPositionHandle(), "payload");
+    payloadArgument->SetTypeAnn(itemType);
+    TExprNode::TPtr payload = TypedCallable(ctx, "Void", {}, voidType);
+    if (shape == EStaticSetIfPresentShape::NonVoidPayload) {
+        payload = TypedLiteral(ctx, "String", "payload", itemType);
+    }
+
+    const bool reversedSettings =
+        shape == EStaticSetIfPresentShape::ReversedSettings;
+    auto settings = ctx.ExprCtx.NewList(
+        TPositionHandle(),
+        {
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                reversedSettings ? "Auto" : "One"),
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                reversedSettings ? "One" : "Auto"),
+        });
+    auto dict = TypedCallable(
+        ctx,
+        "ToDict",
+        {
+            std::move(values),
+            TypedUnaryLambda(ctx, keyArgument, std::move(keyBody)),
+            TypedUnaryLambda(ctx, payloadArgument, std::move(payload)),
+            std::move(settings),
+        },
+        dictType);
+
+    auto lookup = ctx.ExprCtx.NewArgument(TPositionHandle(), "lookup");
+    lookup->SetTypeAnn(itemType);
+    auto contains = TypedCallable(
+        ctx,
+        "Contains",
+        {std::move(dict), lookup},
+        boolType);
+    return TypedCallable(
+        ctx,
+        "IfPresent",
+        {
+            TypedMember(ctx, "a.x", optionalItemType),
+            TypedUnaryLambda(ctx, lookup, std::move(contains)),
+            TypedLiteral(ctx, "Bool", "false", boolType),
+        },
+        boolType);
+}
+
+TExprNode::TPtr DataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf typeName,
     const TTypeAnnotationNode* type)
 {
     auto result = ctx.ExprCtx.NewCallable(
@@ -550,6 +677,20 @@ TExprNode::TPtr DataTypeDescriptor(
         {ctx.ExprCtx.NewAtom(TPositionHandle(), typeName)});
     result->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(type));
     return result;
+}
+
+TExprNode::TPtr TypedNothing(
+    TExportTestContext& ctx,
+    TStringBuf typeName,
+    const TTypeAnnotationNode* itemType,
+    const TTypeAnnotationNode* optionalType)
+{
+    auto descriptor = TypedCallable(
+        ctx,
+        "OptionalType",
+        {DataTypeDescriptor(ctx, typeName, itemType)},
+        ctx.ExprCtx.MakeType<TTypeExprType>(optionalType));
+    return TypedCallable(ctx, "Nothing", {std::move(descriptor)}, optionalType);
 }
 
 TExprNode::TPtr DecimalDataTypeDescriptor(
@@ -1182,6 +1323,422 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "not equality-compatible");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactUnaryIfPresentWithScopedBoundValue) {
+        TExportTestContext ctx;
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "present_value");
+        argument->SetTypeAnn(intType);
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "IfPresent",
+                {
+                    TypedMember(ctx, "a.x", optionalInt),
+                    TypedUnaryLambda(
+                        ctx,
+                        argument,
+                        TypedCallable(
+                            ctx,
+                            "+",
+                            {
+                                argument,
+                                TypedLiteral(ctx, "Int32", "2", intType),
+                            },
+                            intType)),
+                    TypedLiteral(ctx, "Int32", "0", intType),
+                },
+                intType),
+            true);
+
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(expression["optional"]["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(expression["present"]["kind"].GetStringSafe(), "add");
+        UNIT_ASSERT_VALUES_EQUAL(expression["present"]["left"]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(expression["present"]["left"]["depth"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(expression["present"]["right"]["value"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(expression["missing"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(ExportsExactIfAndExistsAroundIfPresent) {
+        TExportTestContext ctx;
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+        auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "present_value");
+        argument->SetTypeAnn(intType);
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "If",
+                {
+                    TypedCallable(
+                        ctx,
+                        "Exists",
+                        {TypedMember(ctx, "a.x", optionalInt)},
+                        boolType),
+                    TypedCallable(
+                        ctx,
+                        "IfPresent",
+                        {
+                            TypedMember(ctx, "a.x", optionalInt),
+                            TypedUnaryLambda(
+                                ctx,
+                                argument,
+                                TypedCallable(
+                                    ctx,
+                                    "==",
+                                    {
+                                        argument,
+                                        TypedLiteral(ctx, "Int32", "7", intType),
+                                    },
+                                    boolType)),
+                            TypedLiteral(ctx, "Bool", "false", boolType),
+                        },
+                        boolType),
+                    TypedLiteral(ctx, "Bool", "false", boolType),
+                },
+                boolType),
+            true);
+
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+        UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["kind"].GetStringSafe(), "exists");
+        UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["arg"]["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(expression["then"]["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(expression["then"]["present"]["kind"].GetStringSafe(), "eq");
+        UNIT_ASSERT_VALUES_EQUAL(expression["then"]["present"]["left"]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(expression["else"]["value"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(IfAndExistsEnforceExactTypesAndNullability) {
+        TExportTestContext ctx;
+        const auto* optionalBool = ScalarType(
+            ctx,
+            NUdf::EDataSlot::Bool,
+            true);
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(
+            ctx,
+            NUdf::EDataSlot::Int32,
+            true);
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "If",
+                {
+                    TypedMember(ctx, "a.x", optionalBool),
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                    TypedLiteral(ctx, "Int32", "2", intType),
+                },
+                optionalInt),
+            true);
+        UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+
+        const auto badIf = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "If",
+                {
+                    TypedMember(ctx, "a.x", optionalBool),
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                    TypedLiteral(ctx, "Int32", "2", intType),
+                },
+                intType),
+            true);
+        UNIT_ASSERT(!badIf.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            badIf.UnsupportedReason,
+            "result nullability");
+
+        const auto badExists = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "Exists",
+                {TypedMember(ctx, "a.x", optionalBool)},
+                optionalBool),
+            true);
+        UNIT_ASSERT(!badExists.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            badExists.UnsupportedReason,
+            "non-null Bool");
+    }
+
+    Y_UNIT_TEST(IfPresentBindingsAreAlphaNormalizedAndLexicallyScoped) {
+        const auto exportIdentity = [](TStringBuf argumentName) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), argumentName);
+            argument->SetTypeAnn(intType);
+            return ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "IfPresent",
+                    {
+                        TypedMember(ctx, "a.x", optionalInt),
+                        TypedUnaryLambda(ctx, argument, argument),
+                        TypedLiteral(ctx, "Int32", "0", intType),
+                    },
+                    intType),
+                true);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NJson::WriteJson(exportIdentity("left_name"), false, true),
+            NJson::WriteJson(exportIdentity("right_name"), false, true));
+
+        TExportTestContext nested;
+        const auto* intType = ScalarType(nested, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(nested, NUdf::EDataSlot::Int32, true);
+        auto outer = nested.ExprCtx.NewArgument(TPositionHandle(), "outer");
+        auto inner = nested.ExprCtx.NewArgument(TPositionHandle(), "inner");
+        outer->SetTypeAnn(intType);
+        inner->SetTypeAnn(intType);
+        const auto expression = ExportMapExpression(
+            nested,
+            "a",
+            TypedCallable(
+                nested,
+                "IfPresent",
+                {
+                    TypedMember(nested, "a.x", optionalInt),
+                    TypedUnaryLambda(
+                        nested,
+                        outer,
+                        TypedCallable(
+                            nested,
+                            "IfPresent",
+                            {
+                                TypedCallable(nested, "Just", {outer}, optionalInt),
+                                TypedUnaryLambda(
+                                    nested,
+                                    inner,
+                                    TypedCallable(
+                                        nested,
+                                        "+",
+                                        {outer, inner},
+                                        intType)),
+                                outer,
+                            },
+                            intType)),
+                    TypedLiteral(nested, "Int32", "-1", intType),
+                },
+                intType),
+            true);
+
+        const auto& innerNode = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(innerNode["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(innerNode["present"]["left"]["depth"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(innerNode["present"]["right"]["depth"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(innerNode["missing"]["depth"].GetUIntegerSafe(), 0);
+    }
+
+    Y_UNIT_TEST(IfPresentBoundValuesRemainExplicitOpaqueArguments) {
+        TExportTestContext ctx;
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "value");
+        argument->SetTypeAnn(intType);
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "IfPresent",
+                {
+                    TypedMember(ctx, "a.x", optionalInt),
+                    TypedUnaryLambda(
+                        ctx,
+                        argument,
+                        TypedCallable(ctx, "Just", {argument}, optionalInt)),
+                    TypedNothing(ctx, "Int32", intType, optionalInt),
+                },
+                optionalInt),
+            true);
+
+        const auto& present = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(present["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(present["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(present["args"][0]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(present["args"][0]["depth"].GetUIntegerSafe(), 0);
+    }
+
+    Y_UNIT_TEST(NormalizesExactStaticSetContainsInsideIfPresent) {
+        TExportTestContext ctx;
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedStaticSetIfPresent(ctx, EStaticSetIfPresentShape::Exact),
+            true);
+
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if_present");
+        const auto& present = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(present["kind"].GetStringSafe(), "in");
+        UNIT_ASSERT_VALUES_EQUAL(present["lookup"]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(present["lookup"]["depth"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(present["items"].GetArraySafe().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(present["items"][0]["value"].GetStringSafe(), "AIR");
+        UNIT_ASSERT_VALUES_EQUAL(present["items"][1]["value"].GetStringSafe(), "AIR REG");
+    }
+
+    Y_UNIT_TEST(StaticSetContainsRecognizerFailsClosed) {
+        const TVector<std::pair<EStaticSetIfPresentShape, TStringBuf>> cases = {
+            {
+                EStaticSetIfPresentShape::NonIdentityKey,
+                "key selector must be identity",
+            },
+            {
+                EStaticSetIfPresentShape::NonVoidPayload,
+                "payload selector must return Void",
+            },
+            {
+                EStaticSetIfPresentShape::ReversedSettings,
+                "settings must be exactly (One, Auto)",
+            },
+            {
+                EStaticSetIfPresentShape::DecimalItems,
+                "Decimal membership is unsupported",
+            },
+        };
+
+        for (const auto& [shape, expectedReason] : cases) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedStaticSetIfPresent(ctx, shape),
+                true);
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<size_t>(shape));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReason);
+        }
+    }
+
+    Y_UNIT_TEST(IfPresentFailsClosedForMalformedOrUnsafeHandlers) {
+        for (size_t testCase = 0; testCase < 5; ++testCase) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "value");
+            argument->SetTypeAnn(testCase == 1 ? int64Type : intType);
+            auto body = argument;
+            auto missing = TypedLiteral(ctx, "Int32", "0", intType);
+            TExprNode::TPtr optional = TypedMember(ctx, "a.x", optionalInt);
+            if (testCase == 0) {
+                optional = TypedMember(ctx, "a.x", intType);
+            } else if (testCase == 2) {
+                missing = TypedNothing(ctx, "Int32", intType, optionalInt);
+            } else if (testCase == 3) {
+                auto free = ctx.ExprCtx.NewArgument(TPositionHandle(), "free");
+                free->SetTypeAnn(intType);
+                body = free;
+            } else if (testCase == 4) {
+                body = TypedCallable(ctx, "Unwrap", {argument}, intType);
+            }
+            const auto* resultType = testCase == 2 ? optionalInt : intType;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "IfPresent",
+                    {
+                        std::move(optional),
+                        TypedUnaryLambda(ctx, argument, std::move(body)),
+                        std::move(missing),
+                    },
+                    resultType),
+                true);
+            UNIT_ASSERT_C(!result.IsSupported(), testCase);
+        }
+    }
+
+    Y_UNIT_TEST(IfPresentBindingDepthIsBounded) {
+        const auto nestedIfPresent = [](TExportTestContext& ctx, size_t depth) {
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            TVector<TExprNode::TPtr> arguments;
+            arguments.reserve(depth);
+            for (size_t index = 0; index < depth; ++index) {
+                auto argument = ctx.ExprCtx.NewArgument(
+                    TPositionHandle(),
+                    TStringBuilder() << "value_" << index);
+                argument->SetTypeAnn(intType);
+                arguments.push_back(std::move(argument));
+            }
+
+            TExprNode::TPtr expression =
+                TypedLiteral(ctx, "Int32", "1", intType);
+            for (size_t index = depth; index > 0; --index) {
+                const size_t level = index - 1;
+                auto optional = level == 0
+                    ? TypedMember(ctx, "a.x", optionalInt)
+                    : TypedCallable(
+                        ctx,
+                        "Just",
+                        {arguments[level - 1]},
+                        optionalInt);
+                expression = TypedCallable(
+                    ctx,
+                    "IfPresent",
+                    {
+                        std::move(optional),
+                        TypedUnaryLambda(
+                            ctx,
+                            arguments[level],
+                            std::move(expression)),
+                        TypedLiteral(ctx, "Int32", "0", intType),
+                    },
+                    intType);
+            }
+            return expression;
+        };
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                nestedIfPresent(ctx, 64),
+                true);
+            UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                nestedIfPresent(ctx, 65),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "binding depth exceeds");
         }
     }
 
@@ -2969,7 +3526,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(DecimalDivIsAllowedInsideAuditedOpaqueParents) {
+    Y_UNIT_TEST(DecimalDivIsAllowedInsideExactIf) {
         TExportTestContext ctx;
         const auto* decimal = DecimalType(ctx, "5", "2");
         const auto expression = ExportMapExpression(
@@ -2996,13 +3553,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 },
                 decimal));
 
-        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
-        UNIT_ASSERT_STRING_CONTAINS(
-            expression["fingerprint"].GetStringSafe(),
-            "DecimalDiv");
-        const auto& args = expression["args"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(args.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(args.front()["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+        UNIT_ASSERT_VALUES_EQUAL(expression["then"]["kind"].GetStringSafe(), "div");
+        UNIT_ASSERT_VALUES_EQUAL(expression["then"]["left"]["column"].GetStringSafe(), "a.x");
     }
 
     Y_UNIT_TEST(DecimalDivNDecimalOracleCoversRoundingAndSpecials) {
@@ -3328,13 +3881,22 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "a",
             TypedCallable(ctx, "If", {exists, coalesce, convert}, intType));
 
-        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
         UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Int32");
         UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
-        UNIT_ASSERT_VALUES_EQUAL(expression["args"].GetArraySafe().size(), 2);
-        for (const auto callable : {"SafeCast", "Exists", "Just", "Coalesce", "Convert", "If"}) {
-            UNIT_ASSERT_STRING_CONTAINS(expression["fingerprint"].GetStringSafe(), callable);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["kind"].GetStringSafe(), "exists");
+        UNIT_ASSERT_STRING_CONTAINS(
+            expression["condition"]["arg"]["fingerprint"].GetStringSafe(),
+            "SafeCast");
+        UNIT_ASSERT_STRING_CONTAINS(
+            expression["then"]["fingerprint"].GetStringSafe(),
+            "Coalesce");
+        UNIT_ASSERT_STRING_CONTAINS(
+            expression["then"]["fingerprint"].GetStringSafe(),
+            "Just");
+        UNIT_ASSERT_STRING_CONTAINS(
+            expression["else"]["fingerprint"].GetStringSafe(),
+            "Convert");
 
         TExportTestContext nullable;
         const auto* nullableType = ScalarType(nullable, NUdf::EDataSlot::Int32, true);

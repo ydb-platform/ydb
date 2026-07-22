@@ -227,6 +227,15 @@ NJson::TJsonValue ColumnExpr(TStringBuf name) {
     return value;
 }
 
+constexpr size_t MaxIfPresentBindingDepth = 64;
+
+NJson::TJsonValue BoundExpr(size_t depth) {
+    auto value = JsonMap();
+    value["kind"] = "bound";
+    value["depth"] = static_cast<ui64>(depth);
+    return value;
+}
+
 NJson::TJsonValue BinaryExpr(
     TStringBuf kind,
     NJson::TJsonValue left,
@@ -846,6 +855,122 @@ struct TDecimalArithmeticSignature {
     bool ResultNullable;
 };
 
+struct TIfPresentSignature {
+    const TExprNode* Optional;
+    const TExprNode* Argument;
+    const TExprNode* Present;
+    const TExprNode* Missing;
+    TString ResultType;
+    bool ResultNullable;
+};
+
+struct TIfSignature {
+    const TExprNode* Condition;
+    const TExprNode* Then;
+    const TExprNode* Else;
+    TString ResultType;
+    bool ResultNullable;
+};
+
+const TExprNode* CheckExistsCallable(const TExprNode& node) {
+    if (!node.IsCallable("Exists") || node.ChildrenSize() != 1) {
+        Unsupported("Exists must have exactly one scalar argument");
+    }
+
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
+        Unsupported("Exists result must be non-null Bool");
+    }
+    ScalarTypeName(*node.Child(0));
+    return node.Child(0);
+}
+
+TIfSignature CheckIfCallable(const TExprNode& node) {
+    if (!node.IsCallable("If") || node.ChildrenSize() != 3) {
+        Unsupported("If must have one condition and two branches");
+    }
+
+    bool conditionNullable = false;
+    if (ScalarTypeName(*node.Child(0), &conditionNullable) != "Bool") {
+        Unsupported("If condition must be Bool or Optional<Bool>");
+    }
+
+    bool resultNullable = false;
+    bool thenNullable = false;
+    bool elseNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    if (ScalarTypeName(*node.Child(1), &thenNullable) != resultType ||
+        ScalarTypeName(*node.Child(2), &elseNullable) != resultType)
+    {
+        Unsupported("If branches must have the result's scalar type");
+    }
+    if (resultNullable !=
+        (conditionNullable || thenNullable || elseNullable))
+    {
+        Unsupported("If result nullability must equal the OR of its condition and branches");
+    }
+
+    return {
+        node.Child(0),
+        node.Child(1),
+        node.Child(2),
+        resultType,
+        resultNullable,
+    };
+}
+
+TIfPresentSignature CheckIfPresentCallable(const TExprNode& node) {
+    if (!node.IsCallable("IfPresent") || node.ChildrenSize() != 3) {
+        Unsupported("IfPresent must have one optional, one unary handler, and one missing branch");
+    }
+
+    bool optionalNullable = false;
+    const TString optionalType = ScalarTypeName(*node.Child(0), &optionalNullable);
+    if (!optionalNullable) {
+        Unsupported("IfPresent input must be exactly Optional<Data>");
+    }
+
+    const auto& handler = *node.Child(1);
+    if (!handler.IsLambda() || handler.ChildrenSize() != 2) {
+        Unsupported("IfPresent handler must be a one-body lambda");
+    }
+    const auto& arguments = *handler.Child(0);
+    if (!arguments.IsArguments() || arguments.ChildrenSize() != 1 ||
+        !arguments.Child(0)->IsArgument())
+    {
+        Unsupported("IfPresent handler must have exactly one argument");
+    }
+
+    const auto& argument = *arguments.Child(0);
+    bool argumentNullable = false;
+    if (ScalarTypeName(argument, &argumentNullable) != optionalType ||
+        argumentNullable)
+    {
+        Unsupported("IfPresent handler argument must be the non-null input value");
+    }
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    bool presentNullable = false;
+    bool missingNullable = false;
+    if (ScalarTypeName(*handler.Child(1), &presentNullable) != resultType ||
+        ScalarTypeName(*node.Child(2), &missingNullable) != resultType ||
+        presentNullable != resultNullable ||
+        missingNullable != resultNullable)
+    {
+        Unsupported("IfPresent branches must exactly match its result type and nullability");
+    }
+
+    return {
+        node.Child(0),
+        &argument,
+        handler.Child(1),
+        node.Child(2),
+        resultType,
+        resultNullable,
+    };
+}
+
 TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node) {
     CheckScalarArity(node, 2, 2);
 
@@ -975,16 +1100,7 @@ void CheckOpaqueCallable(const TExprNode& node) {
         return;
     }
     if (name == "Exists") {
-        CheckScalarArity(node, 1, 1);
-        bool resultNullable = false;
-        bool inputNullable = false;
-        if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
-            Unsupported("Opaque Exists result is not non-null Bool");
-        }
-        ScalarTypeName(*node.Child(0), &inputNullable);
-        if (!inputNullable) {
-            Unsupported("Opaque Exists input is not optional");
-        }
+        CheckExistsCallable(node);
         return;
     }
     if (name == "Coalesce") {
@@ -1005,16 +1121,11 @@ void CheckOpaqueCallable(const TExprNode& node) {
         return;
     }
     if (name == "If") {
-        CheckScalarArity(node, 3, 3);
-        const TString resultType = ScalarTypeName(node);
-        if (ScalarTypeName(*node.Child(0)) != "Bool") {
-            Unsupported("Opaque If condition is not Bool");
-        }
-        if (ScalarTypeName(*node.Child(1)) != resultType ||
-            ScalarTypeName(*node.Child(2)) != resultType)
-        {
-            Unsupported("Opaque If has inconsistent branch types");
-        }
+        CheckIfCallable(node);
+        return;
+    }
+    if (name == "IfPresent") {
+        CheckIfPresentCallable(node);
         return;
     }
 
@@ -1050,17 +1161,35 @@ void CheckOpaqueCallable(const TExprNode& node) {
     Unsupported(TStringBuilder() << "Unsupported scalar callable " << name);
 }
 
+void CheckScalarSafetyMetadata(const TExprNode& node) {
+    if (node.HasResult()) {
+        Unsupported("Scalar expression contains an executed Result node");
+    }
+    if (node.IsPosAware()) {
+        Unsupported("Scalar expression contains a position-aware node");
+    }
+    if (node.HasSideEffects() || !node.IsCseeSafe()) {
+        Unsupported("Scalar expression contains a side-effecting or CSE-unsafe node");
+    }
+    if ((node.IsCallable() || node.IsList()) && node.UnorderedChildren()) {
+        Unsupported("Scalar expression contains a node with unordered children");
+    }
+}
+
 class TOpaqueExpressionEncoder {
 public:
     TOpaqueExpressionEncoder(
         const TExprNode* rowArgument,
-        const THashSet<TString>& visibleColumns)
+        const THashSet<TString>& visibleColumns,
+        TVector<const TExprNode*> boundArguments = {})
         : RowArgument(rowArgument)
         , VisibleColumns(visibleColumns)
+        , BoundArguments(std::move(boundArguments))
     {
     }
 
     void Validate(const TExprNode& node) {
+        AllowNestedIfPresent = true;
         TStringBuilder fingerprint;
         EncodeRoot(node, fingerprint);
     }
@@ -1073,8 +1202,10 @@ public:
         EncodeRoot(node, fingerprint);
 
         auto args = JsonArray();
-        for (const auto& column : Columns) {
-            args.AppendValue(ColumnExpr(column));
+        for (const auto& argument : ExternalArguments) {
+            args.AppendValue(argument.IsBound
+                ? BoundExpr(argument.Depth)
+                : ColumnExpr(argument.Column));
         }
 
         auto result = JsonMap();
@@ -1090,6 +1221,12 @@ private:
     static constexpr size_t MaxNodes = 256;
     static constexpr size_t MaxDepth = 64;
     static constexpr size_t MaxFingerprintBytes = 64 * 1024;
+
+    struct TExternalArgument {
+        bool IsBound;
+        TString Column;
+        size_t Depth;
+    };
 
     void EncodeRoot(const TExprNode& node, TStringBuilder& fingerprint) {
         if (!node.IsCallable()) {
@@ -1110,18 +1247,7 @@ private:
         if (++NodeCount > MaxNodes) {
             Unsupported("Opaque scalar exceeds the node audit limit");
         }
-        if (node.HasResult()) {
-            Unsupported("Opaque scalar contains an executed Result node");
-        }
-        if (node.IsPosAware()) {
-            Unsupported("Opaque scalar contains a position-aware node");
-        }
-        if (node.HasSideEffects() || !node.IsCseeSafe()) {
-            Unsupported("Opaque scalar contains a side-effecting or CSE-unsafe node");
-        }
-        if ((node.IsCallable() || node.IsList()) && node.UnorderedChildren()) {
-            Unsupported("Opaque scalar contains a node with unordered children");
-        }
+        CheckScalarSafetyMetadata(node);
     }
 
     void EncodeMember(const TExprNode& node, TStringBuilder& out) {
@@ -1134,19 +1260,81 @@ private:
         }
         ScalarTypeName(node);
 
-        size_t index = 0;
-        const auto existing = ColumnIndices.find(column);
-        if (existing == ColumnIndices.end()) {
-            index = Columns.size();
-            ColumnIndices.emplace(column, index);
-            Columns.push_back(column);
-        } else {
-            index = existing->second;
-        }
+        const size_t index = ExternalIndex(
+            TStringBuilder() << "column:" << column.size() << ":" << column,
+            {false, column, 0});
 
         AppendIdentityField(out, "node", "member");
         AppendIdentityField(out, "type", TypeFingerprint(node));
         AppendIdentityField(out, "argument", ToString(index));
+    }
+
+    size_t BoundDepth(const TExprNode& node) const {
+        const auto it = std::find(BoundArguments.begin(), BoundArguments.end(), &node);
+        if (it == BoundArguments.end()) {
+            Unsupported("Opaque scalar contains a free Argument");
+        }
+        return static_cast<size_t>(it - BoundArguments.begin());
+    }
+
+    size_t ExternalIndex(TString key, TExternalArgument argument) {
+        const auto [it, inserted] = ExternalIndices.emplace(
+            std::move(key),
+            ExternalArguments.size());
+        if (inserted) {
+            ExternalArguments.push_back(std::move(argument));
+        }
+        return it->second;
+    }
+
+    void EncodeBound(const TExprNode& node, TStringBuilder& out) {
+        bool nullable = false;
+        ScalarTypeName(node, &nullable);
+        if (nullable) {
+            Unsupported("IfPresent bound argument must be non-nullable");
+        }
+        const size_t depth = BoundDepth(node);
+        const size_t index = ExternalIndex(
+            TStringBuilder() << "bound:" << depth,
+            {true, {}, depth});
+        AppendIdentityField(out, "node", "bound");
+        AppendIdentityField(out, "type", TypeFingerprint(node));
+        AppendIdentityField(out, "argument", ToString(index));
+    }
+
+    void EncodeIfPresent(
+        const TExprNode& node,
+        TStringBuilder& out,
+        size_t depth)
+    {
+        if (!AllowNestedIfPresent) {
+            Unsupported("Opaque scalar cannot hide an IfPresent binder");
+        }
+        const auto signature = CheckIfPresentCallable(node);
+        const auto& handler = *node.Child(1);
+        const auto& arguments = *handler.Child(0);
+        CheckSafeNode(handler);
+        CheckSafeNode(arguments);
+        CheckSafeNode(*signature.Argument);
+
+        AppendIdentityField(out, "node", "callable");
+        AppendIdentityField(out, "content", "IfPresent");
+        AppendIdentityField(out, "type", TypeFingerprint(node));
+        AppendIdentityField(out, "children", "3");
+        Encode(*signature.Optional, out, depth + 1);
+
+        AppendIdentityField(out, "node", "lambda");
+        AppendIdentityField(out, "argument_type", TypeFingerprint(*signature.Argument));
+        AppendIdentityField(out, "result_type", TypeFingerprint(*signature.Present));
+        AppendIdentityField(out, "children", "1");
+        if (BoundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported("IfPresent binding depth exceeds the audit limit");
+        }
+        BoundArguments.insert(BoundArguments.begin(), signature.Argument);
+        Encode(*signature.Present, out, depth + 1);
+        BoundArguments.erase(BoundArguments.begin());
+
+        Encode(*signature.Missing, out, depth + 1);
     }
 
     void Encode(const TExprNode& node, TStringBuilder& out, size_t depth) {
@@ -1157,6 +1345,14 @@ private:
 
         if (node.IsCallable("Member")) {
             EncodeMember(node, out);
+            return;
+        }
+        if (node.IsArgument()) {
+            EncodeBound(node, out);
+            return;
+        }
+        if (node.IsCallable("IfPresent")) {
+            EncodeIfPresent(node, out, depth);
             return;
         }
 
@@ -1193,16 +1389,32 @@ private:
 private:
     const TExprNode* RowArgument;
     const THashSet<TString>& VisibleColumns;
-    THashMap<TString, size_t> ColumnIndices;
-    TVector<TString> Columns;
+    TVector<const TExprNode*> BoundArguments;
+    THashMap<TString, size_t> ExternalIndices;
+    TVector<TExternalArgument> ExternalArguments;
     size_t NodeCount = 0;
+    bool AllowNestedIfPresent = false;
 };
 
 NJson::TJsonValue ExportExprNode(
     const TExprNode& node,
     const TExprNode* rowArgument,
-    const THashSet<TString>& visibleColumns)
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments)
 {
+    if (node.IsArgument()) {
+        const auto it = std::find(boundArguments.begin(), boundArguments.end(), &node);
+        if (it == boundArguments.end()) {
+            Unsupported("Scalar expression contains a free Argument");
+        }
+        bool nullable = false;
+        ScalarTypeName(node, &nullable);
+        if (nullable) {
+            Unsupported("IfPresent bound argument must be non-nullable");
+        }
+        return BoundExpr(static_cast<size_t>(it - boundArguments.begin()));
+    }
+
     if (node.IsCallable("Member")) {
         if (node.ChildrenSize() != 2 || !node.Child(1)->IsAtom()) {
             Unsupported("Malformed Member expression");
@@ -1228,6 +1440,50 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (node.IsCallable("Exists")) {
+        const auto* argument = CheckExistsCallable(node);
+        CheckScalarSafetyMetadata(node);
+
+        auto result = JsonMap();
+        result["kind"] = "exists";
+        result["arg"] = ExportExprNode(
+            *argument,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        return result;
+    }
+
+    if (node.IsCallable("If")) {
+        const auto signature = CheckIfCallable(node);
+
+        // Branch terms are built eagerly by the verifier.  Recursive export
+        // keeps that equivalent to lazy YQL If by admitting only audited,
+        // deterministic, total scalar subtrees.
+        CheckScalarSafetyMetadata(node);
+
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = ExportExprNode(
+            *signature.Condition,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        result["then"] = ExportExprNode(
+            *signature.Then,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        result["else"] = ExportExprNode(
+            *signature.Else,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        result["type"] = signature.ResultType;
+        result["nullable"] = signature.ResultNullable;
+        return result;
+    }
+
     if (node.IsCallable("Decimal")) {
         return DecimalLiteralExpr(node);
     }
@@ -1243,6 +1499,217 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (node.IsCallable("IfPresent")) {
+        const auto signature = CheckIfPresentCallable(node);
+
+        // The SMT encoder constructs both branch terms eagerly.  That is
+        // equivalent to YQL's lazy branch choice only after this closed-world
+        // exporter has recursively admitted only deterministic, total branch
+        // subtrees.  Audit the binder nodes themselves here; every branch node
+        // is checked by its own exact or opaque exporter below.
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(1));
+        CheckScalarSafetyMetadata(*node.Child(1)->Child(0));
+        CheckScalarSafetyMetadata(*signature.Argument);
+
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported("IfPresent binding depth exceeds the audit limit");
+        }
+        auto presentBindings = boundArguments;
+        presentBindings.insert(presentBindings.begin(), signature.Argument);
+
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportExprNode(
+            *signature.Optional,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        result["present"] = ExportExprNode(
+            *signature.Present,
+            rowArgument,
+            visibleColumns,
+            presentBindings);
+        result["missing"] = ExportExprNode(
+            *signature.Missing,
+            rowArgument,
+            visibleColumns,
+            boundArguments);
+        result["type"] = signature.ResultType;
+        result["nullable"] = signature.ResultNullable;
+        return result;
+    }
+
+    if (node.IsCallable("Contains")) {
+        // New RBO lowers a static SQL membership test to a temporary
+        // one-value dictionary under IfPresent.  Recognize only that exact,
+        // set-like shape and normalize it back to the existing explicit IN
+        // semantics.  Generic dictionaries and Contains stay unsupported.
+        constexpr size_t MaxItems = 512;
+        if (node.ChildrenSize() != 2) {
+            Unsupported("Static-set Contains must have exactly two arguments");
+        }
+        bool resultNullable = false;
+        if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable) {
+            Unsupported("Static-set Contains result must be non-null Bool");
+        }
+
+        const auto& dict = *node.Child(0);
+        const auto& lookup = *node.Child(1);
+        if (!dict.IsCallable("ToDict") || dict.ChildrenSize() != 4) {
+            Unsupported("Static-set Contains input must be the exact ToDict shape");
+        }
+        if (!lookup.IsArgument()) {
+            Unsupported("Static-set Contains lookup must be an IfPresent bound value");
+        }
+        const auto bound = std::find(
+            boundArguments.begin(),
+            boundArguments.end(),
+            &lookup);
+        if (bound == boundArguments.end()) {
+            Unsupported("Static-set Contains lookup is a free Argument");
+        }
+
+        const auto& values = *dict.Child(0);
+        if (!values.IsCallable("List") ||
+            values.ChildrenSize() < 2 ||
+            values.ChildrenSize() > MaxItems + 1)
+        {
+            Unsupported("Static-set ToDict must contain between 1 and 512 values");
+        }
+        if (!values.GetTypeAnn() ||
+            values.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List)
+        {
+            Unsupported("Static-set List has no exact List type annotation");
+        }
+        const auto* itemAnnotation = values.GetTypeAnn()
+            ->Cast<TListExprType>()->GetItemType();
+        bool itemNullable = false;
+        const TString itemType = TypeName(itemAnnotation, &itemNullable);
+        if (itemNullable) {
+            Unsupported("Static-set items must be non-nullable");
+        }
+        if (ParseCanonicalDecimalType(itemType)) {
+            Unsupported("Static-set Decimal membership is unsupported");
+        }
+
+        const auto& listDescriptor = *values.Child(0);
+        if (!listDescriptor.IsCallable("ListType") ||
+            listDescriptor.ChildrenSize() != 1 ||
+            !listDescriptor.GetTypeAnn() ||
+            listDescriptor.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type)
+        {
+            Unsupported("Static-set List has an invalid ListType descriptor");
+        }
+        const auto* describedList = listDescriptor.GetTypeAnn()
+            ->Cast<TTypeExprType>()->GetType();
+        if (!describedList || describedList->GetKind() != ETypeAnnotationKind::List ||
+            !IsSameAnnotation(
+                *describedList->Cast<TListExprType>()->GetItemType(),
+                *itemAnnotation))
+        {
+            Unsupported("Static-set ListType annotation disagrees with its List");
+        }
+        bool descriptorNullable = false;
+        if (DataTypeDescriptorName(
+                *listDescriptor.Child(0),
+                &descriptorNullable) != itemType ||
+            descriptorNullable)
+        {
+            Unsupported("Static-set ListType descriptor disagrees with its item type");
+        }
+
+        bool lookupNullable = false;
+        if (ScalarTypeName(lookup, &lookupNullable) != itemType || lookupNullable) {
+            Unsupported("Static-set Contains lookup must exactly match its item type");
+        }
+
+        const auto checkUnaryLambda = [&](const TExprNode& lambda, TStringBuf label) {
+            if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+                !lambda.Child(0)->IsArguments() ||
+                lambda.Child(0)->ChildrenSize() != 1 ||
+                !lambda.Child(0)->Child(0)->IsArgument())
+            {
+                Unsupported(TStringBuilder()
+                    << "Static-set ToDict " << label << " must be a unary lambda");
+            }
+            const auto& argument = *lambda.Child(0)->Child(0);
+            bool nullable = false;
+            if (ScalarTypeName(argument, &nullable) != itemType || nullable) {
+                Unsupported(TStringBuilder()
+                    << "Static-set ToDict " << label << " argument has the wrong type");
+            }
+            CheckScalarSafetyMetadata(lambda);
+            CheckScalarSafetyMetadata(*lambda.Child(0));
+            CheckScalarSafetyMetadata(argument);
+            return &argument;
+        };
+
+        const auto& keyLambda = *dict.Child(1);
+        const auto* keyArgument = checkUnaryLambda(keyLambda, "key selector");
+        if (keyLambda.Child(1) != keyArgument) {
+            Unsupported("Static-set ToDict key selector must be identity");
+        }
+
+        const auto& payloadLambda = *dict.Child(2);
+        checkUnaryLambda(payloadLambda, "payload selector");
+        const auto& payload = *payloadLambda.Child(1);
+        if (!payload.IsCallable("Void") || payload.ChildrenSize() != 0 ||
+            !payload.GetTypeAnn() ||
+            payload.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Void)
+        {
+            Unsupported("Static-set ToDict payload selector must return Void");
+        }
+
+        const auto& settings = *dict.Child(3);
+        if (!settings.IsList() || settings.ChildrenSize() != 2 ||
+            !settings.Child(0)->IsAtom("One") ||
+            !settings.Child(1)->IsAtom("Auto"))
+        {
+            Unsupported("Static-set ToDict settings must be exactly (One, Auto)");
+        }
+
+        if (!dict.GetTypeAnn() ||
+            dict.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Dict)
+        {
+            Unsupported("Static-set ToDict has no exact Dict type annotation");
+        }
+        const auto* dictType = dict.GetTypeAnn()->Cast<TDictExprType>();
+        if (!IsSameAnnotation(*dictType->GetKeyType(), *itemAnnotation) ||
+            dictType->GetPayloadType()->GetKind() != ETypeAnnotationKind::Void)
+        {
+            Unsupported("Static-set ToDict annotation disagrees with its selectors");
+        }
+
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(dict);
+        CheckScalarSafetyMetadata(values);
+        CheckScalarSafetyMetadata(listDescriptor);
+        CheckScalarSafetyMetadata(payload);
+        CheckScalarSafetyMetadata(settings);
+
+        auto items = JsonArray();
+        for (size_t index = 1; index < values.ChildrenSize(); ++index) {
+            const auto& item = *values.Child(index);
+            bool nullable = false;
+            if (ScalarTypeName(item, &nullable) != itemType || nullable) {
+                Unsupported("Static-set List items must have one non-null type");
+            }
+            items.AppendValue(ExportExprNode(
+                item,
+                rowArgument,
+                visibleColumns,
+                boundArguments));
+        }
+
+        auto result = JsonMap();
+        result["kind"] = "in";
+        result["lookup"] = BoundExpr(static_cast<size_t>(
+            bound - boundArguments.begin()));
+        result["items"] = std::move(items);
+        return result;
+    }
+
     if (node.IsCallable("SafeCast") &&
         ParseCanonicalDecimalType(ScalarTypeName(node)))
     {
@@ -1253,14 +1720,18 @@ NJson::TJsonValue ExportExprNode(
 
         // Retain the closed-world node checks used by opaque expressions while
         // assigning this reviewed cast shape an exact verifier meaning.
-        TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
 
         auto result = JsonMap();
         result["kind"] = "cast_decimal";
         result["arg"] = ExportExprNode(
             *node.Child(0),
             rowArgument,
-            visibleColumns);
+            visibleColumns,
+            boundArguments);
         result["type"] = resultType;
         result["nullable"] = false;
         return result;
@@ -1363,7 +1834,11 @@ NJson::TJsonValue ExportExprNode(
             if (type != annotatedItemTypes[index]) {
                 Unsupported("SqlIn item type does not match its collection annotation");
             }
-            items.AppendValue(ExportExprNode(item, rowArgument, visibleColumns));
+            items.AppendValue(ExportExprNode(
+                item,
+                rowArgument,
+                visibleColumns,
+                boundArguments));
         }
 
         const auto& options = *node.Child(2);
@@ -1398,7 +1873,11 @@ NJson::TJsonValue ExportExprNode(
 
         auto result = JsonMap();
         result["kind"] = "in";
-        result["lookup"] = ExportExprNode(*node.Child(1), rowArgument, visibleColumns);
+        result["lookup"] = ExportExprNode(
+            *node.Child(1),
+            rowArgument,
+            visibleColumns,
+            boundArguments);
         result["items"] = std::move(items);
         return result;
     }
@@ -1411,7 +1890,11 @@ NJson::TJsonValue ExportExprNode(
         result["kind"] = node.IsCallable("And") ? "and" : "or";
         auto args = JsonArray();
         for (const auto& child : node.Children()) {
-            args.AppendValue(ExportExprNode(*child, rowArgument, visibleColumns));
+            args.AppendValue(ExportExprNode(
+                *child,
+                rowArgument,
+                visibleColumns,
+                boundArguments));
         }
         result["args"] = std::move(args);
         return result;
@@ -1423,7 +1906,11 @@ NJson::TJsonValue ExportExprNode(
         }
         auto result = JsonMap();
         result["kind"] = "not";
-        result["arg"] = ExportExprNode(*node.Child(0), rowArgument, visibleColumns);
+        result["arg"] = ExportExprNode(
+            *node.Child(0),
+            rowArgument,
+            visibleColumns,
+            boundArguments);
         return result;
     }
 
@@ -1439,8 +1926,8 @@ NJson::TJsonValue ExportExprNode(
         };
         auto result = BinaryExpr(
             equality ? TStringBuf("eq") : TStringBuf(Kinds.at(TString(node.Content()))),
-            ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
-            ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
+            ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
+            ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
         if (node.IsCallable("IsNotDistinctFrom")) {
             result["null_safe"] = true;
         }
@@ -1468,7 +1955,10 @@ NJson::TJsonValue ExportExprNode(
         {
             // Keep the old closed-world and safety checks even though the result
             // now has a concrete verifier meaning instead of an opaque identity.
-            TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+            TOpaqueExpressionEncoder(
+                rowArgument,
+                visibleColumns,
+                boundArguments).Validate(node);
 
             TStringBuf kind;
             if (node.IsCallable("+")) {
@@ -1480,8 +1970,8 @@ NJson::TJsonValue ExportExprNode(
             }
             auto result = BinaryExpr(
                 kind,
-                ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
-                ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
+                ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
+                ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
             result["type"] = resultType;
             result["nullable"] = resultNullable;
             return result;
@@ -1493,19 +1983,33 @@ NJson::TJsonValue ExportExprNode(
 
         // Retain the same closed-world node checks as opaque expressions while
         // giving the admitted Decimal arithmetic an exact verifier meaning.
-        TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
 
         const TStringBuf kind = node.IsCallable("DecimalMul") ? "mul" : "div";
         auto result = BinaryExpr(
             kind,
-            ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
-            ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
+            ExportExprNode(*node.Child(0), rowArgument, visibleColumns, boundArguments),
+            ExportExprNode(*node.Child(1), rowArgument, visibleColumns, boundArguments));
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
     }
 
-    return TOpaqueExpressionEncoder(rowArgument, visibleColumns).Export(node);
+    return TOpaqueExpressionEncoder(
+        rowArgument,
+        visibleColumns,
+        boundArguments).Export(node);
+}
+
+NJson::TJsonValue ExportExprNode(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    return ExportExprNode(node, rowArgument, visibleColumns, {});
 }
 
 NJson::TJsonValue ExportExpr(

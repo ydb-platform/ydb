@@ -29,6 +29,7 @@ from .types import (
 FORMAT = "ydb-rbo-semantic-snapshot"
 VERSION = 1
 MAX_STATIC_IN_ITEMS = 512
+MAX_BOUND_DEPTH = 64
 JOIN_KINDS = frozenset(
     {
         "cross",
@@ -90,6 +91,7 @@ class Expr:
     kind: str
     args: tuple[Expr, ...] = ()
     column: str | None = None
+    depth: int | None = None
     value: bool | int | str | decimal.Literal | None = None
     result_type: str | None = None
     nullable: bool | None = None
@@ -387,13 +389,20 @@ def _decimal_literal(value: Any, scalar_type: str, path: str) -> decimal.Literal
     _fail(f"{path}.kind", f"unsupported Decimal literal kind {kind!r}")
 
 
-def _parse_expr(value: Any, path: str) -> Expr:
+def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
     obj = _object(value, path)
     kind = _string(obj.get("kind"), f"{path}.kind")
 
     if kind == "column":
         _keys(obj, {"kind", "column"}, path)
         return Expr(kind=kind, column=_string(obj["column"], f"{path}.column"))
+
+    if kind == "bound":
+        _keys(obj, {"kind", "depth"}, path)
+        depth = _index(obj["depth"], f"{path}.depth")
+        if depth >= bound_depth:
+            _fail(f"{path}.depth", "does not refer to an enclosing IfPresent handler")
+        return Expr(kind=kind, depth=depth)
 
     if kind == "void":
         _keys(obj, {"kind"}, path)
@@ -424,12 +433,25 @@ def _parse_expr(value: Any, path: str) -> Expr:
             _fail(f"{path}.args", "must not be empty")
         return Expr(
             kind=kind,
-            args=tuple(_parse_expr(arg, f"{path}.args[{index}]") for index, arg in enumerate(raw_args)),
+            args=tuple(
+                _parse_expr(arg, f"{path}.args[{index}]", bound_depth)
+                for index, arg in enumerate(raw_args)
+            ),
         )
 
     if kind == "not":
         _keys(obj, {"kind", "arg"}, path)
-        return Expr(kind=kind, args=(_parse_expr(obj["arg"], f"{path}.arg"),))
+        return Expr(
+            kind=kind,
+            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+        )
+
+    if kind == "exists":
+        _keys(obj, {"kind", "arg"}, path)
+        return Expr(
+            kind=kind,
+            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+        )
 
     if kind == "in":
         _keys(obj, {"kind", "lookup", "items"}, path)
@@ -442,9 +464,9 @@ def _parse_expr(value: Any, path: str) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["lookup"], f"{path}.lookup"),
+                _parse_expr(obj["lookup"], f"{path}.lookup", bound_depth),
                 *(
-                    _parse_expr(item, f"{path}.items[{index}]")
+                    _parse_expr(item, f"{path}.items[{index}]", bound_depth)
                     for index, item in enumerate(raw_items)
                 ),
             ),
@@ -457,8 +479,8 @@ def _parse_expr(value: Any, path: str) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["left"], f"{path}.left"),
-                _parse_expr(obj["right"], f"{path}.right"),
+                _parse_expr(obj["left"], f"{path}.left", bound_depth),
+                _parse_expr(obj["right"], f"{path}.right", bound_depth),
             ),
             null_safe=_bool(obj.get("null_safe", False), f"{path}.null_safe"),
         )
@@ -468,8 +490,8 @@ def _parse_expr(value: Any, path: str) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["left"], f"{path}.left"),
-                _parse_expr(obj["right"], f"{path}.right"),
+                _parse_expr(obj["left"], f"{path}.left", bound_depth),
+                _parse_expr(obj["right"], f"{path}.right", bound_depth),
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
@@ -479,7 +501,43 @@ def _parse_expr(value: Any, path: str) -> Expr:
         _keys(obj, {"kind", "arg", "type", "nullable"}, path)
         return Expr(
             kind=kind,
-            args=(_parse_expr(obj["arg"], f"{path}.arg"),),
+            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind == "if":
+        _keys(
+            obj,
+            {"kind", "condition", "then", "else", "type", "nullable"},
+            path,
+        )
+        return Expr(
+            kind=kind,
+            args=(
+                _parse_expr(obj["condition"], f"{path}.condition", bound_depth),
+                _parse_expr(obj["then"], f"{path}.then", bound_depth),
+                _parse_expr(obj["else"], f"{path}.else", bound_depth),
+            ),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind == "if_present":
+        _keys(
+            obj,
+            {"kind", "optional", "present", "missing", "type", "nullable"},
+            path,
+        )
+        if bound_depth >= MAX_BOUND_DEPTH:
+            _fail(path, "IfPresent binding depth exceeds the audit limit")
+        return Expr(
+            kind=kind,
+            args=(
+                _parse_expr(obj["optional"], f"{path}.optional", bound_depth),
+                _parse_expr(obj["present"], f"{path}.present", bound_depth + 1),
+                _parse_expr(obj["missing"], f"{path}.missing", bound_depth),
+            ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
@@ -489,7 +547,10 @@ def _parse_expr(value: Any, path: str) -> Expr:
         raw_args = _array(obj["args"], f"{path}.args")
         return Expr(
             kind=kind,
-            args=tuple(_parse_expr(arg, f"{path}.args[{index}]") for index, arg in enumerate(raw_args)),
+            args=tuple(
+                _parse_expr(arg, f"{path}.args[{index}]", bound_depth)
+                for index, arg in enumerate(raw_args)
+            ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
             fingerprint=_string(obj["fingerprint"], f"{path}.fingerprint"),
@@ -921,7 +982,12 @@ def _unique(values: Sequence[str], path: str) -> None:
         seen.add(value)
 
 
-def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueType:
+def _infer_expr(
+    expr: Expr,
+    columns: Mapping[str, Column],
+    path: str,
+    bindings: tuple[ValueType, ...] = (),
+) -> ValueType:
     if expr.kind == "column":
         if expr.column not in columns:
             _fail(path, f"column {expr.column!r} is not available")
@@ -930,6 +996,11 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
             _fail(path, "void may only flow transparently to a canonical count aggregate")
         return value_type
 
+    if expr.kind == "bound":
+        if expr.depth is None or not 0 <= expr.depth < len(bindings):
+            _fail(path, "bound expression does not refer to an enclosing IfPresent handler")
+        return bindings[expr.depth]
+
     if expr.kind == "void":
         _fail(path, "void may only flow transparently to a canonical count aggregate")
 
@@ -937,23 +1008,28 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         assert expr.result_type is not None and expr.nullable is not None
         if expr.kind == "opaque":
             for index, arg in enumerate(expr.args):
-                _infer_expr(arg, columns, f"{path}.args[{index}]")
+                _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
         return ValueType(expr.result_type, expr.nullable)
 
     if expr.kind in {"and", "or", "not"}:
         argument_types = [
-            _infer_expr(arg, columns, f"{path}.args[{index}]") for index, arg in enumerate(expr.args)
+            _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
+            for index, arg in enumerate(expr.args)
         ]
         if any(argument.name != BOOL for argument in argument_types):
             _fail(path, f"{expr.kind} requires Boolean arguments")
         return ValueType(BOOL, any(argument.nullable for argument in argument_types))
 
+    if expr.kind == "exists":
+        _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        return ValueType(BOOL, False)
+
     if expr.kind == "in":
-        lookup = _infer_expr(expr.args[0], columns, f"{path}.lookup")
+        lookup = _infer_expr(expr.args[0], columns, f"{path}.lookup", bindings)
         item_name = None
         for index, item_expr in enumerate(expr.args[1:]):
             item_path = f"{path}.items[{index}]"
-            item = _infer_expr(item_expr, columns, item_path)
+            item = _infer_expr(item_expr, columns, item_path, bindings)
             if item.nullable:
                 _fail(item_path, "IN items must be non-nullable")
             if item_name is None:
@@ -971,8 +1047,8 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         return ValueType(BOOL, lookup.nullable)
 
     if expr.kind in {"eq", "lt", "lte", "gt", "gte"}:
-        left = _infer_expr(expr.args[0], columns, f"{path}.left")
-        right = _infer_expr(expr.args[1], columns, f"{path}.right")
+        left = _infer_expr(expr.args[0], columns, f"{path}.left", bindings)
+        right = _infer_expr(expr.args[1], columns, f"{path}.right", bindings)
         if not equality_comparison_compatible(left.name, right.name):
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
@@ -988,8 +1064,8 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
 
     if expr.kind in {"add", "sub", "mul", "div"}:
         assert expr.result_type is not None and expr.nullable is not None
-        left = _infer_expr(expr.args[0], columns, f"{path}.left")
-        right = _infer_expr(expr.args[1], columns, f"{path}.right")
+        left = _infer_expr(expr.args[0], columns, f"{path}.left", bindings)
+        right = _infer_expr(expr.args[1], columns, f"{path}.right", bindings)
         if decimal.is_type(expr.result_type):
             if left.name != expr.result_type:
                 _fail(path, f"Decimal {expr.kind} left operand must exactly match its result type")
@@ -1021,7 +1097,7 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
 
     if expr.kind == "cast_decimal":
         assert expr.result_type is not None and expr.nullable is not None
-        argument = _infer_expr(expr.args[0], columns, f"{path}.arg")
+        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
         if family(argument.name) != "int":
             _fail(path, "Decimal cast source must be integral")
         if argument.nullable:
@@ -1034,6 +1110,50 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         if expr.nullable:
             _fail(path, "exact integral Decimal cast must be non-nullable")
         return ValueType(expr.result_type, False)
+
+    if expr.kind == "if":
+        assert expr.result_type is not None and expr.nullable is not None
+        condition = _infer_expr(
+            expr.args[0],
+            columns,
+            f"{path}.condition",
+            bindings,
+        )
+        if condition.name != BOOL:
+            _fail(f"{path}.condition", "If condition must be Boolean")
+        then = _infer_expr(expr.args[1], columns, f"{path}.then", bindings)
+        otherwise = _infer_expr(expr.args[2], columns, f"{path}.else", bindings)
+        if then.name != expr.result_type or otherwise.name != expr.result_type:
+            _fail(path, "If branch types must exactly match its result type")
+        expected_nullable = condition.nullable or then.nullable or otherwise.nullable
+        if expr.nullable != expected_nullable:
+            _fail(path, "If nullability must equal the OR of condition and branches")
+        return ValueType(expr.result_type, expr.nullable)
+
+    if expr.kind == "if_present":
+        assert expr.result_type is not None and expr.nullable is not None
+        optional = _infer_expr(expr.args[0], columns, f"{path}.optional", bindings)
+        if not optional.nullable:
+            _fail(f"{path}.optional", "IfPresent optional must be nullable")
+        result = ValueType(expr.result_type, expr.nullable)
+        present = _infer_expr(
+            expr.args[1],
+            columns,
+            f"{path}.present",
+            (ValueType(optional.name, False), *bindings),
+        )
+        missing = _infer_expr(expr.args[2], columns, f"{path}.missing", bindings)
+        if present != result:
+            _fail(
+                f"{path}.present",
+                "IfPresent handler type and nullability must exactly match its result",
+            )
+        if missing != result:
+            _fail(
+                f"{path}.missing",
+                "IfPresent missing type and nullability must exactly match its result",
+            )
+        return result
 
     raise AssertionError(f"parser admitted unknown expression kind {expr.kind!r}")
 

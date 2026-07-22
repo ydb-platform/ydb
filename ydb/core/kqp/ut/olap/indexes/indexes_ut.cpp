@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(!status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(LocalIndexesUsedInQueries, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
@@ -745,34 +745,47 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         };
 
         assertDDLQueryOk(R"(
-            CREATE TABLE `/Root/minmax_test_applied_applied` (
+            CREATE TABLE `/Root/olap_indexes_applied_test` (
                 `key` Int32 NOT NULL,
                 `value` String NOT NULL,
+                `value_bloom` String NOT NULL,
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
             WITH (
                 STORE = COLUMN
             );
-            ALTER TABLE `/Root/minmax_test_applied_applied` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
+            ALTER TABLE `/Root/olap_indexes_applied_test`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (`value_bloom`)
+                ;
+
+            ALTER TABLE `/Root/olap_indexes_applied_test` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
 
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
-            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item+1 AS String) AS `value` FROM AS_TABLE($data1);
+            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT 
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item AS String) AS `value`,
+            "Value_" || CAST(item AS String) AS `value_bloom`,
+            FROM AS_TABLE($data1);
         )");
 
         runDMLQuery(R"(
             $data2 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
-            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item AS String) AS `value` FROM AS_TABLE($data2);
+            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item+1 AS String) AS `value`,
+            "Value_" || CAST(item+1 AS String) AS `value_bloom`,
+            FROM AS_TABLE($data2);
         )");
+
         csController->WaitCompactions(TDuration::Seconds(5));
 
         struct TQueryResult {
             ui64 CountResult;
-            bool MinMaxIndexUsed;
+            bool LocalIndexUsed;
         };
 
         auto runQuery = [&](TString text) -> TQueryResult {
@@ -782,69 +795,75 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             return TQueryResult {
                 .CountResult = NYT::NodeFromYsonString(ysonArrayWithOneInteger).AsList()[0].AsList()[0].AsUint64(),
-                .MinMaxIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
+                .LocalIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
             };
         };
 
         TQueryResult resLess = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` < "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resLess.CountResult, 944450, "incorrect result for query with '<' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resLess.MinMaxIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resLess.LocalIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resGreater = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` > "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resGreater.CountResult, 555549, "incorrect result for query with '>' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resGreater.MinMaxIndexUsed, "query with '>' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resGreater.LocalIndexUsed, "query with '>' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resLessOrEqual = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` <= "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resLessOrEqual.CountResult, 944451, "incorrect result for query with '<=' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resLessOrEqual.MinMaxIndexUsed, "query with '<=' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resLessOrEqual.LocalIndexUsed, "query with '<=' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resGreaterOrEqual = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` >= "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resGreaterOrEqual.CountResult, 555550, "incorrect result for query with '>=' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resGreaterOrEqual.MinMaxIndexUsed, "query with '>=' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resGreaterOrEqual.LocalIndexUsed, "query with '>=' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resBetween = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` BETWEEN "Value_500000" AND "Value_500001";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` BETWEEN "Value_500000" AND "Value_500001";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resBetween.CountResult, 2, "incorrect result for query with 'BETWEEN' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resBetween.MinMaxIndexUsed, "query with 'BETWEEN' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resBetween.LocalIndexUsed, "query with 'BETWEEN' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resAnd = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" AND `value` <= "Value_500001";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` >= "Value_500000" AND `value` <= "Value_500001";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resAnd.CountResult, 2, "incorrect result for query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resAnd.MinMaxIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resAnd.LocalIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resOr = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resOr.CountResult, 1500000, "incorrect result for query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column");
-        UNIT_ASSERT_C(resOr.MinMaxIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        UNIT_ASSERT_C(resOr.LocalIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
 
         TQueryResult resNeq = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` != "Value_500000";
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` != "Value_500000";
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
-        UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
+        UNIT_ASSERT_C(!resNeq.LocalIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
 
         TQueryResult resIsNotNull = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS NOT NULL;
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` IS NOT NULL;
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resIsNotNull.CountResult, 1500000, "incorrect result for query with 'IS NOT NULL' filter over min_max-indexed column");
-        UNIT_ASSERT_C(!resIsNotNull.MinMaxIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        UNIT_ASSERT_C(!resIsNotNull.LocalIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
 
         TQueryResult resDistinctFromNull = runQuery(R"(
-            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS DISTINCT FROM NULL;
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value` IS DISTINCT FROM NULL;
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
-        UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        UNIT_ASSERT_C(!resDistinctFromNull.LocalIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        
+        TQueryResult resBloom = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value_bloom` LIKE '%alue?_50000%' ESCAPE '?';
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resBloom.CountResult, 11, "incorrect result for query with 'LIKE' filter over bloom_ngram_filter-indexed column");
+        UNIT_ASSERT_C(resBloom.LocalIndexUsed, "query with 'LIKE' filter over bloom_ngram_filter-indexed column doesn't use bloom_ngram_filter index)");
     }
 
     Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService, ELocalIndexAsSchemeObject) {
@@ -1153,6 +1172,113 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
+    }
+
+    // Reproduction of https://github.com/ydb-platform/ydb/issues/45739:
+    // adding a bloom ngram index without a WITH clause must fall back to defaults
+    // instead of failing with an internal error.
+    Y_UNIT_TEST(AddLocalBloomNgramIndexWithoutWithClause, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TKikimrSettings settings{};
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            CREATE TABLE `/Root/olapBloomWithoutWithClause` (
+                `key` Int32 NOT NULL,
+                `value1` String NOT NULL,
+                `value2` String NOT NULL,
+                INDEX idx_ngram1 LOCAL USING bloom_ngram_filter ON (`value1`),
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (STORE = COLUMN);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapBloomWithoutWithClause`
+            ADD INDEX idx_ngram2 LOCAL USING bloom_ngram_filter
+                ON (`value2`);
+        )");
+    }
+
+    // Reproduction of https://github.com/ydb-platform/ydb/issues/45738:
+    // a bloom ngram index must be allowed on a String column (documented as supported),
+    // not rejected as an inappropriate column type.
+    Y_UNIT_TEST(AddLocalBloomNgramIndexOnStringColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = MakeLocalIndexOnInsertTestSettings();
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            CREATE TABLE `/Root/olapStringNgram` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (STORE = COLUMN);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER TABLE `/Root/olapStringNgram`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (`value`)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        // Data (insert) goes through the query client; index probing uses scan queries, which push
+        // the LIKE filter down to the shard where the ngram index checker runs.
+        auto runDML = [&](const TString& query) {
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto runScan = [&](const TString& query) -> TString {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+
+        // Two overlapping writes so each shard accumulates several portions and compaction merges
+        // them into ngram-indexed portions the reader can skip over.
+        runDML(R"(
+            $rows = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/olapStringNgram` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "value_" || CAST(item + 1 AS String) AS `value` FROM AS_TABLE($rows);
+        )");
+        runDML(R"(
+            $rows = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/olapStringNgram` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "value_" || CAST(item AS String) AS `value` FROM AS_TABLE($rows);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        // Correctness: the LIKE select returns the expected row.
+        CompareYson(R"([["value_1234567"]])",
+            runScan(R"(SELECT `value` FROM `/Root/olapStringNgram` WHERE `value` LIKE "%value_1234567%";)"),
+            "unexpected LIKE result over ngram-indexed column");
+
+        // The ngram index must be consulted for a LIKE filter: a substring absent from every row
+        // must let the index skip the indexed portions instead of scanning them.
+        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveBefore = csController->GetIndexesApprovedOnSelect().Val();
+        CompareYson(R"([[0u]])",
+            runScan(R"(SELECT COUNT(*) FROM `/Root/olapStringNgram` WHERE `value` LIKE "%nosuchsubstring%";)"),
+            "unexpected count for absent-substring LIKE");
+        const ui64 consulted = (csController->GetIndexesSkippingOnSelect().Val() - skipBefore) +
+                               (csController->GetIndexesApprovedOnSelect().Val() - approveBefore);
+        UNIT_ASSERT_C(consulted > 0, "ngram index idx_ngram was not used for the LIKE select");
     }
 
     Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService, ELocalIndexAsSchemeObject) {

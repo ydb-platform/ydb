@@ -402,7 +402,8 @@ runs:
             *) GRAPH_SAVE_PARAMS+=(-A) ;;
           esac
         fi
-        GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]}"
+        # -k so configure warnings (BadDep etc.) do not fail graph save / compare.
+        GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]} -k"
 
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
@@ -467,17 +468,10 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             GRAPH_YA_MAKE_COMMAND+=" --retest"
           fi
-          if [ "$GRAPH_ONLY_MODE" = "true" ]; then
-            $GRAPH_YA_MAKE_COMMAND --cache-tests \
-              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
-              $YA_MAKE_TARGET
-          else
-            $GRAPH_YA_MAKE_COMMAND -k --cache-tests \
-              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
-              $YA_MAKE_TARGET
-          fi
+          $GRAPH_YA_MAKE_COMMAND --cache-tests \
+            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+            "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
+            $YA_MAKE_TARGET
         fi
 
         if [ "$GRAPH_ONLY_MODE" = "true" ]; then

@@ -431,7 +431,7 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
             auto request = ExtractFromConstFuture(future);
             desc->DataSourceInstance = request.data_source_instance();
 
-            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& future) mutable {
+            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise](const NConnector::TDescribeTableAsyncResult& future) mutable {
                 try {
                     auto result = ExtractFromConstFuture(future);
 

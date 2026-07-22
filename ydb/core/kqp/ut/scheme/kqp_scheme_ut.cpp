@@ -4834,7 +4834,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4885,7 +4885,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4998,12 +4998,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
             "Invalid vector_dimension: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
-            "Invalid vector_dimension: 0 should be between 1 and 16384");
+            "Invalid vector_dimension: 0 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
-            "Invalid vector_dimension: 16385 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65536, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65537, levels=3, clusters=10",
+            "Invalid vector_dimension: 65537 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
@@ -5095,7 +5096,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5109,7 +5110,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         WITH (
                             similarity=inner_product,
                             vector_type=float,
-                            vector_dimension=16385,
+                            vector_dimension=65537,
                             levels=3,
                             clusters=10)
                 );
@@ -5121,10 +5122,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5219,7 +5220,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
@@ -5228,7 +5229,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     WITH (
                         similarity=inner_product,
                         vector_type=float,
-                        vector_dimension=16385,
+                        vector_dimension=65537,
                         levels=3,
                         clusters=10)
             )";
@@ -5239,10 +5240,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx

@@ -14,6 +14,7 @@ TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCo
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, const TActorContext& ctx) {
+    Counters.OnNewRequest();
     auto tx = ev->Get()->DetachLongTxWrite();
     NTxProxy::DoLongTxWriteSameMailbox(ctx, tx.GetReplyTo(), tx.GetLongTxId(), tx.GetDedupId(), tx.GetDatabaseName(), tx.GetPath(),
         tx.GetNavigateResult(), tx.GetBatch(), tx.GetIssues(), tx.GetUserCtx(), true);

@@ -1,6 +1,8 @@
 #include "read_balancer.h"
 #include "read_balancer_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
 namespace NKikimr::NPQ {
 
 void TPersQueueReadBalancer::HandleOnInit(
@@ -52,9 +54,11 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
         .Deadline = TAppData::TimeProvider->Now() + timeout,
     });
 
-    PQ_LOG_D("Enqueue GetPartitionsLocation request, queueSize=" << PartitionsLocationQueue.size()
-            << " timeout=" << timeout
-            << " deadline=" << PartitionsLocationQueue.back().Deadline);
+    YDB_LOG_DEBUG("Enqueue GetPartitionsLocation request",
+        {"logPrefix", LogPrefix()},
+        {"queueSize", PartitionsLocationQueue.size()},
+        {"timeout", timeout},
+        {"deadline", PartitionsLocationQueue.back().Deadline});
 
     SchedulePartitionsLocationWakeup(ctx);
 }
@@ -74,7 +78,9 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
         }
 
         if (request.Deadline <= now) {
-            PQ_LOG_D("GetPartitionsLocation request expired, sender=" << request.Sender);
+            YDB_LOG_DEBUG("GetPartitionsLocation request expired",
+                {"logPrefix", LogPrefix()},
+                {"sender", request.Sender});
             SendPartitionsLocationError(request.Sender, ctx);
             continue;
         }
@@ -113,10 +119,12 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
         pResponse->SetNodeId(iter->second.NodeId.GetRef());
         pResponse->SetGeneration(iter->second.Generation.GetRef());
 
-        PQ_LOG_D("The partition location was added to response: TabletId " << tabletId
-                << ", PartitionId " << partitionId
-                << ", NodeId " << pResponse->GetNodeId()
-                << ", Generation " << pResponse->GetGeneration());
+        YDB_LOG_DEBUG("The partition location was added to response",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"partitionId", partitionId},
+            {"nodeId", pResponse->GetNodeId()},
+            {"generation", pResponse->GetGeneration()});
 
         return true;
     };

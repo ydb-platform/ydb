@@ -2,20 +2,11 @@
 #include "interconnect_tcp_proxy.h"
 
 #include <util/stream/str.h>
-#include <util/system/env.h>
 #include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
 
 namespace NActors {
-
-    namespace {
-        // number of io_uring rings/reaper threads the shared engine is created with (overridable for tests)
-        ui32 UringEngineShards() {
-            const TString s = GetEnv("YDB_IC_V2_SHARDS");
-            return s.empty() ? 4 : FromString<ui32>(s);
-        }
-    }
 
     class TInterconnectSessionTCPv2::TDirectSessionV2 final : public IDirectSession {
         TIntrusivePtr<IUringEngine> Engine;
@@ -87,30 +78,21 @@ namespace NActors {
 
         Proxy->Metrics->SetConnected(1);
 
-        // Register the socket with the shared io_uring engine and start driving traffic. Register is a
-        // direct, synchronous call (the engine arms recv under its shard mutex). The engine is created
-        // lazily on first use, so no per-deployment initializer wiring is required.
-        Engine = Proxy->Common->EnsureUringEngineV2(TActivationContext::ActorSystem(), UringEngineShards(),
-            Proxy->Common->MonCounters->GetSubgroup("subsystem", "uring"));
-        if (!Engine) {
-            YDB_LOG_ERROR("v2 io_uring engine is unavailable",
-                {"marker", "ICS99"});
-            return Terminate(TDisconnectReason::LostConnection());
-        }
-
+        // Register the socket with the shared io_uring engine and start driving traffic.
+        Y_ABORT_UNLESS(Proxy->Common->UringEngineV2);
         auto onDisconnectCallback = [selfId = SelfId(), as = TActivationContext::ActorSystem()](TDisconnectReason reason) {
             as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
         };
         SetNonBlock(*Socket, false);
-        EngineHandle = Engine->Register(Socket, SelfId(), Proxy->Common->Settings.ChecksumInterconnectSessionV2,
-            Params.PeerScopeId, onDisconnectCallback);
+        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(),
+            Proxy->Common->Settings.ChecksumInterconnectSessionV2, Params.PeerScopeId, onDisconnectCallback);
         if (!EngineHandle) {
             YDB_LOG_ERROR("v2 io_uring engine failed to register the connection",
                 {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }
 
-        DirectSession = std::make_shared<TDirectSessionV2>(Engine, EngineHandle);
+        DirectSession = std::make_shared<TDirectSessionV2>(Proxy->Common->UringEngineV2, EngineHandle);
     }
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
@@ -140,7 +122,7 @@ namespace NActors {
 
         Proxy->Metrics->SetConnected(0);
 
-        Engine->Unregister(EngineHandle);
+        Proxy->Common->UringEngineV2->Unregister(EngineHandle);
 
         TActor::PassAway();
     }
@@ -181,8 +163,10 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
-        ev->Preserialize();
-        Engine->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
+        if (Proxy->Common->Settings.EnablePreserializeInV2) {
+            ev->Preserialize();
+        }
+        Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
     }
 
     void TInterconnectSessionTCPv2::Forward(STATEFN_SIG) {

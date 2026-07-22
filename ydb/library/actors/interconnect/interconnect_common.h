@@ -89,6 +89,11 @@ namespace NActors {
         // v2 is used only when both peers have this enabled and encryption is not in effect.
         bool EnableInterconnectSessionV2 = false;
         bool ChecksumInterconnectSessionV2 = false;
+        // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
+        bool EnableSQPOLLv2 = true;
+        // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
+        // serialization cost off the engine's shard worker thread).
+        bool EnablePreserializeInV2 = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -187,19 +192,9 @@ namespace NActors {
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         // Shared v2 io_uring data-plane engine for the node (created once at startup when v2 + io_uring
-        // are enabled). Sessions fetch it and call it directly. Guarded because it is published on one
-        // thread and read from session mailbox threads.
-        mutable TMutex UringEngineLock;
+        // are enabled, and bound to the actor system once it exists). Sessions fetch it and call it
+        // directly.
         TIntrusivePtr<IUringEngine> UringEngineV2;
-
-        void SetUringEngineV2(TIntrusivePtr<IUringEngine> engine);
-        TIntrusivePtr<IUringEngine> GetUringEngineV2() const;
-
-        // Returns the node's v2 io_uring engine, creating it lazily on first use and registering it to
-        // be stopped when the actor system stops (via DeferPreStop). Returns null only when io_uring is
-        // unavailable. This keeps the engine working without any per-deployment initializer wiring.
-        TIntrusivePtr<IUringEngine> EnsureUringEngineV2(TActorSystem* actorSystem, ui32 numShards,
-            NMonitoring::TDynamicCounterPtr counters);
 
         // Out-of-line so translation units that construct/destroy Common do not need the complete
         // IUringEngine type (it is only complete in interconnect_common.cpp).

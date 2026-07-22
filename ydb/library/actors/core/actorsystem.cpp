@@ -29,11 +29,22 @@ namespace NActors {
 
     namespace {
         template<class TCallback>
-        void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
-            for (const auto& subsystem : subsystems) {
-                if (subsystem) {
-                    callback(*subsystem);
-                }
+        void ForEachSubSystem(
+                TSubSystems& subsystems,
+                const std::vector<size_t>& order,
+                TCallback&& callback) {
+            for (const size_t index : order) {
+                callback(*subsystems[index]);
+            }
+        }
+
+        template<class TCallback>
+        void ForEachSubSystemReverse(
+                TSubSystems& subsystems,
+                const std::vector<size_t>& order,
+                TCallback&& callback) {
+            for (auto it = order.rbegin(); it != order.rend(); ++it) {
+                callback(*subsystems[*it]);
             }
         }
     }
@@ -474,7 +485,12 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        auto subSystemOrder = ResolveSubSystemDependencies(SubSystems);
+        Y_ABORT_UNLESS(subSystemOrder.has_value(),
+            "cyclic actor subsystem dependency detected");
+        SubSystemOrder = std::move(*subSystemOrder);
+
+        ForEachSubSystem(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnBeforeStart(*this);
         });
 
@@ -517,7 +533,7 @@ namespace NActors {
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystem(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnAfterStart(*this);
         });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
@@ -530,7 +546,7 @@ namespace NActors {
             return;
         }
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnBeforeStop(*this);
         });
 
@@ -543,7 +559,7 @@ namespace NActors {
         Scheduler->Stop();
         CpuManager->Shutdown();
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnAfterStop(*this);
         });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");

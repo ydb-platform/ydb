@@ -98,6 +98,26 @@ class ExpressionRendererTest(unittest.TestCase):
             ),
             (
                 ir.Expr(
+                    kind="div",
+                    args=(one, two),
+                    result_type="Decimal(15,4)",
+                    nullable=False,
+                ),
+                'div(left=literal(type="Int64", value=1), '
+                'right=literal(type="Int64", value=2), '
+                'type="Decimal(15,4)", nullable=false)',
+            ),
+            (
+                ir.Expr(
+                    kind="cast_decimal",
+                    args=(_column(),),
+                    result_type="Decimal(15,4)",
+                    nullable=False,
+                ),
+                'cast_decimal(arg=column("x"), type="Decimal(15,4)", nullable=false)',
+            ),
+            (
+                ir.Expr(
                     kind="opaque",
                     args=(_column(),),
                     result_type="Bool",
@@ -119,6 +139,8 @@ class ExpressionRendererTest(unittest.TestCase):
             render_expression(ir.Expr(kind="eq", args=(_literal(),)))
         with self.assertRaisesRegex(InspectionError, "between 1 and 512 items"):
             render_expression(ir.Expr(kind="in", args=(_column(),)))
+        with self.assertRaisesRegex(InspectionError, "exactly one argument"):
+            render_expression(ir.Expr(kind="cast_decimal", args=()))
 
 
 class OperatorRendererTest(unittest.TestCase):

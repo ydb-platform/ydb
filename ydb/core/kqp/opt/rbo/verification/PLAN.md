@@ -175,8 +175,16 @@ this list requires an explicit totality review and tests.
 One cast shape is normalized before opaque fallback: when YQL cast analysis
 reports a complete conversion from a non-null integer literal to a non-null
 Decimal, the exporter evaluates it and emits the resulting Decimal literal.
-General casts, nullable cast shapes, and non-integer Decimal cast sources fail
-closed.
+An explicit `cast_decimal` node separately models `SafeCast` from a non-null
+exact signed or unsigned 8/16/32/64-bit integer expression to a non-null
+canonical `Decimal(p,s)`. The target descriptor and annotation must agree with
+the result, and the target must retain at least one integral digit. Its exact
+runtime meaning is the integer coefficient scaled by `10^s`, with strict
+`Decimal(p,s)` bounds and signed-infinity saturation. Complete literals remain
+normalized literals; incomplete literals and non-constant admitted expressions
+remain explicit casts. `Convert`, `StrictCast`, nullable source/target/result
+shapes, zero-integral-digit targets, and non-integer Decimal sources fail closed
+outside the existing complete-literal normalization.
 
 The persisted fingerprint is collision-free canonical text rather than a
 machine hash. It length-prefixes node kind, callable and atom bytes, normalized
@@ -234,7 +242,8 @@ order `-Inf < finite values < +Inf < NaN`, reversed for descending. Raw code
 equality makes two NaNs a sort tie. One order item retains one exact canonical
 `Decimal(p,s)` identity without scale alignment; separate tuple keys may have
 different Decimal identities. NULL placement continues to use the pre-physical
-snapshot's explicit `nulls_first` field. Generic division, general casts,
+snapshot's explicit `nulls_first` field. Generic division, casts outside the
+exact integral-`SafeCast` and constant-normalization gates,
 dynamic or otherwise non-core `IN`, and aggregate functions other than the
 bounded `sum` below remain unsupported.
 
@@ -277,13 +286,14 @@ Implementation sequence:
 7. M4: actual column-store filter pushdown from the executed OLAP dialect;
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
-9. M4: exact canonical Decimal `+`, `-`, `DecimalMul`, and `DecimalDiv`;
-10. M4: exact Decimal Sort, TopSort, and Merge ordering;
-11. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
-12. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
+9. M4: exact non-null integral `SafeCast` to Decimal;
+10. M4: exact canonical Decimal `+`, `-`, `DecimalMul`, and `DecimalDiv`;
+11. M4: exact Decimal Sort, TopSort, and Merge ordering;
+12. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
+13. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
     Sort, Merge, and latent sequences;
-13. M4: quantifier-scoped shared-term SMT rendering;
-14. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+14. M4: quantifier-scoped shared-term SMT rendering;
+15. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -537,7 +547,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   or NaN; source and opaque values use the exact legal typed domain. Ordinary
   equality/order, exact-type null-safe equality, Decimal/Decimal and
   Decimal/integer `DataCompare` alignment, precision-cap saturation, and
-  complete non-null integer constant casts are modeled. Canonical same-type
+  complete non-null integer constant casts are modeled. Exact `cast_decimal`
+  additionally covers non-null integral `SafeCast` expressions for every
+  signed and unsigned 8/16/32/64-bit width when the non-null canonical Decimal
+  target/result agree and retain an integral digit; runtime scale multiplication
+  and signed-infinity saturation are explicit. Canonical same-type
   Decimal `+`/`-`, `DecimalMul`, and `DecimalDiv` with a same-type Decimal or
   integer right operand have exact `NDecimal` special, scale, rounding, and
   overflow semantics, including the current negative-divisor asymmetry. Sort,
@@ -545,11 +559,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
   `Decimal(35,s)` and is exact whenever its carried finite bound proves that
   saturating partial addition cannot overflow; unsafe bounds fail closed.
-  General casts, generic division, non-core `IN`, and other aggregate functions
-  remain unsupported. Exhaustive rational, ordering, and aggregate references,
+  Casts outside that gate, generic division, non-core `IN`, and other aggregate
+  functions remain unsupported. Exhaustive cast, rational, ordering, and
+  aggregate references,
   adversarial arithmetic and accumulator-overflow cases, signature and mutation
-  tests, and green real-host Decimal filter, arithmetic, ordered, and aggregate
-  obligations cover this boundary.
+  tests, and green real-host Decimal filter, integral-cast, arithmetic, ordered,
+  and aggregate obligations cover this boundary. TPC-DS q90 exercises two
+  `Uint64` count expressions cast to `Decimal(15,4)` and is
+  `VERIFIED_BOUNDED` at the standard two-row/two-task bound.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -570,7 +587,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
   2026-07-22 complete formula-only baseline emits TPCH q3 (1/22) and TPC-DS q3,
-  q48, q52, q55, q61, q71, q88, q93, and q96 (9/99). Formula emission confirms
+  q48, q52, q55, q61, q71, q88, q90, q93, and q96 (10/99), for 11/121
+  workload queries (9.1%). Formula emission confirms
   end-to-end model coverage at two rows per referenced table and two tasks; it
   is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
@@ -578,9 +596,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
   before allocating its 32768-pair join matrix.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q48, q52, q55, q93, and q96 with a fixed 60-second per-query
-  budget. q48 recorded 175 ms of preparation and 3,028 ms of verification in a
-  proof-floor `VERIFIED_BOUNDED` run. q61's 1,572,871-byte formula and q88 both
+  TPC-DS q3, q48, q52, q55, q90, q93, and q96 with a fixed 60-second per-query
+  budget. q48 recorded 179 ms of preparation and 2,997 ms of verification in a
+  proof-floor `VERIFIED_BOUNDED` run. The same run recorded 227 ms of q90
+  preparation and 7,299 ms of verification before returning
+  `VERIFIED_BOUNDED`. These are eight curated proofs (6.6% of the workload).
+  q61's 1,572,871-byte formula and q88 both
   return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of preparation and 63,897
   ms of verification. q71's 118,276,852-byte formula recorded 100,948 ms in the
   verifier/formula-emission phase of the complete run before a focused solver
@@ -613,7 +634,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the seven curated workload proofs have separate
+- Formula construction and the eight curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

@@ -374,6 +374,76 @@ Y_UNIT_TEST_LLVM(TestCastAndMulTinyInt) {
                                                       });
 }
 
+Y_UNIT_TEST_LLVM(TestIntegralToDecimal) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto result = pb.NewTuple({
+        pb.ToDecimal(NTest::ConvertValueToLiteralNode(pb, i8(-10)), 3, 2),
+        pb.ToDecimal(NTest::ConvertValueToLiteralNode(pb, ui8(9)), 3, 2),
+        pb.ToDecimal(NTest::ConvertValueToLiteralNode(pb, i16(-99)), 4, 2),
+        pb.ToDecimal(NTest::ConvertValueToLiteralNode(pb, ui16(100)), 4, 2),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, std::numeric_limits<i32>::max()),
+            12,
+            2),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, std::numeric_limits<ui32>::max()),
+            12,
+            2),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, i64(-99'999'999'999LL)),
+            15,
+            4),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, i64(-100'000'000'000LL)),
+            15,
+            4),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, ui64(99'999'999'999ULL)),
+            15,
+            4),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, ui64(100'000'000'000ULL)),
+            15,
+            4),
+        pb.ToDecimal(
+            NTest::ConvertValueToLiteralNode(pb, TMaybe<i8>{}),
+            3,
+            2),
+    });
+
+    const auto graph = setup.BuildGraph(result);
+    using TInt128 = NYql::NDecimal::TInt128;
+    using TRow = std::tuple<
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TInt128,
+        TMaybe<TInt128>>;
+    AssertUnboxedValueElementEqual(
+        graph->GetValue(),
+        TRow{
+            -NYql::NDecimal::Inf(),
+            TInt128(900),
+            TInt128(-9900),
+            +NYql::NDecimal::Inf(),
+            TInt128(std::numeric_limits<i32>::max()) * 100,
+            TInt128(std::numeric_limits<ui32>::max()) * 100,
+            TInt128(-99'999'999'999LL) * 10'000,
+            -NYql::NDecimal::Inf(),
+            TInt128(99'999'999'999ULL) * 10'000,
+            +NYql::NDecimal::Inf(),
+            TMaybe<TInt128>{},
+        });
+}
+
 Y_UNIT_TEST_LLVM(TestLongintMul) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;

@@ -759,6 +759,77 @@ NJson::TJsonValue DecimalConstantCastExpr(const TExprNode& node) {
     return DecimalValueExpr(resultType, *parameters, source.Child(0)->Content());
 }
 
+TString CheckIntegralDecimalSafeCastCallable(const TExprNode& node) {
+    if (!node.IsCallable("SafeCast")) {
+        Unsupported("Integral Decimal cast must use SafeCast");
+    }
+    CheckScalarArity(node, 2, 2);
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    const auto parameters = ParseCanonicalDecimalType(resultType);
+    if (!parameters || resultNullable) {
+        Unsupported(
+            "Integral Decimal SafeCast must have a non-nullable canonical Decimal result");
+    }
+    if (parameters->Precision == parameters->Scale) {
+        Unsupported(
+            "Integral Decimal SafeCast target must have at least one integral digit");
+    }
+
+    const auto targetAnnotation = node.Child(1)->GetTypeAnn();
+    if (!targetAnnotation) {
+        Unsupported("Integral Decimal SafeCast target is missing its Type annotation");
+    }
+    if (targetAnnotation->GetKind() != ETypeAnnotationKind::Type) {
+        Unsupported("Integral Decimal SafeCast target annotation is not Type");
+    }
+
+    bool targetNullable = false;
+    const TString targetType = DataTypeDescriptorName(*node.Child(1), &targetNullable);
+    bool annotationNullable = false;
+    if (TypeName(
+            targetAnnotation->Cast<TTypeExprType>()->GetType(),
+            &annotationNullable) != targetType ||
+        annotationNullable != targetNullable)
+    {
+        Unsupported(
+            "Integral Decimal SafeCast target annotation disagrees with its descriptor");
+    }
+    if (targetNullable || targetType != resultType) {
+        Unsupported(
+            "Integral Decimal SafeCast target does not match its non-nullable result");
+    }
+
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(*node.Child(0), &sourceNullable);
+    if (sourceNullable || !IsIntegerType(sourceType)) {
+        Unsupported(
+            "Integral Decimal SafeCast source must be a non-nullable exact integer");
+    }
+
+    return resultType;
+}
+
+bool IsCompleteIntegerLiteralDecimalCast(const TExprNode& node) {
+    const auto& source = *node.Child(0);
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    if (sourceNullable ||
+        !IsIntegerType(sourceType) ||
+        !source.IsCallable() ||
+        source.Content() != sourceType ||
+        source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom())
+    {
+        return false;
+    }
+
+    LiteralExpr(source);
+    return CastResult<false>(source.GetTypeAnn(), node.GetTypeAnn()) ==
+        NUdf::ECastOptions::Complete;
+}
+
 struct TDecimalArithmeticSignature {
     TString ResultType;
     bool ResultNullable;
@@ -938,6 +1009,10 @@ void CheckOpaqueCallable(const TExprNode& node) {
 
     if (name == "SafeCast" || name == "Convert") {
         if (ParseCanonicalDecimalType(ScalarTypeName(node))) {
+            if (name == "SafeCast") {
+                CheckIntegralDecimalSafeCastCallable(node);
+                return;
+            }
             DecimalConstantCastExpr(node);
             return;
         }
@@ -1157,7 +1232,30 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
-    if (node.IsCallable({"SafeCast", "Convert"}) &&
+    if (node.IsCallable("SafeCast") &&
+        ParseCanonicalDecimalType(ScalarTypeName(node)))
+    {
+        const TString resultType = CheckIntegralDecimalSafeCastCallable(node);
+        if (IsCompleteIntegerLiteralDecimalCast(node)) {
+            return DecimalConstantCastExpr(node);
+        }
+
+        // Retain the closed-world node checks used by opaque expressions while
+        // assigning this reviewed cast shape an exact verifier meaning.
+        TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+
+        auto result = JsonMap();
+        result["kind"] = "cast_decimal";
+        result["arg"] = ExportExprNode(
+            *node.Child(0),
+            rowArgument,
+            visibleColumns);
+        result["type"] = resultType;
+        result["nullable"] = false;
+        return result;
+    }
+
+    if (node.IsCallable("Convert") &&
         ParseCanonicalDecimalType(ScalarTypeName(node)))
     {
         return DecimalConstantCastExpr(node);

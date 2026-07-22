@@ -146,6 +146,19 @@ class Encoder:
                 _wrap_integer(raw, expression.result_type),
             )
 
+        if expression.kind == "cast_decimal":
+            assert expression.result_type is not None
+            argument = self.evaluate(expression.args[0], row)
+            return Value(
+                expression.result_type,
+                smt.FALSE,
+                decimal.cast_integral(
+                    argument.value,
+                    argument.type,
+                    expression.result_type,
+                ),
+            )
+
         if expression.kind == "opaque":
             return self._evaluate_opaque(expression, row)
 

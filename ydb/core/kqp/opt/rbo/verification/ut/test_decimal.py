@@ -17,6 +17,10 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder, Value
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
+    INTEGER_TYPES,
+    integer_bounds,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem, solve
 
 
@@ -288,6 +292,100 @@ def _arithmetic_snapshot(kind, staged, right=None):
             "assumptions": [],
         }
     return parse_snapshot(value)
+
+
+def _cast_snapshot(staged, argument=None):
+    argument = argument or {"kind": "column", "column": "a.i"}
+    value = {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "A",
+                    "columns": [
+                        {"name": "i", "type": "Int8", "nullable": False},
+                    ],
+                    "unique_keys": [],
+                }
+            ]
+        },
+        "plan": {
+            "nodes": [
+                {
+                    "id": "scan",
+                    "op": "scan",
+                    "table": "A",
+                    "columns": [{"source": "i", "output": "a.i"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "project",
+                    "op": "project",
+                    "input": "scan",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": "cast_decimal",
+                                "arg": argument,
+                                "type": "Decimal(3,2)",
+                                "nullable": False,
+                            },
+                        }
+                    ],
+                },
+            ],
+            "root": "project",
+            "output": ["result"],
+        },
+        "stage_graph": None,
+    }
+    if staged:
+        value["stage_graph"] = {
+            "root_stage": "project_stage",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "scan"}],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "project_stage",
+                    "nodes": ["project"],
+                    "inputs": ["scan"],
+                    "outputs": [{"index": 0, "node": "project"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "map",
+                    "producer": "source",
+                    "consumer": "project_stage",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "map",
+                }
+            ],
+            "assumptions": [],
+        }
+    return parse_snapshot(value)
+
+
+def _ref_integral_cast(value, precision, scale):
+    """Independent integer oracle for the audited YDB cast subset."""
+
+    coefficient = value * 10**scale
+    bound = 10**precision
+    if -bound < coefficient < bound:
+        return coefficient
+    return decimal.INF if coefficient > 0 else -decimal.INF
 
 
 def _ref_value(code, scalar_type):
@@ -631,6 +729,75 @@ class DecimalKernelTest(unittest.TestCase):
                         smt.ONE,
                         result_type,
                         right_type,
+                    )
+
+    def test_integral_cast_matches_independent_boundary_and_overflow_oracle(self):
+        result_types = (
+            "Decimal(1,0)",
+            "Decimal(3,2)",
+            "Decimal(19,0)",
+            "Decimal(20,0)",
+            "Decimal(35,34)",
+        )
+        for source_type in sorted(INTEGER_TYPES):
+            lower, upper = integer_bounds(source_type)
+            source_values = {
+                lower,
+                lower + 1,
+                0,
+                1,
+                upper - 2,
+                upper - 1,
+                -10,
+                -9,
+                9,
+                10,
+            }
+            source_values = tuple(value for value in source_values if lower <= value < upper)
+            for result_type in result_types:
+                result = decimal.parse_type(result_type)
+                assert result is not None
+                for value in source_values:
+                    with self.subTest(
+                        source_type=source_type,
+                        result_type=result_type,
+                        value=value,
+                    ):
+                        actual = decimal.cast_integral(
+                            smt.int_value(value),
+                            source_type,
+                            result_type,
+                        )
+                        self.assertEqual(
+                            _ground(actual),
+                            _ref_integral_cast(value, result.precision, result.scale),
+                        )
+
+        # Exhausting both 8-bit domains makes the strict +/-10 boundary for
+        # Decimal(3,2), zero, and both overflow signs independent of samples.
+        for source_type in ("Int8", "Uint8"):
+            lower, upper = integer_bounds(source_type)
+            for value in range(lower, upper):
+                actual = decimal.cast_integral(
+                    smt.int_value(value),
+                    source_type,
+                    "Decimal(3,2)",
+                )
+                self.assertEqual(_ground(actual), _ref_integral_cast(value, 3, 2))
+
+    def test_integral_cast_kernel_rejects_broadened_shapes(self):
+        for source_type, result_type, message in (
+            ("Bool", "Decimal(3,2)", "source is not integral"),
+            ("Date", "Decimal(3,2)", "source is not integral"),
+            ("Int8", "Int64", "result is not Decimal"),
+            ("Int8", "Decimal(3,3)", "at least one integral digit"),
+        ):
+            with self.subTest(source_type=source_type, result_type=result_type):
+                with self.assertRaisesRegex(ValueError, message):
+                    decimal.cast_integral(
+                        smt.ONE,
+                        source_type,
+                        result_type,
                     )
 
     def test_arithmetic_specials_zero_and_precision_overflow_are_explicit(self):
@@ -1055,6 +1222,108 @@ class DecimalIrTest(unittest.TestCase):
                     (kind, result_type, nullable),
                 )
 
+    def test_exact_non_null_integral_decimal_cast_gate_is_admitted(self):
+        for source_type in sorted(INTEGER_TYPES):
+            value = _snapshot({"kind": "literal", "type": "Bool", "value": True})
+            value["schema"]["tables"][0]["columns"][2]["type"] = source_type
+            cast = {
+                "kind": "cast_decimal",
+                "arg": {"kind": "column", "column": "a.i"},
+                "type": "Decimal(3,2)",
+                "nullable": False,
+            }
+            value["plan"]["nodes"][1]["predicate"] = {
+                "kind": "eq",
+                "left": cast,
+                "right": {
+                    "kind": "literal",
+                    "type": "Decimal(3,2)",
+                    "value": {"kind": "finite", "scaled": "0"},
+                },
+            }
+            with self.subTest(source_type=source_type):
+                expression = parse_snapshot(value).plan.nodes[1].predicate.args[0]
+                self.assertEqual(
+                    (expression.kind, expression.result_type, expression.nullable),
+                    ("cast_decimal", "Decimal(3,2)", False),
+                )
+
+    def test_integral_decimal_cast_ir_fails_closed(self):
+        base = {
+            "kind": "cast_decimal",
+            "arg": {"kind": "column", "column": "a.i"},
+            "type": "Decimal(3,2)",
+            "nullable": False,
+        }
+
+        def snapshot(cast):
+            return _snapshot(
+                {
+                    "kind": "eq",
+                    "left": cast,
+                    "right": {
+                        "kind": "literal",
+                        "type": "Decimal(3,2)",
+                        "value": {"kind": "finite", "scaled": "0"},
+                    },
+                }
+            )
+
+        cases = []
+        decimal_source = copy.deepcopy(base)
+        decimal_source["arg"]["column"] = "a.d"
+        cases.append(
+            ("Decimal source", snapshot(decimal_source), "source must be integral")
+        )
+
+        for source_type in ("Bool", "Date", "String"):
+            non_integral_source = snapshot(copy.deepcopy(base))
+            non_integral_source["schema"]["tables"][0]["columns"][2]["type"] = source_type
+            cases.append(
+                (
+                    f"{source_type} source",
+                    non_integral_source,
+                    "source must be integral",
+                )
+            )
+
+        nullable_source = snapshot(copy.deepcopy(base))
+        nullable_source["schema"]["tables"][0]["columns"][2]["nullable"] = True
+        cases.append(("nullable source", nullable_source, "source must be non-nullable"))
+
+        non_decimal = copy.deepcopy(base)
+        non_decimal["type"] = "Int64"
+        non_decimal_snapshot = snapshot(non_decimal)
+        non_decimal_snapshot["plan"]["nodes"][1]["predicate"]["right"] = {
+            "kind": "literal",
+            "type": "Int64",
+            "value": 0,
+        }
+        cases.append(("non-Decimal result", non_decimal_snapshot, "canonical Decimal type"))
+
+        no_integral_digit = copy.deepcopy(base)
+        no_integral_digit["type"] = "Decimal(3,3)"
+        no_integral_snapshot = snapshot(no_integral_digit)
+        no_integral_snapshot["plan"]["nodes"][1]["predicate"]["right"]["type"] = "Decimal(3,3)"
+        cases.append(("no integral digit", no_integral_snapshot, "at least one integral digit"))
+
+        nullable_result = copy.deepcopy(base)
+        nullable_result["nullable"] = True
+        cases.append(("nullable result", snapshot(nullable_result), "must be non-nullable"))
+
+        extra_field = copy.deepcopy(base)
+        extra_field["source_type"] = "Int32"
+        cases.append(("unknown field", snapshot(extra_field), "unknown fields"))
+
+        missing_arg = copy.deepcopy(base)
+        del missing_arg["arg"]
+        cases.append(("missing arg", snapshot(missing_arg), "missing fields"))
+
+        for label, value, message in cases:
+            with self.subTest(case=label):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(value)
+
     def test_unaudited_decimal_arithmetic_shapes_fail_closed(self):
         base = {
             "kind": "mul",
@@ -1183,6 +1452,42 @@ class DecimalIrTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class DecimalVerificationTest(unittest.TestCase):
+    def test_integral_cast_survives_normal_initial_to_stage_verification(self):
+        result = solve(
+            build_problem(
+                _cast_snapshot(staged=False),
+                _cast_snapshot(staged=True),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_integral_cast_argument_mutation_produces_counterexample(self):
+        incremented = {
+            "kind": "add",
+            "left": {"kind": "column", "column": "a.i"},
+            "right": {"kind": "literal", "type": "Int8", "value": 1},
+            "type": "Int8",
+            "nullable": False,
+        }
+        result = solve(
+            build_problem(
+                _cast_snapshot(staged=False),
+                _cast_snapshot(staged=True, argument=incremented),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertEqual(len(result.witness["A"]), 1)
+
     def test_arithmetic_survives_normal_initial_to_stage_verification(self):
         for kind in ("add", "sub", "mul", "div"):
             result = solve(

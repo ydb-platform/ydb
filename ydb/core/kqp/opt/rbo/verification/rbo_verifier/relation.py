@@ -987,7 +987,7 @@ def combine_families(
     ] = [
         (smt.TRUE, (), (), ())
     ]
-    for family in families:
+    for relation_family in families:
         expanded: list[
             tuple[
                 smt.Term,
@@ -997,7 +997,7 @@ def combine_families(
             ]
         ] = []
         for enabled, relations, decisions, choices in partials:
-            for outcome in family.outcomes:
+            for outcome in relation_family.outcomes:
                 merged = _merge_decisions(decisions, outcome.decisions)
                 if merged is None:
                     continue

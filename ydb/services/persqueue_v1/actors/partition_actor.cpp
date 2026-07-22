@@ -1522,14 +1522,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         return;
 
     if (record.GetSessionInvalidated()) {
-        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, unlock partition for next read",
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, close read session",
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
-            {"partition", Partition});
-        EndOffset = record.GetEndOffset();
-        SizeLag = record.GetSizeLag();
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
+            {"partition", Partition},
+            {"session", Session});
+        Counters.Errors.Inc();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            TStringBuilder() << "status is not ok: no such session '" << Session << "'",
+            ConvertOldCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION)));
         return;
     }
 

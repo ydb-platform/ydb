@@ -106,6 +106,9 @@ SRCS(
     schemeshard__find_subdomain_path_id.cpp
     schemeshard__fix_bad_paths.cpp
     schemeshard__init.cpp
+    schemeshard__init_loaders.cpp
+    schemeshard__init_read_everything.cpp
+    schemeshard__init_restore.cpp
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp

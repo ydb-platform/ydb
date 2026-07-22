@@ -19,10 +19,14 @@ and bounded symbolic input tables
 and Eval(initial RBO plan) != Eval(final StageGraph program)
 ```
 
-Unordered Limit, Sort ties, and Merge interleavings make evaluation a finite
-family of enabled bags or sequences. Equality is mutual inclusion of the two
-families. Shared-DAG choices remain correlated, while distinct stage-task
-executions are independent.
+Unordered Limit produces a finite family of enabled bags. Small ordered choices
+may also stay as explicit sequence families, while larger Sort, Merge, and latent
+sequence choices use bounded symbolic row ordinals. Equality is mutual inclusion
+of the two result languages: one side supplies a candidate sequence and the
+other side's ordinal choices are quantified when testing membership. Shared-DAG
+choices remain correlated, while distinct stage-task executions are independent.
+Every ordinal ranges only over the fixed candidate-row vector, so this removes
+factorial construction without broadening the bounded verification claim.
 
 Results have five distinct meanings:
 
@@ -87,6 +91,13 @@ transformation-prefix localization logic. The kernel emits inspectable SMT-LIB a
 explicit Z3-compatible solver executable; it does not import ambient Python
 packages. Hermetic tests resolve the separately built, pinned Z3 executable;
 the solver is not linked into `ydbd`.
+
+SMT terms form an immutable DAG. The renderer gives each quantifier body its own
+scope and emits repeated compound terms once through hygienic, dependency-ordered
+SMT `let` bindings. It never lifts a term across a quantifier that binds one of
+its symbols. This preserves the direct mathematical obligation while avoiding
+textual duplication in large ordered queries; the sharing transformation is an
+exact rendering step, not a solver hint or semantic approximation.
 
 ## Scalar expressions
 
@@ -231,7 +242,9 @@ declared-type bound and can only make verification fail closed.
 
 Each base table has a fixed number of symbolic row slots. A slot contains a
 presence Boolean and one nullable value per column. Plans produce fixed vectors
-of guarded rows.
+of guarded rows. Rows also carry structural occurrence provenance and routing
+facts used only for exact StageGraph normalization; neither annotation changes
+SQL values or multiplicity.
 
 Implementation sequence:
 
@@ -247,7 +260,10 @@ Implementation sequence:
 9. M4: exact canonical Decimal `+`, `-`, and `DecimalMul`;
 10. M4: exact Decimal Sort, TopSort, and Merge ordering;
 11. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
-12. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+12. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
+    Sort, Merge, and latent sequences;
+13. M4: quantifier-scoped shared-term SMT rendering;
+14. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -272,18 +288,24 @@ Limit observers of one shared unordered stream remain unsupported until a
 common latent-order model is added. Ordered Limit is deterministic, while
 Aggregate, Join, and UnionAll establish new unordered streams.
 
-Sort enumerates every permutation of the bounded row slots and enables exactly
-those satisfying the lexicographic `(column, ascending, nulls-first)` order.
-This preserves every legal tie ordering. A non-null Sort limit is TopSort and
-applies the same ordered prefix semantics after sorting. Sort and Limit phases
-are preserved but do not independently change the modeled runtime semantics.
-If the initial root is ordered, results are compared as compressed sequences;
-otherwise they are compared as bags.
+For a small candidate vector, Sort may enumerate every permutation and enable
+exactly the lexicographically sorted ones. When that expansion would cross the
+ordinary outcome cap, Sort instead assigns one bounded integer ordinal to every
+row slot. Present rows have in-range, pairwise-distinct ordinals; key comparisons
+constrain their relative ordinals, while ties remain unconstrained. Absent rows
+do not occupy a compressed position. This is the same finite sequence language
+with quadratic constraints rather than factorial outcomes. A non-null Sort
+limit is TopSort and applies an exact prefix by compressed ordinal rank. Sort and
+Limit phases are preserved but do not independently change the modeled runtime
+semantics. If the initial root is ordered, results are compared as compressed
+sequences; otherwise they are compared as bags.
 
-All explicit families fail closed above 256 alternatives. This cap includes
-unordered-Limit choices, Sort permutations, Merge interleavings, latent
-sequence expansion, and family products/gathers. Cross-plan equality fails
-closed above 4096 outcome pairs. Neither cap is approximated.
+Explicit outcome families still fail closed above 256 alternatives. The cap
+applies to unordered-Limit masks, small enumerated ordered choices, and family
+products/gathers. Large Sort, Merge, and latent-sequence choices switch to the
+exact ordinal representation before factorial expansion; the number of row
+slots itself remains bounded. Cross-plan equality fails closed above 4096
+explicit outcome pairs. Neither cap is approximated.
 
 ## StageGraph semantics
 
@@ -305,8 +327,19 @@ Stage-local operators execute independently on each task. The final collection
 then projects `TOpRoot::ColumnOrder`.
 
 Merge requires every producer task to carry an order compatible with the edge
-order. It enumerates exactly the sorted interleavings that preserve each
-producer sequence; incompatible metadata and unordered inputs fail closed.
+order. Small cases may enumerate sorted producer-order-preserving interleavings.
+Larger cases assign result ordinals and constrain them by both sort keys and the
+input ordinals within each producer. Incompatible metadata and unordered inputs
+fail closed.
+
+Source placement and HashShuffle create guarded task copies of one logical row
+occurrence. At a non-Merge multi-task gather, opposite facts for the same routing
+choice prove those copies mutually exclusive, so the evaluator can coalesce them into
+one guarded occurrence and use exact conditional values when task-local state
+differs. Broadcast copies have no contradictory routing fact and retain their
+bag multiplicity. Unknown provenance also remains uncompacted. This
+occurrence/routing normalization removes task-copy blow-up without identifying
+rows that can coexist.
 
 Logical `TOpUnionAll` and a `TUnionAllConnection` are different IR nodes and
 receive different semantics.
@@ -385,6 +418,13 @@ A C++ `NDecimal::Add` oracle locks the overflow non-associativity that requires
 the headroom gate, the exporter test locks `Decimal(7,2)` to `Decimal(35,2)`
 widening across intermediate/final phases, and a real-host query proves the
 split two-row/two-task aggregate obligation.
+Symbolic-order tests compare the represented sequence sets with exhaustive
+finite enumeration, exercise 48-slot construction, and retain direction, NULL,
+tie, producer-order, TopSort, and mutation cases. Routing-compaction tests keep
+distinct occurrences and broadcast multiplicity while checking exact guarded
+values for exclusive task copies. SMT tests lock typed quantifier shadowing,
+hygienic dependency-ordered `let` bindings, and the rule that shared terms in a
+quantified body stay inside that scope.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -431,7 +471,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Local join execution and final gather.
 - Wrong-shuffle and wrong-broadcast mutation tests.
 - Exact bounded Merge execution with input-order validation, tie-preserving
-  sorted interleavings, and wrong-order mutation tests.
+  explicit or symbolic producer-order-preserving interleavings, and wrong-order
+  mutation tests.
+- Occurrence- and routing-aware gather compaction for mutually exclusive source
+  and shuffle task copies, while broadcast multiplicity and distinct occurrences
+  remain explicit.
 - Independent exhaustive concrete routing references for every admitted
   non-Merge connection and representative local-join combinations.
 
@@ -444,7 +488,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Unordered literal Limit/offset, split per-task execution, and column-source
   pushed limits, with exhaustive and mutation tests.
 - Sort/TopSort, ordered Limit, and Merge, with exhaustive concrete differential
-  tests, family-cap tests, and order/limit/phase mutation tests.
+  tests, bounded symbolic ordinals beyond the small explicit-family threshold,
+  and order/limit/phase mutation tests.
 - A real-host ordered test captures logical Sort+Limit and the transformed
   per-task TopSort+Merge+final-Limit program, then constructs or solves the
   normal equivalence obligation.
@@ -495,21 +540,20 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
-- The Decimal milestone moves TPC-DS q48 through strict initial/final export and
-  emits its two-row/two-task SMT obligation. This is formula coverage, not a
-  solver proof; the focused formula-only run took 365116 ms and no Z3 executable
-  was present.
-- Focused Decimal-arithmetic, ordering, and SUM corpus reruns move the affected
-  TPCH and TPC-DS queries past `DecimalMul`, `+`, `-`, Decimal order keys, and
-  the widened partial/final aggregate. TPCH q3 and TPC-DS q3, q52, q55, and q93
-  now reach the verifier's 256-alternative factorial Sort bound. TPC-DS q71 has
-  48 candidate aggregate slots at the current catalog bound; constructing its
-  first 257 permutation outcomes was stopped after 4m28s at about 531 MiB RSS.
-  No additional formula is emitted: the complete floors remain TPCH 0/22 and
-  TPC-DS 3/99. A non-factorial exact Sort encoding is the common next gate.
+- Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
+  shared-term rendering remove the former factorial construction gate. The
+  2026-07-22 complete formula-only baseline emits TPCH q3 (1/22) and TPC-DS q3,
+  q48, q52, q55, q71, q88, q93, and q96 (8/99). Formula emission confirms
+  end-to-end model coverage at two rows per referenced table and two tasks; it
+  is not a proof by itself.
+- Focused solver runs produce `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
+  q55, q93, and q96. TPC-DS q48 remains formula-only, q88 remains `UNKNOWN` at
+  60 seconds, and q71's 118,276,852-byte formula took 80,359 ms to construct in
+  the complete run before a focused solver attempt reached the external process
+  deadline. No optimizer correctness bug is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
-  commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
-  and explicit unsupported/optimizer-failure inventory.
+  commands, complete formula-only baseline, focused solver evidence, q88
+  investigation, and explicit unsupported/optimizer-failure inventory.
 
 ### M5: confirmation and localization — in progress
 

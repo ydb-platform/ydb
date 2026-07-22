@@ -6,11 +6,11 @@
   "suites": {
     "TPCH_YQL": {
       "query_count": 22,
-      "required_formula_queries": []
+      "required_formula_queries": [3]
     },
     "TPCDS_YQL": {
       "query_count": 99,
-      "required_formula_queries": [48, 88, 96]
+      "required_formula_queries": [3, 48, 52, 55, 71, 88, 93, 96]
     }
   }
 }

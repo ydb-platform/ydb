@@ -967,10 +967,12 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     Y_UNIT_TEST(PolicyFileMatchesFixedContract) {
         const auto policy = LoadCoveragePolicy();
         UNIT_ASSERT_VALUES_EQUAL(policy.Suites.size(), 2);
-        UNIT_ASSERT(policy.Suites.at(Tpch.Name).RequiredFormulaQueries.empty());
+        UNIT_ASSERT(
+            policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
+            std::set<ui32>({3}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({48, 88, 96}));
+            std::set<ui32>({3, 48, 52, 55, 71, 88, 93, 96}));
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -989,8 +991,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         const TMap<ui32, TString> statuses = {
             {1, "FORMULA_EMITTED"},
+            {3, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
+            {52, "FORMULA_EMITTED"},
+            {55, "FORMULA_EMITTED"},
+            {71, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
+            {93, "FORMULA_EMITTED"},
             {96, "FORMULA_EMITTED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
@@ -1003,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.Violations.empty());
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 48, 88, 96}));
+            std::set<ui32>({1, 3, 48, 52, 55, 71, 88, 93, 96}));
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
@@ -1013,8 +1020,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected.insert(queryId);
         }
         const TMap<ui32, TString> statuses = {
+            {3, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
+            {52, "FORMULA_EMITTED"},
+            {55, "FORMULA_EMITTED"},
+            {71, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
+            {93, "FORMULA_EMITTED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
@@ -1042,7 +1054,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto focused = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {48, 88, 96},
+            {3, 48, 52, 55, 71, 88, 93, 96},
             statuses,
             false);
         UNIT_ASSERT(!focused.Enforced);

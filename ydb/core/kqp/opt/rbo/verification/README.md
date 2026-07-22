@@ -17,6 +17,13 @@ command and sequential localizer are implemented outside the verifier kernel.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
+The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
+q48, q52, q55, q71, q88, q93, and q96: 9/121 workload queries. Focused solver
+runs return `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52, q55, q93, and
+q96. TPC-DS q48 has formula-construction coverage only, q71 reached the external
+solver process deadline, and q88 is `UNKNOWN`; no optimizer correctness bug has been
+confirmed. These results all retain the two-row-per-table/two-task and
+pre-physical-boundary qualifications described below.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -35,8 +42,18 @@ parallel UnionAll uses the runtime's cross-input round-robin offset, and a
 broadcast-only stage uses one task just as KQP task construction does. Invalid
 connection combinations are rejected. Merge has one consumer task, validates
 that every producer stream has an order compatible with the edge order, and
-enumerates the sorted interleavings that preserve every producer sequence. The
-final stage is gathered before root column projection.
+represents every sorted interleaving that preserves each producer sequence. It
+uses explicit interleavings for small inputs and bounded symbolic ordinals once
+enumeration would cross the ordinary outcome cap. The final stage is gathered
+before root column projection.
+
+Rows carry structural occurrence provenance and facts about symbolic source or
+hash routing. When a non-Merge gather sees task copies of the same occurrence
+with contradictory routing facts, those guards are mutually exclusive and the copies
+can be coalesced exactly, including conditional task-local values. Broadcast
+copies have no such proof and retain their bag multiplicity; distinct or unknown
+occurrences also remain separate. This keeps routed StageGraphs compact without
+silently deduplicating SQL rows.
 
 The exporter and decoder both validate the StageGraph independently: plan nodes
 partition into stages, each stage has one logical sink, every cross-stage child
@@ -176,11 +193,15 @@ In particular, the current lowering does not visibly preserve
 that contract is clarified.
 
 Sort order is an exact, non-empty sequence of `(column, ascending,
-nulls_first)` entries. The bounded evaluator enumerates every permutation of the
-input row slots and enables exactly the lexicographically sorted ones, retaining
-all legal tie orders. A non-null Sort `limit` is TopSort and applies an exact
-ordered prefix after sorting. Sort and Limit phases (`undefined`,
-`intermediate`, and `final`) are preserved but are not otherwise semantic.
+nulls_first)` entries. Small inputs are represented by explicit permutations.
+For larger inputs, the bounded evaluator gives each candidate row an integer
+ordinal: present-row ordinals are in range and pairwise distinct, and strict key
+comparisons imply the corresponding ordinal order. Tied keys remain free in
+either order, so the symbolic encoding denotes the same complete sequence set
+without factorial expansion. A non-null Sort `limit` is TopSort and applies an
+exact prefix by compressed ordinal rank after sorting. Sort and Limit phases
+(`undefined`, `intermediate`, and `final`) are preserved but are not otherwise
+semantic.
 Project nodes carry the exact `TOpMap::Ordered` Boolean. Both `ordered: true`
 and `ordered: false` currently preserve an input sequence and compatible order
 metadata. This matches RBO's streaming WideMap lowering; retaining the exact
@@ -190,8 +211,18 @@ Limit on an ordered input takes the exact `offset:offset+count` slice of the
 compressed present-row sequence. If the initial root is ordered, equivalence is
 sequence equality; an unordered initial root retains bag equality. The Merge
 encoding is exact within the declared row/task/family bounds: it rejects an
-unordered or differently ordered producer and enumerates all sorted,
-producer-order-preserving interleavings.
+unordered or differently ordered producer and represents all sorted,
+producer-order-preserving interleavings. Symbolic Merge ordinals preserve the
+relative input ordinals within each producer as well as the output sort order.
+
+Ordinal variables are bounded by the fixed candidate-row vector. When result
+languages are compared, one side's choices describe a candidate sequence and
+the other side's choices are existentially quantified inside the membership
+test; the reverse direction is checked as well. The SMT renderer shares repeated
+DAG terms through hygienic, dependency-ordered `let` bindings separately inside
+each quantifier scope, never hoisting an expression past a binder. These are
+exact finite encodings and rendering transformations, not unbounded ordering
+proofs or semantic approximations.
 
 `String` and `Utf8` remain equality-only uninterpreted atoms. Date is an exact
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
@@ -269,10 +300,11 @@ descriptors, and unknown operations fail closed. The predicate filters raw scan
 rows before symbolic source partitioning and any per-task pushed limit.
 
 Every explicit outcome family is capped at 256 alternatives, including
-unordered-Limit choices, Sort permutations, Merge interleavings, latent
-sequence expansion, Cartesian products, and gathers. Cross-plan bag or sequence
-equality is capped at 4096 outcome pairs. Exceeding either audit bound returns
-`UNSUPPORTED` rather than approximating.
+unordered-Limit choices, small enumerated sequence choices, Cartesian products,
+and gathers. Sort, Merge, and latent sequences switch to bounded symbolic
+ordinals before a large factorial expansion. Cross-plan bag or sequence equality
+is capped at 4096 explicit outcome pairs. Exceeding either remaining audit bound
+returns `UNSUPPORTED` rather than approximating.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:

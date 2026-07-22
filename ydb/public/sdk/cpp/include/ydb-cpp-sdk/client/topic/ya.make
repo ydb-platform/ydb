@@ -20,6 +20,7 @@ SRCS(
     write_events.h
     write_session.h
     producer.h
+    ydb_topic_deferred_publish.h
 )
 
 PEERDIR(

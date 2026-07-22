@@ -26,6 +26,12 @@ struct TTestMessage {
     std::optional<TTransactionId> Tx;
 };
 
+struct TTestMessageWithWriteContext {
+    TInstant CreatedAt;
+    std::vector<std::pair<std::string, std::string>> MessageMeta;
+    std::variant<std::monostate, TTransactionId, TDeferredPublication> WriteContext;
+};
+
 void FillMetadata(
         Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& message,
         const std::vector<std::pair<std::string, std::string>>& metadata) {
@@ -42,6 +48,22 @@ void FillTx(Ydb::Topic::StreamWriteMessage::WriteRequest& request, const std::op
     }
     request.mutable_tx()->set_id(tx->TxId);
     request.mutable_tx()->set_session(tx->SessionId);
+}
+
+void FillWriteContext(
+        Ydb::Topic::StreamWriteMessage::WriteRequest& request,
+        const std::variant<std::monostate, TTransactionId, TDeferredPublication>& writeContext) {
+    if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+        FillTx(request, *tx);
+        return;
+    }
+    if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+        auto* proto = request.mutable_deferred_publish();
+        proto->set_int_publication_id(deferred->IntPublicationId);
+        if (deferred->ExtPublicationId) {
+            proto->set_ext_publication_id(*deferred->ExtPublicationId);
+        }
+    }
 }
 
 size_t BuildTopicWriteRequestBlockSize(
@@ -165,6 +187,39 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
         const size_t estimate = NGrpc::EstimateTopicWriteRequestBlockSize(block, messages, true);
         const size_t actual = BuildTopicWriteRequestBlockSize(block, messages, true);
         AssertEstimateCloseToActual(estimate, actual);
+    }
+
+    Y_UNIT_TEST(EstimateTopicWriteRequestDeferredPublishSize) {
+        const std::string data = "deferred-payload";
+        TTestBlock block;
+        block.MessageCount = 1;
+        block.CodecID = static_cast<ui32>(ECodec::RAW);
+        block.OriginalSize = data.size();
+        block.OriginalDataRefs = {data};
+
+        const TDeferredPublication deferred{
+            .IntPublicationId = 42,
+            .ExtPublicationId = std::string(128, 'x'),
+        };
+        std::vector<TTestMessageWithWriteContext> messages = {{
+            .CreatedAt = TInstant::MilliSeconds(123456789),
+            .MessageMeta = {{"meta-key", "meta-value"}},
+            .WriteContext = deferred,
+        }};
+
+        Ydb::Topic::StreamWriteMessage::WriteRequest request;
+        request.set_codec(static_cast<i32>(block.CodecID));
+        FillWriteContext(request, messages.front().WriteContext);
+        auto* message = request.add_messages();
+        message->set_seq_no(-1);
+        *message->mutable_created_at() =
+            google::protobuf::util::TimeUtil::MillisecondsToTimestamp(messages.front().CreatedAt.MilliSeconds());
+        FillMetadata(*message, messages.front().MessageMeta);
+        message->set_uncompressed_size(static_cast<i64>(block.OriginalSize));
+        message->set_data(block.OriginalDataRefs.front().data(), block.OriginalDataRefs.front().size());
+
+        const size_t estimate = NGrpc::EstimateTopicWriteRequestBlockSize(block, messages, true);
+        AssertEstimateCloseToActual(estimate, request.ByteSizeLong());
     }
 }
 

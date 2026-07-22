@@ -150,7 +150,17 @@ void TDDiskDataCopier::StartCopyRange()
     DirtyMap->SetFlushWatermark(Destination, futureWatermark);
 
     auto readHint = DirtyMap->MakeReadHint(range);
-    Y_ABORT_UNLESS(!readHint.RangeHints.empty());
+    if (readHint.RangeHints.empty()) {
+        auto waitReadyFuture = readHint.WaitReady;
+        Y_ABORT_UNLESS(!waitReadyFuture.HasValue());
+        waitReadyFuture.Subscribe(
+            [self = shared_from_this()](const NThreading::TFuture<void>& f)
+            {
+                Y_UNUSED(f);
+                self->StartCopyRange();
+            });
+        return;
+    }
 
     const ui64 requestId = Random();
     std::shared_ptr<TReadBlocksLocalRequest> readRequest =

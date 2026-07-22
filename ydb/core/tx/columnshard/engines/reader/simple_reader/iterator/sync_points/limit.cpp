@@ -75,24 +75,24 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
                 return item.GetSourceIdx() == source->GetSourceIdx();
             }) != UnfilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
-                    "source_idx", source->GetSourceIdx());
+                    "back", UnfilledIterators.back().DebugString())(
+                    "source", source->GetAs<IDataSource>()->GetStartPKRecordBatch().DebugString())("source_idx", source->GetSourceIdx());
         } else if (FindIf(FilledIterators, [&](const auto& item) {
                        return item.GetSourceIdx() == source->GetSourceIdx();
                    }) != FilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
-                    "source_idx", source->GetSourceIdx());
+                    "back", UnfilledIterators.back().DebugString())(
+                    "source", source->GetAs<IDataSource>()->GetStartPKRecordBatch().DebugString())("source_idx", source->GetSourceIdx());
         } else {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
-                    "source_idx", source->GetSourceIdx());
+                    "back", UnfilledIterators.back().DebugString())(
+                    "source", source->GetAs<IDataSource>()->GetStartPKRecordBatch().DebugString())("source_idx", source->GetSourceIdx());
         }
     }
 
     UnfilledIterators.pop_front();
 
-    const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
+    const auto& rk = *Context->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
 
     if (g && g->GetRecordsCount()) {
@@ -135,8 +135,7 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "idx=" << Source->GetSourceIdx() << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetAs<TPortionDataSource>()->GetStart().DebugString() << ";";
-    sb << "finish=" << Source->GetAs<TPortionDataSource>()->GetFinish().DebugString() << ";";
+    sb << "start=" << Source->GetAs<IDataSource>()->GetStartPKRecordBatch().DebugString() << ";";
     return sb;
 }
 

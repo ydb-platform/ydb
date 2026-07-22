@@ -336,6 +336,58 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         Cerr << rawBytes3 << "/" << bytes3 << "/" << count3 << Endl;
     }
 
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        for (ui64 i = 0; i < 10; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto tableClient = kikimr.GetTableClient();
+        // ORDER BY must be a PK prefix of the sys view (PathId, TabletId, PortionId, InternalEntityId, ChunkIdx)
+        // so that the scan is executed as sorted with the limit pushed down to the columnshard.
+        auto allRows = ExecuteScanQuery(tableClient, R"(
+            SELECT PathId, TabletId, PortionId
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            ORDER BY PathId, TabletId, PortionId
+        )");
+        UNIT_ASSERT_GE(allRows.size(), 10);
+
+        const ui32 limit = 3;
+        {
+            auto rows = ExecuteScanQuery(tableClient, Sprintf(R"(
+                SELECT PathId, TabletId, PortionId
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                ORDER BY PathId, TabletId, PortionId
+                LIMIT %u
+            )", limit));
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), limit);
+            for (ui32 i = 0; i < limit; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("TabletId")), GetUint64(allRows[i].at("TabletId")));
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(allRows[i].at("PortionId")));
+            }
+        }
+        {
+            auto rows = ExecuteScanQuery(tableClient, Sprintf(R"(
+                SELECT PathId, TabletId, PortionId
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                ORDER BY PathId DESC, TabletId DESC, PortionId DESC
+                LIMIT %u
+            )", limit));
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), limit);
+            for (ui32 i = 0; i < limit; ++i) {
+                const auto& expected = allRows[allRows.size() - 1 - i];
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("TabletId")), GetUint64(expected.at("TabletId")));
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
+            }
+        }
+    }
+
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;

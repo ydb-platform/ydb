@@ -711,6 +711,8 @@ macho_syminfo (struct backtrace_state *state, uintptr_t addr,
 {
   struct macho_syminfo_data *sdata;
   struct macho_symbol *sym;
+  void *mdata;
+  struct backtrace_moredata md;
 
   sym = NULL;
   if (!state->threaded)
@@ -747,10 +749,20 @@ macho_syminfo (struct backtrace_state *state, uintptr_t addr,
 	}
     }
 
-  if (sym == NULL)
-    callback (data, addr, NULL, 0, 0);
+  if (!state->moredata)
+    mdata = data;
   else
-    callback (data, addr, sym->name, sym->address, 0);
+    {
+      memset (&md, 0, sizeof md);
+      md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+      md.backtrace_data = data;
+      mdata = (void *) &md;
+    }
+
+  if (sym == NULL)
+    callback (mdata, addr, NULL, 0, 0);
+  else
+    callback (mdata, addr, sym->name, sym->address, 0);
 }
 
 /* Look through a fat file to find the relevant executable.  Returns 1

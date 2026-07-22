@@ -8,8 +8,8 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
-ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, and
-exact Decimal comparison/arithmetic/ordering, and benchmark-dashboard parts of
+ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, exact
+Decimal comparison/arithmetic/ordering/SUM, and benchmark-dashboard parts of
 M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
@@ -197,15 +197,25 @@ producer-order-preserving interleavings.
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
 Merge. Decimal has exact literals, its legal typed domain, and the comparison
 and arithmetic semantics above, plus exact raw-code Sort/TopSort/Merge ordering.
-Decimal division, general casts, static `IN`, and aggregate functions remain
-unsupported. String and Utf8 sort keys therefore return `UNSUPPORTED` during
-strict validation instead of inventing an ordering.
+Decimal division, general casts, static `IN`, and aggregate functions other
+than the bounded `sum` below remain unsupported. String and Utf8 sort keys
+therefore return `UNSUPPORTED` during strict validation instead of inventing an
+ordering.
 
-The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
-grouping and inputs, and optimizer-generated intermediate/final phases. Signed
-inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both sums use
-the runtime's exact 64-bit modular overflow. A column-storage source is split
-into symbolic source tasks before a pushed intermediate aggregate executes.
+The aggregate subset covers grouped and scalar `count`, integer `sum`, and
+Decimal `sum`, including NULL grouping and inputs and optimizer-generated
+intermediate/final phases. Signed inputs widen to `Int64`, unsigned inputs widen
+to `Uint64`, and both integer sums use the runtime's exact 64-bit modular
+overflow. `sum(Decimal(p,s))` widens every input, partial state, and result to
+`Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
+
+Decimal `AggrAdd` saturates each intermediate result and is not associative when
+finite overflow is possible. The verifier therefore carries a conservative
+absolute finite-code bound through partial states and admits a Decimal sum only
+when the total bound is strictly below `10^35`. Within that headroom every row
+order and distributed parenthesization has the same exact result; otherwise the
+query fails closed. A column-storage source is split into symbolic source tasks
+before a pushed intermediate aggregate executes.
 The optimizer's canonical `COUNT(*)` extractor is represented by the exact
 zero-child, typed `Void` expression and evaluated as one non-null unit value;
 it may pass through routing and relational operators, but every path must
@@ -365,6 +375,9 @@ A Decimal arithmetic query checks `+`, `-`, same-type multiplication, integer-
 right multiplication, and YQL's normalization of the reversed SQL spelling at
 both boundaries, then proves the two-row/two-task obligation. All equivalent
 real-host fixtures require `VERIFIED_BOUNDED` from the hermetic solver. A
+Decimal aggregate query checks the `Decimal(7,2)` to `Decimal(35,2)` widening,
+undefined/intermediate/final `sum` phases, and serial partial-state UnionAll,
+then proves its two-row/two-task obligation. A
 separate Decimal ordered query covers logical Sort+Limit and the transformed
 per-task TopSort+Merge+final-Limit path. That proof ends before physical
 lowering, consistent with the boundary caveat above.

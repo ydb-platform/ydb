@@ -946,6 +946,88 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesDecimalSumPhases) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateDecimalColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT SUM(D) AS Total
+                FROM `/Root/RboDecimal`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertSum = [](
+            const NJson::TJsonValue& aggregate,
+            TStringBuf phase,
+            TStringBuf input)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(
+                aggregate["phase"].GetStringSafe(),
+                phase);
+            const auto& traits = aggregate["aggregates"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(traits.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(traits[0]["input"].GetStringSafe(), input);
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["function"].GetStringSafe(),
+                "sum");
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["type"].GetStringSafe(),
+                "Decimal(35,2)");
+            UNIT_ASSERT(traits[0]["nullable"].GetBooleanSafe());
+        };
+
+        const auto initialAggregates = PlanNodes(initial, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(initialAggregates.size(), 1);
+        assertSum(*initialAggregates.front(), "undefined", "/Root/RboDecimal.D");
+
+        const auto finalAggregates = PlanNodes(final, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(finalAggregates.size(), 2);
+        const NJson::TJsonValue* intermediate = nullptr;
+        const NJson::TJsonValue* finalAggregate = nullptr;
+        for (const auto* aggregate : finalAggregates) {
+            const TString phase = (*aggregate)["phase"].GetStringSafe();
+            if (phase == "intermediate") {
+                intermediate = aggregate;
+            } else if (phase == "final") {
+                finalAggregate = aggregate;
+            }
+        }
+        UNIT_ASSERT(intermediate);
+        UNIT_ASSERT(finalAggregate);
+        assertSum(*intermediate, "intermediate", "/Root/RboDecimal.D");
+        const TString partialOutput =
+            (*intermediate)["aggregates"][0]["output"].GetStringSafe();
+        assertSum(*finalAggregate, "final", partialOutput);
+
+        const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "union_all");
+        UNIT_ASSERT(!edges[0]["parallel"].GetBooleanSafe());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesDecimalTopSortAndMerge) {
         auto kikimr = MakeTpcdsRunner();
         CreateDecimalColumnTable(kikimr);

@@ -70,6 +70,15 @@ def is_type(scalar_type: str) -> bool:
     return parse_type(scalar_type) is not None
 
 
+def sum_type(input_type: str) -> str | None:
+    """YQL SUM state/result type for a Decimal input."""
+
+    decimal_type = parse_type(input_type)
+    if decimal_type is None:
+        return None
+    return f"Decimal({MAX_PRECISION},{decimal_type.scale})"
+
+
 def parse_scaled_integer(value: str) -> int:
     if not _SCALED_INTEGER.fullmatch(value):
         raise ValueError("scaled Decimal value is not a canonical signed integer")
@@ -161,6 +170,64 @@ def subtract(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     """Exact same-type YQL Decimal subtraction."""
 
     return _add_or_subtract("sub", left, right, result_type)
+
+
+def sum_with_headroom(
+    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
+    result_type: str,
+    finite_abs_bound: int,
+) -> smt.Term:
+    """Reduce YDB Decimal aggregate inputs with proven finite headroom.
+
+    ``AggrAdd`` saturates each intermediate result and is not associative when
+    finite overflow is possible.  Requiring the sum of absolute finite-input
+    bounds to be strictly below the result precision makes every reduction
+    order agree: NaN is absorbing, opposite infinities produce NaN, one
+    infinity sign wins, and finite codes add exactly.
+    """
+
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"not a Decimal type: {result_type!r}")
+    if decimal_type.precision != MAX_PRECISION:
+        raise ValueError("Decimal SUM result must have maximum precision")
+    if type(finite_abs_bound) is not int or not (
+        0 <= finite_abs_bound < 10**decimal_type.precision
+    ):
+        raise ValueError("Decimal SUM finite bound has insufficient headroom")
+
+    active_nan = []
+    active_pos_inf = []
+    active_neg_inf = []
+    finite_terms = []
+    for guard, value in guarded_values:
+        active_nan.append(smt.and_(guard, smt.eq(value, smt.int_value(NAN))))
+        active_pos_inf.append(smt.and_(guard, smt.eq(value, smt.int_value(INF))))
+        active_neg_inf.append(smt.and_(guard, smt.eq(value, smt.int_value(-INF))))
+        finite_terms.append(
+            smt.ite(
+                smt.and_(guard, _normal(value, decimal_type.precision)),
+                value,
+                smt.ZERO,
+            )
+        )
+
+    has_nan = smt.or_(*active_nan)
+    has_pos_inf = smt.or_(*active_pos_inf)
+    has_neg_inf = smt.or_(*active_neg_inf)
+    return smt.ite(
+        smt.or_(has_nan, smt.and_(has_pos_inf, has_neg_inf)),
+        smt.int_value(NAN),
+        smt.ite(
+            has_pos_inf,
+            smt.int_value(INF),
+            smt.ite(
+                has_neg_inf,
+                smt.int_value(-INF),
+                smt.add(*finite_terms),
+            ),
+        ),
+    )
 
 
 def multiply(

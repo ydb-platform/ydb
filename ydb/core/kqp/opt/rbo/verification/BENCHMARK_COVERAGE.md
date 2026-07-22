@@ -110,9 +110,10 @@ not regress a required formula-only query.
 
 This baseline was rerun on 2026-07-21 in formula-only mode; therefore its three
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`.
-Later focused Decimal-arithmetic and ordering reruns updated the affected
-reasons below. All selected queries remained unsupported, so the complete-suite
-counts and query sets are unchanged.
+Later focused Decimal-arithmetic, ordering, and SUM reruns updated the affected
+reasons below. All selected queries remained unsupported or did not finish
+formula construction, so the complete-suite counts and query sets are
+unchanged.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -143,7 +144,7 @@ verifier:
 
 | Verifier-level unsupported reason | Queries |
 |---|---|
-| Decimal `sum` | q3 |
+| Sort permutations exceed the 256-alternative audit bound | q3 |
 
 Exact Date literals and ordering removed the previous Date blockers without
 changing the 0/22 formula count: these deeper scalar and OLAP blockers were
@@ -151,12 +152,12 @@ then exposed. Restricted static `IN` similarly removed the first blocker from
 q12 and q19, and exact Decimal comparison moved q19 to the narrower constant-
 cast gate, without yet changing the formula count.
 
-Exact Decimal arithmetic and ordering remove `DecimalMul` and the Decimal sort
-key as q3's first blockers; both snapshots now export and the verifier reaches
-unsupported Decimal `sum`. q5 reaches initial `Map` and a final OLAP
-non-callable; q8 reaches `Map` at both boundaries; and q10 reaches initial
-`Map` and a final OLAP non-callable. All four remain unsupported, so TPCH stays
-at 0/22 formulas.
+Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
+sort key, and the widened partial/final aggregate as q3's first blockers. Both
+snapshots now export and the verifier reaches the 256-alternative factorial
+Sort bound. q5 reaches initial `Map` and a final OLAP non-callable; q8 reaches
+`Map` at both boundaries; and q10 reaches initial `Map` and a final OLAP
+non-callable. All four remain unsupported, so TPCH stays at 0/22 formulas.
 
 ### TPC-DS inventory
 
@@ -190,12 +191,14 @@ one reason because both snapshots are audited independently.
 | Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
 | Type `Interval` | q37, q72, q77, q80, q82 | q72 |
 
-Five queries now pass both C++ export boundaries and fail in the trusted
-verifier:
+Four queries now pass both C++ export boundaries and fail in the trusted
+verifier. A fifth, q71, reaches the same evaluator but does not reach a verdict
+before the current factorial construction becomes impractical:
 
 | Verifier-level unsupported reason | Queries |
 |---|---|
-| Decimal `sum` | q3, q52, q55, q71, q93 |
+| Sort permutations exceed the 256-alternative audit bound | q3, q52, q55, q93 |
+| Sort construction scalability: 48 candidate slots, no verdict | q71 |
 
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
@@ -204,9 +207,12 @@ formula, while q13, q21, q28, q31, q37, q40, q43, q61, q65, q74, q82, q85,
 and q91 reach the deeper cast, scalar, OLAP, arithmetic, type, or ordering
 reasons shown above. The formula-only count is now 3/99.
 
-Focused arithmetic and ordering reruns remove the old `+`, `-`, `DecimalMul`,
-and Decimal sort-key blockers without increasing formula coverage. q3, q52,
-q55, q71, and q93 now stop at verifier-level Decimal `sum`; q11 and q61 at
+Focused arithmetic, ordering, and SUM reruns remove the old `+`, `-`,
+`DecimalMul`, Decimal sort-key, and Decimal aggregate blockers without
+increasing formula coverage. q3, q52, q55, and q93 now stop at the verifier's
+256-alternative Sort bound. q71 expands to 48 aggregate candidate slots; its
+attempt to construct the first 257 permutation outcomes was stopped after
+4m28s at about 531 MiB, before a verdict or report. q11 and q61 stop at
 `DecimalDiv`; q64 at String Sort; q65 at the initial Decimal constant-cast gate
 and final String Sort; q75 at the initial constant-cast gate and final `Double`;
 and q80 at initial `Interval` and a final OLAP non-callable. q91's final Decimal
@@ -235,6 +241,13 @@ TPC-DS therefore remains at 3/99 formulas (q48, q88, and q96).
   no opaque scalar functions and no longer produces that candidate; Z3 returns
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
+
+- Exact Decimal SUM moves TPCH q3 and TPC-DS q3, q52, q55, and q93 to the
+  common factorial Sort bound. Their focused prepare/verification times in
+  milliseconds were q3 TPCH 126/2164, q3 TPC-DS 110/2855, q52 95/2874, q55
+  89/3800, and q93 123/6580. TPC-DS q71 did not produce a report under the
+  current construction. These are deeper coverage observations, not new
+  formulas or bounded proofs.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

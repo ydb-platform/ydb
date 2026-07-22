@@ -1014,7 +1014,7 @@ def _sum_type(input_type: str) -> str | None:
         return "Int64"
     if input_type in {"Uint8", "Uint16", "Uint32", "Uint64"}:
         return "Uint64"
-    return None
+    return decimal.sum_type(input_type)
 
 
 def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_name: str) -> bool:

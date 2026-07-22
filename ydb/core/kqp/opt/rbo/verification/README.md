@@ -14,7 +14,9 @@ ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
 optional Decimal, exact Decimal semantics for comparison, integral casts,
 arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
-parts of M4.
+parts of M4. The exporter also exactly folds the reviewed constant
+String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape and erases
+the corresponding direct Date-literal OLAP `just` wrapper.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -25,18 +27,24 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The 2026-07-22 complete current-code formula-only dashboard establishes formula
-construction for TPCH q3 and q19 plus TPC-DS q3, q15, q19, q42, q48, q50, q52,
-q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99: 20/121 workload
-queries (16.5%). The checked-in solver proof floor returns
+The 2026-07-22 complete current-code formula-only dashboard establishes
+formula construction for TPCH q3 and q19 plus TPC-DS q3, q15, q19, q37, q40,
+q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96,
+and q99: 23/121 workload queries (19.0%). Formula emission means that both
+snapshots were modeled and SMT was constructed; it is not a solver proof. The
+checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55,
 q90, q93, and q96: ten obligations (8.3%
 of the workload). Focused q19 took 116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
-q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. q76 is
-formula-covered, not part of the proof floor. None is evidence of an optimizer
+q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. The new q37 and
+q82 obligations are likewise `UNKNOWN` at 60 seconds. A separate non-gating
+q40 experiment with a 10-second solver budget reported `SOLVER_ERROR` after the
+external solver exceeded its 15.0-second process deadline; the focused `ya`
+experiment failed on that status as designed. All three are formula-covered,
+not proved, and not part of the proof floor. None is evidence of an optimizer
 correctness bug.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPC-DS q65: both snapshots must continue to export and reach the verifier.
@@ -253,11 +261,34 @@ literals, numeric overflow saturates to signed infinity, and underflow can round
 to zero. Successful casts become existing Decimal literal nodes, so this
 milestone changes neither the snapshot IR nor the Python decoder/evaluator.
 
-Focused real-workload capture confirms the next closed boundaries. TPC-DS q21
-and q40 now reach initial scalar type `Interval` and final OLAP unary operation
-`just`. q65 exports both snapshots, then the verifier rejects unmodeled
-aggregate `avg` after 231 ms of preparation and 255 ms of verifier work. The
-formula slice therefore remains 20/121 and the proof floor remains ten.
+A third constant normalization covers only Optional-Date arithmetic of the
+form `SafeCast(text, Optional<Date>) +/- Apply(udf, days)`. The text must be a
+direct non-null `String` or `Utf8` literal. The cast result and descriptor must
+be exactly `Optional<Date>`, and YQL cast analysis must classify it as the
+reviewed `MayFail` conversion. The right side must be the strict normalized
+eight-child `DateTime2.IntervalFromDays` UDF applied to a direct non-null
+`Int32` literal in `[-49672, 49672]`, with its callable annotations, cached
+descriptor, Void fields, empty configuration/file alias, and `blocks, strict`
+settings all matching exactly. Other Date arithmetic remains unsupported.
+
+The exporter parses the Date with MiniKQL `ValueFromString`, applies the signed
+day offset, and reuses an existing typed Date literal or NULL node. An invalid
+Date or a result outside `[0, 49673)` becomes typed Date NULL, matching runtime
+optional arithmetic. No Interval snapshot node or Python evaluator extension
+is introduced. At the pushed-OLAP boundary, `just` is erased only around a
+direct, valid, non-null Date literal; nullable, malformed, dynamic, or non-Date
+arguments fail closed.
+
+This exact fold moves TPC-DS q37, q40, and q82 through formula construction.
+The complete current-code dashboard therefore covers 23/121 queries (19.0%);
+the solver proof floor remains ten. q37 and q82 are `UNKNOWN` at a 60-second
+solver budget. A separate non-gating q40 scaling experiment retained a
+97,319,076-byte formula but reported `SOLVER_ERROR` after the external solver
+exceeded its 15.0-second process deadline; it is neither a proof nor a
+counterexample. q5, q80, and q84 now expose unsupported `Concat`; q21 exposes
+`Double`; q72 still has a dynamic Date-fold
+`SafeCast(Optional<Date>)` mismatch; and q77 passes export but fails the
+verifier's Decimal-SUM headroom gate.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -279,7 +310,7 @@ This expansion removes TPC-DS q8's former `Uint64 > Int32` snapshot blocker.
 The focused real-host run prepared q8 in 480 ms, then failed closed before
 verifier construction (`verify_ms = 0`) on unsupported scalar callable
 `Unwrap` at both the initial and final boundaries. It therefore changes neither
-the 20/121 formula-construction slice nor the ten-query proof floor.
+the current 23/121 formula-construction slice nor the ten-query proof floor.
 
 Ordinary Decimal `=`, `<`, `<=`, `>`, and `>=` are strict on NULL; NaN makes
 every ordinary comparison false, and infinities participate in the YDB order.

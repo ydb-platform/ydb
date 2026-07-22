@@ -11,6 +11,7 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/utf8.h>
@@ -1595,6 +1596,269 @@ void CheckScalarSafetyMetadata(const TExprNode& node) {
     }
 }
 
+bool IsExactDataAnnotation(
+    const TTypeAnnotationNode* annotation,
+    NUdf::EDataSlot slot,
+    bool nullable)
+{
+    bool optional = false;
+    const TDataExprType* data = nullptr;
+    return annotation &&
+        IsDataOrOptionalOfData(annotation, optional, data) && data &&
+        optional == nullable && data->GetSlot() == slot &&
+        !dynamic_cast<const TDataExprParamsType*>(data);
+}
+
+const TTypeAnnotationNode& DescribedType(
+    const TExprNode& node,
+    TStringBuf label)
+{
+    const auto annotation = node.GetTypeAnn();
+    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Type ||
+        !annotation->Cast<TTypeExprType>()->GetType())
+    {
+        Unsupported(TStringBuilder() << label << " has no exact Type annotation");
+    }
+    return *annotation->Cast<TTypeExprType>()->GetType();
+}
+
+void CheckDataDescriptor(
+    const TExprNode& node,
+    NUdf::EDataSlot slot,
+    bool nullable,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!IsExactDataAnnotation(&DescribedType(node, label), slot, nullable)) {
+        Unsupported(TStringBuilder() << label << " annotation disagrees with its descriptor");
+    }
+
+    const TExprNode* data = &node;
+    if (nullable) {
+        if (!node.IsCallable("OptionalType") || node.ChildrenSize() != 1) {
+            Unsupported(TStringBuilder() << label << " is not exact OptionalType");
+        }
+        data = node.Child(0);
+        CheckScalarSafetyMetadata(*data);
+        if (!IsExactDataAnnotation(&DescribedType(*data, label), slot, false)) {
+            Unsupported(TStringBuilder() << label << " item annotation disagrees");
+        }
+    }
+    const TStringBuf name = NUdf::GetDataTypeInfo(slot).Name;
+    if (!data->IsCallable("DataType") || data->ChildrenSize() != 1 ||
+        !data->Child(0)->IsAtom(name))
+    {
+        Unsupported(TStringBuilder() << label << " does not describe " << name);
+    }
+}
+
+void CheckVoidNode(const TExprNode& node, bool typeDescriptor, TStringBuf label) {
+    CheckScalarSafetyMetadata(node);
+    const bool exact = typeDescriptor
+        ? node.IsCallable("VoidType") && node.ChildrenSize() == 0 &&
+            DescribedType(node, label).GetKind() == ETypeAnnotationKind::Void
+        : node.IsCallable("Void") && node.ChildrenSize() == 0 &&
+            node.GetTypeAnn() &&
+            node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void;
+    if (!exact) {
+        Unsupported(TStringBuilder() << label << " is not exact Void");
+    }
+}
+
+const TCallableExprType& IntervalFromDaysType(
+    const TTypeAnnotationNode* annotation,
+    TStringBuf label)
+{
+    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Callable) {
+        Unsupported(TStringBuilder() << label << " is not Callable");
+    }
+    const auto& callable = *annotation->Cast<TCallableExprType>();
+    const auto& args = callable.GetArguments();
+    if (!IsExactDataAnnotation(
+            callable.GetReturnType(), NUdf::EDataSlot::Interval, true) ||
+        callable.GetOptionalArgumentsCount() != 0 ||
+        !callable.GetPayload().empty() || args.size() != 1 ||
+        !IsExactDataAnnotation(args[0].Type, NUdf::EDataSlot::Int32, false) ||
+        !args[0].Name.empty() ||
+        args[0].Flags != NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+    {
+        Unsupported(TStringBuilder() << label
+            << " is not (Int32{AutoMap}) -> Optional<Interval>");
+    }
+    return callable;
+}
+
+void CheckCachedIntervalFromDaysType(
+    const TExprNode& node,
+    const TCallableExprType& udfType)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("CallableType") || node.ChildrenSize() != 3 ||
+        !IsSameAnnotation(
+            IntervalFromDaysType(
+                &DescribedType(node, "cached IntervalFromDays type"),
+                "cached IntervalFromDays type"),
+            udfType))
+    {
+        Unsupported("IntervalFromDays cached CallableType disagrees with Udf");
+    }
+
+    const auto& main = *node.Child(0);
+    const auto& result = *node.Child(1);
+    const auto& argument = *node.Child(2);
+    CheckScalarSafetyMetadata(main);
+    CheckScalarSafetyMetadata(result);
+    CheckScalarSafetyMetadata(argument);
+    if (!main.IsList() || main.ChildrenSize() != 0 ||
+        !result.IsList() || result.ChildrenSize() != 1 ||
+        !argument.IsList() || argument.ChildrenSize() != 3 ||
+        !argument.Child(1)->IsAtom("") || !argument.Child(2)->IsAtom("1"))
+    {
+        Unsupported("IntervalFromDays cached CallableType is not canonical");
+    }
+    CheckDataDescriptor(
+        *result.Child(0), NUdf::EDataSlot::Interval, true, "Udf return type");
+    CheckDataDescriptor(
+        *argument.Child(0), NUdf::EDataSlot::Int32, false, "Udf argument type");
+}
+
+bool IsExactSetting(const TExprNode& node, TStringBuf name) {
+    CheckScalarSafetyMetadata(node);
+    return node.IsList() && node.ChildrenSize() == 1 &&
+        node.Child(0)->IsAtom(name);
+}
+
+const TCallableExprType& CheckIntervalFromDaysUdf(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Udf") || node.ChildrenSize() != 8 ||
+        !node.Child(0)->IsAtom("DateTime2.IntervalFromDays") ||
+        !node.Child(3)->IsAtom("") || !node.Child(6)->IsAtom(""))
+    {
+        Unsupported("IntervalFromDays requires its normalized eight-child Udf");
+    }
+    const auto& callable = IntervalFromDaysType(
+        node.GetTypeAnn(), "IntervalFromDays Udf");
+    CheckVoidNode(*node.Child(1), false, "Udf run config");
+    CheckVoidNode(*node.Child(2), true, "Udf user type");
+    CheckCachedIntervalFromDaysType(*node.Child(4), callable);
+    CheckVoidNode(*node.Child(5), true, "Udf run-config type");
+
+    const auto& settings = *node.Child(7);
+    CheckScalarSafetyMetadata(settings);
+    if (!settings.IsList() || settings.ChildrenSize() != 2 ||
+        !IsExactSetting(*settings.Child(0), "blocks") ||
+        !IsExactSetting(*settings.Child(1), "strict"))
+    {
+        Unsupported("IntervalFromDays settings are not exactly blocks, strict");
+    }
+    return callable;
+}
+
+std::optional<ui16> ParseDateSafeCast(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported("Date fold requires SafeCast with Optional<Date> result");
+    }
+    CheckDataDescriptor(
+        *node.Child(1), NUdf::EDataSlot::Date, true, "Date SafeCast target");
+
+    const auto& source = *node.Child(0);
+    CheckScalarSafetyMetadata(source);
+    bool nullable = false;
+    const TString type = ScalarTypeName(source, &nullable);
+    if (nullable || !IsStringType(type) || !source.IsCallable(type) ||
+        source.ChildrenSize() != 1 || !source.Child(0)->IsAtom())
+    {
+        Unsupported("Date SafeCast source is not a direct String or Utf8 literal");
+    }
+    LiteralExpr(source);
+    const auto& dateType = DescribedType(
+        *node.Child(1)->Child(0), "Date SafeCast item");
+    if (CastResult<false>(source.GetTypeAnn(), &dateType) !=
+        NUdf::ECastOptions::MayFail)
+    {
+        Unsupported("Date SafeCast is not the reviewed MayFail conversion");
+    }
+
+    const TStringBuf text = source.Child(0)->Content();
+    const auto value = NKikimr::NMiniKQL::ValueFromString(
+        NUdf::EDataSlot::Date, NUdf::TStringRef(text.data(), text.size()));
+    return value.HasValue()
+        ? std::optional<ui16>(value.Get<ui16>())
+        : std::nullopt;
+}
+
+i32 ParseIntervalFromDays(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Interval, true))
+    {
+        Unsupported("Date fold requires Apply with Optional<Interval> result");
+    }
+    const auto& callable = CheckIntervalFromDaysUdf(*node.Child(0));
+    if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType())) {
+        Unsupported("IntervalFromDays Apply result disagrees with its Udf");
+    }
+
+    const auto& days = *node.Child(1);
+    CheckScalarSafetyMetadata(days);
+    if (!days.IsCallable("Int32") || days.ChildrenSize() != 1 ||
+        !days.Child(0)->IsAtom() ||
+        !IsExactDataAnnotation(days.GetTypeAnn(), NUdf::EDataSlot::Int32, false) ||
+        !IsSameAnnotation(*days.GetTypeAnn(), *callable.GetArguments()[0].Type))
+    {
+        Unsupported("IntervalFromDays argument is not a direct Int32 literal");
+    }
+    LiteralExpr(days);
+    const i32 value = ParseInteger<i32>(
+        days.Child(0)->Content(), "IntervalFromDays Int32");
+    constexpr i32 MaxDays = static_cast<i32>(NUdf::MAX_DATE - 1);
+    if (value < -MaxDays || value > MaxDays) {
+        Unsupported(TStringBuilder() << "IntervalFromDays argument is outside ["
+            << -MaxDays << ", " << MaxDays << "]");
+    }
+    return value;
+}
+
+// This is a closed normalization, not general Date/Interval support: both
+// operands must be the exact constant shapes validated above.
+NJson::TJsonValue ConstantDateIntervalExpr(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported("Date/Interval fold requires Optional<Date> arithmetic");
+    }
+    const auto date = ParseDateSafeCast(*node.Child(0));
+    const i32 days = ParseIntervalFromDays(*node.Child(1));
+    if (date) {
+        const i64 value = static_cast<i64>(*date) +
+            (node.IsCallable("+") ? static_cast<i64>(days) : -static_cast<i64>(days));
+        if (value >= 0 && value < static_cast<i64>(NUdf::MAX_DATE)) {
+            auto result = JsonMap();
+            result["kind"] = "literal";
+            result["type"] = "Date";
+            result["value"] = static_cast<ui64>(value);
+            return result;
+        }
+    }
+    auto result = JsonMap();
+    result["kind"] = "null";
+    result["type"] = "Date";
+    return result;
+}
+
+bool IsDateArithmetic(const TExprNode& node) {
+    bool nullable = false;
+    const TDataExprType* data = nullptr;
+    return node.IsCallable({"+", "-"}) && node.GetTypeAnn() &&
+        IsDataOrOptionalOfData(node.GetTypeAnn(), nullable, data) && data &&
+        data->GetSlot() == NUdf::EDataSlot::Date;
+}
+
 class TOpaqueExpressionEncoder {
 public:
     TOpaqueExpressionEncoder(
@@ -1934,6 +2198,10 @@ NJson::TJsonValue ExportExprNode(
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
+    }
+
+    if (IsDateArithmetic(node)) {
+        return ConstantDateIntervalExpr(node);
     }
 
     if (node.IsCallable("Decimal")) {
@@ -2699,6 +2967,20 @@ NJson::TJsonValue ExportOlapUnary(
     }
 
     const TString op(operation.Operator().StringValue());
+    if (op == "just") {
+        const auto& argument = operation.Arg().Ref();
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(argument);
+        if (!argument.IsCallable("Date") ||
+            !IsExactDataAnnotation(
+                argument.GetTypeAnn(), NUdf::EDataSlot::Date, false))
+        {
+            Unsupported(
+                "OLAP just may erase only a direct non-null Date literal");
+        }
+        budget.Charge(normalizedDepth);
+        return LiteralExpr(argument);
+    }
     if (op != "exists" && op != "empty") {
         Unsupported(TStringBuilder() << "Unsupported OLAP unary operation " << op);
     }

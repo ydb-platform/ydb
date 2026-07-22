@@ -117,6 +117,8 @@ The explicit scalar core initially contains:
 - canonical Decimal `+` and `-` with same-type operands, plus `DecimalMul` with
   a same-type Decimal or integer right operand, all with exact `NDecimal`
   specials, rounding, overflow, and strict NULL propagation;
+- exact constant Optional-Date `+`/`-` folding for a direct String/Utf8-literal
+  `SafeCast` and the strict normalized `DateTime2.IntervalFromDays` UDF shape;
 - restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
   recursively supported, non-null expressions of one item type; that type is
   identical to the lookup or uses a deliberately separate lossless
@@ -312,6 +314,25 @@ Version-one `Date` is the exact unsigned day-since-epoch domain
 non-null opaque Date results receive explicit domain constraints, and same-type
 comparison, Sort, and Merge use integer day ordering.
 
+The exporter additionally normalizes one complete constant Date expression,
+rather than introducing Interval into the snapshot IR. The left operand must be
+a direct non-null String/Utf8 literal `SafeCast` whose result, target descriptor,
+outer annotation, and item annotation are exactly `Optional<Date>` and whose
+YQL cast classification is `MayFail`. The right operand must be an `Apply` of
+the strict normalized eight-child `DateTime2.IntervalFromDays` UDF to a direct
+non-null `Int32` literal in `[-49672, 49672]`. Its callable/cached annotations,
+AutoMap flag, Void run configuration and user types, empty type configuration
+and file alias, and ordered `blocks, strict` settings must all agree exactly.
+Only Optional-Date `+` and `-` with that operand order enter the gate.
+
+MiniKQL `ValueFromString` is the parser oracle. A valid Date plus the signed day
+offset becomes an existing Date literal; parser failure or a result outside
+`[0, NUdf::MAX_DATE)` becomes existing typed Date NULL. The pushed OLAP
+`just` wrapper is erased only around a direct valid non-null Date literal.
+Dynamic, nullable, malformed, differently annotated, or otherwise noncanonical
+forms fail closed. Because the whole expression is evaluated by the exporter,
+no Interval node or Python evaluator semantics are added.
+
 Canonical `Decimal(p,s)` uses YDB's scaled-integer representation. Finite
 values satisfy `-10^p < code < 10^p`; negative infinity, positive infinity, and
 NaN are the only other legal codes. Snapshot literals tag these four cases
@@ -405,7 +426,10 @@ Implementation sequence:
 17. M4: exact all-pairs ordinary integral `DataCompare`;
 18. M4: exact direct String/Utf8-literal `SafeCast` to optional Decimal;
 19. M4: exact same-type Decimal aggregate `max`;
-20. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+20. M4: exact constant String/Utf8-to-Date plus-or-minus
+    `DateTime2.IntervalFromDays` normalization and direct Date-literal OLAP
+    `just` erasure;
+21. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -585,6 +609,15 @@ parser errors, and successful nonnormal rejection. Structural mutations cover
 the complete annotation, descriptor, source, ASCII, and cast-classification
 gate. The actual pushed-OLAP dialect has direct exporter coverage, while
 real-host TPC-DS q65 confirms that both snapshot boundaries now pass export.
+Constant Date/Interval tests use MiniKQL `ValueFromString` as the parser oracle
+for String and Utf8, both arithmetic signs, negative day literals, zero and
+both Date-domain boundaries, invalid dates, and result underflow/overflow.
+Structural mutations cover every result/descriptor annotation, UDF name and
+eight-child metadata field, cached callable, setting order/presence, argument
+type/nullability, day-range boundary, and arithmetic operator. OLAP tests admit
+only direct valid non-null Date literals under `just`, and a real-host
+column-store `BETWEEN` obligation proves the logical filter to pushed-filter
+pair at the normal two-row/two-task bound.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -697,11 +730,28 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   non-empty 7-bit ASCII and the exact `MayFail | MayLoseData` classification;
   finite half-even parsing, specials, saturation, underflow, and nonnormal
   rejection are locked by runtime-oracle and fail-closed tests. No Python IR
-  change is needed. Focused TPC-DS q21 and q40 now reach initial `Interval` and
-  final OLAP `just`; q65 exports both snapshots and reaches unsupported
-  aggregate `avg` after 231 ms of preparation and 255 ms of verifier work. This
-  milestone changes neither the 20/121 formula slice nor the ten-query proof
-  floor.
+  change is needed. Before Date/Interval folding, focused TPC-DS q21 and q40
+  reached initial `Interval` and final OLAP `just`; q65 exports both snapshots
+  and reaches unsupported aggregate `avg` after 231 ms of preparation and 255
+  ms of verifier work. This Decimal-cast milestone itself added no formula.
+- Exact constant Date/Interval normalization admits only a direct non-null
+  String/Utf8 literal `SafeCast` to exactly `Optional<Date>`, followed by `+` or
+  `-` with the strict normalized eight-child
+  `DateTime2.IntervalFromDays` UDF applied to a direct non-null `Int32` literal
+  in `[-49672, 49672]`. MiniKQL parses the Date; invalid input or a result outside
+  `[0, 49673)` becomes typed Date NULL. The related pushed-OLAP `just` is erased
+  only around a direct valid non-null Date literal. Runtime-oracle, structural
+  mutation, Date/day boundary, and real-host pushed-filter tests cover the
+  complete gate without adding Interval to the snapshot IR. This moves TPC-DS
+  q37, q40, and q82 through formula construction, for 21/99 TPC-DS and 23/121
+  total workload formulas (19.0%). Formula construction is not a proof. q37 and
+  q82 return `UNKNOWN` at a 60-second solver budget. A separate non-gating q40
+  scaling experiment retains a 97,319,076-byte formula and reports
+  `SOLVER_ERROR` after the external solver exceeds its 15.0-second deadline;
+  that focused `ya` experiment fails on the status as designed. The proof floor
+  remains ten. Current deeper blockers include `Concat` for q5/q80/q84,
+  `Double` for q21, a noncanonical dynamic Date fold for q72, and verifier-side
+  Decimal-SUM headroom for q77.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -750,7 +800,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   split-state, wrong-shuffle, type, and phase-nullability tests. Focused TPC-DS
   q74 passes its former aggregate blocker and reaches the 65,536-pair join
   matching preflight after 463 ms of preparation and 375 ms of verifier work.
-  It changes neither the 20/121 formula slice nor the ten-query proof floor.
+  It changes neither the 23/121 formula slice nor the ten-query proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial plan compared its nullable `Int64` directly with
   `Int32` membership constants; the final plan used an opaque
@@ -768,13 +818,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer statistics metadata. The supported Boolean/comparison subset is
   evaluated before per-task pushed limits. Exact two-child
   `TKqpOlapFilterUnaryOp` tuples require an Atom operator tag: `exists(x)` maps
-  to the scalar presence node and `empty(x)` to its negation. `just`, unknown or
+  to the scalar presence node and `empty(x)` to its negation. Unknown or
   non-Atom tags, malformed tuples, and unavailable physical columns fail
-  closed. `Coalesce(predicate, false)` is erased only at a positive filter
-  position propagated through AND/OR; the same node beneath NOT, a comparison,
-  or a unary presence operation fails closed. Exporter safety tests and
-  real-host `IS NULL`/`IS NOT NULL` obligations cover these boundaries. This
-  exact lowering moves TPC-DS q76 through formula construction.
+  closed; the separate Date gate admits `just` only around a direct valid
+  non-null Date literal. `Coalesce(predicate, false)` is erased only at a
+  positive filter position propagated through AND/OR; the same node beneath
+  NOT, a comparison, or a unary presence operation fails closed. Exporter
+  safety tests and real-host `IS NULL`/`IS NOT NULL` obligations cover these
+  boundaries. This exact lowering moves TPC-DS q76 through formula
+  construction.
 - The exact new-RBO `TPCDS_YQL` q96 schema and query pass strict initial/final
   export and produce `VERIFIED_BOUNDED` at two rows per table and two tasks. This
   covers exact Date and typed Decimal catalog columns, canonical `Void` for
@@ -786,17 +838,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPC-DS q65 must reach the verifier, the
-  twenty-query formula floor must keep constructing SMT, and the ten-query
+  23-query formula floor must keep constructing SMT, and the ten-query
   hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete current-code formula-only dashboard emits TPCH q3 and q19
-  (2/22) and TPC-DS q3, q15, q19, q42, q48, q50, q52, q55, q61, q62, q71, q76,
-  q79, q88, q90, q93, q96, and q99 (18/99), for 20/121 workload queries (16.5%).
-  Formula emission confirms end-to-end model coverage at two rows per referenced
-  table and two tasks; it is not a proof by itself.
+  2026-07-22 complete current-code formula-only dashboard emits TPCH q3
+  and q19 (2/22) and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
+  q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for 23/121
+  workload queries (19.0%). TPCH has 17 unsupported and three optimizer-failure
+  results; TPC-DS has 49 unsupported and 29 optimizer-failure results. Formula
+  emission confirms end-to-end model coverage at two rows per referenced table
+  and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
@@ -827,8 +881,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   83,339 ms in the verifier/formula-emission phase of the complete run before a
   focused solver
   attempt reached the external process deadline. q76 is formula-covered but is
-  not one of the ten proofs. No optimizer correctness bug is confirmed by these
-  runs.
+  not one of the ten proofs. The Date additions q37 and q82 return `UNKNOWN` at
+  the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
+  retained formulas are 4,201,832 and 2,841,844 bytes. A separate non-gating
+  q40 scaling experiment used a 10-second solver budget, prepared in 178 ms,
+  retained a 97,319,076-byte formula, and spent 104,804 ms in verifier
+  processing before reporting `SOLVER_ERROR` because the external solver
+  exceeded its 15.0-second process deadline. That focused `ya` experiment fails
+  on `SOLVER_ERROR` as designed; q40 is formula-covered but neither proved nor
+  a counterexample. No optimizer correctness bug is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q79/q88
   investigations, and explicit unsupported/optimizer-failure inventory.

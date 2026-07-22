@@ -277,6 +277,18 @@ void CreateDecimalColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateDateColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboDate` (
+            Id Uint64 NOT NULL,
+            D Date,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TKikimrRunner MakeTpcdsRunner() {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
@@ -1514,6 +1526,74 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         }
         UNIT_ASSERT_VALUES_EQUAL(kinds, THashSet<TString>({"empty", "eq", "gte"}));
         UNIT_ASSERT_VALUES_EQUAL(columns, THashSet<TString>({"A", "B", "Payload"}));
+        UNIT_ASSERT(PlanNodes(final, "filter").empty());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesConstantDateIntervalPushedOlapFilter) {
+        TKikimrRunner kikimr;
+        CreateDateColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, D
+                FROM `/Root/RboDate`
+                WHERE D BETWEEN
+                    (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(30))
+                    AND
+                    (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(30));
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        // Date literal folding calls MiniKQL code that requires an active actor
+        // context, just as normal query preparation has inside the server.
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+            host,
+            query,
+            settings
+        ] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertBounds = [](const NJson::TJsonValue& predicate) {
+            TVector<const NJson::TJsonValue*> literals;
+            CollectExpressions(predicate, "literal", literals);
+            THashSet<ui64> days;
+            for (const auto* literal : literals) {
+                if ((*literal)["type"].GetStringSafe() == "Date") {
+                    UNIT_ASSERT(days.insert(
+                        (*literal)["value"].GetUIntegerSafe()).second);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(days, THashSet<ui64>({10'294, 10'354}));
+        };
+
+        const auto& initialScan = OnlyPlanNode(initial, "scan");
+        UNIT_ASSERT(initialScan["predicate"].IsNull());
+        assertBounds(OnlyPlanNode(initial, "filter")["predicate"]);
+
+        const auto& finalScan = OnlyPlanNode(final, "scan");
+        UNIT_ASSERT(!finalScan["predicate"].IsNull());
+        assertBounds(finalScan["predicate"]);
         UNIT_ASSERT(PlanNodes(final, "filter").empty());
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);

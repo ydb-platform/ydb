@@ -18,6 +18,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -776,6 +777,231 @@ TExprNode::TPtr TypedTextLiteralDecimalCast(
                 optionalDecimalType),
         },
         optionalDecimalType);
+}
+
+enum class EDateIntervalShape {
+    Exact,
+    NonOptionalDateTarget,
+    MismatchedDateTargetAnnotation,
+    NonOptionalDateCastResult,
+    NonOptionalArithmeticResult,
+    WrongUdfName,
+    NonVoidRunConfig,
+    NonVoidUserType,
+    NonEmptyTypeConfig,
+    WrongCachedArgumentFlags,
+    MismatchedCachedCallableAnnotation,
+    WrongCachedReturnDescriptor,
+    NonVoidCachedRunConfigType,
+    NonEmptyFileAlias,
+    WrongCallableAnnotation,
+    ReversedUdfSettings,
+    MissingUdfSetting,
+    WrongApplyResult,
+    WrongDaysType,
+    NullableDays,
+};
+
+TExprNode::TPtr VoidValue(TExportTestContext& ctx) {
+    return TypedCallable(
+        ctx,
+        "Void",
+        {},
+        ctx.ExprCtx.MakeType<TVoidExprType>());
+}
+
+TExprNode::TPtr VoidTypeDescriptor(TExportTestContext& ctx) {
+    const auto* voidType = ctx.ExprCtx.MakeType<TVoidExprType>();
+    return TypedCallable(
+        ctx,
+        "VoidType",
+        {},
+        ctx.ExprCtx.MakeType<TTypeExprType>(voidType));
+}
+
+const TCallableExprType* IntervalFromDaysCallableType(
+    TExportTestContext& ctx,
+    const TTypeAnnotationNode* resultType,
+    const TTypeAnnotationNode* argumentType,
+    ui64 flags)
+{
+    TCallableExprType::TArgumentInfo argument;
+    argument.Type = argumentType;
+    argument.Flags = flags;
+    return ctx.ExprCtx.MakeType<TCallableExprType>(
+        resultType,
+        TVector<TCallableExprType::TArgumentInfo>{argument},
+        0,
+        TStringBuf());
+}
+
+TExprNode::TPtr TypedConstantDateInterval(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf sourceCallable,
+    TStringBuf date,
+    TStringBuf days,
+    EDateIntervalShape shape = EDateIntervalShape::Exact)
+{
+    const auto sourceSlot = sourceCallable == "Utf8"
+        ? NUdf::EDataSlot::Utf8
+        : NUdf::EDataSlot::String;
+    const auto* sourceType = ScalarType(ctx, sourceSlot);
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(ctx, NUdf::EDataSlot::Date, true);
+    const auto* intervalType = ScalarType(ctx, NUdf::EDataSlot::Interval);
+    const auto* optionalIntervalType = ScalarType(
+        ctx, NUdf::EDataSlot::Interval, true);
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* optionalInt32Type = ScalarType(
+        ctx, NUdf::EDataSlot::Int32, true);
+    const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+
+    TExprNode::TPtr dateTarget;
+    if (shape == EDateIntervalShape::NonOptionalDateTarget) {
+        dateTarget = DataTypeDescriptor(ctx, "Date", dateType);
+    } else {
+        dateTarget = OptionalDataTypeDescriptor(
+            ctx, "Date", dateType, optionalDateType);
+        if (shape == EDateIntervalShape::MismatchedDateTargetAnnotation) {
+            dateTarget->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(dateType));
+        }
+    }
+    auto dateCast = TypedCallable(
+        ctx,
+        "SafeCast",
+        {
+            TypedLiteral(ctx, sourceCallable, date, sourceType),
+            std::move(dateTarget),
+        },
+        shape == EDateIntervalShape::NonOptionalDateCastResult
+            ? dateType
+            : optionalDateType);
+
+    const ui64 autoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+    const ui64 annotationFlags =
+        shape == EDateIntervalShape::WrongCallableAnnotation ? 0 : autoMap;
+    const auto* callableType = IntervalFromDaysCallableType(
+        ctx, optionalIntervalType, int32Type, annotationFlags);
+    const auto* cachedCallableType =
+        shape == EDateIntervalShape::MismatchedCachedCallableAnnotation
+            ? IntervalFromDaysCallableType(
+                ctx, optionalIntervalType, int32Type, 0)
+            : callableType;
+
+    auto callableDescriptor = TypedCallable(
+        ctx,
+        "CallableType",
+        {
+            ctx.ExprCtx.NewList(TPositionHandle(), {}),
+            ctx.ExprCtx.NewList(
+                TPositionHandle(),
+                {shape == EDateIntervalShape::WrongCachedReturnDescriptor
+                    ? OptionalDataTypeDescriptor(
+                        ctx,
+                        "Date",
+                        dateType,
+                        optionalDateType)
+                    : OptionalDataTypeDescriptor(
+                        ctx,
+                        "Interval",
+                        intervalType,
+                        optionalIntervalType)}),
+            ctx.ExprCtx.NewList(
+                TPositionHandle(),
+                {
+                    DataTypeDescriptor(ctx, "Int32", int32Type),
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+                    ctx.ExprCtx.NewAtom(
+                        TPositionHandle(),
+                        shape == EDateIntervalShape::WrongCachedArgumentFlags
+                            ? "0"
+                            : "1"),
+                }),
+        },
+        ctx.ExprCtx.MakeType<TTypeExprType>(cachedCallableType));
+
+    auto settings = ctx.ExprCtx.NewList(
+        TPositionHandle(),
+        {
+            ctx.ExprCtx.NewList(
+                TPositionHandle(),
+                {ctx.ExprCtx.NewAtom(
+                    TPositionHandle(),
+                    shape == EDateIntervalShape::ReversedUdfSettings
+                        ? "strict"
+                        : "blocks")}),
+            ctx.ExprCtx.NewList(
+                TPositionHandle(),
+                {ctx.ExprCtx.NewAtom(
+                    TPositionHandle(),
+                    shape == EDateIntervalShape::ReversedUdfSettings
+                        ? "blocks"
+                        : "strict")}),
+        });
+
+    TExprNode::TListType udfChildren = {
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EDateIntervalShape::WrongUdfName
+                ? "DateTime2.IntervalFromHours"
+                : "DateTime2.IntervalFromDays"),
+        shape == EDateIntervalShape::NonVoidRunConfig
+            ? TypedLiteral(ctx, "Int32", "0", int32Type)
+            : VoidValue(ctx),
+        shape == EDateIntervalShape::NonVoidUserType
+            ? DataTypeDescriptor(ctx, "Int32", int32Type)
+            : VoidTypeDescriptor(ctx),
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EDateIntervalShape::NonEmptyTypeConfig ? "config" : ""),
+        std::move(callableDescriptor),
+        shape == EDateIntervalShape::NonVoidCachedRunConfigType
+            ? DataTypeDescriptor(ctx, "Int32", int32Type)
+            : VoidTypeDescriptor(ctx),
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EDateIntervalShape::NonEmptyFileAlias ? "module" : ""),
+        std::move(settings),
+    };
+    if (shape == EDateIntervalShape::MissingUdfSetting) {
+        udfChildren[7] = ctx.ExprCtx.NewList(
+            TPositionHandle(),
+            {ctx.ExprCtx.NewList(
+                TPositionHandle(),
+                {ctx.ExprCtx.NewAtom(TPositionHandle(), "blocks")})});
+    }
+    auto udf = TypedCallable(
+        ctx, "Udf", std::move(udfChildren), callableType);
+
+    const bool wrongDaysType = shape == EDateIntervalShape::WrongDaysType;
+    const auto* daysType = wrongDaysType
+        ? int64Type
+        : shape == EDateIntervalShape::NullableDays
+            ? optionalInt32Type
+            : int32Type;
+    auto interval = TypedCallable(
+        ctx,
+        "Apply",
+        {
+            std::move(udf),
+            TypedLiteral(
+                ctx,
+                wrongDaysType ? TStringBuf("Int64") : TStringBuf("Int32"),
+                days,
+                daysType),
+        },
+        shape == EDateIntervalShape::WrongApplyResult
+            ? intervalType
+            : optionalIntervalType);
+
+    return TypedCallable(
+        ctx,
+        operation,
+        {std::move(dateCast), std::move(interval)},
+        shape == EDateIntervalShape::NonOptionalArithmeticResult
+            ? dateType
+            : optionalDateType);
 }
 
 TExprNode::TPtr MakeOlapFilterProcess(
@@ -1543,6 +1769,141 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "Date literal type annotation does not match");
+        }
+    }
+
+    Y_UNIT_TEST(FoldsExactDateAndIntervalLiteralsAgainstRuntimeParser) {
+        struct TCase {
+            TString Operation;
+            TString SourceCallable;
+            TString Date;
+            TString Days;
+            i32 SignedDays;
+        };
+        const TVector<TCase> cases = {
+            {"-", "String", "1998-04-08", "30", -30},
+            {"+", "String", "1998-04-08", "30", 30},
+            {"+", "Utf8", "1970-01-01", "0", 0},
+            {"+", "Utf8", "1998-04-08", "-30", -30},
+            {"-", "Utf8", "1998-04-08", "-30", 30},
+            {"+", "String", "1970-01-01", "49672", 49'672},
+            {"+", "String", "2105-12-31", "-49672", -49'672},
+            {"-", "String", "1970-01-01", "-49672", 49'672},
+            {"-", "String", "2105-12-31", "49672", -49'672},
+        };
+
+        for (const auto& testCase : cases) {
+            const auto parsed = NKikimr::NMiniKQL::ValueFromString(
+                NUdf::EDataSlot::Date,
+                NUdf::TStringRef(testCase.Date.data(), testCase.Date.size()));
+            UNIT_ASSERT_C(parsed.HasValue(), testCase.Date);
+            const i64 expected = static_cast<i64>(parsed.Get<ui16>()) +
+                testCase.SignedDays;
+            UNIT_ASSERT(expected >= 0 && expected < NUdf::MAX_DATE);
+
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedConstantDateInterval(
+                    ctx,
+                    testCase.Operation,
+                    testCase.SourceCallable,
+                    testCase.Date,
+                    testCase.Days));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["value"].GetUIntegerSafe(),
+                static_cast<ui64>(expected));
+        }
+    }
+
+    Y_UNIT_TEST(DateAndIntervalLiteralRuntimeFailuresBecomeTypedNull) {
+        struct TCase {
+            TString Operation;
+            TString Date;
+            TString Days;
+        };
+        const TVector<TCase> cases = {
+            {"+", "1998-02-30", "30"},
+            {"-", "1970-01-01", "1"},
+            {"+", "2105-12-31", "1"},
+            {"+", "1970-01-01", "-1"},
+            {"-", "2105-12-31", "-1"},
+        };
+
+        for (const auto& testCase : cases) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedConstantDateInterval(
+                    ctx,
+                    testCase.Operation,
+                    "String",
+                    testCase.Date,
+                    testCase.Days));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "null");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Date");
+        }
+    }
+
+    Y_UNIT_TEST(DateAndIntervalLiteralGateFailsClosed) {
+        const TVector<EDateIntervalShape> malformedShapes = {
+            EDateIntervalShape::NonOptionalDateTarget,
+            EDateIntervalShape::MismatchedDateTargetAnnotation,
+            EDateIntervalShape::NonOptionalDateCastResult,
+            EDateIntervalShape::NonOptionalArithmeticResult,
+            EDateIntervalShape::WrongUdfName,
+            EDateIntervalShape::NonVoidRunConfig,
+            EDateIntervalShape::NonVoidUserType,
+            EDateIntervalShape::NonEmptyTypeConfig,
+            EDateIntervalShape::WrongCachedArgumentFlags,
+            EDateIntervalShape::MismatchedCachedCallableAnnotation,
+            EDateIntervalShape::WrongCachedReturnDescriptor,
+            EDateIntervalShape::NonVoidCachedRunConfigType,
+            EDateIntervalShape::NonEmptyFileAlias,
+            EDateIntervalShape::WrongCallableAnnotation,
+            EDateIntervalShape::ReversedUdfSettings,
+            EDateIntervalShape::MissingUdfSetting,
+            EDateIntervalShape::WrongApplyResult,
+            EDateIntervalShape::WrongDaysType,
+            EDateIntervalShape::NullableDays,
+        };
+        for (const auto shape : malformedShapes) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedConstantDateInterval(
+                    ctx,
+                    "+",
+                    "String",
+                    "1998-04-08",
+                    "30",
+                    shape));
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+
+        for (const TString days : {"49673", "-49673", "2147483648"}) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedConstantDateInterval(
+                    ctx, "+", "String", "1998-04-08", days));
+            UNIT_ASSERT_C(!result.IsSupported(), days);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedConstantDateInterval(
+                    ctx, "*", "String", "1998-04-08", "30"));
+            UNIT_ASSERT(!result.IsSupported());
         }
     }
 
@@ -6388,6 +6749,119 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         check("empty", true);
     }
 
+    Y_UNIT_TEST(OlapJustErasesOnlyDirectNonNullDateLiterals) {
+        const auto exportArgument = [](TExportTestContext& ctx, TExprNode::TPtr argument) {
+            const auto& table = AddTable(ctx, "/Root/OlapDate", {
+                {"d", "Date", false},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"d"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.d", NUdf::EDataSlot::Date, true}});
+            const auto just = Build<TKqpOlapFilterUnaryOp>(
+                ctx.ExprCtx,
+                TPositionHandle())
+                .Operator().Value("just").Build()
+                .Arg(TExprBase(std::move(argument)))
+                .Done();
+            const auto comparison = Build<TKqpOlapFilterBinaryOp>(
+                ctx.ExprCtx,
+                TPositionHandle())
+                .Operator().Value("gte").Build()
+                .Left<TCoAtom>().Value("d").Build()
+                .Right(just)
+                .Done();
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx, comparison.Ptr());
+            TOpRoot root(read, TPositionHandle(), {"a.d"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        for (const ui16 day : {ui16{0}, ui16{10'354}}) {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportArgument(
+                ctx,
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    ToString(day),
+                    ScalarType(ctx, NUdf::EDataSlot::Date))));
+            const auto& right = FindNode(snapshot, "scan")["predicate"]["right"];
+            UNIT_ASSERT_VALUES_EQUAL(right["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(right["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(right["value"].GetUIntegerSafe(), day);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportArgument(
+                ctx,
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    "49673",
+                    ScalarType(ctx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = exportArgument(
+                ctx,
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    "not-a-day",
+                    ScalarType(ctx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = exportArgument(
+                ctx,
+                TypedLiteral(
+                    ctx,
+                    "Date",
+                    "0",
+                    ScalarType(ctx, NUdf::EDataSlot::Date, true)));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = exportArgument(
+                ctx,
+                TypedLiteral(
+                    ctx,
+                    "Int32",
+                    "0",
+                    ScalarType(ctx, NUdf::EDataSlot::Int32)));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto result = exportArgument(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Date", "0", dateType)},
+                    ScalarType(ctx, NUdf::EDataSlot::Date, true)));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = exportArgument(
+                ctx,
+                ctx.ExprCtx.NewAtom(TPositionHandle(), "d"));
+            UNIT_ASSERT(!result.IsSupported());
+        }
+    }
+
     Y_UNIT_TEST(ExportsDecimalLiteralInActualOlapFilterDialect) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/Decimal", {
@@ -6538,7 +7012,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             NYql::EStorageType::ColumnStorage);
         result = ExportSemanticSnapshotV1(unsupportedUnaryRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported OLAP unary operation just");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "OLAP just may erase only a direct non-null Date literal");
 
         auto missingUnaryColumn = makeRead();
         missingUnaryColumn->OlapFilterLambda = MakeOlapUnaryProcess(ctx, "empty", "missing");
@@ -6579,7 +7055,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             NYql::EStorageType::ColumnStorage);
         result = ExportSemanticSnapshotV1(nestedJustRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported OLAP unary operation just");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "OLAP just may erase only a direct non-null Date literal");
 
         auto nestedCoalesce = makeRead();
         const auto comparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)

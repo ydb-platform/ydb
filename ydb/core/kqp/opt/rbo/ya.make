@@ -48,6 +48,7 @@ PEERDIR(
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
+    yql/essentials/minikql
     yql/essentials/public/decimal
 )
 

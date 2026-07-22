@@ -102,7 +102,8 @@ requires TPC-DS q65 to keep passing both snapshot exporters and invoke the
 verifier; its current verifier-side `UNSUPPORTED` result does not count as a
 formula, while any later formula or proof still satisfies this depth floor. The
 formula-construction floor requires TPCH q3 and q19 plus TPC-DS q3, q15, q19,
-q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99.
+q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90,
+q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
 requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96;
 dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
@@ -146,18 +147,19 @@ StageGraph remains a separate diagnostic step.
 ## Current measured formula coverage
 
 The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the twenty-query floor below and recorded an
+formula-only mode. It emitted the 23-query floor below and recorded an
 outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
-complete suite reports satisfied the checked-in coverage policy.
+complete suite reports satisfied the checked-in coverage policy, including the
+newly required TPC-DS q37, q40, and q82 formulas.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 2 (q3, q19) | 17 | 3 | 22 |
-| TPCDS_YQL | 18 (q3, q15, q19, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, q99) | 52 | 29 | 99 |
+| TPCDS_YQL | 21 (q3, q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, q99) | 49 | 29 | 99 |
 
-The supported formula slice is 20/121 queries (16.5%). This is a useful end-to-end
+The supported formula slice is 23/121 queries (19.0%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 101 workload entries or larger
+slice rather than a claim about the remaining 98 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -198,10 +200,10 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 41 of the 52
+The exporter matrix below covers the boundary failures among 37 of the 49
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
-The eleven queries that pass export and fail closed inside the verifier are listed
+The twelve queries that pass export and fail closed inside the verifier are listed
 after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -212,12 +214,11 @@ after the matrix.
 | Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
-| OLAP unary operation `just` | - | q5, q21, q37, q40, q77, q80, q82 |
 | Callable `/` | q73, q78 | q73, q78 |
-| Callable `Concat` | q84 | q84 |
+| Callable `Concat` | q5, q80, q84 | q5, q80, q84 |
 | Callable `Unwrap` | q8, q38, q87 | q8, q38, q87 |
-| Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q34, q75, q85 |
-| Type `Interval` | q5, q21, q37, q40, q72, q77, q80, q82 | q72 |
+| Type `Double` | q7, q13, q21, q22, q26, q34, q75, q85 | q7, q13, q21, q22, q26, q34, q75, q85 |
+| Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 
 After both snapshots export, q4 fails before materializing a 13,824-row join
 output above the 4,096-row relation bound. q11's join matching and q25/q29's
@@ -226,7 +227,9 @@ bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
 rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
-and fails closed because aggregate `avg` is not modeled. The focused q68 run
+and fails closed because aggregate `avg` is not modeled. q77 passes both
+exports and fails closed because its Decimal `sum` cannot establish the finite
+headroom required for order-independent partial aggregation. The focused q68 run
 passed both snapshot exports and reached its Merge audit cap after 11,175 ms of
 verifier work.
 
@@ -251,15 +254,14 @@ former String blocker now exposes a deeper reason: q4, q11, q25, q29, q46, q64,
 and q91 reach the construction bounds enumerated above. Exact direct
 String/Utf8-literal `SafeCast` to optional Decimal then moves q21 and q40 to
 initial `Interval` and final OLAP `just`, while q65 passes both exports and
-reaches verifier aggregate `avg`. Exact
-`If`, `Exists`, and scoped unary `IfPresent` move q34 to `Double` at both
+reaches verifier aggregate `avg`. Those were intermediate blockers before the
+constant Date/Interval fold described below. Exact `If`, `Exists`, and scoped
+unary `IfPresent` move q34 to `Double` at both
 boundaries, q73 to `/` at both boundaries, q79 to the formerly opaque
 `Substring` at both boundaries, and q68 through both exports to the Merge
-construction cap. q31
-still reaches its construction cap, and exact Decimal MAX moves q74 to its
-65,536-pair join-matching cap. q5 now
-reaches initial `Interval` and final OLAP `just`; q75 reaches `Double` in both
-snapshots; and q80 reaches initial `Interval` and final OLAP `just`. Exact OLAP
+construction cap. q31 still reaches its construction cap, and exact Decimal MAX
+moves q74 to its 65,536-pair join-matching cap. Before the Date fold, q5 and q80
+likewise reached `Interval`/OLAP `just`, while q75 reached `Double`. Exact OLAP
 unary presence lowering then moves q76 through formula construction and raises
 the measured TPC-DS slice to 13/99. Restricted `Substring` then moves q15, q19,
 q62, q79, and q99 through formula construction and raises that slice to 18/99.
@@ -271,8 +273,22 @@ deliberately broader than static `IN`, which retains its lossless-common-type
 gate. q8 passes its former `Uint64 > Int32` blocker and now fails closed on
 unsupported scalar callable `Unwrap` at both snapshot boundaries. Exact partial
 integral `SafeCast` removes q79's subsequent false-positive witness. Neither
-that change nor direct text-literal Decimal-cast normalization alters the
-formula-construction count.
+that change nor direct text-literal Decimal-cast normalization altered the
+then-current formula-construction count.
+
+The exact constant Date/Interval normalization admits only a direct non-null
+String/Utf8 literal `SafeCast` to exactly `Optional<Date>`, added to or
+subtracted from the strict normalized eight-child
+`DateTime2.IntervalFromDays` UDF applied to a direct non-null `Int32` day count
+in `[-49672, 49672]`. MiniKQL parses the Date; an invalid input or arithmetic
+result outside `[0, 49673)` becomes typed Date NULL. The corresponding OLAP
+`just` is erased only around a direct valid non-null Date literal. The exporter
+folds the complete shape to existing Date literal/NULL nodes, so no Interval IR
+or Python evaluator support is added. This moves q37, q40, and q82 through
+formula construction and raises TPC-DS to 21/99. q5 and q80 now join q84 at
+unsupported `Concat`; q21 reaches `Double`; q72 remains outside the gate because
+its dynamic Date expression does not have the exact Optional-Date cast shape;
+and q77 reaches the verifier's Decimal-SUM headroom gate.
 
 ## Curated proof floor and focused results
 
@@ -331,10 +347,32 @@ formula-construction count.
   specials, overflow saturates to signed infinity, and underflow may round to
   zero; a successful nonnormal finite result fails closed. The result reuses
   existing Decimal literal/NULL snapshot nodes, with no Python IR change.
-  Focused q21 and q40 now reach initial `Interval` and final OLAP `just`. q65
-  passes both exports, then reports unmodeled aggregate `avg` after 231 ms of
-  preparation and 255 ms of verifier work. No formula is emitted, so coverage
-  remains 20/121 and the proof floor remains ten.
+  Before constant Date/Interval folding, focused q21 and q40 reached initial
+  `Interval` and final OLAP `just`. q65 passes both exports, then reports
+  unmodeled aggregate `avg` after 231 ms of preparation and 255 ms of verifier
+  work. This Decimal-cast normalization itself added no formula.
+
+- Constant Date/Interval normalization admits only direct non-null String/Utf8
+  literal `SafeCast` to exactly `Optional<Date>`, followed by `+` or `-` with
+  the strict normalized eight-child `DateTime2.IntervalFromDays` UDF applied to
+  a direct non-null `Int32` literal in `[-49672, 49672]`. MiniKQL
+  `ValueFromString` parses the Date; parser failure or a result outside
+  `[0, 49673)` becomes typed Date NULL. The corresponding OLAP `just` wrapper
+  is erased only for a direct valid non-null Date literal. Runtime-oracle,
+  annotation/descriptor/UDF-shape mutation, boundary, and real-host pushed
+  filter tests cover the gate. q37, q40, and q82 newly emit formulas, raising
+  TPC-DS to 21/99 and the workload to 23/121 (19.0%); formula emission is not a
+  proof. The complete dashboard recorded 2,342, 55,463, and 1,820 ms in their
+  respective verifier/formula-emission phases. Focused 60-second solver runs
+  returned `UNKNOWN` for q37 after 162 ms of preparation and 63,782 ms of
+  verifier work and for q82 after 130 ms and 63,078 ms; their retained SMT
+  files were 4,201,832 and 2,841,844 bytes. A separate non-gating q40 scaling
+  experiment used a 10-second solver budget, prepared in 178 ms, retained a
+  97,319,076-byte formula, and spent 104,804 ms in verifier processing before
+  reporting `SOLVER_ERROR` because the external solver exceeded its 15.0-second
+  process deadline. That focused `ya` experiment failed as designed on the
+  solver error; it is neither a proof nor a counterexample. The proof floor
+  remains ten.
 
 - Decimal aggregate `max` is exact only when its input and output have the same
   canonical Decimal type and phase-aware nullability. It ignores NULL and uses
@@ -344,7 +382,7 @@ formula-construction count.
   task, wrong-shuffle, and fail-closed type tests cover the contract. Focused
   q74 passes MAX and then rejects 65,536 join-matching pairs above the 16,384
   construction cap after 463 ms of preparation and 375 ms of verifier work.
-  It emits no formula, so the 20/121 formula slice and ten-query proof floor are
+  It emits no formula, so the 23/121 formula slice and ten-query proof floor are
   unchanged.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
@@ -366,11 +404,13 @@ formula-construction count.
 - TPC-DS q76 now reaches formula construction through exact OLAP unary
   presence lowering. The final two-child `TKqpOlapFilterUnaryOp` form admits
   only Atom-tagged `exists(x)` and `empty(x)`, represented as `exists(x)` and
-  `not(exists(x))`; malformed or unknown tags, `just`, and unavailable columns
-  fail closed. `Coalesce(predicate, false)` is erased only at the filter
-  boundary and through AND/OR, never beneath NOT, comparison, or a unary
-  presence operation. Exporter fail-closed tests and real-host `IS NULL` and
-  `IS NOT NULL` obligations cover that contract and return `VERIFIED_BOUNDED`.
+  `not(exists(x))`; malformed or unknown tags and unavailable columns fail
+  closed. The separate Date gate admits `just` only around a direct valid
+  non-null Date literal. `Coalesce(predicate, false)` is erased only at the
+  filter boundary and through AND/OR, never beneath NOT, comparison, or a
+  unary presence operation. Exporter fail-closed tests and real-host `IS NULL`
+  and `IS NOT NULL` obligations cover that contract and return
+  `VERIFIED_BOUNDED`.
   The complete dashboard recorded 360 ms of preparation and 13,561 ms of
   verification/formula construction; a focused run recorded 391 ms and 14,169
   ms. A focused 60-second solver experiment recorded 419 ms and 88,305 ms
@@ -387,7 +427,7 @@ formula-construction count.
   ms in verifier construction before both exports failed closed on unsupported
   scalar callable `Unwrap`. A separate real-host `COUNT(*) > 1` fixture captures
   the same type pair at both snapshots and returns `VERIFIED_BOUNDED`. q8
-  remains unsupported and changes neither the 20/121 formula slice nor the
+  remains unsupported and changes neither the 23/121 formula slice nor the
   ten-query proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial nullable `Int64` membership test and the final

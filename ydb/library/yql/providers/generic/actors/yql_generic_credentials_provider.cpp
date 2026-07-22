@@ -21,7 +21,7 @@ namespace NYql::NDq {
 
         auto credentialsProviderFactory = credentialsFactory->Create(structuredTokenJSON, false);
 
-        AsyncCredentialsProvider_ = credentialsProviderFactory->CreateProviderAsync();
+        CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
     NThreading::TFuture<TGenericCredentials> TGenericCredentialsProvider::AsyncCredentials() const {
@@ -34,19 +34,17 @@ namespace NYql::NDq {
             return NThreading::MakeFuture(credentials);
         }
         // 2. Otherwise use credentials provider to get token from Token Accessor
-        return AsyncCredentialsProvider_.Apply([](const NThreading::TFuture<NYdb::TCredentialsProviderPtr>& future) {
-            auto provider = future.GetValue();
-            Y_ENSURE(provider);
-            return provider->GetAuthInfoAsync();
-        }).Apply([](const NThreading::TFuture<std::string>& f1) {
-            NThreading::TFuture<std::string> f2 = f1;
-            auto iamToken = f2.ExtractValueSync();
-            TGenericCredentials credentials;
-            auto& token = *credentials.mutable_token();
-            *token.mutable_type() = "IAM";
-            *token.mutable_value() = std::move(iamToken);
-            return credentials;
-        });
+        Y_ENSURE(CredentialsProvider_);
+        return CredentialsProvider_->GetAuthInfoAsync()
+            .Apply([](const NThreading::TFuture<std::string>& f1) {
+                NThreading::TFuture<std::string> f2 = f1;
+                auto iamToken = f2.ExtractValueSync();
+                TGenericCredentials credentials;
+                auto& token = *credentials.mutable_token();
+                *token.mutable_type() = "IAM";
+                *token.mutable_value() = std::move(iamToken);
+                return credentials;
+            });
     }
 
     TGenericCredentialsProvider::TPtr

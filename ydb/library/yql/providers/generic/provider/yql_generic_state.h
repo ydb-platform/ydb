@@ -130,7 +130,7 @@ namespace NYql {
         // It's important to cache credentials providers, because they make IO
         // (e.g. synchronous call via Token Accessor client) during the construction.
         // TODO: reconsider cache usefulness; TokenAccessor is part of deprecated yqv1, IAM cloud delegated auth (which also uses IO) shares singleton instance internally, "simple" providers are inexpensive
-        std::unordered_map<TString, NThreading::TFuture<NYdb::TCredentialsProviderPtr>> CredentialProviders;
+        std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
         IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;

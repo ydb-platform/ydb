@@ -29,7 +29,7 @@ namespace NYql::NDq {
         };
         std::optional<BasicAuthCredentials> BasicAuthCredentials_;
 
-        NThreading::TFuture<NYdb::TCredentialsProviderPtr> AsyncCredentialsProvider_;
+        NYdb::TCredentialsProviderPtr CredentialsProvider_;
     };
 
     TGenericCredentialsProvider::TPtr

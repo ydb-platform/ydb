@@ -116,21 +116,19 @@ NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> TGenericDescribeTab
 
         providersIt =
             State_->CredentialProviders
-                .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProviderAsync())
+                .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProvider())
                 .first;
     }
-    return providersIt->second.Apply([](const NThreading::TFuture<NYdb::TCredentialsProviderPtr>& future) mutable {
-        auto provider = future.GetValue(); // Don't extract!
-        return provider->GetAuthInfoAsync();
-    }).Apply([request=std::move(request)](const NThreading::TFuture<std::string>& f1) mutable {
-        NThreading::TFuture<std::string> f2(f1);
-        TString iamToken = f2.ExtractValueSync();
-        auto dsi = request.mutable_data_source_instance();
-        Y_ENSURE(iamToken, "empty IAM token");
-        *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
-        *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
-        return std::move(request);
-    });
+    return providersIt->second->GetAuthInfoAsync()
+        .Apply([request=std::move(request)](const NThreading::TFuture<std::string>& f1) mutable {
+            NThreading::TFuture<std::string> f2(f1);
+            TString iamToken = f2.ExtractValueSync();
+            auto dsi = request.mutable_data_source_instance();
+            Y_ENSURE(iamToken, "empty IAM token");
+            *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
+            *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+            return std::move(request);
+        });
 }
 
 template <typename T>

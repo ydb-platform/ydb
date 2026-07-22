@@ -1586,6 +1586,101 @@ Y_UNIT_TEST_SUITE(TOlap) {
         StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/false);
     }
 
+    Y_UNIT_TEST(DropColumnTableResetsSmallBlobsCounters) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SmallBlobsQuotaConfig.SetSmallBlobSizeThresholdBytes(1'000'000'000);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SomeDatabase"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            auto& self = record.GetPathDescription().GetSelf();
+            pathId = self.GetPathId();
+            txId = self.GetCreateTxId() + 1;
+            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/Table");
+        };
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        const ui32 rowsInBatch = 100000;
+        const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+        constexpr ui32 batchCount = 3;
+        for (ui32 i = 0; i < batchCount; ++i) {
+            std::vector<ui64> writeIds;
+            ++txId;
+            UNIT_ASSERT(NTxUT::WriteData(runtime, sender, shardId, i + 1, pathId, data, defaultYdbSchema, &writeIds,
+                NEvWrite::EModificationType::Upsert, txId));
+            planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        }
+
+        WaitTableStats(runtime, shardId);
+
+        const auto waitForCounter = [&](const TString& name, ui64 minValue) {
+            for (int i = 0; i < 30; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                if (GetSimpleCounter(runtime, name) >= minValue) {
+                    return;
+                }
+            }
+            UNIT_FAIL("counter " << name << " did not reach " << minValue << "; " << DEBUG_HINT);
+        };
+
+        waitForCounter("SchemeShard/SmallBlobsCount", 1);
+        waitForCounter("SchemeShard/SmallBlobsVolumeBytes", 1);
+
+        const ui64 smallBlobsCountBefore = GetSimpleCounter(runtime, "SchemeShard/SmallBlobsCount");
+        const ui64 smallBlobsVolumeBefore = GetSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes");
+        UNIT_ASSERT_GT_C(smallBlobsCountBefore, 0, DEBUG_HINT);
+        UNIT_ASSERT_GT_C(smallBlobsVolumeBefore, 0, DEBUG_HINT);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/Table", false, NLs::PathNotExist);
+
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCount", 0);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes", 0);
+    }
+
     Y_UNIT_TEST(MoveNonExistentTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

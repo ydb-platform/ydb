@@ -12,6 +12,14 @@ MAX_DAYS_BACK = 180
 DEFAULT_DAYS_BACK = 14
 SUITE_IN_CLAUSE_THRESHOLD = 50
 
+# Nightly regression workflows only — PR-check/Postcommit often upload a tiny
+# subset of the same suite_folder (import_test/flake8), which collapses p90.
+DEFAULT_HISTORY_JOB_NAMES = (
+    "Regression-run_Small_and_Medium",
+    "Regression-run_Large",
+    "Regression-run_compatibility",
+)
+
 
 def _sql_string_list(values: list[str]) -> str:
     return ",".join("'{0}'".format(value.replace("'", "''")) for value in values)
@@ -54,12 +62,14 @@ def get_suite_duration_p90(
     branch: str,
     *,
     in_clause_threshold: int = SUITE_IN_CLAUSE_THRESHOLD,
+    job_names: tuple[str, ...] | list[str] = DEFAULT_HISTORY_JOB_NAMES,
 ) -> dict[str, float]:
     """Return {suite_folder: p90_total_duration_sec} for suites with history.
 
-    Duration per suite is p90 over job runs of SUM(test durations) in that suite.
+    Duration per suite is p90 over nightly regression job runs of
+    SUM(test durations) in that suite (Small_and_Medium / Large / compatibility).
     If len(suite_paths) < in_clause_threshold, filter in SQL (including parent
-    prefixes); otherwise fetch all matching rows for branch/build_type and keep
+    prefixes); otherwise fetch matching rows for branch/build_type/jobs and keep
     suites related to the request by prefix so longest-prefix match works.
     """
     if not suite_paths:
@@ -80,6 +90,11 @@ def get_suite_duration_p90(
     if use_in_clause:
         suite_filter = f"AND suite_folder IN [{_sql_string_list(lookup_paths)}]"
 
+    history_jobs = tuple(name for name in job_names if str(name).strip())
+    if not history_jobs:
+        history_jobs = DEFAULT_HISTORY_JOB_NAMES
+    job_filter = f"AND t.job_name IN [{_sql_string_list(list(history_jobs))}]"
+
     with YDBWrapper(silent=True) as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
             print("Warning: YDB credentials not found, skipping duration history", file=sys.stderr)
@@ -90,7 +105,8 @@ def get_suite_duration_p90(
             f"Querying suite duration p90 for {len(requested)} suites "
             f"({'IN clause' if use_in_clause else 'wide scan + prefix filter'}, "
             f"lookup_keys={len(lookup_paths)}): "
-            f"build_type={build_type}, branch={branch}, days_back={days_back}",
+            f"build_type={build_type}, branch={branch}, days_back={days_back}, "
+            f"jobs={list(history_jobs)}",
             file=sys.stderr,
         )
 
@@ -112,7 +128,7 @@ def get_suite_duration_p90(
             AND t.run_timestamp > CurrentUtcDate() - {days_back} * Interval("P1D")
             AND ('{build_type}' = '' OR t.build_type = '{build_type}')
             AND ('{branch}' = '' OR t.branch = '{branch}')
-            AND t.job_name != 'Run-tests'
+            {job_filter}
             AND (t.pull IS NULL OR NOT String::Contains(t.pull, 'manual'))
             AND t.duration IS NOT NULL
             AND t.duration > 0
@@ -138,7 +154,8 @@ def get_suite_duration_p90(
 
         print(
             f"Retrieved suite duration p90 for {len(results)} suites "
-            f"(requested {len(requested)} paths, days_back={days_back})",
+            f"(requested {len(requested)} paths, days_back={days_back}, "
+            f"nightly jobs only)",
             file=sys.stderr,
         )
         return results

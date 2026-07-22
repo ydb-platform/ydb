@@ -525,6 +525,10 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     return {writeData, columnList};
 }
 
+bool GeneratedDepsComeFromTable(TYdbOperation op) {
+    return op == TYdbOperation::Upsert || op == TYdbOperation::UpdateOn;
+}
+
 std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx, bool generatedLookup)
 {
@@ -538,7 +542,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithStoredGeneratedColumns(cons
         inputColumnsSet.insert(col.Value());
     }
 
-    if (generatedLookup && GetTableOp(write) == TYdbOperation::Upsert) {
+    if (generatedLookup && GeneratedDepsComeFromTable(GetTableOp(write))) {
         auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet);
         if (!missingDeps.empty()) {
             return BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns, missingDeps, table, pos, ctx);
@@ -549,7 +553,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithStoredGeneratedColumns(cons
 }
 
 bool NeedsGeneratedStreamLookup(const TKiWriteTable& write, const TKikimrTableDescription& table, const TCoAtomList& inputColumns) {
-    if (GetTableOp(write) != TYdbOperation::Upsert) {
+    if (!GeneratedDepsComeFromTable(GetTableOp(write))) {
         return false;
     }
 
@@ -1031,13 +1035,16 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
 TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
+    const auto [input, columns] = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
+        tableData, write.Pos(), ctx, /* generatedLookup */ true);
+
     return Build<TKqlUpdateRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input<TKqpWriteConstraint>()
-            .Input(write.Input())
+            .Input(input)
             .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
         .Build()
-        .Columns(inputColumns)
+        .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
         .Done();
 }
@@ -1051,8 +1058,11 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
             return BuildTableMeta(meta, pos, ctx);
         });
 
+    const auto [input, columns] = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
+        tableData, write.Pos(), ctx, /* generatedLookup */ true);
+
     THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& column : inputColumns) {
+    for (const auto& column : columns) {
         inputColumnsSet.emplace(column.Value());
     }
 
@@ -1070,10 +1080,10 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
         return Build<TKqlUpdateRows>(ctx, write.Pos())
             .Table(BuildTableMeta(tableData, write.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
-                .Input(write.Input())
+                .Input(input)
                 .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
             .Build()
-            .Columns(inputColumns)
+            .Columns(columns)
             .ReturningColumns(write.ReturningColumns())
             .Done();
     }
@@ -1081,10 +1091,10 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
     return Build<TKqlUpdateRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input<TKqpWriteConstraint>()
-            .Input(write.Input())
+            .Input(input)
             .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
         .Build()
-        .Columns(inputColumns)
+        .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
         .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(IsUpdateSetting(isStreamIndexWrite, ctx, write.Pos()))

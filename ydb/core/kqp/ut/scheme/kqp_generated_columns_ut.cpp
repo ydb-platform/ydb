@@ -1556,6 +1556,202 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 10;", "[[2;[10]]]");
     }
 
+    Y_UNIT_TEST(UpdateOnGeneratedRejected) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Rejects("UPDATE TestTable ON (k, g1) VALUES (1, 5);", "cannot be set explicitly");
+        fixture.Rejects("UPDATE TestTable ON (k, a, g2) VALUES (1, 5, 5);", "cannot be set explicitly");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow2, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(UpdateOnOneDependency) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 10 + 2 = 12, g2 = 2*10 + 3 = 23
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[10];[2];[3];[100];[12];[23]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnAllDependencies) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 5 + 6 = 11, g2 = 6*10 + 7 = 67
+        fixture.Exec("UPDATE TestTable ON (k, a, b, c) VALUES (1, 5, 6, 7);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[5];[6];[7];[100];[11];[67]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnSharedDependency) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
+        fixture.Exec("UPDATE TestTable ON (k, b) VALUES (1, 7);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];[7];[3];[100];[8];[73]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnIndependentDependencies) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 4 + 2 = 6, g2 = 2*10 + 9 = 29
+        fixture.Exec("UPDATE TestTable ON (k, a, c) VALUES (1, 4, 9);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[4];[2];[9];[100];[6];[29]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnNonDependency) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("UPDATE TestTable ON (k, d) VALUES (1, 42);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];[2];[3];[42];[3];[23]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnDependencyToNull) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 1 + 0 = 1, g2 = 0*10 + 3 = 3
+        fixture.Exec("UPDATE TestTable ON (k, b) VALUES (1, NULL);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];#;[3];[100];[1];[3]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnMultipleRows) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // k=1: g1 = 10 + 2 = 12, k=2: g1 = 20 + 5 = 25
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10), (2, 20);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[10];[2];[3];[100];[12];[23]];[2;[20];[5];[6];[100];[25];[56]];" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnMissingRow) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (99, 1);");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow2, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(UpdateOnMissingAndExistingRows) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Only k=1 exists: g1 = 10 + 2 = 12
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10), (99, 1);");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[10];[2];[3];[100];[12];[23]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnViaSelect) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 10 + 2 = 12
+        fixture.Exec("UPDATE TestTable ON SELECT 1 AS k, 10 AS a;");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[10];[2];[3];[100];[12];[23]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpdateOnReturningGenerated) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 10 + 2 = 12, g2 unchanged at 23
+        fixture.CheckReturning(
+            "UPDATE TestTable ON (k, a) VALUES (1, 10) RETURNING k, a, g1, g2;",
+            "SELECT k, a, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[10];[12];[23]]]");
+    }
+
+    Y_UNIT_TEST(UpdateOnReturningBothGenerated) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // k=1: g1 = 1 + 7 = 8,  g2 = 7*10 + 3 = 73
+        // k=2: g1 = 4 + 7 = 11, g2 = 7*10 + 6 = 76
+        fixture.CheckReturning(
+            "UPDATE TestTable ON (k, b) VALUES (1, 7), (2, 7) RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[8];[73]];[2;[11];[76]]]");
+    }
+
+    Y_UNIT_TEST(UpdateOnWithIndexOnGenerated) {
+        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+            "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
+
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
+
+        // g1 = 10 + 2 = 12
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10);");
+
+        fixture.Check("SELECT k, a, b, g1 FROM TestTable ORDER BY k;",
+            "[[1;[10];[2];[12]];[2;[4];[5];[9]];[3;[7];[8];[15]]]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 12;", "[[1;[12]]]");
+    }
+
+    Y_UNIT_TEST(DeleteOnByKey) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("DELETE FROM TestTable ON (k) VALUES (2);");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(DeleteOnMultipleRows) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("DELETE FROM TestTable ON (k) VALUES (1), (3);");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow2}));
+    }
+
+    Y_UNIT_TEST(DeleteOnMissingRow) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("DELETE FROM TestTable ON (k) VALUES (99);");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow2, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(DeleteOnViaSelect) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.Exec("DELETE FROM TestTable ON SELECT 2 AS k;");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(DeleteOnReturningGenerated) {
+        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckUnordered("DELETE FROM TestTable ON (k) VALUES (2) RETURNING k, a, b, g1, g2;",
+            "[[2;[4];[5];[9];[56]]]");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1, MultiGeneratedRow3}));
+    }
+
+    Y_UNIT_TEST(DeleteOnWithIndexOnGenerated) {
+        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+            "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
+
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 9;", "[[2;[9]]]");
+
+        fixture.Exec("DELETE FROM TestTable ON (k) VALUES (2);");
+
+        fixture.Check("SELECT k, a, b, g1 FROM TestTable ORDER BY k;", "[[1;[1];[2];[3]];[3;[7];[8];[15]]]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 9;", "[]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
+    }
+
     Y_UNIT_TEST(DeleteByPrimaryKey) {
         TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 

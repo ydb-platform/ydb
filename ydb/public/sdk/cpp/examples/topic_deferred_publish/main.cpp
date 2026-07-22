@@ -53,14 +53,15 @@ int main() {
         .ExtPublicationId = extPublicationId,
     });
     session->Write(std::move(*token), std::move(message));
-    session->Close();
 
-    // 3. Publish
+    // 3. Publish (SDK waits for write acks before the server RPC)
     auto publish = deferredClient.Publish(intPublicationId).GetValueSync();
     if (!publish.IsSuccess()) {
         std::cerr << "Publish failed: " << publish.GetIssues().ToString() << std::endl;
         return 1;
     }
+
+    session->Close();
 
     std::cout << "Deferred publish demo completed for ext_publication_id=" << extPublicationId << std::endl;
     return 0;

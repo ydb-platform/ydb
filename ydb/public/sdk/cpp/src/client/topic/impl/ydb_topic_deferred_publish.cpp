@@ -9,6 +9,7 @@
 #include <ydb/public/api/grpc/draft/ydb_topic_deferred_publish_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_topic_deferred_publish.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publish_ack_tracker.h>
 
 namespace NYdb::inline Dev::NTopic::NDeferredPublish {
 
@@ -154,21 +155,40 @@ public:
         request.set_int_publication_id(intPublicationId);
 
         auto promise = NThreading::NewPromise<TPublishResult>();
-        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            Y_UNUSED(any);
-            promise.SetValue(TPublishResult(TStatus(std::move(status))));
-        };
+        auto connections = Connections_;
+        auto dbDriverState = DbDriverState_;
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
 
-        Connections_->RunDeferred<
-            Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService,
-            PublishRequest,
-            PublishResponse>(
-            std::move(request),
-            extractor,
-            &Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub::AsyncPublish,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings));
+        TDeferredPublishAckTracker::For(DbDriverState_.get()).WaitAllAcks(intPublicationId)
+            .Subscribe([
+                promise,
+                request = std::move(request),
+                connections,
+                dbDriverState,
+                rpcSettings
+            ](const NThreading::TFuture<TStatus>& future) mutable {
+                auto waitStatus = future.GetValue();
+                if (!waitStatus.IsSuccess()) {
+                    promise.SetValue(TPublishResult(TStatus(std::move(waitStatus))));
+                    return;
+                }
+
+                auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+                    Y_UNUSED(any);
+                    promise.SetValue(TPublishResult(TStatus(std::move(status))));
+                };
+
+                connections->RunDeferred<
+                    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService,
+                    PublishRequest,
+                    PublishResponse>(
+                    std::move(request),
+                    extractor,
+                    &Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub::AsyncPublish,
+                    dbDriverState,
+                    INITIAL_DEFERRED_CALL_DELAY,
+                    rpcSettings);
+            });
 
         return promise.GetFuture();
     }
@@ -185,21 +205,40 @@ public:
         request.set_int_publication_id(intPublicationId);
 
         auto promise = NThreading::NewPromise<TCancelPublicationResult>();
-        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            Y_UNUSED(any);
-            promise.SetValue(TCancelPublicationResult(TStatus(std::move(status))));
-        };
+        auto connections = Connections_;
+        auto dbDriverState = DbDriverState_;
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
 
-        Connections_->RunDeferred<
-            Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService,
-            CancelPublicationRequest,
-            CancelPublicationResponse>(
-            std::move(request),
-            extractor,
-            &Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub::AsyncCancelPublication,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings));
+        TDeferredPublishAckTracker::For(DbDriverState_.get()).WaitAllAcks(intPublicationId)
+            .Subscribe([
+                promise,
+                request = std::move(request),
+                connections,
+                dbDriverState,
+                rpcSettings
+            ](const NThreading::TFuture<TStatus>& future) mutable {
+                auto waitStatus = future.GetValue();
+                if (!waitStatus.IsSuccess()) {
+                    promise.SetValue(TCancelPublicationResult(TStatus(std::move(waitStatus))));
+                    return;
+                }
+
+                auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+                    Y_UNUSED(any);
+                    promise.SetValue(TCancelPublicationResult(TStatus(std::move(status))));
+                };
+
+                connections->RunDeferred<
+                    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService,
+                    CancelPublicationRequest,
+                    CancelPublicationResponse>(
+                    std::move(request),
+                    extractor,
+                    &Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub::AsyncCancelPublication,
+                    dbDriverState,
+                    INITIAL_DEFERRED_CALL_DELAY,
+                    rpcSettings);
+            });
 
         return promise.GetFuture();
     }

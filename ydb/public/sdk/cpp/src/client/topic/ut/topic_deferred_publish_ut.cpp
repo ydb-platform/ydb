@@ -37,25 +37,6 @@ NTopic::TContinuationToken WaitForWriteToken(NTopic::IWriteSession& session) {
     return std::move(*token);
 }
 
-void WaitForWriteAck(NTopic::IWriteSession& session, std::optional<NTopic::TContinuationToken>& token) {
-    bool acked = false;
-    while (!acked) {
-        UNIT_ASSERT_C(
-            session.WaitEvent().Wait(TDuration::Seconds(30)),
-            "timeout waiting write ack");
-        for (auto& event : session.GetEvents()) {
-            if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                token = std::move(ready->ContinuationToken);
-            } else if (auto* acks = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                UNIT_ASSERT(!acks->Acks.empty());
-                acked = true;
-            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
-            }
-        }
-    }
-}
-
 class TDeferredWriteHelper {
 public:
     explicit TDeferredWriteHelper(NTopic::TTopicClient& client, const std::string& topicPath)
@@ -88,7 +69,6 @@ public:
         message.DeferredPublication(std::move(deferred));
         Session_->Write(std::move(*Token_), std::move(message));
         Token_.reset();
-        WaitForWriteAck(*Session_, Token_);
     }
 
 private:
@@ -196,8 +176,8 @@ Y_UNIT_TEST(BeginPublicationCreatesPublication) {
 
 Y_UNIT_TEST(PublishMakesDataVisible) {
     TTopicSdkTestSetup setup("PublishMakesDataVisible", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-publish";
@@ -207,7 +187,9 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
 
-    TDeferredWriteHelper(topicClient, topicPath).WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    // Keep write session alive across Publish: no explicit ack wait; Publish waits internally.
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
 
     auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
@@ -219,8 +201,8 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
 
 Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     TTopicSdkTestSetup setup("StreamWriteAllowsOmitExtPublicationId", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-omit-ext";
@@ -230,7 +212,8 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
 
-    TDeferredWriteHelper(topicClient, topicPath).WriteDeferred(payload, begin.GetIntPublicationId());
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, begin.GetIntPublicationId());
 
     auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
@@ -242,8 +225,8 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
 
 Y_UNIT_TEST(CancelDiscardsData) {
     TTopicSdkTestSetup setup("CancelDiscardsData", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-cancel";
@@ -253,7 +236,8 @@ Y_UNIT_TEST(CancelDiscardsData) {
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
 
-    TDeferredWriteHelper(topicClient, topicPath).WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
 
     auto cancel = deferredClient.CancelPublication(begin.GetIntPublicationId()).GetValueSync();
     UNIT_ASSERT_C(cancel.IsSuccess(), cancel.GetIssues().ToString());
@@ -264,8 +248,8 @@ Y_UNIT_TEST(CancelDiscardsData) {
 
 Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
     TTopicSdkTestSetup setup("StagingNotVisibleBeforePublish", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-staging";
@@ -275,7 +259,8 @@ Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
 
-    TDeferredWriteHelper(topicClient, topicPath).WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
 
     const auto messagesBeforePublish = ReadNoMessages(topicClient, topicPath, TEST_CONSUMER);
     UNIT_ASSERT_VALUES_EQUAL(messagesBeforePublish.size(), 0u);
@@ -290,8 +275,8 @@ Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
 
 Y_UNIT_TEST(RepeatFinalizeNotFound) {
     TTopicSdkTestSetup setup("RepeatFinalizeNotFound", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-repeat-finalize";
@@ -300,8 +285,8 @@ Y_UNIT_TEST(RepeatFinalizeNotFound) {
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
 
-    TDeferredWriteHelper(topicClient, topicPath).WriteDeferred(
-        "payload", begin.GetIntPublicationId(), extId);
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred("payload", begin.GetIntPublicationId(), extId);
 
     auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
@@ -313,8 +298,8 @@ Y_UNIT_TEST(RepeatFinalizeNotFound) {
 
 Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
     TTopicSdkTestSetup setup("StreamWriteRejectsDeferredPlusTx", MakeDeferredPublishEnabledSettings());
-    auto topicClient = setup.MakeClient();
     TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
     TTopicDeferredPublishClient deferredClient(driver);
 
     auto begin = deferredClient.BeginPublication("ext-sdk-deferred-tx").GetValueSync();

@@ -509,6 +509,7 @@ protected:
 
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
+    std::unordered_map<ui64, ui64> WrittenInDeferred; // SeqNo -> int_publication_id
 };
 
 } // namespace NYdb::NTopic

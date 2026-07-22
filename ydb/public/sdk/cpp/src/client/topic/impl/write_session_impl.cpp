@@ -1,5 +1,7 @@
 #include "write_session_impl.h"
 
+#include "deferred_publish_ack_tracker.h"
+
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -693,6 +695,13 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
+        const ui64 intPublicationId = deferredIt->second;
+        TDeferredPublishAckTracker::For(DbDriverState.get()).OnAck(intPublicationId);
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", intPublicationId=" << intPublicationId);
+    }
+
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
@@ -767,16 +776,20 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 
         ui64 seqNo = GetNextIdImpl(message.SeqNo_);
 
-        if (message.GetTxPtr()) {
-            const auto& txId = MakeTransactionId(*message.GetTxPtr());
-            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+        if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(*tx);
             with_lock(txInfo->Lock) {
                 ++txInfo->WriteCount;
 
                 LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << *tx << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
             }
-            WrittenInTx[seqNo] = txId;
+            WrittenInTx[seqNo] = *tx;
+        } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+            TDeferredPublishAckTracker::For(DbDriverState.get()).OnWrite(deferred->IntPublicationId);
+            WrittenInDeferred[seqNo] = deferred->IntPublicationId;
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                     LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", intPublicationId=" << deferred->IntPublicationId);
         }
 
         CurrentBatch.Add(
@@ -1357,11 +1370,13 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
             Y_ABORT_UNLESS(!SentOriginalMessages.empty());
             Y_ABORT_UNLESS(SentOriginalMessages.front().Id == id + i);
             WrittenInTx.erase(SentOriginalMessages.front().Id);
+            WrittenInDeferred.erase(SentOriginalMessages.front().Id);
             SentOriginalMessages.pop();
         }
     } else {
         Y_ABORT_UNLESS(sentFront.Id == id);
         WrittenInTx.erase(id);
+        WrittenInDeferred.erase(id);
         SentOriginalMessages.pop();
     }
 
@@ -2019,6 +2034,17 @@ void TWriteSessionImpl::CancelTransactions()
     }
 
     Txs.clear();
+
+    std::unordered_map<ui64, ui64> unackedByPublication;
+    for (const auto& [_, intPublicationId] : WrittenInDeferred) {
+        ++unackedByPublication[intPublicationId];
+    }
+    WrittenInDeferred.clear();
+
+    auto& tracker = TDeferredPublishAckTracker::For(DbDriverState.get());
+    for (const auto& [intPublicationId, unackedCount] : unackedByPublication) {
+        tracker.OnUnackedAbort(intPublicationId, unackedCount);
+    }
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues) {

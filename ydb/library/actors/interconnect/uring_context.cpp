@@ -238,4 +238,21 @@ namespace NActors {
         return supported;
     }
 
+    bool TUringContext::IsAvailable() {
+        static const bool available = [] {
+            // Minimal capability: can we create a plain ring at all? The v2 data plane needs only this;
+            // it uses provided buffer rings when IsSupported() also holds, and falls back to ordinary
+            // per-recv buffers otherwise.
+            struct io_uring ring;
+            struct io_uring_params params = {};
+            const int ret = io_uring_queue_init_params(8, &ring, &params);
+            if (ret != 0) {
+                return false;
+            }
+            io_uring_queue_exit(&ring);
+            return true;
+        }();
+        return available;
+    }
+
 } // namespace NActors

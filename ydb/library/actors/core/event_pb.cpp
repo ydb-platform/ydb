@@ -80,10 +80,11 @@ namespace NActors {
         Y_ABORT_UNLESS(size >= 0);
         NSan::CheckMemIsInitialized(data, size);
         while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain, Buffer.size())) {
+            if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain)) {
                 const void *produce = data;
                 if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second)) {
+                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second) &&
+                        Buffer.size() >= bytesToAppend) {
                     memcpy(Buffer.data(), data, bytesToAppend);
                     produce = Buffer.data();
                     Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
@@ -188,11 +189,12 @@ namespace NActors {
         return Chunks;
     }
 
-    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event) {
+    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes) {
         Y_ABORT_UNLESS(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
+        WithCachedSizes = withCachedSizes;
     }
 
     void TCoroutineChunkSerializer::Abort() {

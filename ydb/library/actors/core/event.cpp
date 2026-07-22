@@ -53,6 +53,15 @@ namespace NActors {
         return new TEventSerializedData;
     }
 
+    void IEventHandle::Preserialize() {
+        if (Event && !Buffer) {
+            TAllocChunkSerializer serializer;
+            Event->SerializeToArcadiaStream(&serializer);
+            Buffer = serializer.Release(Event->CreateSerializationInfo(false));
+            Event.Reset();
+        }
+    }
+
 #ifndef NDEBUG
     void IEventHandle::DoTrackNextEvent() {
         TrackNextEvent = true;

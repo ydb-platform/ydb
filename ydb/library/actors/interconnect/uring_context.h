@@ -85,7 +85,14 @@ namespace NActors {
 
         struct io_uring* GetRing() { return Ring.get(); }
 
+        // True when the provided-buffer-ring API (io_uring_setup_buf_ring, kernel >= 5.19) works. This
+        // is the hard dependency of the v1 multishot-recv data path.
         static bool IsSupported();
+
+        // True when io_uring is usable at all (a plain ring can be created). This is the minimum for the
+        // v2 data plane, which uses buffer rings when available (IsSupported) and falls back to ordinary
+        // per-recv buffers on older kernels (>= 5.1) where only IsAvailable() holds.
+        static bool IsAvailable();
 #else
         TUringContext(TActorId, TActorId) {}
         ~TUringContext() = default;
@@ -121,6 +128,7 @@ namespace NActors {
         void* GetRing() { return nullptr; }
 
         static bool IsSupported() { return false; }
+        static bool IsAvailable() { return false; }
 #endif
 
         using TPtr = TIntrusivePtr<TUringContext>;

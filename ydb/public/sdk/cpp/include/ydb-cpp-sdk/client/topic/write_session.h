@@ -200,6 +200,8 @@ concept Serializable =
 
 //! Deferred publication identity for StreamWrite.
 struct TDeferredPublication {
+    static constexpr size_t MaxExtPublicationIdLength = 2048;
+
     uint64_t IntPublicationId = 0;
     std::optional<std::string> ExtPublicationId;
 

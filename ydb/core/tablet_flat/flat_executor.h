@@ -566,7 +566,8 @@ class TExecutor
     void StartNewBackup();
     void FailBackup(const TString& error);
     void ScheduleRetryBackup();
-    TStringBuilder BackupLogPrefix() const;
+
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);

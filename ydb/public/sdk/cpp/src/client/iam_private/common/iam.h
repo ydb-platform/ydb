@@ -43,16 +43,24 @@ public:
     {}
 
     TCredentialsProviderPtr CreateProvider() const override final {
-        auto authFacility = CreateSimpleCoreFacility();
-        auto authProvider = std::make_shared<TOwningFacilityCredentialsProvider>(
-            authFacility,
-            Params_.SystemServiceAccountCredentials->CreateProvider(authFacility),
-            true);
-        auto outerFacility = CreateSimpleCoreFacility();
-        auto serviceProvider = std::make_shared<TCredentialsProvider>(
-            Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
-        return std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(outerFacility), std::move(serviceProvider));
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                auto authProvider = NCredentials::NDetail::GetOrCreateCachedProvider(
+                    "TIamServiceCredentialsProviderFactory.Auth\t" +
+                        Params_.SystemServiceAccountCredentials->GetClientIdentity(),
+                    [this] {
+                        auto authFacility = CreateSimpleCoreFacility();
+                        auto provider = Params_.SystemServiceAccountCredentials->CreateProvider(authFacility);
+                        return std::make_shared<TOwningFacilityCredentialsProvider>(
+                            std::move(authFacility), std::move(provider), true);
+                    });
+                auto outerFacility = CreateSimpleCoreFacility();
+                auto serviceProvider = std::make_shared<TCredentialsProvider>(
+                    Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
+                return std::make_shared<TOwningFacilityCredentialsProvider>(
+                    std::move(outerFacility), std::move(serviceProvider));
+            });
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -60,15 +68,16 @@ public:
     }
 
     std::string GetClientIdentity() const override final {
-        return TStringBuilder()
-                << "TIamServiceCredentialsProviderFactory"
-                << '\t' << Params_.ServiceId
-                << '\t' << Params_.MicroserviceId
-                << '\t' << Params_.ResourceId
-                << '\t' << Params_.ResourceType
-                << '\t' << Params_.TargetServiceAccountId
-                << '\t' << Params_.SystemServiceAccountCredentials->GetClientIdentity()
-                ;
+        return NIam::NDetail::MakeClientIdentity(
+            "TIamServiceCredentialsProviderFactory",
+            Params_,
+            TService::service_full_name(),
+            Params_.ServiceId,
+            Params_.MicroserviceId,
+            Params_.ResourceId,
+            Params_.ResourceType,
+            Params_.TargetServiceAccountId,
+            Params_.SystemServiceAccountCredentials->GetClientIdentity());
     }
 
 private:

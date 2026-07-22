@@ -173,10 +173,14 @@ public:
     TIamCredentialsProviderFactory(const TIamHost& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
-        auto facility = CreateSimpleCoreFacility();
-        auto provider = CreateProvider(facility);
-        return std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(facility), std::move(provider));
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                auto facility = CreateSimpleCoreFacility();
+                auto provider = CreateProvider(facility);
+                return std::make_shared<TOwningFacilityCredentialsProvider>(
+                    std::move(facility), std::move(provider));
+            });
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const final {

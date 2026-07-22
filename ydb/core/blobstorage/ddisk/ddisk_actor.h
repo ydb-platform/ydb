@@ -376,10 +376,6 @@ namespace NKikimr::NDDisk {
             WakeupProcessDeallocatePersistentBufferChunk = 5,
         };
 
-        // Note: TEvListPersistentBuffer retries do NOT use EWakeupTag / TEvents::TEvWakeup, since
-        // they need to carry the original event plus a retry counter, not just a bare tag. See
-        // TEvPrivate::TEvRetryListPersistentBuffer and Schedule() in ProcessListPersistentBuffer.
-
         struct TPbOpSnapshot {
             TInstant Timestamp;
             ui64 Requests = 0;

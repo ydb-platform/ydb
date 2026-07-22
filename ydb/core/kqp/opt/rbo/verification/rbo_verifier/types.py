@@ -73,12 +73,18 @@ def integer_comparison_compatible(left: str, right: str) -> bool:
     return signed_width > unsigned_width
 
 
+def ordinary_integer_comparison_compatible(left: str, right: str) -> bool:
+    """Whether ordinary DataCompare has exact mathematical-integer semantics."""
+
+    return left in INTEGER_TYPES and right in INTEGER_TYPES
+
+
 def equality_comparison_compatible(left: str, right: str) -> bool:
     """Whether ordinary equality compares both scalar values without loss."""
 
     return (
         left == right
-        or integer_comparison_compatible(left, right)
+        or ordinary_integer_comparison_compatible(left, right)
         or string_comparison_compatible(left, right)
         or decimal_comparison_compatible(left, right)
     )
@@ -108,7 +114,7 @@ def decimal_comparison_compatible(left: str, right: str) -> bool:
 
 def ordering_comparison_compatible(left: str, right: str) -> bool:
     return (
-        integer_comparison_compatible(left, right)
+        ordinary_integer_comparison_compatible(left, right)
         or string_comparison_compatible(left, right)
         or (left == DATE and right == DATE)
         or decimal_comparison_compatible(left, right)

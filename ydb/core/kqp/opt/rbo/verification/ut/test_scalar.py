@@ -255,6 +255,136 @@ class IntegralSafeCastTest(unittest.TestCase):
                 )
 
 
+class IntegerComparisonTest(unittest.TestCase):
+    @staticmethod
+    def _evaluate(
+        kind,
+        left_type,
+        left_value,
+        right_type,
+        right_value,
+        *,
+        left_is_null=False,
+        right_is_null=False,
+        null_safe=False,
+    ):
+        expression = Expr(
+            kind=kind,
+            args=(
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            ),
+            null_safe=null_safe,
+        )
+        return Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "left": Value(
+                    left_type,
+                    smt.bool_value(left_is_null),
+                    smt.int_value(left_value),
+                ),
+                "right": Value(
+                    right_type,
+                    smt.bool_value(right_is_null),
+                    smt.int_value(right_value),
+                ),
+            },
+        )
+
+    def test_signed_unsigned_endpoints_use_mathematical_integer_order(self):
+        cases = (
+            ("Int8", -(1 << 7), "Uint64", 0),
+            ("Int64", -1, "Uint64", (1 << 64) - 1),
+            ("Int64", (1 << 63) - 1, "Uint64", (1 << 63) - 1),
+            ("Uint8", (1 << 8) - 1, "Int8", (1 << 7) - 1),
+            ("Uint64", (1 << 64) - 1, "Int64", (1 << 63) - 1),
+            ("Uint64", 0, "Int64", -(1 << 63)),
+        )
+        operations = {
+            "eq": lambda left, right: left == right,
+            "lt": lambda left, right: left < right,
+            "lte": lambda left, right: left <= right,
+            "gt": lambda left, right: left > right,
+            "gte": lambda left, right: left >= right,
+        }
+        for left_type, left, right_type, right in cases:
+            for kind, reference in operations.items():
+                actual = self._evaluate(
+                    kind,
+                    left_type,
+                    left,
+                    right_type,
+                    right,
+                )
+                with self.subTest(
+                    left_type=left_type,
+                    left=left,
+                    right_type=right_type,
+                    right=right,
+                    kind=kind,
+                ):
+                    self.assertEqual(actual.type, "Bool")
+                    self.assertEqual(actual.is_null, smt.FALSE)
+                    self.assertEqual(
+                        _ground(actual.value),
+                        reference(left, right),
+                    )
+
+    def test_cross_type_comparisons_have_exact_sql_null_semantics(self):
+        for kind in ("eq", "lt", "lte", "gt", "gte"):
+            for left_is_null in (False, True):
+                for right_is_null in (False, True):
+                    actual = self._evaluate(
+                        kind,
+                        "Int8",
+                        -1,
+                        "Uint64",
+                        (1 << 64) - 1,
+                        left_is_null=left_is_null,
+                        right_is_null=right_is_null,
+                    )
+                    expected_is_null = left_is_null or right_is_null
+                    with self.subTest(
+                        kind=kind,
+                        left_is_null=left_is_null,
+                        right_is_null=right_is_null,
+                    ):
+                        self.assertEqual(_ground(actual.is_null), expected_is_null)
+                        self.assertEqual(
+                            _ground(Encoder.is_true(actual)),
+                            not expected_is_null and kind in {"lt", "lte"},
+                        )
+
+    def test_cross_type_null_safe_equality_is_exactly_two_valued(self):
+        cases = (
+            (True, True, 0, 1, True),
+            (True, False, 0, 0, False),
+            (False, True, 0, 0, False),
+            (False, False, (1 << 7) - 1, (1 << 7) - 1, True),
+            (False, False, (1 << 7) - 1, (1 << 64) - 1, False),
+        )
+        for left_is_null, right_is_null, left, right, expected in cases:
+            actual = self._evaluate(
+                "eq",
+                "Int8",
+                left,
+                "Uint64",
+                right,
+                left_is_null=left_is_null,
+                right_is_null=right_is_null,
+                null_safe=True,
+            )
+            with self.subTest(
+                left_is_null=left_is_null,
+                right_is_null=right_is_null,
+                left=left,
+                right=right,
+            ):
+                self.assertEqual(actual.is_null, smt.FALSE)
+                self.assertEqual(_ground(actual.value), expected)
+
+
 class DecimalDivisionDispatchTest(unittest.TestCase):
     def test_same_decimal_and_every_integer_right_type_are_forwarded_exactly(self):
         for right_type in ("Decimal(7,2)", *sorted(INTEGER_TYPES)):

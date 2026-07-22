@@ -645,7 +645,11 @@ ui32 IntegerTypeWidth(TStringBuf type) {
     return 0;
 }
 
-bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
+bool IntegralDataComparisonCompatible(TStringBuf left, TStringBuf right) {
+    return IsIntegerType(left) && IsIntegerType(right);
+}
+
+bool LosslessIntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
     if (!IsIntegerType(left) || !IsIntegerType(right)) {
         return false;
     }
@@ -664,11 +668,11 @@ bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
     return signedWidth > unsignedWidth;
 }
 
-bool EqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
+bool StaticSqlInEqualityCompatible(TStringBuf left, TStringBuf right) {
     // Static SQL IN has a separate, deliberately narrow audit surface.  Do
     // not add broader scalar Decimal or cross String/Utf8 compatibility here.
     return (!IsCanonicalDecimalType(left) && !IsCanonicalDecimalType(right)) &&
-        (left == right || IntegerComparisonCompatible(left, right));
+        (left == right || LosslessIntegerComparisonCompatible(left, right));
 }
 
 bool DecimalScaleAlignmentSupported(
@@ -721,13 +725,14 @@ bool DecimalComparisonCompatible(TStringBuf left, TStringBuf right) {
 }
 
 bool ScalarEqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
-    return EqualityComparisonCompatible(left, right) ||
+    return left == right ||
+        IntegralDataComparisonCompatible(left, right) ||
         StringComparisonCompatible(left, right) ||
         DecimalComparisonCompatible(left, right);
 }
 
 bool ScalarOrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
-    return IntegerComparisonCompatible(left, right) ||
+    return IntegralDataComparisonCompatible(left, right) ||
         (left == "Date" && right == "Date") ||
         StringComparisonCompatible(left, right) ||
         DecimalComparisonCompatible(left, right);
@@ -2162,7 +2167,7 @@ NJson::TJsonValue ExportExprNode(
                 if (nullable) {
                     Unsupported("SqlIn static tuple item annotation is nullable");
                 }
-                if (!EqualityComparisonCompatible(lookupType, type)) {
+                if (!StaticSqlInEqualityCompatible(lookupType, type)) {
                     Unsupported("SqlIn static tuple item is not equality-compatible with its lookup");
                 }
                 annotatedItemTypes.push_back(type);
@@ -2184,7 +2189,7 @@ NJson::TJsonValue ExportExprNode(
             if (nullable) {
                 Unsupported("SqlIn AsList item annotation is nullable");
             }
-            if (!EqualityComparisonCompatible(lookupType, type)) {
+            if (!StaticSqlInEqualityCompatible(lookupType, type)) {
                 Unsupported("SqlIn AsList item is not equality-compatible with its lookup");
             }
             annotatedItemTypes.assign(collection.ChildrenSize(), type);

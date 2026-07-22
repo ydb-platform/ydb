@@ -106,11 +106,11 @@ The explicit scalar core initially contains:
 
 - column access, typed literal, and typed NULL;
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
-- ordinary nullable equality, null-safe equality, integer ordering when YQL's
-  common integer type preserves both operands exactly, cross-identity
-  `String`/`Utf8` equality and unsigned raw-byte ordering, and same-type `Date`
-  ordering; exact Decimal equality and ordering use YDB `DataCompare`
-  alignment for Decimal/Decimal and Decimal/integer operands;
+- ordinary nullable equality, null-safe equality, and ordering across every
+  signed/unsigned 8/16/32/64-bit integer pair, cross-identity `String`/`Utf8`
+  equality and unsigned raw-byte ordering, and same-type `Date` ordering; exact
+  Decimal equality and ordering use YDB `DataCompare` alignment for
+  Decimal/Decimal and Decimal/integer operands;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
   propagation, exact typed input domains, and fixed-width
   modular/two's-complement overflow;
@@ -119,8 +119,8 @@ The explicit scalar core initially contains:
   specials, rounding, overflow, and strict NULL propagation;
 - restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
   recursively supported, non-null expressions of one item type; that type is
-  identical to the lookup or uses the same lossless common-integer gate as
-  ordinary equality, evaluated as the SQL three-valued OR of that equality;
+  identical to the lookup or uses a deliberately separate lossless
+  common-integer gate, evaluated as the SQL three-valued OR of that equality;
 - exact `Exists`, scalar `If`, and unary `IfPresent`; optional payloads use
   lexically scoped de Bruijn bindings, and the optimizer's exact
   identity-key/Void-payload `(One, Auto)` static `ToDict` membership shape is
@@ -164,6 +164,17 @@ fingerprint is shared between both plans.
 Volatile, stateful, observably failing, evaluation-count-sensitive, or otherwise
 unsupported expressions produce `UNSUPPORTED`. New concrete scalar semantics are
 added only in response to real optimizer transformations or spurious witnesses.
+
+Ordinary integer `DataCompare` accepts all 64 ordered pairs of signed and
+unsigned 8-, 16-, 32-, and 64-bit identities for equality, null-safe equality,
+and ordering. MiniKQL compares their sign-aware mathematical values rather than
+applying a wrapping unsigned conversion. Existing exact per-identity domains on
+literals, source cells, and non-null opaque results therefore make an SMT
+integer comparison exact: width `w` uses `[-2^(w-1), 2^(w-1)-1]` when signed
+and `[0, 2^w-1]` when unsigned. Ordinary comparisons are strict on SQL NULL;
+null-safe equality is two-valued with the usual both-NULL/one-NULL cases.
+Static `IN` intentionally keeps its narrower lossless-common-type gate: equal
+signedness, or a signed width greater than the unsigned width.
 
 Integer arithmetic is deliberately narrow: both operands and the result must
 have exactly the same integer identity, and result nullability must be the OR of
@@ -377,7 +388,8 @@ Implementation sequence:
     Sort, Merge, and latent sequences;
 15. M4: quantifier-scoped shared-term SMT rendering;
 16. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
-17. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+17. M4: exact all-pairs ordinary integral `DataCompare`;
+18. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -637,8 +649,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `Uint32` is allowed only in those bound positions; type, range, arity, and
   dynamic-bound mutations fail closed. A real-host obligation covers the
   normalized converted-literal form. This moves TPC-DS q15, q19, q62, q79, and
-  q99 through formula construction; q8 now exposes its deeper mixed-width
-  `Uint64 > Int32` comparison blocker at both snapshot boundaries.
+  q99 through formula construction; q8 then reaches its mixed-width integral
+  comparison at both snapshot boundaries.
+- Ordinary integral equality, null-safe equality, and ordering admit all 64
+  ordered pairs of signed/unsigned 8/16/32/64-bit identities. MiniKQL's
+  sign-aware mathematical comparison, exact integer domains, ordinary SQL NULL
+  propagation, and two-valued null-safe equality have all-pair exporter and
+  decoder tests, plus signed/unsigned endpoint and fail-closed mutation tests.
+  A dedicated real-host `COUNT(*) > 1` fixture captures `Uint64 > Int32` at
+  both snapshots and returns `VERIFIED_BOUNDED`. Static `IN` retains its
+  independent lossless-common-type audit. A focused real-host q8 run now passes
+  the former mixed-width boundary and fails closed on unsupported scalar
+  callable `Unwrap` in both snapshots after 480 ms of preparation and 0 ms of
+  verifier work; formula and proof counts are unchanged.
 - Partial integer `SafeCast` is exported as `cast_integral` only for exact
   signed/unsigned 8/16/32/64-bit source and optional target identities whose
   YQL cast classification is `MayFail`. Descriptor and nested annotation
@@ -725,9 +748,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   shared-term rendering remove the former factorial construction gate. The
   2026-07-22 complete current-code formula-only dashboard emits TPCH q3 and q19
   (2/22) and TPC-DS q3, q15, q19, q42, q48, q50, q52, q55, q61, q62, q71, q76,
-  q79, q88, q90, q93, q96, and q99 (18/99), for 20/121 workload queries
-  (16.5%). Formula emission confirms end-to-end model coverage at two rows per
-  referenced table and two tasks; it is not a proof by itself.
+  q79, q88, q90, q93, q96, and q99 (18/99), for 20/121 workload queries (16.5%).
+  Formula emission confirms end-to-end model coverage at two rows per referenced
+  table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed

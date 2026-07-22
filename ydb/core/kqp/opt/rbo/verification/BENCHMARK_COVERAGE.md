@@ -144,9 +144,9 @@ StageGraph remains a separate diagnostic step.
 ## Current measured formula coverage
 
 The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the twenty-query floor below and recorded a
-current outcome for every workload entry. `FORMULA_EMITTED` is not a solver
-proof. Both complete suite reports satisfied the checked-in coverage policy.
+formula-only mode. It emitted the twenty-query floor below and recorded an
+outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
+complete suite reports satisfied the checked-in coverage policy.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -214,8 +214,7 @@ after the matrix.
 | OLAP unary operation `just` | - | q5, q21, q37, q40, q77, q80, q82 |
 | Callable `/` | q73, q78 | q73, q78 |
 | Callable `Concat` | q84 | q84 |
-| `>` operand types differ (`Uint64`, `Int32`) | q8 | q8 |
-| Callable `Unwrap` | q38, q87 | q38, q87 |
+| Callable `Unwrap` | q8, q38, q87 | q8, q38, q87 |
 | Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q34, q75, q85 |
 | Type `Interval` | q5, q37, q72, q77, q80, q82 | q72 |
 
@@ -258,10 +257,15 @@ snapshots; and q80 reaches initial `Interval` and final OLAP `just`. Exact OLAP
 unary presence lowering then moves q76 through formula construction and raises
 the measured TPC-DS slice to 13/99. Restricted `Substring` then moves q15, q19,
 q62, q79, and q99 through formula construction and raises that slice to 18/99.
-q8 passes the `Substring` audit and now fails closed on a deeper `Uint64 > Int32`
-comparison mismatch at both snapshot boundaries. Exact partial integral
-`SafeCast` removes q79's subsequent false-positive witness without changing
-the formula-construction count.
+Exact ordinary integral `DataCompare` then admits equality, null-safe equality,
+and ordering across every signed/unsigned 8/16/32/64-bit pair. It uses
+MiniKQL's sign-aware mathematical comparison over the existing exact typed
+domains, with SQL NULL propagation and two-valued null-safe equality. This is
+deliberately broader than static `IN`, which retains its lossless-common-type
+gate. q8 passes its former `Uint64 > Int32` blocker and now fails closed on
+unsupported scalar callable `Unwrap` at both snapshot boundaries. Exact partial
+integral `SafeCast` removes q79's subsequent false-positive witness. Neither
+change alters the formula-construction count.
 
 ## Curated proof floor and focused results
 
@@ -346,6 +350,13 @@ the formula-construction count.
   schema/query, exact Date and typed Decimal columns, `COUNT(*)`, four scans,
   three joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
+- TPC-DS q8 now passes exact ordinary `Uint64 > Int32` comparison at both
+  real-host snapshot boundaries. Its focused run spent 480 ms preparing and 0
+  ms in verifier construction before both exports failed closed on unsupported
+  scalar callable `Unwrap`. A separate real-host `COUNT(*) > 1` fixture captures
+  the same type pair at both snapshots and returns `VERIFIED_BOUNDED`. q8
+  remains unsupported and changes neither the 20/121 formula slice nor the
+  ten-query proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial nullable `Int64` membership test and the final
   lowering through `SafeCast(Int64 -> Int32)` disagreed only because the cast

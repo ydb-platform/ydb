@@ -255,7 +255,7 @@ namespace NYql::NDq {
                         SendRetryOrError(actorSystem, selfId, result.Status, state);
                     }
                 } catch (std::exception& ex) {
-                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAUTHENTICATED, ex.what()), std::move(state));
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
                 }
             });
         }

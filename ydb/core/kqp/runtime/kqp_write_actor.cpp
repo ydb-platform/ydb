@@ -6096,28 +6096,59 @@ private:
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor receive EvBufferWriteResult from " << BufferActorId);
 
+        AFL_ENSURE(!PendingResult);
         WriteToken = result->Get()->Token;
 
         if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            for (const auto& batch : result->Get()->Data) {
-                for (const auto& row : GetRows(batch)) {
-                    AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
-                    NUdf::TUnboxedValue* outputRowItems = nullptr;
-                    auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+            PendingResult.Reset(result->Release().Release());
+            PendingBatchIndex = 0;
+            PendingRowIndex = 0;
+            ConsumePendingReturning();
+        } else {
+            OnFlushed();
+        }
+    }
 
-                    for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
-                        outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
-                    }
+    void ConsumePendingReturning() {
+        AFL_ENSURE(TransformOutput);
+        AFL_ENSURE(PendingResult);
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
 
-                    AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
-                    TransformOutput->Consume(std::move(outputRow));
+        const auto& data = PendingResult->Data;
+        while (PendingBatchIndex < data.size()) {
+            const auto rows = GetRows(data[PendingBatchIndex], PendingRowIndex);
+            for (size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+                if (TransformOutput->GetFillLevel() != NYql::NDq::EDqFillLevel::NoLimit) {
+                    CA_LOG_D("TKqpForwardWriteActor TransformOutput is full, waiting for drain");
+                    Callbacks->ResumeExecution();
+                    return;
                 }
+                const auto& row = rows[rowIndex];
+                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                NUdf::TUnboxedValue* outputRowItems = nullptr;
+                auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+                for (size_t colIndex = 0; colIndex < ReturningColumnsTypes.size(); ++colIndex) {
+                    outputRowItems[colIndex] = NMiniKQL::GetCellValue(row[colIndex], ReturningColumnsTypes[colIndex]);
+                }
+                TransformOutput->Consume(std::move(outputRow));
+                ++PendingRowIndex;
             }
+            PendingRowIndex = 0;
+            ++PendingBatchIndex;
         }
 
+        PendingResult.Reset();
+        PendingRowIndex = 0;
+        PendingBatchIndex = 0;
         OnFlushed();
+    }
+
+    void OnOutputConsumerReady() final {
+        if (!PendingResult) {
+            return;
+        }
+        ConsumePendingReturning();
     }
 
     void OnFlushed() {
@@ -6330,6 +6361,7 @@ private:
         if (TransformOutput) {
             AFL_ENSURE(Alloc);
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            PendingResult.Reset();
             TransformOutput.Reset();
         }
 
@@ -6360,6 +6392,10 @@ private:
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
+
+    THolder<TEvBufferWriteResult> PendingResult;
+    size_t PendingBatchIndex = 0;
+    size_t PendingRowIndex = 0;
 
 private:
     template<typename TArgs>

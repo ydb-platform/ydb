@@ -126,7 +126,7 @@ struct TExponentialBackoffPolicy : IRetryPolicy<TArgs...> {
 
         TMaybe<TDuration> GetNextRetryDelay(typename TTypeTraits<TArgs>::TFuncParam... args) override {
             const ERetryErrorClass errorClass = RetryClassFunction(args...);
-            if (errorClass == ERetryErrorClass::NoRetry || AttemptsDone >= MaxRetries || StartTime && TInstant::Now() - StartTime >= MaxTime) {
+            if (errorClass == ERetryErrorClass::NoRetry || AttemptsDone >= MaxRetries || (StartTime && TInstant::Now() - StartTime >= MaxTime)) {
                 return {};
             }
 
@@ -215,7 +215,7 @@ struct TFixedIntervalPolicy : IRetryPolicy<TArgs...> {
 
         TMaybe<TDuration> GetNextRetryDelay(typename TTypeTraits<TArgs>::TFuncParam... args) override {
             const ERetryErrorClass errorClass = RetryClassFunction(args...);
-            if (errorClass == ERetryErrorClass::NoRetry || AttemptsDone >= MaxRetries || StartTime && TInstant::Now() - StartTime >= MaxTime) {
+            if (errorClass == ERetryErrorClass::NoRetry || AttemptsDone >= MaxRetries || (StartTime && TInstant::Now() - StartTime >= MaxTime)) {
                 return {};
             }
 

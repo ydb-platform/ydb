@@ -180,7 +180,7 @@ void TLoginCredentialsProvider::FinishRequest(
     const auto& responseValue = response ? *response : emptyResponse;
     const auto operationStatus = static_cast<EStatus>(responseValue.operation().status());
     if (!status.Ok() || operationStatus != EStatus::SUCCESS) {
-        if (IsRetryable(status.Ok() ? operationStatus : status.Status)) {
+        if (!status.Ok() && IsRetryable(status.Status)) {
             std::lock_guard lock(Mutex_);
             Requesting_ = false;
             TokenRequestAt_ = TInstant::Now() + TDuration::Seconds(1);

@@ -98,10 +98,11 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has three monotonic contracts. The verifier-entry floor
-requires TPC-DS q5, q65, and q80 to keep passing both snapshot exporters and
-invoke the verifier; their current verifier-side `UNSUPPORTED` results do not
-count as formulas, while any later formula or proof still satisfies this depth
-floor. The formula-construction floor requires TPCH q3 and q19 plus TPC-DS q3,
+requires TPCH q1 and TPC-DS q5, q65, and q80 to keep passing both snapshot
+exporters and invoke the verifier; their current verifier-side `UNSUPPORTED`
+results do not count as formulas, while any later formula or proof still
+satisfies this depth floor. The formula-construction floor requires TPCH q3 and
+q19 plus TPC-DS q3,
 q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
 q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
@@ -149,8 +150,8 @@ StageGraph remains a separate diagnostic step.
 The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
 formula-only mode. It emitted the 23-query floor below and recorded an
 outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
-measured suites meet the updated checked-in floors: q5, q65, and q80 reach
-verifier entry.
+measured suites meet the updated checked-in floors: TPCH q1 and TPC-DS q5, q65,
+and q80 reach verifier entry.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -173,10 +174,9 @@ initial and final reason.
 | Catalog required for subplans | q2, q4, q11, q15, q17, q21, q22 | q2, q4, q11, q15, q17, q21, q22 |
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
-| Type `Interval` | q1 | - |
 | Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
 | OLAP `string_contains` | - | q9 |
-| OLAP unary operation `just` | - | q1, q5, q6, q10, q12, q14 |
+| OLAP unary operation `just` | - | q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
@@ -190,9 +190,11 @@ Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
 sort key, and the widened partial/final aggregate as q3's first blockers.
 Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
 construct a complete formula for q3. Together with q19, that raises TPCH to
-2/22. q5 reaches initial `Map` and final OLAP `just`; q8 reaches `Map` at both
-boundaries; and q10 reaches initial `Map` and final OLAP `just`. Those queries
-remain unsupported.
+2/22. Exact direct numeric Date/Interval folding moves q1 through both snapshot
+exporters to verifier-side aggregate `avg` after 109 ms of preparation and 214
+ms of verifier work. q5 reaches initial `Map` and final OLAP `just`; q8 reaches
+`Map` at both boundaries; and q10 reaches initial `Map` and final OLAP `just`.
+Those queries remain unsupported.
 
 ### TPC-DS inventory
 
@@ -379,6 +381,18 @@ headroom gate.
   process deadline. That focused `ya` experiment failed as designed on the
   solver error; it is neither a proof nor a counterexample. The proof floor
   remains ten.
+
+- Direct numeric Date/Interval normalization admits only an exact non-null
+  `Date` left operand and `Interval` right operand under an `Optional<Date>`
+  `+` or `-`. It
+  reproduces MiniKQL's midnight-microsecond scaling, signed arithmetic,
+  scaled-domain validation, and post-arithmetic truncation to days; malformed
+  types or out-of-domain Interval literals fail closed, while an arithmetic
+  result outside the Date domain becomes typed NULL. Synthetic boundary and
+  fractional-day tests plus a real-host pushed-filter obligation cover the
+  gate. TPCH q1 now passes both snapshot exporters and reaches verifier-side
+  aggregate `avg` after 109 ms of preparation and 214 ms of verifier work. It
+  emits no formula, so the formula slice and proof floor are unchanged.
 
 - Restricted stored-String `Concat` is admitted only as a Map-body root whose
   binary tree contains canonical String literals and one or two catalog-backed

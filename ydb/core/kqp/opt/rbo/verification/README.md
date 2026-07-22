@@ -16,8 +16,9 @@ optional Decimal, exact Decimal semantics for comparison, integral casts,
 arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
 parts of M4. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
-the corresponding direct Date-literal OLAP `just` wrapper, and admits the
-reviewed catalog-bounded stored-String `Concat` shape.
+the corresponding direct Date-literal OLAP `just` wrapper, exactly folds direct
+numeric Date/Interval literal arithmetic, and admits the reviewed
+catalog-bounded stored-String `Concat` shape.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -48,11 +49,11 @@ experiment failed on that status as designed. All three are formula-covered,
 not proved, and not part of the proof floor. None is evidence of an optimizer
 correctness bug.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
-for TPC-DS q5, q65, and q80: both snapshots must continue to export and reach
-the verifier. Their current verifier-side results stop at Decimal-SUM headroom,
-unsupported aggregate `avg`, and the 82,944-pair grouped-aggregate construction
-cap, respectively; none is counted as a formula. Later formula or proof results
-satisfy the same depth floor automatically.
+for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
+and reach the verifier. Their current verifier-side results stop at aggregate
+`avg`, Decimal-SUM headroom, aggregate `avg`, and the 82,944-pair grouped-
+aggregate construction cap, respectively; none is counted as a formula. Later
+formula or proof results satisfy the same depth floor automatically.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -328,6 +329,20 @@ is introduced. At the pushed-OLAP boundary, `just` is erased only around a
 direct, valid, non-null Date literal; nullable, malformed, dynamic, or non-Date
 arguments fail closed.
 
+An independent constant normalization admits only a direct non-null numeric
+`Date` left operand and `Interval` right operand under an exactly
+`Optional<Date>` `+` or `-`.
+The Interval atom must satisfy the runtime type's strict open range. The
+exporter follows MiniKQL exactly: it scales Date midnight to microseconds,
+performs signed arithmetic, rejects a scaled result outside
+`[0, MAX_TIMESTAMP)` as typed NULL, and only then truncates back to whole days.
+This matters for fractional-day intervals such as one microsecond. Valid input
+ranges prove that the arithmetic cannot overflow `i64`; every other shape
+fails closed. Synthetic open-boundary, fractional-day, malformed-shape, and
+typed-NULL tests cover the gate, while a real-host pushed-filter fixture folds
+the exact TPCH q1 constant `Date('1998-12-01') - Interval('P90D')` to day
+10,471 and returns `VERIFIED_BOUNDED`.
+
 This exact fold moved TPC-DS q37, q40, and q82 through formula construction.
 At that milestone the dashboard covered 23/121 queries (19.0%). q37 and q82
 are `UNKNOWN` at a 60-second solver budget. A separate non-gating q40 scaling
@@ -338,7 +353,8 @@ counterexample. Before restricted stored-String `Concat` was added, q5, q80,
 and q84 stopped at the generic callable. q5 and q80 now have the deeper outcomes
 described above, while q84 remains unsupported on its two-cell allocation
 bound. The current dashboard covers 23/121 queries and the proof floor remains
-ten. q21 exposes `Double`; q72 still has a dynamic Date-fold
+ten. TPCH q1 passes both snapshot exporters and reaches unmodeled aggregate
+`avg`; q21 exposes `Double`; q72 still has a dynamic Date-fold
 `SafeCast(Optional<Date>)` mismatch; and q77 passes export but fails the
 verifier's Decimal-SUM headroom gate.
 

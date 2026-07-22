@@ -755,6 +755,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q5, q80, and q84 stopped at that callable; other deeper blockers include
   `Double` for q21, a noncanonical dynamic Date fold for q72, and verifier-side
   Decimal-SUM headroom for q77.
+- Direct numeric Date/Interval normalization accepts only an exact non-null
+  `Date` left operand and `Interval` right operand under an `Optional<Date>`
+  `+` or `-`. It
+  reproduces MiniKQL's microsecond scaling, signed arithmetic, scaled-domain
+  validation, and final day truncation; exact type-range premises prove the
+  intermediate cannot overflow `i64`. Malformed shapes and invalid Interval
+  atoms fail closed, while an out-of-Date-range result becomes typed NULL.
+  Synthetic boundary/fractional-day tests and a real-host pushed-filter proof
+  cover the gate. TPCH q1 now passes both exporters and reaches verifier-side
+  aggregate `avg`; formula and proof counts are unchanged.
 - Restricted stored-String `Concat` is admitted only at a Map-body root as a
   binary non-null String tree. Its leaves are canonical String literals, one or
   two catalog-backed stored String occurrences, or exactly
@@ -865,8 +875,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
-  enforce three monotonic depths: TPC-DS q5, q65, and q80 must reach the
-  verifier, the 23-query formula floor must keep constructing SMT, and the
+  enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
+  the verifier, the 23-query formula floor must keep constructing SMT, and the
   ten-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.

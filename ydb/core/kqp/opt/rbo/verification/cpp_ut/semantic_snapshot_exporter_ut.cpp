@@ -803,6 +803,25 @@ enum class EDateIntervalShape {
     NullableDays,
 };
 
+enum class EDirectDateIntervalShape {
+    Exact,
+    NonOptionalResult,
+    WrongResultType,
+    WrongArithmeticCallable,
+    UnaryArithmetic,
+    TernaryArithmetic,
+    WrongDateCallable,
+    EmptyDate,
+    BinaryDate,
+    WrongDateType,
+    NullableDate,
+    WrongIntervalCallable,
+    EmptyInterval,
+    BinaryInterval,
+    WrongIntervalType,
+    NullableInterval,
+};
+
 TExprNode::TPtr VoidValue(TExportTestContext& ctx) {
     return TypedCallable(
         ctx,
@@ -1003,6 +1022,87 @@ TExprNode::TPtr TypedConstantDateInterval(
         shape == EDateIntervalShape::NonOptionalArithmeticResult
             ? dateType
             : optionalDateType);
+}
+
+TExprNode::TPtr TypedDirectDateInterval(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf date,
+    TStringBuf interval,
+    EDirectDateIntervalShape shape = EDirectDateIntervalShape::Exact)
+{
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(
+        ctx, NUdf::EDataSlot::Date, true);
+    const auto* intervalType = ScalarType(ctx, NUdf::EDataSlot::Interval);
+    const auto* optionalIntervalType = ScalarType(
+        ctx, NUdf::EDataSlot::Interval, true);
+    const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+    const auto* optionalDatetimeType = ScalarType(
+        ctx, NUdf::EDataSlot::Datetime, true);
+
+    TExprNode::TListType dateChildren;
+    if (shape != EDirectDateIntervalShape::EmptyDate) {
+        dateChildren.push_back(ctx.ExprCtx.NewAtom(TPositionHandle(), date));
+    }
+    if (shape == EDirectDateIntervalShape::BinaryDate) {
+        dateChildren.push_back(
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "unexpected"));
+    }
+    auto dateLiteral = TypedCallable(
+        ctx,
+        shape == EDirectDateIntervalShape::WrongDateCallable
+            ? TStringBuf("Uint16")
+            : TStringBuf("Date"),
+        std::move(dateChildren),
+        shape == EDirectDateIntervalShape::WrongDateType
+            ? int64Type
+            : shape == EDirectDateIntervalShape::NullableDate
+                ? optionalDateType
+                : dateType);
+
+    TExprNode::TListType intervalChildren;
+    if (shape != EDirectDateIntervalShape::EmptyInterval) {
+        intervalChildren.push_back(
+            ctx.ExprCtx.NewAtom(TPositionHandle(), interval));
+    }
+    if (shape == EDirectDateIntervalShape::BinaryInterval) {
+        intervalChildren.push_back(
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "unexpected"));
+    }
+    auto intervalLiteral = TypedCallable(
+        ctx,
+        shape == EDirectDateIntervalShape::WrongIntervalCallable
+            ? TStringBuf("Int64")
+            : TStringBuf("Interval"),
+        std::move(intervalChildren),
+        shape == EDirectDateIntervalShape::WrongIntervalType
+            ? int64Type
+            : shape == EDirectDateIntervalShape::NullableInterval
+                ? optionalIntervalType
+                : intervalType);
+
+    TExprNode::TListType arguments = {
+        std::move(dateLiteral),
+        std::move(intervalLiteral),
+    };
+    if (shape == EDirectDateIntervalShape::UnaryArithmetic) {
+        arguments.pop_back();
+    } else if (shape == EDirectDateIntervalShape::TernaryArithmetic) {
+        arguments.push_back(TypedLiteral(ctx, "Date", "0", dateType));
+    }
+
+    return TypedCallable(
+        ctx,
+        shape == EDirectDateIntervalShape::WrongArithmeticCallable
+            ? TStringBuf("*")
+            : operation,
+        std::move(arguments),
+        shape == EDirectDateIntervalShape::NonOptionalResult
+            ? dateType
+            : shape == EDirectDateIntervalShape::WrongResultType
+                ? optionalDatetimeType
+                : optionalDateType);
 }
 
 TExprNode::TPtr MakeOlapFilterProcess(
@@ -2566,6 +2666,152 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "Date literal type annotation does not match");
+        }
+    }
+
+    Y_UNIT_TEST(FoldsDirectNumericDateAndIntervalLiteralsExactly) {
+        constexpr i64 MicrosPerDay = 86'400'000'000LL;
+        static_assert(
+            static_cast<ui64>(MicrosPerDay) * NUdf::MAX_DATE ==
+            NUdf::MAX_TIMESTAMP);
+
+        struct TCase {
+            TString Operation;
+            TString Date;
+            TString Interval;
+            ui16 Expected;
+        };
+        const TVector<TCase> cases = {
+            // Exact TPC-H q1 initial-plan constant: 1998-12-01 - 90 days.
+            {"-", "10561", "7776000000000", 10471},
+            {"+", "10471", "7776000000000", 10561},
+
+            // MiniKQL truncates only after signed microsecond arithmetic.
+            {"+", "10561", "1", 10561},
+            {"-", "10561", "1", 10560},
+            {"+", "10561", "-1", 10560},
+            {"-", "10561", "-1", 10561},
+
+            // Interval's open range accepts both immediately adjacent values.
+            {"+", "0", ToString(
+                static_cast<i64>(NUdf::MAX_TIMESTAMP) - 1), 49672},
+            {"-", "0", ToString(
+                -static_cast<i64>(NUdf::MAX_TIMESTAMP) + 1), 49672},
+        };
+
+        for (const auto& testCase : cases) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedDirectDateInterval(
+                    ctx,
+                    testCase.Operation,
+                    testCase.Date,
+                    testCase.Interval));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["value"].GetUIntegerSafe(), testCase.Expected);
+        }
+    }
+
+    Y_UNIT_TEST(DirectNumericDateAndIntervalOverflowBecomesTypedNull) {
+        constexpr i64 MicrosPerDay = 86'400'000'000LL;
+        struct TCase {
+            TString Operation;
+            TString Date;
+            TString Interval;
+        };
+        const TVector<TCase> cases = {
+            {"+", "0", "-1"},
+            {"-", "0", "1"},
+            {"+", "49672", ToString(MicrosPerDay)},
+            {"-", "49672", ToString(-MicrosPerDay)},
+        };
+
+        for (const auto& testCase : cases) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedDirectDateInterval(
+                    ctx,
+                    testCase.Operation,
+                    testCase.Date,
+                    testCase.Interval));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(), "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(), "Date");
+        }
+    }
+
+    Y_UNIT_TEST(DirectNumericDateAndIntervalGateFailsClosed) {
+        const TVector<EDirectDateIntervalShape> malformedShapes = {
+            EDirectDateIntervalShape::NonOptionalResult,
+            EDirectDateIntervalShape::WrongResultType,
+            EDirectDateIntervalShape::WrongArithmeticCallable,
+            EDirectDateIntervalShape::UnaryArithmetic,
+            EDirectDateIntervalShape::TernaryArithmetic,
+            EDirectDateIntervalShape::WrongDateCallable,
+            EDirectDateIntervalShape::EmptyDate,
+            EDirectDateIntervalShape::BinaryDate,
+            EDirectDateIntervalShape::WrongDateType,
+            EDirectDateIntervalShape::NullableDate,
+            EDirectDateIntervalShape::WrongIntervalCallable,
+            EDirectDateIntervalShape::EmptyInterval,
+            EDirectDateIntervalShape::BinaryInterval,
+            EDirectDateIntervalShape::WrongIntervalType,
+            EDirectDateIntervalShape::NullableInterval,
+        };
+        for (const auto shape : malformedShapes) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDirectDateInterval(
+                    ctx, "-", "10561", "7776000000000", shape));
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+
+        for (const TString date : {"-1", "49673", "not-a-date"}) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDirectDateInterval(
+                    ctx, "-", date, "7776000000000"));
+            UNIT_ASSERT_C(!result.IsSupported(), date);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason, "Date literal");
+        }
+
+        struct TInvalidInterval {
+            TString Value;
+            TString Reason;
+        };
+        const TVector<TInvalidInterval> invalidIntervals = {
+            {"not-an-interval", "Invalid Interval literal"},
+            {"1.0", "Invalid Interval literal"},
+            {"9223372036854775808", "Invalid Interval literal"},
+            {ToString(static_cast<i64>(NUdf::MAX_TIMESTAMP)),
+                "Interval literal is outside"},
+            {ToString(-static_cast<i64>(NUdf::MAX_TIMESTAMP)),
+                "Interval literal is outside"},
+        };
+        for (const auto& testCase : invalidIntervals) {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedDirectDateInterval(
+                    ctx, "-", "10561", testCase.Value));
+            UNIT_ASSERT_C(!result.IsSupported(), testCase.Value);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason, testCase.Reason);
         }
     }
 

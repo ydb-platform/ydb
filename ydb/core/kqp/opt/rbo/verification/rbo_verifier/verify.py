@@ -313,8 +313,6 @@ def solve(
     if query.status != "sat":
         raise SolverError(f"unexpected solver status {query.status!r}")
 
-    if not any(problem.witness.values()):
-        return Result("COUNTEREXAMPLE", row_bound, witness={})
     return Result(
         "COUNTEREXAMPLE",
         row_bound,

@@ -19,6 +19,7 @@ END()
 RECURSE_FOR_TESTS(
     benchmark_ut
     bisect_ut
+    confirmation_ut
     cpp_ut
     inspect_ut
     integration_ut
@@ -30,6 +31,8 @@ RECURSE_FOR_TESTS(
 RECURSE(
     bin
     bisect_bin
+    confirm_bin
+    confirmation
     inspect_bin
     inspector
     prefix_capture

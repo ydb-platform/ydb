@@ -19,6 +19,7 @@ from ..rbo_verifier.verify import (
     term_value,
 )
 from .plan import InspectionError, snapshot_digest
+from .witness import bind_witness
 
 
 TRACE_FORMAT = "ydb-rbo-concrete-trace"
@@ -121,6 +122,7 @@ class PreparedInspection:
     problem: Problem
     observation: Observation
     probes: Probes
+    fixed_witness: Mapping[str, list[dict[str, Any]]] | None = None
 
     def formula(self) -> str:
         return self.problem.formula()
@@ -141,6 +143,11 @@ class PreparedInspection:
             },
         }
         if query.status == "unsat":
+            if self.fixed_witness is not None:
+                return common | {
+                    "status": "WITNESS_NOT_REPRODUCED",
+                    "reason": "the saved verifier witness makes the counterexample obligation unsatisfiable",
+                }
             return common | {"status": "VERIFIED_BOUNDED"}
         if query.status == "unknown":
             if query.phase == "model":
@@ -162,9 +169,12 @@ class PreparedInspection:
         mismatches = _mismatches(comparison, self.probes, query.values)
         if not mismatches:
             raise InspectionError("SAT model has no unmatched root outcome")
+        witness = decode_witness(self.problem.witness, query.values, literals)
+        if self.fixed_witness is not None and witness != self.fixed_witness:
+            raise InspectionError("solver model differs from the fixed verifier witness")
         return common | {
             "status": "COUNTEREXAMPLE",
-            "witness": decode_witness(self.problem.witness, query.values, literals),
+            "witness": witness,
             "mismatches": mismatches,
             "trace": {
                 "before": _execution_json(
@@ -201,6 +211,7 @@ def prepare(
     after: ir.Snapshot,
     row_bound: int,
     timeout_ms: int | None = None,
+    fixed_witness: Any | None = None,
 ) -> PreparedInspection:
     """Build one obligation, observe it read-only, then add trace aliases."""
 
@@ -215,6 +226,9 @@ def prepare(
         after_edge_observer=observation.after.edge,
         boundary_observer=observation.boundary,
         comparison_observer=observation.compared,
+    )
+    normalized_witness = (
+        None if fixed_witness is None else bind_witness(problem, fixed_witness)
     )
     comparison = observation.comparison
     if comparison is None or set(observation.boundaries) != {"before", "after"}:
@@ -233,7 +247,15 @@ def prepare(
     for row in comparison.pair_equal:
         for term in row:
             probes.add(term)
-    return PreparedInspection(before, after, row_bound, problem, observation, probes)
+    return PreparedInspection(
+        before,
+        after,
+        row_bound,
+        problem,
+        observation,
+        probes,
+        normalized_witness,
+    )
 
 
 def _add_family(probes: Probes, result: RelationFamily) -> None:

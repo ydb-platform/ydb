@@ -4,6 +4,7 @@ TEST_SRCS(
     test_cli.py
     test_plan.py
     test_trace.py
+    test_witness.py
 )
 
 PEERDIR(

@@ -565,19 +565,33 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   commands, complete formula-only baseline, proof-floor evidence, q88
   investigation, and explicit unsupported/optimizer-failure inventory.
 
-### M5: confirmation and localization — in progress
+### M5: confirmation and localization — implemented for replayable single-result witnesses
 
 - Separate normalized-plan and exact concrete-counterexample inspector.
 - Separate real-YDB replay tool for deterministic, range-valid inspector
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
   legal Decimal specials are rendered as `-inf`, `inf`, and `nan`; multi-result
   TPC-DS q14, q23, and q39 remain an explicit replay extension.
+- Version-four benchmark reports preserve the exact assembled query, both
+  snapshots, and byte-exact raw verifier verdict with SHA-256 bindings. The raw
+  verdict artifact is authoritative for the witness; the report's parsed
+  verdict contains metadata only and omits the witness to prevent loss of wide
+  Decimal integers during JSON re-encoding. The separate confirmation driver
+  processes every `COUNTEREXAMPLE` deterministically, pins inspection to the
+  database decoded directly from that raw artifact, invokes real-YDB replay
+  with explicit isolated targets, and retains every input, child command,
+  stream, classification, and digest. A missing or changed witness,
+  nondeterminism, setup failure, multi-result query, or protocol error is
+  `UNRESOLVED`; symbolic candidates are never promoted beyond symbolic evidence
+  without a successful replay divergence, and exact StageGraph attribution
+  remains a separate localization step.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
 - Formula construction and the six curated workload proofs have separate
-  checked-in regression floors. Automatic replay-confirmation policy for future
-  counterexamples remains.
+  checked-in regression floors. Every future solver witness has a mandatory,
+  automatic all-candidates confirmation command; the external target mutation
+  remains outside recursive tests and the verifier kernel.
 - A separate manual real-YDB Decimal `SUM` diagnostic checks one- versus
   two-partition execution of identical rows in both optimizer modes. It
   currently confirms the shared `M` versus `inf` mismatch and is intentionally

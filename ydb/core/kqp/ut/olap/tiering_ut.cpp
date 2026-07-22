@@ -626,6 +626,39 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
     }
 
+    // Issue #26733: a ngramm bloom index whose rebuilt filter exceeds the storage MaxBlobSize used to abort
+    // the tablet with "blob size for secondary data ... bigger than limit" during tiering actualization.
+    Y_UNIT_TEST(OversizedNGrammIndexOnTiering) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "uid", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+    }
+
     Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

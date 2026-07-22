@@ -174,12 +174,21 @@ arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just` and
-`Coalesce`; `SafeCast`; and non-failing `Convert`. The same audit
+`Coalesce`; `SafeCast`; non-failing `Convert`; and `Substring` in the exact
+workload shape described below. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
 parent may contain it. YQL has no complete generic totality or determinism flag,
 so all other callables fail closed rather than relying on a denylist. This
 includes UDF and PG calls, generic division, strict casts, `Unwrap`, runtime-
 dependent generators, free variables, and unsafe AST metadata.
+
+The reviewed `Substring` shape is exactly
+`Substring(Optional<String>, start, count) -> Optional<String>`. Both bounds
+must be non-null `Uint32` literals, either directly or as an in-range integer
+literal converted to `Uint32`; that conversion exception is confined to those
+two direct bound positions. The canonical fingerprint retains both bounds and
+the String column is the only external function argument. Other arities,
+`Utf8`, nullable or dynamic bounds, and out-of-range conversions fail closed.
 
 A complete cast of a non-null integer constant to a non-null Decimal is handled
 before opaque fallback: the exporter evaluates the YDB cast and emits the

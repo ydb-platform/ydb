@@ -1049,6 +1049,78 @@ TIfSignature CheckIfCallable(const TExprNode& node) {
     };
 }
 
+bool IsExactUint32LiteralConversion(const TExprNode& node) {
+    if (!node.IsCallable("Convert") || node.ChildrenSize() != 2 ||
+        !node.Child(1)->IsCallable("DataType"))
+    {
+        return false;
+    }
+
+    bool resultNullable = false;
+    bool targetNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Uint32" || resultNullable ||
+        DataTypeDescriptorName(*node.Child(1), &targetNullable) != "Uint32" ||
+        targetNullable)
+    {
+        return false;
+    }
+
+    const auto& source = *node.Child(0);
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    if (sourceNullable || !IsIntegerType(sourceType) ||
+        !source.IsCallable(sourceType) || source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom())
+    {
+        return false;
+    }
+    LiteralExpr(source);
+
+    ui64 value = 0;
+    return TryFromString<ui64>(source.Child(0)->Content(), value) &&
+        value <= std::numeric_limits<ui32>::max();
+}
+
+void CheckRestrictedSubstringBound(const TExprNode& node) {
+    bool nullable = false;
+    if (ScalarTypeName(node, &nullable) != "Uint32" || nullable) {
+        Unsupported(
+            "Restricted Substring bounds must be non-null Uint32 literals");
+    }
+
+    if (node.IsCallable("Uint32")) {
+        LiteralExpr(node);
+        return;
+    }
+
+    if (!IsExactUint32LiteralConversion(node)) {
+        Unsupported(
+            "Restricted Substring bounds must be direct Uint32 literals or "
+            "in-range integer literals converted to Uint32");
+    }
+}
+
+void CheckRestrictedSubstringCallable(const TExprNode& node) {
+    if (!node.IsCallable("Substring") || node.ChildrenSize() != 3) {
+        Unsupported(
+            "Restricted Substring must have one string and two bound arguments");
+    }
+
+    bool inputNullable = false;
+    bool resultNullable = false;
+    if (ScalarTypeName(*node.Child(0), &inputNullable) != "String" ||
+        !inputNullable || ScalarTypeName(node, &resultNullable) != "String" ||
+        !resultNullable)
+    {
+        Unsupported(
+            "Restricted Substring requires Optional<String> input and result");
+    }
+
+    for (size_t index = 1; index < 3; ++index) {
+        CheckRestrictedSubstringBound(*node.Child(index));
+    }
+}
+
 TIfPresentSignature CheckIfPresentCallable(const TExprNode& node) {
     if (!node.IsCallable("IfPresent") || node.ChildrenSize() != 3) {
         Unsupported("IfPresent must have one optional, one unary handler, and one missing branch");
@@ -1140,7 +1212,10 @@ TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node
     return {resultType, resultNullable};
 }
 
-void CheckOpaqueCallable(const TExprNode& node) {
+void CheckOpaqueCallable(
+    const TExprNode& node,
+    bool allowExactUint32LiteralConversion = false)
+{
     const TStringBuf name = node.Content();
 
     if (name == "Decimal") {
@@ -1258,6 +1333,10 @@ void CheckOpaqueCallable(const TExprNode& node) {
         CheckIfPresentCallable(node);
         return;
     }
+    if (name == "Substring") {
+        CheckRestrictedSubstringCallable(node);
+        return;
+    }
 
     if (name == "SafeCast" || name == "Convert") {
         if (ParseCanonicalDecimalType(ScalarTypeName(node))) {
@@ -1281,7 +1360,10 @@ void CheckOpaqueCallable(const TExprNode& node) {
         }
         if (name == "Convert") {
             const auto options = CastResult<false>(node.Child(0)->GetTypeAnn(), node.GetTypeAnn());
-            if (options & (NUdf::ECastOptions::MayFail | NUdf::ECastOptions::Impossible)) {
+            if ((options & (NUdf::ECastOptions::MayFail | NUdf::ECastOptions::Impossible)) &&
+                !(allowExactUint32LiteralConversion &&
+                    IsExactUint32LiteralConversion(node)))
+            {
                 Unsupported("Opaque Convert may fail");
             }
         }
@@ -1472,7 +1554,12 @@ private:
         Encode(*signature.Missing, out, depth + 1);
     }
 
-    void Encode(const TExprNode& node, TStringBuilder& out, size_t depth) {
+    void Encode(
+        const TExprNode& node,
+        TStringBuilder& out,
+        size_t depth,
+        bool allowExactUint32LiteralConversion = false)
+    {
         if (depth > MaxDepth) {
             Unsupported("Opaque scalar exceeds the nesting audit limit");
         }
@@ -1493,7 +1580,7 @@ private:
 
         switch (node.Type()) {
             case TExprNode::Callable:
-                CheckOpaqueCallable(node);
+                CheckOpaqueCallable(node, allowExactUint32LiteralConversion);
                 AppendIdentityField(out, "node", "callable");
                 AppendIdentityField(out, "content", node.Content());
                 break;
@@ -1516,8 +1603,12 @@ private:
 
         AppendIdentityField(out, "type", TypeFingerprint(node));
         AppendIdentityField(out, "children", ToString(node.ChildrenSize()));
-        for (const auto& child : node.Children()) {
-            Encode(*child, out, depth + 1);
+        for (size_t index = 0; index < node.ChildrenSize(); ++index) {
+            Encode(
+                *node.Child(index),
+                out,
+                depth + 1,
+                node.IsCallable("Substring") && index > 0);
         }
     }
 

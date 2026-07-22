@@ -3,6 +3,7 @@
 #include "transaction.h"
 
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 namespace NYdb::inline Dev::NTopic {
@@ -66,7 +67,10 @@ void TDeferredPublishAckTracker::OnWrite(ui64 intPublicationId) {
 
 void TDeferredPublishAckTracker::OnAck(ui64 intPublicationId) {
     auto info = GetOrCreate(intPublicationId);
+    std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
+    const TStatus completeStatus = MakeCommitTransactionSuccess();
     bool tryErase = false;
+
     with_lock (info->Lock) {
         ++info->AckCount;
         Y_ABORT_UNLESS(info->AckCount <= info->WriteCount);
@@ -74,9 +78,13 @@ void TDeferredPublishAckTracker::OnAck(ui64 intPublicationId) {
             return;
         }
         if (info->WaitCalled) {
-            info->AllAcksReceived.TrySetValue(MakeCommitTransactionSuccess());
+            promiseToComplete = info->AllAcksReceived;
         }
         tryErase = true;
+    }
+
+    if (promiseToComplete) {
+        promiseToComplete->TrySetValue(completeStatus);
     }
     if (tryErase) {
         EraseIfReconciled(intPublicationId, info);
@@ -89,14 +97,21 @@ void TDeferredPublishAckTracker::OnUnackedAbort(ui64 intPublicationId, ui64 unac
     }
 
     auto info = GetOrCreate(intPublicationId);
+    std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
+    const TStatus completeStatus = MakeSessionExpiredError();
     bool tryErase = false;
+
     with_lock (info->Lock) {
         Y_ABORT_UNLESS(info->WriteCount >= info->AckCount + unackedCount);
         if (info->WaitCalled) {
-            info->AllAcksReceived.TrySetValue(MakeSessionExpiredError());
+            promiseToComplete = info->AllAcksReceived;
         }
         info->WriteCount -= unackedCount;
         tryErase = (info->WriteCount == info->AckCount);
+    }
+
+    if (promiseToComplete) {
+        promiseToComplete->TrySetValue(completeStatus);
     }
     if (tryErase) {
         EraseIfReconciled(intPublicationId, info);
@@ -105,8 +120,11 @@ void TDeferredPublishAckTracker::OnUnackedAbort(ui64 intPublicationId, ui64 unac
 
 NThreading::TFuture<TStatus> TDeferredPublishAckTracker::WaitAllAcks(ui64 intPublicationId) {
     auto info = GetOrCreate(intPublicationId);
+    std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
+    const TStatus completeStatus = MakeCommitTransactionSuccess();
     bool tryErase = false;
     NThreading::TFuture<TStatus> future;
+
     with_lock (info->Lock) {
         if (info->WaitCalled) {
             return info->AllAcksReceived.GetFuture();
@@ -114,11 +132,15 @@ NThreading::TFuture<TStatus> TDeferredPublishAckTracker::WaitAllAcks(ui64 intPub
 
         info->WaitCalled = true;
         info->AllAcksReceived = NThreading::NewPromise<TStatus>();
+        future = info->AllAcksReceived.GetFuture();
         if (info->WriteCount == info->AckCount) {
-            info->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+            promiseToComplete = info->AllAcksReceived;
             tryErase = true;
         }
-        future = info->AllAcksReceived.GetFuture();
+    }
+
+    if (promiseToComplete) {
+        promiseToComplete->SetValue(completeStatus);
     }
     if (tryErase) {
         EraseIfReconciled(intPublicationId, info);

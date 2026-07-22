@@ -66,9 +66,16 @@ protected:
         int err = 0;
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
-                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem, event->Get()->CaFile);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(
+                    event->Get()->SslCertificatePem,
+                    event->Get()->CaFile,
+                    event->Get()->ClientCertificateRequired);
             } else {
-                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile, event->Get()->CaFile);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(
+                    event->Get()->CertificateFile,
+                    event->Get()->PrivateKeyFile,
+                    event->Get()->CaFile,
+                    event->Get()->ClientCertificateRequired);
             }
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;

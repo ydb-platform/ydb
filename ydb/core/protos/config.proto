@@ -654,6 +654,7 @@ message TMonitoringConfig {
     optional bool RequireHealthcheckAuthentication = 22 [default = false];
     optional string MonitoringCaFile = 23;
     repeated string CompressContentTypes = 24; // by default most text types are compressed
+    optional bool ClientCertificateRequired = 25 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -3113,6 +3114,7 @@ message TClientCertificateAuthorization {
     repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
     optional bool RequestClientCertificate = 2 [default = false];
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
+    optional bool ClientCertificateRequired = 4 [default = false];
 }
 
 message TKafkaProxyConfig {

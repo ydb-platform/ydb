@@ -488,6 +488,7 @@ namespace NKikimr::NStorage {
             bool ConvertToDonor = false;
             bool IgnoreVSlotQuotaCheck = false;
             bool AllowUnusableDisks = false;
+            bool SettleOnlyOnOperationalDisks = false;
             bool IsSelfHealReasonDecommit = false;
             TBridgePileId BridgePileId;
             std::optional<TGroupId> BridgeProxyGroupId;

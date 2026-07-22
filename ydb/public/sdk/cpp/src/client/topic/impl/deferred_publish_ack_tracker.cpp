@@ -50,15 +50,19 @@ void TDeferredPublishAckTracker::OnWrite(ui64 intPublicationId) {
 
 void TDeferredPublishAckTracker::OnAck(ui64 intPublicationId) {
     auto info = GetOrCreate(intPublicationId);
-    bool complete = false;
+    bool erase = false;
     with_lock (info->Lock) {
         ++info->AckCount;
         Y_ABORT_UNLESS(info->AckCount <= info->WriteCount);
-        if (info->WaitCalled && info->WriteCount == info->AckCount) {
-            complete = info->AllAcksReceived.TrySetValue(MakeCommitTransactionSuccess());
+        if (info->WriteCount != info->AckCount) {
+            return;
         }
+        if (info->WaitCalled) {
+            info->AllAcksReceived.TrySetValue(MakeCommitTransactionSuccess());
+        }
+        erase = true;
     }
-    if (complete) {
+    if (erase) {
         with_lock (MapLock_) {
             auto it = Publications_.find(intPublicationId);
             if (it != Publications_.end() && it->second == info) {
@@ -74,18 +78,17 @@ void TDeferredPublishAckTracker::OnUnackedAbort(ui64 intPublicationId, ui64 unac
     }
 
     auto info = GetOrCreate(intPublicationId);
-    bool eraseEmpty = false;
+    bool erase = false;
     with_lock (info->Lock) {
         Y_ABORT_UNLESS(info->WriteCount >= info->AckCount + unackedCount);
         if (info->WaitCalled) {
             info->AllAcksReceived.TrySetValue(MakeSessionExpiredError());
-            return;
         }
         info->WriteCount -= unackedCount;
-        eraseEmpty = (info->WriteCount == 0 && info->AckCount == 0);
+        erase = (info->WriteCount == info->AckCount);
     }
 
-    if (eraseEmpty) {
+    if (erase) {
         with_lock (MapLock_) {
             auto it = Publications_.find(intPublicationId);
             if (it != Publications_.end() && it->second == info) {

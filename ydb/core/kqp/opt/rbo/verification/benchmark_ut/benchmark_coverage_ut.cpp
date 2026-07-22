@@ -1240,7 +1240,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({3, 5, 6, 10, 14, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
-            std::set<ui32>({3, 19}));
+            std::set<ui32>({3, 6, 14, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 65, 80}));

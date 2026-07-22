@@ -49,11 +49,11 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the ten curated obligations with the pinned
-Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3 and
-q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 directly from the policy,
-accepts only `VERIFIED_BOUNDED`, and ignores every ambient
-`RBO_COVERAGE_*` variable:
+The checked-in proof floor runs the twelve curated obligations with the pinned
+Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3,
+q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96
+directly from the policy, accepts only `VERIFIED_BOUNDED`, and ignores every
+ambient `RBO_COVERAGE_*` variable:
 
 ```bash
 set -o pipefail
@@ -106,7 +106,8 @@ q5, q6, q10, q14, and q19 plus TPC-DS q3,
 q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
 q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
-requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96;
+requires TPCH q3, q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
+q93, and q96;
 dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
@@ -316,8 +317,8 @@ DateTime2 execution is admitted.
 
 Synthetic exact-result, leap-day, month-end, Date-boundary, structural-mutation,
 and year-wrap cases plus a real-host pushed-filter proof cover the gate. The
-full TPCH dashboard emits formulas for q5, q6, q10, and q14 at 170/113,378,
-55/222, 108/7,886, and 53/267 ms of preparation/verifier work, respectively.
+full TPCH dashboard emits formulas for q5, q6, q10, and q14 at 153/109,903,
+55/213, 109/8,144, and 59/247 ms of preparation/verifier work, respectively.
 q12 passes this fold but remains unsupported on unordered scalar children at
 both snapshot boundaries. This raises TPCH formula coverage to 6/22 and total
 workload formula coverage to 27/121 (22.3%).
@@ -325,11 +326,13 @@ workload formula coverage to 27/121 (22.3%).
 ## Curated proof floor and focused results
 
 - The complete current-code proof floor returns `VERIFIED_BOUNDED` for TPCH q3,
-  q19 and TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96, each at two rows per
-  referenced table and two tasks. These are ten bounded proofs (8.3% of the
-  workload) for the modeled pre-physical semantics, not unbounded
-  SQL-equivalence claims. In that run TPCH q3 spent 131 ms preparing and 11,845
-  ms verifying; q42 spent 95 ms preparing and 15,210 ms verifying.
+  q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96,
+  each at two rows per referenced table and two tasks. These are twelve bounded
+  proofs (9.9% of the workload) for the modeled pre-physical semantics, not
+  unbounded SQL-equivalence claims. The current TPCH run spent 128/13,291 ms of
+  preparation/verification on q3, 72/749 ms on q6, 97/33,152 ms on q14, and
+  110/902 ms on q19; q42 spent 95 ms preparing and 15,210 ms verifying in its
+  recorded proof-floor run.
 
 - TPCH q19 newly reaches formula construction through exact scoped unary
   `IfPresent` and restricted static-membership lowering. Its focused
@@ -403,8 +406,8 @@ workload formula coverage to 27/121 (22.3%).
   97,319,076-byte formula, and spent 104,804 ms in verifier processing before
   reporting `SOLVER_ERROR` because the external solver exceeded its 15.0-second
   process deadline. That focused `ya` experiment failed as designed on the
-  solver error; it is neither a proof nor a counterexample. The proof floor
-  remains ten.
+  solver error; it is neither a proof nor a counterexample. At that milestone,
+  the proof floor remained ten.
 
 - Direct numeric Date/Interval normalization admits only an exact non-null
   `Date` left operand and `Interval` right operand under an `Optional<Date>`
@@ -429,15 +432,26 @@ workload formula coverage to 27/121 (22.3%).
   result/boundary/mutation tests and a real-host pushed-filter obligation cover
   the gate. TPCH q5, q6, q10, and q14 now emit formulas, raising the formula
   slice to 27/121 (22.3%). q12 remains unsupported on unordered children.
-  Focused solver experiments do not promote any proof: q5 reports
-  `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier work and the
-  65-second external-process watchdog, and q10 returns `UNKNOWN` after
-  142/74,871 ms. q6 and q14 return symbolic counterexamples after 54/788 and
+  At that milestone, focused solver experiments did not promote any proof: q5
+  reported `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier work and the
+  65-second external-process watchdog, and q10 returned `UNKNOWN` after
+  142/74,871 ms. q6 and q14 returned symbolic counterexamples after 54/788 and
   87/1,046 ms. Inspection indicates verifier false positives: q6's equivalent
   final Decimal predicates are opaque where the initial predicates are
   structured, while q14 fingerprints equivalent zero constants differently.
-  Neither is replay-confirmed or evidence of an optimizer bug. The checked-in
-  proof floor is unchanged.
+  Neither was replay-confirmed or evidence of an optimizer bug. The checked-in
+  proof floor was unchanged.
+
+- Exact wrapper normalization resolves those two verifier-modeling gaps. It
+  lowers only a nullable direct comparison under exact `Coalesce(..., false)`
+  to schema-preserving `if_present`, and only a direct Decimal literal or
+  complete integer-literal Decimal cast under matching `Just` to
+  `if(true, value, typed-null)`. Broader wrappers remain opaque, and structural,
+  type, nullability, safety, source-depth, normalized-node, and live-binding
+  gates fail closed. The former q6/q14 witnesses disappear; the policy-backed
+  TPCH floor returns `VERIFIED_BOUNDED` after 72/749 and 97/33,152 ms of
+  preparation/verification, respectively. Both obligations now belong to the
+  proof floor, with no bounded witness requiring replay.
 
 - Restricted stored-String `Concat` is admitted only as a Map-body root whose
   binary tree contains canonical String literals and one or two catalog-backed
@@ -542,11 +556,11 @@ workload formula coverage to 27/121 (22.3%).
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
 
-No proof-floor or focused run has confirmed an optimizer correctness bug. The
-new q19 result is a bounded proof, while q68 is a construction-bound coverage
-gap rather than a candidate divergence. The q79 and q88 candidates above were
-verifier-modeling false positives; replay remains the confirmation boundary for
-any future symbolic counterexample.
+No proof-floor or focused run has confirmed an optimizer correctness bug. q6,
+q14, and q19 are bounded proofs, while q68 is a construction-bound coverage gap
+rather than a candidate divergence. The former q6/q14 candidates and the q79
+and q88 candidates above were verifier-modeling false positives; replay remains
+the confirmation boundary for any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

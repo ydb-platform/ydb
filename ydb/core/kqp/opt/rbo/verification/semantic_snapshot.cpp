@@ -1597,6 +1597,74 @@ void CheckScalarSafetyMetadata(const TExprNode& node) {
     }
 }
 
+const TExprNode* ExactComparisonCoalesceFalseArgument(const TExprNode& node) {
+    if (!node.IsCallable("Coalesce") || node.ChildrenSize() != 2) {
+        return nullptr;
+    }
+
+    const auto& fallback = *node.Child(1);
+    if (!fallback.IsCallable("Bool") || fallback.ChildrenSize() != 1 ||
+        !fallback.Child(0)->IsAtom("false"))
+    {
+        return nullptr;
+    }
+
+    const auto& argument = *node.Child(0);
+    if (!argument.IsCallable({"==", "!=", "<", "<=", ">", ">="}))
+    {
+        return nullptr;
+    }
+
+    bool resultNullable = false;
+    bool argumentNullable = false;
+    bool fallbackNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Bool" || resultNullable ||
+        ScalarTypeName(argument, &argumentNullable) != "Bool" ||
+        !argumentNullable ||
+        ScalarTypeName(fallback, &fallbackNullable) != "Bool" ||
+        fallbackNullable)
+    {
+        return nullptr;
+    }
+
+    CheckScalarSafetyMetadata(node);
+    CheckScalarSafetyMetadata(fallback);
+    return &argument;
+}
+
+const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
+        return nullptr;
+    }
+
+    const auto& argument = *node.Child(0);
+    bool argumentNullable = false;
+    const TString argumentType = ScalarTypeName(argument, &argumentNullable);
+    if (argumentNullable || !ParseCanonicalDecimalType(argumentType)) {
+        return nullptr;
+    }
+
+    const bool directLiteral = argument.IsCallable("Decimal");
+    const bool completeLiteralCast =
+        argument.IsCallable({"SafeCast", "Convert"}) &&
+        argument.ChildrenSize() == 2 &&
+        IsCompleteIntegerLiteralDecimalCast(argument);
+    if (!directLiteral && !completeLiteralCast) {
+        return nullptr;
+    }
+
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != argumentType ||
+        !resultNullable)
+    {
+        Unsupported(
+            "Exact Decimal Just requires a matching Optional<Decimal> result");
+    }
+
+    CheckScalarSafetyMetadata(node);
+    return &argument;
+}
+
 bool IsExactDataAnnotation(
     const TTypeAnnotationNode* annotation,
     NUdf::EDataSlot slot,
@@ -2882,6 +2950,84 @@ NJson::TJsonValue ExportExprNode(
                 Unsupported("Date literal type annotation does not match its callable");
             }
         }
+        return result;
+    }
+
+    if (const auto* argument = ExactDecimalJustArgument(node)) {
+        // Just never changes the value of its non-null argument.  Keep this
+        // normalization deliberately closed over constant Decimal forms whose
+        // exact value is already audited below.  The unreachable NULL branch
+        // preserves the source Optional type in the normalized IR and output
+        // schema while the true condition makes runtime presence exact.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        const TString resultType = ScalarTypeName(*argument);
+
+        budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
+        auto condition = JsonMap();
+        condition["kind"] = "literal";
+        condition["type"] = "Bool";
+        condition["value"] = true;
+        auto missing = JsonMap();
+        missing["kind"] = "null";
+        missing["type"] = resultType;
+
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = std::move(condition);
+        result["then"] = ExportExprNode(
+            *argument,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["else"] = std::move(missing);
+        result["type"] = resultType;
+        result["nullable"] = true;
+        return result;
+    }
+
+    if (const auto* argument = ExactComparisonCoalesceFalseArgument(node)) {
+        // Coalesce(p, false) is the identity handler for a present Boolean and
+        // false for NULL.  Reuse the existing exact IfPresent semantics rather
+        // than erasing the wrapper, which would be wrong in value-sensitive
+        // positions such as Not or projection.  The gate stays limited to one
+        // reviewed comparison; larger Boolean trees retain their shared opaque
+        // identity until their solver cost is reviewed separately.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported("Exact Coalesce false binding depth exceeds the audit limit");
+        }
+
+        budget.Charge(normalizedDepth + 1); // Synthetic identity handler bound value.
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportExprNode(
+            *argument,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["present"] = BoundExpr(0);
+        result["missing"] = ExportExprNode(
+            *node.Child(1),
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["type"] = "Bool";
+        result["nullable"] = false;
         return result;
     }
 

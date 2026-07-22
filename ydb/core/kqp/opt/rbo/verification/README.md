@@ -12,9 +12,12 @@ ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
-optional Decimal, exact Decimal semantics for comparison, integral casts,
+optional Decimal, exact direct-comparison `Coalesce(..., false)`, exact constant
+Decimal `Just`, exact Decimal semantics for comparison, integral casts,
 arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
-parts of M4. The exporter also exactly folds the reviewed constant
+parts of M4. The two exact wrapper forms retain their Optional schema through
+existing `IfPresent`/`If` IR instead of being erased. The exporter also exactly
+folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
 the corresponding direct Date-literal OLAP `just` wrapper, exactly folds direct
 numeric Date/Interval literal arithmetic, exactly folds the reviewed constant
@@ -37,9 +40,10 @@ q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96,
 and q99: 27/121 workload queries (22.3%). Formula emission means that both
 snapshots were modeled and SMT was constructed; it is not a solver proof. The
 checked-in solver proof floor returns
-`VERIFIED_BOUNDED` for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55,
-q90, q93, and q96: ten obligations (8.3% of the workload). Focused q19 took
-116 ms to prepare and 851 ms to prove.
+`VERIFIED_BOUNDED` for TPCH q3, q6, q14, and q19 plus TPC-DS q3, q42, q48,
+q52, q55, q90, q93, and q96: twelve obligations (9.9% of the workload). The
+current TPCH proof-floor run prepared/verified q6 in 72/749 ms and q14 in
+97/33,152 ms. Focused q19 took 116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
@@ -384,18 +388,26 @@ q5/q6-style `1994-01-01 + 1 year` and q10-style `1993-10-01 + 3 months`
 constants to days 9,131 and 8,766 and is `VERIFIED_BOUNDED`.
 
 The complete formula dashboard now emits TPCH q5, q6, q10, and q14 in addition
-to q3 and q19. Their preparation/verifier times were respectively 170/113,378,
-55/222, 108/7,886, and 53/267 ms. q12 passes the DateTime2 fold but remains
+to q3 and q19. Their preparation/verifier times were respectively 153/109,903,
+55/213, 109/8,144, and 59/247 ms. q12 passes the DateTime2 fold but remains
 unsupported on unordered scalar children at both snapshot boundaries. This
-raises the current formula slice to 27/121 (22.3%); the checked-in proof floor
-is unchanged. In focused solver experiments q5 reported `SOLVER_ERROR` after
+raises the current formula slice to 27/121 (22.3%). In the initial focused
+solver experiments q5 reported `SOLVER_ERROR` after
 180/230,982 ms of preparation/verifier work and the 65-second external-process
 watchdog, while q10 returned `UNKNOWN` after 142/74,871 ms. q6 and q14 produced
 symbolic counterexamples after 54/788 and 87/1,046 ms. Inspection indicates
 verifier false positives: equivalent final Decimal predicates or constants are
-opaque or fingerprinted differently from their initial forms. Neither has been
-replay-confirmed, so none of the four enters the proof floor or establishes an
-optimizer bug.
+opaque or fingerprinted differently from their initial forms. Neither was
+replay-confirmed, and neither established an optimizer bug.
+
+The subsequent narrow scalar gates lower only a nullable direct comparison
+under exact `Coalesce(..., false)` and only an exact constant Decimal `Just`.
+They retain wrapper semantics and Optional schema with existing `IfPresent` and
+`If` nodes; broader shapes still fail closed to opaque modeling. The old q6 and
+q14 witnesses disappear, and the current policy-backed run returns
+`VERIFIED_BOUNDED` after 72/749 and 97/33,152 ms, respectively. Both obligations
+now enter the proof floor. A bounded UNSAT result has no witness to replay; q5
+and q10 remain unproved, and no optimizer correctness bug is confirmed.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,

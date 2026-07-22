@@ -3773,6 +3773,561 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(LowersExactBoolCoalesceFalseThroughIfPresent) {
+        const auto makeCoalesce = [](TExportTestContext& ctx) {
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            return TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    TypedCallable(
+                        ctx,
+                        ">=",
+                        {
+                            TypedMember(ctx, "a.x", optionalInt),
+                            TypedLiteral(ctx, "Int32", "7", intType),
+                        },
+                        optionalBool),
+                    TypedLiteral(ctx, "Bool", "false", boolType),
+                },
+                boolType);
+        };
+
+        {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                makeCoalesce(ctx),
+                true);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["optional"]["kind"].GetStringSafe(),
+                "gte");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["optional"]["left"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT(!expression["missing"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Bool");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Not",
+                    {makeCoalesce(ctx)},
+                    boolType),
+                true);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "not");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["arg"]["kind"].GetStringSafe(),
+                "if_present");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto comparison = [&]() {
+                return TypedCallable(
+                    ctx,
+                    ">=",
+                    {
+                        TypedMember(ctx, "a.x", optionalInt),
+                        TypedLiteral(ctx, "Int32", "7", intType),
+                    },
+                    optionalBool);
+            };
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "And",
+                            {comparison(), comparison()},
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType),
+                true);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            ">=",
+                            {
+                                TypedMember(ctx, "a.x", optionalInt),
+                                TypedLiteral(ctx, "Int32", "7", intType),
+                            },
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "true", boolType),
+                    },
+                    boolType),
+                true);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            ">=",
+                            {
+                                TypedLiteral(ctx, "Int32", "7", intType),
+                                TypedLiteral(ctx, "Int32", "1", intType),
+                            },
+                            boolType),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            ">=",
+                            {
+                                TypedMember(ctx, "a.x", optionalInt),
+                                TypedLiteral(ctx, "Int32", "7", intType),
+                            },
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    optionalBool),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "inconsistent nullability");
+        }
+    }
+
+    Y_UNIT_TEST(FoldsExactConstantDecimalJust) {
+        struct TCase {
+            TString Value;
+            TString Precision;
+            TString Scale;
+            TString ExpectedScaled;
+            TString CastCallable;
+        };
+        const TVector<TCase> cases = {
+            {"0", "12", "2", "0", "SafeCast"},
+            {"0", "12", "2", "0", "Convert"},
+            {"0", "12", "2", "0", ""},
+            {"100", "35", "2", "10000", ""},
+            {"0", "35", "2", "0", ""},
+        };
+
+        TString safeCastZero;
+        TString convertZero;
+        TString literalZero;
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(
+                ctx,
+                test.Precision,
+                test.Scale);
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                test.Precision,
+                test.Scale,
+                true);
+            TExprNode::TPtr argument;
+            if (!test.CastCallable.empty()) {
+                const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+                argument = TypedCallable(
+                    ctx,
+                    test.CastCallable,
+                    {
+                        TypedLiteral(ctx, "Int32", test.Value, intType),
+                        DecimalDataTypeDescriptor(
+                            ctx,
+                            test.Precision,
+                            test.Scale,
+                            decimalType),
+                    },
+                    decimalType);
+            } else {
+                argument = TypedDecimalLiteral(
+                    ctx,
+                    test.Value,
+                    test.Precision,
+                    test.Scale,
+                    decimalType);
+            }
+
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {std::move(argument)},
+                    optionalDecimalType));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                TStringBuilder()
+                    << "Decimal(" << test.Precision << "," << test.Scale << ")");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["condition"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["type"].GetStringSafe(),
+                expression["type"].GetStringSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["value"]["kind"].GetStringSafe(),
+                "finite");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["value"]["scaled"].GetStringSafe(),
+                test.ExpectedScaled);
+            if (test.CastCallable == "SafeCast") {
+                safeCastZero = NJson::WriteJson(expression, false, true);
+            } else if (test.CastCallable == "Convert") {
+                convertZero = NJson::WriteJson(expression, false, true);
+            } else if (test.Precision == "12") {
+                literalZero = NJson::WriteJson(expression, false, true);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(safeCastZero, literalZero);
+        UNIT_ASSERT_VALUES_EQUAL(convertZero, literalZero);
+
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "12", "2");
+            const auto* optionalDecimalType = DecimalType(ctx, "12", "2", true);
+            const auto just = [&](TStringBuf value) {
+                return TypedCallable(
+                    ctx,
+                    "Just",
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            value,
+                            "12",
+                            "2",
+                            decimalType),
+                    },
+                    optionalDecimalType);
+            };
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "+",
+                    {just("0"), just("100")},
+                    optionalDecimalType));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "add");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT(expression["left"]["nullable"].GetBooleanSafe());
+            UNIT_ASSERT(expression["right"]["nullable"].GetBooleanSafe());
+        }
+    }
+
+    Y_UNIT_TEST(ConstantDecimalJustGateFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "12", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {
+                        TypedDecimalLiteral(
+                            ctx,
+                            "0",
+                            "12",
+                            "2",
+                            decimalType),
+                    },
+                    DecimalType(ctx, "13", "2", true)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "matching Optional<Decimal>");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* decimalType = DecimalType(ctx, "12", "2");
+            const auto* optionalDecimalType = DecimalType(ctx, "12", "2", true);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "SafeCast",
+                            {
+                                TypedMember(ctx, "a.x", intType),
+                                DecimalDataTypeDescriptor(
+                                    ctx,
+                                    "12",
+                                    "2",
+                                    decimalType),
+                            },
+                            decimalType),
+                    },
+                    optionalDecimalType));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+            UNIT_ASSERT_STRING_CONTAINS(
+                expression["fingerprint"].GetStringSafe(),
+                "Just");
+        }
+    }
+
+    Y_UNIT_TEST(ExactWrapperSafetyMetadataFailsClosed) {
+        const auto makeDecimalJust = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr argument)
+        {
+            return TypedCallable(
+                ctx,
+                "Just",
+                {std::move(argument)},
+                DecimalType(ctx, "12", "2", true));
+        };
+        const auto makeCoalesce = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr comparison)
+        {
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            return TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    std::move(comparison),
+                    TypedLiteral(ctx, "Bool", "false", boolType),
+                },
+                boolType);
+        };
+        const auto makeComparison = [](TExportTestContext& ctx) {
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            return TypedCallable(
+                ctx,
+                ">=",
+                {
+                    TypedMember(ctx, "a.x", optionalInt),
+                    TypedLiteral(ctx, "Int32", "1", intType),
+                },
+                ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+        };
+
+        {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeDecimalJust(
+                    ctx,
+                    TypedDecimalLiteral(
+                        ctx,
+                        "0",
+                        "12",
+                        "2",
+                        DecimalType(ctx, "12", "2"))),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()->SetResult(
+                ctx.ExprCtx.NewAtom(TPositionHandle(), "executed"));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "executed Result node");
+        }
+
+        {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeDecimalJust(
+                    ctx,
+                    TypedDecimalLiteral(
+                        ctx,
+                        "0",
+                        "12",
+                        "2",
+                        DecimalType(ctx, "12", "2"))),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()->Child(0)->SetSideEffects(
+                ESideEffects::General);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeCoalesce(ctx, makeComparison(ctx)),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()->SetResult(
+                ctx.ExprCtx.NewAtom(TPositionHandle(), "executed"));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "executed Result node");
+        }
+
+        {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeCoalesce(ctx, makeComparison(ctx)),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()->Child(0)->SetUnorderedChildren();
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+    }
+
     Y_UNIT_TEST(ExportsExactUnaryIfPresentWithScopedBoundValue) {
         TExportTestContext ctx;
         const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
@@ -4123,11 +4678,20 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     }
 
     Y_UNIT_TEST(IfPresentBindingDepthIsBounded) {
-        const auto nestedIfPresent = [](TExportTestContext& ctx, size_t depth) {
+        const auto nestedIfPresent = [](
+            TExportTestContext& ctx,
+            size_t depth,
+            bool coalesceTerminal)
+        {
             const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
             const auto* optionalInt = ScalarType(
                 ctx,
                 NUdf::EDataSlot::Int32,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
                 true);
             TVector<TExprNode::TPtr> arguments;
             arguments.reserve(depth);
@@ -4139,8 +4703,28 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 arguments.push_back(std::move(argument));
             }
 
-            TExprNode::TPtr expression =
-                TypedLiteral(ctx, "Int32", "1", intType);
+            TExprNode::TPtr expression = coalesceTerminal
+                ? TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            ">=",
+                            {
+                                TypedNothing(
+                                    ctx,
+                                    "Int32",
+                                    intType,
+                                    optionalInt),
+                                TypedLiteral(ctx, "Int32", "1", intType),
+                            },
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType)
+                : TypedLiteral(ctx, "Int32", "1", intType);
+            const auto* resultType = coalesceTerminal ? boolType : intType;
             for (size_t index = depth; index > 0; --index) {
                 const size_t level = index - 1;
                 auto optional = level == 0
@@ -4159,9 +4743,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                             ctx,
                             arguments[level],
                             std::move(expression)),
-                        TypedLiteral(ctx, "Int32", "0", intType),
+                        coalesceTerminal
+                            ? TypedLiteral(ctx, "Bool", "false", boolType)
+                            : TypedLiteral(ctx, "Int32", "0", intType),
                     },
-                    intType);
+                    resultType);
             }
             return expression;
         };
@@ -4171,7 +4757,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto result = ExportMapExpressionResult(
                 ctx,
                 "a",
-                nestedIfPresent(ctx, 64),
+                nestedIfPresent(ctx, 64, false),
                 true);
             UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
         }
@@ -4180,12 +4766,33 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto result = ExportMapExpressionResult(
                 ctx,
                 "a",
-                nestedIfPresent(ctx, 65),
+                nestedIfPresent(ctx, 65, false),
                 true);
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "binding depth exceeds");
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                nestedIfPresent(ctx, 63, true),
+                true);
+            UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                nestedIfPresent(ctx, 64, true),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Coalesce false binding depth exceeds");
         }
     }
 

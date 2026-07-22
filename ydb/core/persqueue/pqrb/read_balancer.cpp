@@ -643,7 +643,7 @@ void TPersQueueReadBalancer::SchedulePartitionsLocationWakeup(const TActorContex
     }
     const auto now = TAppData::TimeProvider->Now();
     const auto& deadline = PartitionsLocationQueue.front().Deadline;
-    const auto delay = deadline > now ? deadline - now : TDuration::Zero();
+    const auto delay = deadline > now ? std::max(deadline - now, TDuration::MilliSeconds(50)) : TDuration::MilliSeconds(50);
     PartitionsLocationWakeupScheduled = true;
     ctx.Schedule(delay, new TEvents::TEvWakeup(PARTITIONS_LOCATION_WAKEUP_TAG));
 }
@@ -670,15 +670,15 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
     while (!PartitionsLocationQueue.empty()) {
         auto request = std::move(PartitionsLocationQueue.front());
         PartitionsLocationQueue.pop_front();
+        if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
+            continue;
+        }
         if (request.Deadline <= now) {
             PQ_LOG_D("GetPartitionsLocation request expired, sender=" << request.Sender);
             SendPartitionsLocationError(request.Sender, ctx);
             continue;
         }
-        if (!TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
-            deferred.push_back(std::move(request));
-            continue;
-        }
+        deferred.push_back(std::move(request));
     }
     PartitionsLocationQueue = std::move(deferred);
     SchedulePartitionsLocationWakeup(ctx);

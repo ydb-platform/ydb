@@ -103,7 +103,7 @@ namespace NYql::NDq {
         // clang-format on
 
         void Handle(TEvGotCredentials::TPtr& ev) {
-            const auto& credentials = std::move(ev->Get()->Credentials);
+            const auto& credentials = ev->Get()->Credentials;
 
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 

@@ -2,34 +2,24 @@
 
 #include "export_iface.h"
 
+#include <util/generic/maybe.h>
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/maybe.h>
 
 #include <memory>
 
 class IOutputStream;
 
+#endif // KIKIMR_DISABLE_S3_OPS
+
 namespace NKikimr {
 namespace NDataShard {
-
-class IExportDataFormat {
-public:
-    virtual bool ColumnsOrder(const TVector<ui32>& tags) = 0;
-    virtual bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) = 0;
-    virtual TMaybe<TBuffer> Flush(bool last) = 0;
-    virtual void Clear() = 0;
-    // Number of encoded output bytes the format is currently holding internally
-    // (data produced but not yet returned via Flush). Formats that write row
-    // output directly into the Collect out stream return 0.
-    virtual size_t GetReadyOutputBytes() const = 0;
-    virtual TString GetError() const = 0;
-
-    virtual ~IExportDataFormat() = default;
-}; 
 
 struct TYdbDumpExportSettings {
     TYdbDumpExportSettings& WithColumns(IExport::TTableColumns columns) {
@@ -80,8 +70,27 @@ struct TParquetExportSettings {
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+
+class IExportDataFormat {
+public:
+    virtual bool ColumnsOrder(const TVector<ui32>& tags) = 0;
+    virtual bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) = 0;
+    virtual TMaybe<TBuffer> Flush(bool last) = 0;
+    virtual void Clear() = 0;
+    // Number of encoded output bytes the format is currently holding internally
+    // (data produced but not yet returned via Flush). Formats that write row
+    // output directly into the Collect out stream return 0.
+    virtual size_t GetReadyOutputBytes() const = 0;
+    virtual TString GetError() const = 0;
+
+    virtual ~IExportDataFormat() = default;
+};
+
 std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TYdbDumpExportSettings&& settings);
 std::unique_ptr<IExportDataFormat> CreateExportDataFormat(TParquetExportSettings&& settings);
+
+#endif // KIKIMR_DISABLE_S3_OPS
 
 } // namespace NDataShard
 } // namespace NKikimr

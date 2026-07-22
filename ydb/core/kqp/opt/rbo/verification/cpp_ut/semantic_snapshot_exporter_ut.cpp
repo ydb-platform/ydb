@@ -711,6 +711,56 @@ TExprNode::TPtr DecimalDataTypeDescriptor(
     return result;
 }
 
+TExprNode::TPtr MakeOlapFilterProcess(
+    TExportTestContext& ctx,
+    TExprNode::TPtr condition)
+{
+    const auto pos = TPositionHandle();
+    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+    const auto filter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+        .Input(TExprBase(argument))
+        .Condition(TExprBase(std::move(condition)))
+        .Done();
+    return ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {argument}),
+        filter.Ptr());
+}
+
+TExprNode::TPtr MakeOlapComparisonCondition(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf column,
+    TStringBuf literal)
+{
+    const auto pos = TPositionHandle();
+    return Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value(operation).Build()
+        .Left<TCoAtom>().Value(column).Build()
+        .Right(TypedLiteral(
+            ctx,
+            "Int32",
+            literal,
+            ScalarType(ctx, NUdf::EDataSlot::Int32)))
+        .Done().Ptr();
+}
+
+TExprNode::TPtr MakeOlapCoalesceFalse(
+    TExportTestContext& ctx,
+    TExprNode::TPtr condition)
+{
+    const auto pos = TPositionHandle();
+    return Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value("??").Build()
+        .Left(TExprBase(std::move(condition)))
+        .Right(TypedLiteral(
+            ctx,
+            "Bool",
+            "false",
+            ScalarType(ctx, NUdf::EDataSlot::Bool)))
+        .Done().Ptr();
+}
+
 TExprNode::TPtr MakeOlapComparisonProcess(
     TExportTestContext& ctx,
     TStringBuf operation,
@@ -718,36 +768,40 @@ TExprNode::TPtr MakeOlapComparisonProcess(
     TStringBuf literal,
     bool coalesceFalse = false)
 {
-    const auto pos = TPositionHandle();
-    const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
-    auto comparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
-        .Operator().Value(operation).Build()
-        .Left<TCoAtom>().Value(column).Build()
-        .Right(TypedLiteral(ctx, "Int32", literal, intType))
-        .Done();
-
-    TExprNode::TPtr condition = comparison.Ptr();
+    auto condition = MakeOlapComparisonCondition(
+        ctx,
+        operation,
+        column,
+        literal);
     if (coalesceFalse) {
-        condition = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
-            .Operator().Value("??").Build()
-            .Left(comparison)
-            .Right(TypedLiteral(
-                ctx,
-                "Bool",
-                "false",
-                ScalarType(ctx, NUdf::EDataSlot::Bool)))
-            .Done().Ptr();
+        condition = MakeOlapCoalesceFalse(ctx, std::move(condition));
     }
 
-    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
-    const auto filter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
-        .Input(TExprBase(argument))
-        .Condition(TExprBase(condition))
+    return MakeOlapFilterProcess(ctx, std::move(condition));
+}
+
+TExprNode::TPtr MakeOlapUnaryProcess(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TExprNode::TPtr argument)
+{
+    const auto pos = TPositionHandle();
+    const auto condition = Build<TKqpOlapFilterUnaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value(operation).Build()
+        .Arg(TExprBase(std::move(argument)))
         .Done();
-    return ctx.ExprCtx.NewLambda(
-        pos,
-        ctx.ExprCtx.NewArguments(pos, {argument}),
-        filter.Ptr());
+    return MakeOlapFilterProcess(ctx, condition.Ptr());
+}
+
+TExprNode::TPtr MakeOlapUnaryProcess(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf column)
+{
+    return MakeOlapUnaryProcess(
+        ctx,
+        operation,
+        ctx.ExprCtx.NewAtom(TPositionHandle(), column));
 }
 
 TExprNode::TPtr MakeOlapDecimalComparisonProcess(
@@ -771,15 +825,7 @@ TExprNode::TPtr MakeOlapDecimalComparisonProcess(
             decimalType))
         .Done();
 
-    const auto argument = ctx.ExprCtx.NewArgument(pos, "row");
-    const auto filter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
-        .Input(TExprBase(argument))
-        .Condition(TExprBase(comparison.Ptr()))
-        .Done();
-    return ctx.ExprCtx.NewLambda(
-        pos,
-        ctx.ExprCtx.NewArguments(pos, {argument}),
-        filter.Ptr());
+    return MakeOlapFilterProcess(ctx, comparison.Ptr());
 }
 
 struct TDecimalOracleType {
@@ -5066,6 +5112,120 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"].GetIntegerSafe(), 30);
     }
 
+    Y_UNIT_TEST(OlapCoalesceTracksPositiveFilterContext) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
+        const auto pos = TPositionHandle();
+
+        auto exportCondition = [&](TExprNode::TPtr condition) {
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32, true}});
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx,
+                std::move(condition));
+            TOpRoot root(read, pos, {"a.k"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        auto coalescedComparison = [&]() {
+            return MakeOlapCoalesceFalse(
+                ctx,
+                MakeOlapComparisonCondition(ctx, "eq", "k", "0"));
+        };
+
+        for (const bool useAnd : {false, true}) {
+            TVector<TExprBase> arguments = {
+                TExprBase(coalescedComparison()),
+                TExprBase(MakeOlapComparisonCondition(ctx, "gte", "k", "1")),
+            };
+            TExprNode::TPtr condition;
+            if (useAnd) {
+                condition = Build<TKqpOlapAnd>(ctx.ExprCtx, pos)
+                    .Add(arguments)
+                    .Done().Ptr();
+            } else {
+                condition = Build<TKqpOlapOr>(ctx.ExprCtx, pos)
+                    .Add(arguments)
+                    .Done().Ptr();
+            }
+
+            const auto snapshot = ParseSupported(exportCondition(std::move(condition)));
+            const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["kind"].GetStringSafe(),
+                useAnd ? "and" : "or");
+            UNIT_ASSERT_VALUES_EQUAL(predicate["args"].GetArraySafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["args"][0]["kind"].GetStringSafe(),
+                "eq");
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["args"][1]["kind"].GetStringSafe(),
+                "gte");
+        }
+
+        auto beneathNot = Build<TKqpOlapNot>(ctx.ExprCtx, pos)
+            .Value(TExprBase(coalescedComparison()))
+            .Done();
+        auto result = exportCondition(beneathNot.Ptr());
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "requires a positive filter context");
+
+        auto beneathComparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+            .Operator().Value("eq").Build()
+            .Left(TExprBase(coalescedComparison()))
+            .Right(TypedLiteral(
+                ctx,
+                "Bool",
+                "true",
+                ScalarType(ctx, NUdf::EDataSlot::Bool)))
+            .Done();
+        result = exportCondition(beneathComparison.Ptr());
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "requires a positive filter context");
+    }
+
+    Y_UNIT_TEST(ExportsExactOlapPresencePredicatesAtAStageBoundary) {
+        auto check = [](TStringBuf operation, bool negated) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32, true}});
+            read->OlapFilterLambda = MakeOlapUnaryProcess(ctx, operation, "k");
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+
+            const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+            const auto& exists = negated ? predicate["arg"] : predicate;
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["kind"].GetStringSafe(),
+                negated ? "not" : "exists");
+            UNIT_ASSERT_VALUES_EQUAL(exists["kind"].GetStringSafe(), "exists");
+            UNIT_ASSERT_VALUES_EQUAL(exists["arg"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(exists["arg"]["column"].GetStringSafe(), "a.k");
+        };
+
+        check("exists", false);
+        check("empty", true);
+    }
+
     Y_UNIT_TEST(ExportsDecimalLiteralInActualOlapFilterDialect) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/Decimal", {
@@ -5103,7 +5263,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
     Y_UNIT_TEST(UnsupportedOlapFilterFormsFailClosed) {
         TExportTestContext ctx;
-        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
         auto makeRead = [&]() {
             auto read = MakeRead(
                 ctx,
@@ -5111,7 +5271,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "a",
                 {"k"},
                 NYql::EStorageType::ColumnStorage);
-            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+            SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32, true}});
             return read;
         };
 
@@ -5166,6 +5326,86 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         result = ExportSemanticSnapshotV1(rowRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "only for column storage");
+
+        auto unsupportedUnary = makeRead();
+        unsupportedUnary->OlapFilterLambda = MakeOlapUnaryProcess(ctx, "just", "k");
+        TOpRoot unsupportedUnaryRoot(unsupportedUnary, pos, {"a.k"});
+        unsupportedUnary->Props.StageId = unsupportedUnaryRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(unsupportedUnaryRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported OLAP unary operation just");
+
+        auto missingUnaryColumn = makeRead();
+        missingUnaryColumn->OlapFilterLambda = MakeOlapUnaryProcess(ctx, "empty", "missing");
+        TOpRoot missingUnaryColumnRoot(missingUnaryColumn, pos, {"a.k"});
+        missingUnaryColumn->Props.StageId = missingUnaryColumnRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(missingUnaryColumnRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable physical column missing");
+
+        auto nonAtomUnaryOperator = makeRead();
+        nonAtomUnaryOperator->OlapFilterLambda = MakeOlapFilterProcess(
+            ctx,
+            ctx.ExprCtx.NewList(
+                pos,
+                {
+                    TypedLiteral(ctx, "Int32", "0", ScalarType(ctx, NUdf::EDataSlot::Int32)),
+                    ctx.ExprCtx.NewAtom(pos, "k"),
+                }));
+        TOpRoot nonAtomUnaryOperatorRoot(nonAtomUnaryOperator, pos, {"a.k"});
+        nonAtomUnaryOperator->Props.StageId = nonAtomUnaryOperatorRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(nonAtomUnaryOperatorRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "non-Atom operator");
+
+        auto nestedJust = makeRead();
+        const auto just = Build<TKqpOlapFilterUnaryOp>(ctx.ExprCtx, pos)
+            .Operator().Value("just").Build()
+            .Arg<TCoAtom>().Value("k").Build()
+            .Done();
+        nestedJust->OlapFilterLambda = MakeOlapUnaryProcess(
+            ctx,
+            "exists",
+            just.Ptr());
+        TOpRoot nestedJustRoot(nestedJust, pos, {"a.k"});
+        nestedJust->Props.StageId = nestedJustRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(nestedJustRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported OLAP unary operation just");
+
+        auto nestedCoalesce = makeRead();
+        const auto comparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+            .Operator().Value("eq").Build()
+            .Left<TCoAtom>().Value("k").Build()
+            .Right(TypedLiteral(
+                ctx,
+                "Int32",
+                "0",
+                ScalarType(ctx, NUdf::EDataSlot::Int32)))
+            .Done();
+        const auto coalesce = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+            .Operator().Value("??").Build()
+            .Left(comparison)
+            .Right(TypedLiteral(
+                ctx,
+                "Bool",
+                "false",
+                ScalarType(ctx, NUdf::EDataSlot::Bool)))
+            .Done();
+        nestedCoalesce->OlapFilterLambda = MakeOlapUnaryProcess(
+            ctx,
+            "empty",
+            coalesce.Ptr());
+        TOpRoot nestedCoalesceRoot(nestedCoalesce, pos, {"a.k"});
+        nestedCoalesce->Props.StageId = nestedCoalesceRoot.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        result = ExportSemanticSnapshotV1(nestedCoalesceRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "requires a positive filter context");
     }
 
     Y_UNIT_TEST(ExportsColumnReadPushdownAtAStageBoundary) {

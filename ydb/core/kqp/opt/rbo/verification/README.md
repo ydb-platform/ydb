@@ -8,11 +8,11 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
-ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, exact
-`Exists`/`If`/unary `IfPresent`, exact String/Utf8 comparison and ordering,
-exact Decimal
-comparison/integral-cast/arithmetic/ordering/SUM, and
-benchmark-dashboard parts of M4.
+ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
+restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact String/Utf8
+comparison and ordering, exact Decimal
+comparison/integral-cast/arithmetic/ordering/SUM, and benchmark-dashboard parts
+of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -23,17 +23,18 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The 2026-07-22 complete post-conditional formula-only dashboard establishes
+The 2026-07-22 complete post-OLAP-presence formula-only dashboard establishes
 formula construction for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52,
-q55, q61, q71, q88, q90, q93, and q96: 14/121 workload queries (11.6%). The
+q55, q61, q71, q76, q88, q90, q93, and q96: 15/121 workload queries (12.4%). The
 checked-in solver proof floor returns `VERIFIED_BOUNDED` for TPCH q3 and q19
 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96: ten obligations (8.3%
 of the workload). Focused q19 took 116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
-65.0-second external process deadline; q71 did likewise, and q61 and q88 are
-`UNKNOWN` at the 60-second solver budget. None is evidence of an optimizer
-correctness bug. Separately, the isolated manual
+65.0-second external process deadline; q71 did likewise, and q61, q76, and q88
+are `UNKNOWN` at the 60-second solver budget. q76 is formula-covered, not part
+of the proof floor. None is evidence of an optimizer correctness bug.
+Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
 shared aggregation/runtime defect, not a new-RBO-only counterexample. These
@@ -383,10 +384,17 @@ rather than `OriginalPredicate` statistics metadata. Version one accepts only a
 one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
 its scalar subset is physical columns, supported literals, Boolean
 AND/OR/NOT, equality, the compatible integer, String/Utf8, Date, or Decimal
-ordering described above, and filter-boundary `Coalesce(predicate, false)`.
-Projection wrappers, range reads, malformed type descriptors, and unknown
-operations fail closed. The predicate filters raw scan rows before symbolic
-source partitioning and any per-task pushed limit.
+ordering described above, and exact presence tests. A
+`TKqpOlapFilterUnaryOp` is admitted only as an exact two-child tuple whose
+operator is the Atom `exists` or `empty`; its recursively decoded argument is
+lowered respectively to `exists(x)` or `not(exists(x))`. A non-Atom or unknown
+operator (including `just`) and an unavailable physical column fail closed.
+`Coalesce(predicate, false)` is erased only in a positive filter context: at
+the filter boundary or beneath AND/OR. The same form beneath NOT, comparison,
+or a unary presence operation fails closed because the erasure is not
+value-preserving there. Projection wrappers, range reads, malformed type
+descriptors, and unknown operations also fail closed. The predicate filters raw
+scan rows before symbolic source partitioning and any per-task pushed limit.
 
 Every relation is capped at 4096 candidate rows. Join matrices and outputs,
 UnionAll, and grouped aggregation are checked before construction; Sort, Merge,
@@ -488,8 +496,9 @@ captured initial/final pair through the normal CLI. One test covers an explicit
 `LIMIT 1` and its split intermediate/final form. The ordered test covers
 `ORDER BY A DESC, B ASC LIMIT 1`: it checks the initial Sort+Limit, final
 per-task intermediate TopSort, exact Merge metadata (including NULL placement),
-and final Limit. A column-store test compares an initial logical Filter with the
-final pushed OLAP predicate and requires the normal bounded proof. The benchmark
+and final Limit. Column-store tests compare initial logical Filters with final
+pushed OLAP predicates, cover `IS NULL` combined with comparisons and
+`IS NULL OR IS NOT NULL`, and require the normal bounded proof. The benchmark
 test loads the exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
 checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second

@@ -255,6 +255,13 @@ NJson::TJsonValue NotExpr(NJson::TJsonValue argument) {
     return result;
 }
 
+NJson::TJsonValue ExistsExpr(NJson::TJsonValue argument) {
+    auto result = JsonMap();
+    result["kind"] = "exists";
+    result["arg"] = std::move(argument);
+    return result;
+}
+
 TString TypeName(const TTypeAnnotationNode* annotation, bool* nullable = nullptr) {
     if (!annotation) {
         Unsupported("Scalar expression has no type annotation");
@@ -1444,14 +1451,11 @@ NJson::TJsonValue ExportExprNode(
         const auto* argument = CheckExistsCallable(node);
         CheckScalarSafetyMetadata(node);
 
-        auto result = JsonMap();
-        result["kind"] = "exists";
-        result["arg"] = ExportExprNode(
+        return ExistsExpr(ExportExprNode(
             *argument,
             rowArgument,
             visibleColumns,
-            boundArguments);
-        return result;
+            boundArguments));
     }
 
     if (node.IsCallable("If")) {
@@ -2035,7 +2039,8 @@ using TOlapColumnMap = THashMap<TString, TString>;
 
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
-    const TOlapColumnMap& columns);
+    const TOlapColumnMap& columns,
+    bool positiveFilterContext = false);
 
 NJson::TJsonValue OlapColumnExpr(
     TStringBuf physicalName,
@@ -2076,7 +2081,8 @@ void CheckOlapBoolOpType(const TExprNode& node) {
 
 NJson::TJsonValue ExportOlapBinary(
     const TKqpOlapFilterBinaryOp& operation,
-    const TOlapColumnMap& columns)
+    const TOlapColumnMap& columns,
+    bool positiveFilterContext)
 {
     const auto& node = operation.Ref();
     if (node.ChildrenSize() != 3 && node.ChildrenSize() != 4) {
@@ -2092,10 +2098,15 @@ NJson::TJsonValue ExportOlapBinary(
         {
             Unsupported("OLAP filter coalesce is supported only with false fallback");
         }
-        // At a filter boundary, IsTrue(Coalesce(predicate, false)) is exactly
-        // IsTrue(predicate).  Keeping that normalization here avoids adding a
-        // general-purpose scalar simplifier to the verifier kernel.
-        return ExportOlapScalar(operation.Left().Ptr(), columns);
+        if (!positiveFilterContext) {
+            Unsupported(
+                "OLAP filter coalesce requires a positive filter context");
+        }
+        // IsTrue(Coalesce(predicate, false)) is exactly IsTrue(predicate), and
+        // that equivalence remains a congruence through AND/OR.  It is not
+        // valid in value-sensitive positions such as NOT or exists/empty, so
+        // recursive callers carry the positive-filter context explicitly.
+        return ExportOlapScalar(operation.Left().Ptr(), columns, true);
     }
 
     TStringBuf kind;
@@ -2114,9 +2125,33 @@ NJson::TJsonValue ExportOlapBinary(
     return op == "neq" ? NotExpr(std::move(result)) : std::move(result);
 }
 
+NJson::TJsonValue ExportOlapUnary(
+    const TKqpOlapFilterUnaryOp& operation,
+    const TOlapColumnMap& columns)
+{
+    const auto& node = operation.Ref();
+    if (node.ChildrenSize() != 2) {
+        Unsupported("Malformed OLAP unary operation");
+    }
+    // The generated tuple wrapper matches every two-child expression list;
+    // this explicit tag check is therefore part of the fail-closed boundary.
+    if (!node.Child(0)->IsAtom()) {
+        Unsupported("OLAP unary operation has a non-Atom operator");
+    }
+
+    const TString op(operation.Operator().StringValue());
+    if (op != "exists" && op != "empty") {
+        Unsupported(TStringBuilder() << "Unsupported OLAP unary operation " << op);
+    }
+
+    auto result = ExistsExpr(ExportOlapScalar(operation.Arg().Ptr(), columns));
+    return op == "empty" ? NotExpr(std::move(result)) : std::move(result);
+}
+
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
-    const TOlapColumnMap& columns)
+    const TOlapColumnMap& columns,
+    bool positiveFilterContext)
 {
     if (!node) {
         Unsupported("OLAP predicate contains a null expression node");
@@ -2140,8 +2175,15 @@ NJson::TJsonValue ExportOlapScalar(
         return LiteralExpr(*node);
     }
 
+    if (const auto maybeUnary = TMaybeNode<TKqpOlapFilterUnaryOp>(node)) {
+        return ExportOlapUnary(maybeUnary.Cast(), columns);
+    }
+
     if (const auto maybeBinary = TMaybeNode<TKqpOlapFilterBinaryOp>(node)) {
-        return ExportOlapBinary(maybeBinary.Cast(), columns);
+        return ExportOlapBinary(
+            maybeBinary.Cast(),
+            columns,
+            positiveFilterContext);
     }
 
     if (const auto maybeAnd = TMaybeNode<TKqpOlapAnd>(node)) {
@@ -2152,7 +2194,10 @@ NJson::TJsonValue ExportOlapScalar(
         result["kind"] = "and";
         auto args = JsonArray();
         for (const auto& child : maybeAnd.Ref().Children()) {
-            args.AppendValue(ExportOlapScalar(child, columns));
+            args.AppendValue(ExportOlapScalar(
+                child,
+                columns,
+                positiveFilterContext));
         }
         result["args"] = std::move(args);
         return result;
@@ -2166,7 +2211,10 @@ NJson::TJsonValue ExportOlapScalar(
         result["kind"] = "or";
         auto args = JsonArray();
         for (const auto& child : maybeOr.Ref().Children()) {
-            args.AppendValue(ExportOlapScalar(child, columns));
+            args.AppendValue(ExportOlapScalar(
+                child,
+                columns,
+                positiveFilterContext));
         }
         result["args"] = std::move(args);
         return result;
@@ -2210,7 +2258,10 @@ NJson::TJsonValue ExportOlapPredicate(
         if (const auto maybeFilter = TMaybeNode<TKqpOlapFilter>(node)) {
             const auto filter = maybeFilter.Cast();
             visit(filter.Input().Ptr());
-            predicates.push_back(ExportOlapScalar(filter.Condition().Ptr(), columns));
+            predicates.push_back(ExportOlapScalar(
+                filter.Condition().Ptr(),
+                columns,
+                true));
             return;
         }
         Unsupported(TStringBuilder()

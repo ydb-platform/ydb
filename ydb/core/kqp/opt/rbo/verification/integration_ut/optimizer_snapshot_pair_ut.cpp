@@ -1313,7 +1313,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         const TString query = R"(--!syntax_v1
                 SELECT Id, A, B, Payload
                 FROM `/Root/RboOrdered`
-                WHERE A >= 30 AND B == 5;
+                WHERE A >= 30 AND B == 5 AND Payload IS NULL;
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -1333,6 +1333,14 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(
             initialFilter["predicate"]["kind"].GetStringSafe(),
             "and");
+        TVector<const NJson::TJsonValue*> initialExists;
+        CollectExpressions(initialFilter["predicate"], "exists", initialExists);
+        UNIT_ASSERT_VALUES_EQUAL(initialExists.size(), 1);
+        const TString initialPresenceColumn =
+            (*initialExists.front())["arg"]["column"].GetStringSafe();
+        UNIT_ASSERT(
+            initialPresenceColumn == "Payload" ||
+            initialPresenceColumn.EndsWith(".Payload"));
 
         const auto& finalScan = OnlyPlanNode(final, "scan");
         UNIT_ASSERT(!finalScan["predicate"].IsNull());
@@ -1341,11 +1349,20 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             finalScan["predicate"]["kind"].GetStringSafe(),
             "and");
         const auto& conjuncts = finalScan["predicate"]["args"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 3);
         THashSet<TString> kinds;
         THashSet<TString> columns;
         for (const auto& conjunct : conjuncts) {
             const TString kind = conjunct["kind"].GetStringSafe();
+            if (kind == "not") {
+                const auto& exists = conjunct["arg"];
+                UNIT_ASSERT_VALUES_EQUAL(exists["kind"].GetStringSafe(), "exists");
+                UNIT_ASSERT_VALUES_EQUAL(exists["arg"]["kind"].GetStringSafe(), "column");
+                UNIT_ASSERT_VALUES_EQUAL(exists["arg"]["column"].GetStringSafe(), "Payload");
+                UNIT_ASSERT(kinds.insert("empty").second);
+                UNIT_ASSERT(columns.insert("Payload").second);
+                continue;
+            }
             const TString column = conjunct["left"]["column"].GetStringSafe();
             kinds.insert(kind);
             columns.insert(column);
@@ -1368,9 +1385,79 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                     5);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(kinds, THashSet<TString>({"eq", "gte"}));
-        UNIT_ASSERT_VALUES_EQUAL(columns, THashSet<TString>({"A", "B"}));
+        UNIT_ASSERT_VALUES_EQUAL(kinds, THashSet<TString>({"empty", "eq", "gte"}));
+        UNIT_ASSERT_VALUES_EQUAL(columns, THashSet<TString>({"A", "B", "Payload"}));
         UNIT_ASSERT(PlanNodes(final, "filter").empty());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesPushedOlapPresencePredicates) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, A, B
+                FROM `/Root/RboOrdered`
+                WHERE A IS NULL OR B IS NOT NULL;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        auto assertPresencePredicate = [](const NJson::TJsonValue& predicate) {
+            UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "or");
+            const auto& alternatives = predicate["args"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(alternatives.size(), 2);
+
+            THashSet<TString> columns;
+            for (const auto& alternative : alternatives) {
+                const NJson::TJsonValue* presence = &alternative;
+                bool negated = false;
+                size_t notCount = 0;
+                while ((*presence)["kind"].GetStringSafe() == "not") {
+                    negated = !negated;
+                    presence = &(*presence)["arg"];
+                    UNIT_ASSERT(++notCount <= 2);
+                }
+                UNIT_ASSERT_VALUES_EQUAL((*presence)["kind"].GetStringSafe(), "exists");
+                const TString column = (*presence)["arg"]["column"].GetStringSafe();
+                if (negated) {
+                    UNIT_ASSERT(column == "A" || column.EndsWith(".A"));
+                    UNIT_ASSERT(columns.insert("empty:A").second);
+                } else {
+                    UNIT_ASSERT(column == "B" || column.EndsWith(".B"));
+                    UNIT_ASSERT(columns.insert("exists:B").second);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                columns,
+                THashSet<TString>({"empty:A", "exists:B"}));
+        };
+
+        const auto& initialScan = OnlyPlanNode(initial, "scan");
+        UNIT_ASSERT(initialScan["predicate"].IsNull());
+        assertPresencePredicate(OnlyPlanNode(initial, "filter")["predicate"]);
+
+        UNIT_ASSERT(PlanNodes(final, "filter").empty());
+        assertPresencePredicate(OnlyPlanNode(final, "scan")["predicate"]);
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

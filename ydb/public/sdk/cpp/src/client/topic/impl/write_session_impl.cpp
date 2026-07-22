@@ -81,7 +81,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
@@ -1475,11 +1474,39 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
     auto credentialsProvider = DbDriverState->GetCredentialsProvider();
-    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
-    auto token = credentialsProvider->GetAuthInfo();
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    UpdateTokenInProgress = true;
+    authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+        if (auto self = cbContext->LockShared()) {
+            self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                if (ok) if (auto self = cbContext->LockShared()) {
+                    std::lock_guard guard(self->Lock);
+                    self->UpdateTokenImpl(future);
+                }
+            });
+        }
+    });
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
     if (token == PrevToken) {
         return;
     }

@@ -49,14 +49,39 @@ TEST(IamCredentialsProvider, NoExpiryFieldFallback) {
 TEST(IamCredentialsProvider, ServerError) {
     TMetadataServer server;
     server.SetStrictMode(false);
-    server.SetResponse(HTTP_INTERNAL_SERVER_ERROR, "");
+    server.SetResponse(HTTP_BAD_REQUEST, "");
 
     TIamHost params = MakeMetadataParams(server.Port);
 
     auto factory = CreateIamCredentialsProviderFactory(params);
     auto provider = factory->CreateProvider();
 
-    EXPECT_EQ(provider->GetAuthInfo(), "");
+    EXPECT_THROW(provider->GetAuthInfo(), yexception);
+}
+
+TEST(IamCredentialsProvider, RetriesTransientError) {
+    TMetadataServer server;
+    server.SetStrictMode(false);
+    server.SetResponse(HTTP_OK, MakeTokenResponse("old-token", 3600));
+
+    TIamHost params = MakeMetadataParams(server.Port);
+    params.RefreshPeriod = TDuration::MilliSeconds(100);
+
+    auto provider = CreateIamCredentialsProviderFactory(params)->CreateProvider();
+    EXPECT_EQ(provider->GetAuthInfo(), "old-token");
+
+    const int countBeforeRefresh = server.GetRequestCount();
+    server.SetResponse(HTTP_INTERNAL_SERVER_ERROR, "");
+    for (int i = 0; i < 1000 && server.GetRequestCount() == countBeforeRefresh; ++i) {
+        Sleep(TDuration::MilliSeconds(10));
+    }
+    ASSERT_GT(server.GetRequestCount(), countBeforeRefresh);
+    auto future = provider->GetAuthInfoAsync();
+    EXPECT_FALSE(future.IsReady());
+
+    server.SetResponse(HTTP_OK, MakeTokenResponse("new-token", 3600));
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    EXPECT_EQ(future.GetValue(), "new-token");
 }
 
 TEST(IamCredentialsProvider, ConcurrentAccess) {

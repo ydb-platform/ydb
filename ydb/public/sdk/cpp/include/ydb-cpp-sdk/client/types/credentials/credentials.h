@@ -4,9 +4,9 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <exception>
 #include <memory>
 #include <string>
-#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -15,6 +15,13 @@ public:
     virtual ~ICredentialsProvider() = default;
     virtual std::string GetAuthInfo() const = 0;
     virtual bool IsValid() const = 0;
+    virtual NThreading::TFuture<std::string> GetAuthInfoAsync() const {
+        try {
+            return NThreading::MakeFuture(GetAuthInfo());
+        } catch (...) {
+            return NThreading::MakeErrorFuture<std::string>(std::current_exception());
+        }
+    }
 };
 
 using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>;
@@ -25,14 +32,8 @@ public:
     virtual ~ICredentialsProviderFactory() = default;
     // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
-    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const {
-        return NThreading::MakeFuture(CreateProvider());
-    }
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
-    }
-    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
-        return NThreading::MakeFuture(CreateProvider(std::move(facility)));
     }
     virtual std::string GetClientIdentity() const;
 };

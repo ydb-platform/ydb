@@ -63,7 +63,7 @@ static inline size_t SubstGlobalImpl(TStringType& s, const TStringViewType from,
         TStringType result;
         for (; (off = TStringViewType(s).find(from, off)) != TStringType::npos; off += fromSize) {
             if (!replacementsCount) {
-                // first replacement occured, we can prepare result string
+                // first replacement occurred, we can prepare result string
                 result.reserve(s.size() + s.size() / 3);
             }
             result.append(s.begin() + srcPos, s.begin() + off);

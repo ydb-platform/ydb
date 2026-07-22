@@ -12,7 +12,7 @@
  * @param with          Substring to use as replacement.
  * @param from          Position at with to start replacement.
  *
- * @return          Number of replacements occured.
+ * @return          Number of replacements occurred.
  */
 size_t SubstGlobal(TString& text, TStringBuf what, TStringBuf with, size_t from = 0);
 
@@ -36,7 +36,7 @@ size_t SubstGlobal(TUtf32String& text, TUtf32StringBuf what, TUtf32StringBuf wit
  * @param with          Character to use as replacement.
  * @param from          Position at with to start replacement.
  *
- * @return          Number of replacements occured.
+ * @return          Number of replacements occurred.
  */
 size_t SubstGlobal(TString& text, char what, char with, size_t from = 0);
 

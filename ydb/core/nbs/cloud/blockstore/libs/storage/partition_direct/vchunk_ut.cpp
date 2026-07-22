@@ -273,7 +273,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::TemporaryOffline);
                     ready.SetValue();
@@ -328,7 +330,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -365,7 +369,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    Y_UNIT_TEST_F(ShouldAppendHost, TBaseFixture)
     {
         Init();
 
@@ -387,9 +391,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
-                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    vchunk->UpdateHostCount(DirectBlockGroupHostCount + 1);
                     ready.SetValue();
                 });
             wait.GetValue(TDuration::Seconds(10));
@@ -399,11 +405,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirectBlockGroupHostCount,
             AccessConfig(*vchunk).GetHostCount());
 
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
-            "H5-{Disabled,0,0}");
-
         {
+            // Response from the database
             UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
             auto task = RunScheduledTasks();
             task.Wait(TDuration::Seconds(10));
@@ -412,19 +415,19 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT_VALUES_EQUAL(
             DirectBlockGroupHostCount + 1,
             AccessConfig(*vchunk).GetHostCount());
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "DDisk{Primary;Primary;Primary;None;None;None}");
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "Enabled{+++++-}");
-
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
-            "H5-{Disabled,0,0}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[0/100] "
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
+            "DDisk{Primary;Primary;Primary;None;None;None} Enabled{++++++}",
+            AccessConfig(*vchunk).DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};"
+            "H5+{Disabled,0,0};",
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
@@ -495,7 +498,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Offline);
                     ready.SetValue();
@@ -551,7 +556,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();

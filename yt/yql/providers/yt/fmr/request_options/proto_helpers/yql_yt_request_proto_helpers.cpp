@@ -717,6 +717,7 @@ NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduc
     protoReduceTaskParams.SetSerializedReduceJobState(reduceTaskParams.SerializedReduceJobState);
     auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceTaskParams.ReduceOperationSpec);
     protoReduceTaskParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    protoReduceTaskParams.SetSortByHasKeyHashPrefix(reduceTaskParams.SortByHasKeyHashPrefix);
     return protoReduceTaskParams;
 }
 
@@ -730,6 +731,7 @@ TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& pro
     reduceTaskParams.Output = outputTables;
     reduceTaskParams.SerializedReduceJobState = protoReduceTaskParams.GetSerializedReduceJobState();
     reduceTaskParams.ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceTaskParams.GetReduceOperationSpec());
+    reduceTaskParams.SortByHasKeyHashPrefix = protoReduceTaskParams.GetSortByHasKeyHashPrefix();
     return reduceTaskParams;
 }
 

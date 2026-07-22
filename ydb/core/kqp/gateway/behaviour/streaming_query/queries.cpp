@@ -1986,11 +1986,12 @@ public:
     )
 
     void HandleRemove(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
+        State = ev->Get()->Info;
+
         if (HandleResult(ev, "Cleanup streaming query")) {
             return;
         }
 
-        State = ev->Get()->Info;
         RemoveQuery();
     }
 
@@ -2043,11 +2044,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvStartStreamingQueryResult::TPtr& ev) {
+        State = ev->Get()->Info;
+
         if (HandleResult(ev, "Start streaming query")) {
             return;
         }
 
-        State = ev->Get()->Info;
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -2444,11 +2446,12 @@ public:
     }
 
     void HandleSync(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        TBase::QueryState = ev->Get()->State;
+
         if (TBase::HandleResult(ev, "Streaming query initialization (recover previous query state, try to repeat request)")) {
             return;
         }
 
-        TBase::QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             TBase::SchemeInfo = std::nullopt;
         }
@@ -2519,11 +2522,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->State;
+
         if (HandleResult(ev, "Streaming query initialization")) {
             return;
         }
 
-        QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             SchemeInfo = std::nullopt;
         }
@@ -2602,7 +2606,7 @@ private:
         TPropertyValidator validator(*SchemeTx.MutableCreateStreamingQuery()->MutableProperties());
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
-        CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
+        CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, ""));
         CHECK_STATUS(validator.SaveDefault(EName::WatermarkLateEventsPolicy, "drop", &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
         CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS(validator.Save(
@@ -2662,11 +2666,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->State;
+
         if (HandleResult(ev, "Streaming query alter")) {
             return;
         }
 
-        QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             SchemeInfo = std::nullopt;
         }
@@ -2773,6 +2778,8 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->Info;
+
         if (HandleResult(ev, "Cleanup streaming query")) {
             return;
         }

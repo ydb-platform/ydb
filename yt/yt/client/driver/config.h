@@ -54,6 +54,10 @@ struct TDriverConfig
     //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
     bool RequirePasswordInAuthenticationCommands;
 
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit;
+
     REGISTER_YSON_STRUCT(TDriverConfig);
 
     static void Register(TRegistrar registrar);

@@ -6,6 +6,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
@@ -122,12 +123,21 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
 struct TCommitTxSettings : public TRequestSettings<TCommitTxSettings> {};
 struct TRollbackTxSettings : public TRequestSettings<TRollbackTxSettings> {};
+struct TDeleteSessionSettings : public TRequestSettings<TDeleteSessionSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
+};
 
 
 
 class TCommitTransactionResult : public TStatus {
 public:
     TCommitTransactionResult(TStatus&& status);
+    TCommitTransactionResult(TStatus&& status, std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp);
+
+    const std::optional<NScheme::TVirtualTimestamp>& GetCommitTimestamp() const { return CommitTimestamp_; }
+
+private:
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
 };
 
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;

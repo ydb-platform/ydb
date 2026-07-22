@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/olap/combinatory/execute.h>
+#include <ydb/core/kqp/ut/olap/helpers/plan_step.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
@@ -63,7 +64,7 @@ TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
@@ -86,6 +87,9 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    // Make the just-compacted portions visible to the next test scans/reads.
+    AdvancePlanStep(kikimr);
     return TConclusionStatus::Success();
 }
 

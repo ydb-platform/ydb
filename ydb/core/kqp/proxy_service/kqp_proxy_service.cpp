@@ -15,7 +15,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -27,11 +27,10 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
+#include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
-#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -350,7 +349,7 @@ public:
             limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
             limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
             limits.ReconciliationCount = config.GetReconciliationCount();
-            limits.CleanupPeriod = TDuration::MilliSeconds(std::max<ui64>(config.GetCleanupPeriodMs(), 200));
+            limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
         } else { // deprecated
@@ -389,10 +388,6 @@ public:
         KqpNodeService = TActivationContext::Register(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
-
-        KqpWorkloadService = TActivationContext::Register(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
-        TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
         auto updateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs());
         KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(updateFairSharePeriod));
@@ -516,7 +511,6 @@ public:
         Send(SpillingService, new TEvents::TEvPoison);
         Send(KqpNodeService, new TEvents::TEvPoison);
 
-        Send(KqpWorkloadService, new TEvents::TEvPoison());
         Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
         Send(KqpQueryTextCacheService, new TEvents::TEvPoison());
         if (RowDispatcherService) {
@@ -1445,7 +1439,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
-            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
+            hFunc(NWorkloadManager::TEvUpdatePoolInfo, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -1663,14 +1657,14 @@ private:
         auto poolId = ev->Get()->GetPoolId();
         ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
 
-        auto context = TClassifyContext{
+        auto context = NWorkloadManager::TClassifyContext{
             // This parameter is set when user creates a request with an explicit PoolId
             .PoolId = poolId,
             .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
             .UserToken = ev->Get()->GetUserToken()
         };
 
-        auto classifier = NWorkload::CreateQueryClassifier(
+        auto classifier = NWorkloadManager::CreateQueryClassifier(
             ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
             ResourcePoolsCache.GetClassifierViewFor(databaseId),
             databaseId,
@@ -1941,7 +1935,7 @@ private:
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
-    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
         ResourcePoolsCache.UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
     }
 
@@ -1958,7 +1952,7 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
     void InitSharedReading() {
@@ -2077,7 +2071,6 @@ private:
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;
-    TActorId KqpWorkloadService;
     TActorId KqpComputeSchedulerService;
     TActorId KqpQueryTextCacheService;
     TActorId RowDispatcherService;

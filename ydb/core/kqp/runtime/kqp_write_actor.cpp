@@ -1195,7 +1195,6 @@ public:
 
     void UpdateShards() {
         for (const auto& shardInfo : ShardedWriteController->ExtractShardUpdates()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
@@ -1204,6 +1203,7 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
@@ -1268,7 +1268,7 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
-            if (MvccSnapshot) {
+            if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }
@@ -1309,7 +1309,7 @@ public:
         if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
             // Commit in snapshot isolation must validate writes against a snapshot
             bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
-            if (!needMvccSnapshot && isPrepare) {
+            if (!needMvccSnapshot && isPrepare && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 for (const auto& operation : evWrite->Record.GetOperations()) {
                     if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                         // This operation may fail with an incorrect unique constraint violation otherwise
@@ -1319,6 +1319,7 @@ public:
                 }
             }
             if (needMvccSnapshot) {
+                AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }
@@ -1936,6 +1937,42 @@ private:
             return false;
         }
 
+        // Filter out absent rows based on lock result (SkipAbsent).
+        std::vector<TOwnedCellVec> lockedKeyStorage;
+        lockInfo.LockActor->ExtractResult(Cookie, [&](const TOwnedCellVec& row, bool /*modified*/) {
+            lockedKeyStorage.emplace_back(row);
+        });
+
+        TPrimaryKeysSet lockedKeys;
+        for (const auto& key : lockedKeyStorage) {
+            lockedKeys.insert(TConstArrayRef<TCell>(key));
+        }
+
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size(), Alloc);
+        for (const auto& processCells : ProcessCells) {
+            const auto key = processCells.first(KeyColumnTypes.size());
+            if (lockedKeys.contains(key)) {
+                for (const auto& cell : processCells) {
+                    rowsBatcher->AddCell(cell);
+                }
+                rowsBatcher->AddRow();
+            } else {
+                Memory -= EstimateSize(processCells);
+            }
+        }
+
+        ProcessBatches.clear();
+        auto filteredBatch = rowsBatcher->Flush();
+        ProcessBatches.push_back(std::move(filteredBatch));
+        ProcessCells.clear();
+        KeyToIndexes.clear();
+
+        if (ProcessBatches.back()->GetRowsCount() == 0) {
+            ProcessBatches.clear();
+            State = EState::WRITING;
+            return true;
+        }
+
         if (NeedLookup()) {
             return StartMainTableLookup();
         }
@@ -1962,6 +1999,8 @@ private:
 
     bool StartMainTableLock() {
         AFL_ENSURE(NeedLock());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
         AFL_ENSURE(!ProcessCells.empty());
 
@@ -1975,6 +2014,8 @@ private:
 
     bool StartMainTableLookup() {
         AFL_ENSURE(NeedLookup());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
 
@@ -3802,7 +3843,8 @@ public:
 
                     lockActor->SetLockSettings(
                         token.Cookie,
-                        indexSettings.KeyColumns);
+                        indexSettings.KeyColumns,
+                        /* skipAbsent */ false);
                 }
 
                 {
@@ -3904,9 +3946,13 @@ public:
                 .LockActor = lockActor,
             });
 
+            const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
+
             lockActor->SetLockSettings(
                 token.Cookie,
-                settings.KeyColumns);
+                settings.KeyColumns,
+                skipAbsent);
         }
 
         // Main table lookup
@@ -4476,7 +4522,7 @@ public:
 
     void SendToExternalShards(const bool isImmediateCommit) {
         auto shards = TxManager->GetShards();
-        AFL_ENSURE(!isImmediateCommit || shards.size() == 1);
+        AFL_ENSURE(!isImmediateCommit || CountParticipatingShards() == 1);
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
@@ -4746,6 +4792,12 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+                    AFL_ENSURE(res->Record.HasStepId());
+                    AFL_ENSURE(res->Record.HasTxId());
+                    AFL_ENSURE(TxId && *TxId == res->Record.GetTxId());
+                    CommitTimestamp = TCommitTimestamp{res->Record.GetStepId(), res->Record.GetTxId()};
+                }
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
@@ -5507,7 +5559,8 @@ public:
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats()
+                BuildStats(),
+                std::move(CommitTimestamp)
             });
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
@@ -5899,6 +5952,7 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
@@ -6096,28 +6150,59 @@ private:
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor receive EvBufferWriteResult from " << BufferActorId);
 
+        AFL_ENSURE(!PendingResult);
         WriteToken = result->Get()->Token;
 
         if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            for (const auto& batch : result->Get()->Data) {
-                for (const auto& row : GetRows(batch)) {
-                    AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
-                    NUdf::TUnboxedValue* outputRowItems = nullptr;
-                    auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+            PendingResult.Reset(result->Release().Release());
+            PendingBatchIndex = 0;
+            PendingRowIndex = 0;
+            ConsumePendingReturning();
+        } else {
+            OnFlushed();
+        }
+    }
 
-                    for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
-                        outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
-                    }
+    void ConsumePendingReturning() {
+        AFL_ENSURE(TransformOutput);
+        AFL_ENSURE(PendingResult);
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
 
-                    AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
-                    TransformOutput->Consume(std::move(outputRow));
+        const auto& data = PendingResult->Data;
+        while (PendingBatchIndex < data.size()) {
+            const auto rows = GetRows(data[PendingBatchIndex], PendingRowIndex);
+            for (size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+                if (TransformOutput->GetFillLevel() != NYql::NDq::EDqFillLevel::NoLimit) {
+                    CA_LOG_D("TKqpForwardWriteActor TransformOutput is full, waiting for drain");
+                    Callbacks->ResumeExecution();
+                    return;
                 }
+                const auto& row = rows[rowIndex];
+                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                NUdf::TUnboxedValue* outputRowItems = nullptr;
+                auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+                for (size_t colIndex = 0; colIndex < ReturningColumnsTypes.size(); ++colIndex) {
+                    outputRowItems[colIndex] = NMiniKQL::GetCellValue(row[colIndex], ReturningColumnsTypes[colIndex]);
+                }
+                TransformOutput->Consume(std::move(outputRow));
+                ++PendingRowIndex;
             }
+            PendingRowIndex = 0;
+            ++PendingBatchIndex;
         }
 
+        PendingResult.Reset();
+        PendingRowIndex = 0;
+        PendingBatchIndex = 0;
         OnFlushed();
+    }
+
+    void OnOutputConsumerReady() final {
+        if (!PendingResult) {
+            return;
+        }
+        ConsumePendingReturning();
     }
 
     void OnFlushed() {
@@ -6330,6 +6415,7 @@ private:
         if (TransformOutput) {
             AFL_ENSURE(Alloc);
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            PendingResult.Reset();
             TransformOutput.Reset();
         }
 
@@ -6360,6 +6446,10 @@ private:
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
+
+    THolder<TEvBufferWriteResult> PendingResult;
+    size_t PendingBatchIndex = 0;
+    size_t PendingRowIndex = 0;
 
 private:
     template<typename TArgs>

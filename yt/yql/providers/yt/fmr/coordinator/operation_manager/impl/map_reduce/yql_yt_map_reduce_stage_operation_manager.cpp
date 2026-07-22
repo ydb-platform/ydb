@@ -109,19 +109,15 @@ private:
         TString path = prefix + "map_reduce_stage/" + GenerateId();
 
         // Always sort the intermediate table by [_yql_key_hash, ...sortBy]. sortBy (not reduceBy)
-        // is required here: for joins it carries an extra tiebreaker column (e.g. "_yql_sort")
-        // after the reduce-by columns that the reducer's compiled lambda relies on to order rows
-        // correctly within a group (e.g. CommonJoinCore's build-then-probe side ordering) - using
-        // reduceBy alone would sort rows into the right groups but leave their relative order
-        // within a group unspecified. The gateway (yql_yt_fmr.cpp) already builds
-        // ReduceOperationSpec.SortBy as MakeMapReduceIntermediateSortColumns(sortBy), i.e. with the
-        // _yql_key_hash prefix already applied, so it's used as-is here rather than re-derived.
-        // An empty SortBy means the caller didn't request extra tiebreaker columns beyond reduceBy
-        // (mirrors the gateway's own "sortBy.empty() -> sortBy = reduceBy" fallback), so fall back
-        // to the reduceBy-derived columns in that case.
-        const auto intermediateSortColumns = params.ReduceOperationSpec.SortBy.Columns.empty()
-            ? MakeMapReduceIntermediateSortColumns(params.ReduceOperationSpec.ReduceBy)
-            : params.ReduceOperationSpec.SortBy;
+        // is required here: for joins it carries an extra tiebreaker column (e.g. "_yql_sort") after
+        // the reduce-by columns that the reducer's compiled lambda relies on to order rows correctly
+        // within a group (e.g. CommonJoinCore's build-then-probe side ordering). The spec holds the
+        // hash-less SortBy, so we apply the _yql_key_hash prefix here. An empty SortBy means no extra
+        // tiebreaker beyond reduceBy, so fall back to the reduceBy columns.
+        const auto intermediateSortColumns = MakeMapReduceIntermediateSortColumns(
+            params.ReduceOperationSpec.SortBy.Columns.empty()
+                ? params.ReduceOperationSpec.ReduceBy
+                : params.ReduceOperationSpec.SortBy);
 
         TFmrTableRef res;
         res.FmrTableId.Id = path;
@@ -185,8 +181,14 @@ private:
         }
 
         auto reducePartitionSettings = GetReducePartitionSettings(fmrOperationSpec);
+
+        // Order/merge by the full intermediate SortBy; cut task boundaries on the reduce group.
+        // The intermediate is keyed by [_yql_key_hash, ...], so the group key is the hash-prefixed
+        // ReduceBy (built the same way SortBy was), a prefix of firstOutputSortingColumns.
+        const auto& reduceSpec = std::get<TMapReduceOperationParams>(context.OperationParams).ReduceOperationSpec;
+        auto groupColumns = MakeMapReduceIntermediateSortColumns(reduceSpec.ReduceBy);
         auto reducePartitioner = TReducePartitioner(
-            partIdsForTables, partIdStats, firstOutputSortingColumns, reducePartitionSettings
+            partIdsForTables, partIdStats, firstOutputSortingColumns, groupColumns, reducePartitionSettings
         );
 
         return reducePartitioner.PartitionTablesIntoTasks(inputTables);
@@ -255,6 +257,15 @@ private:
             reduceTaskParams.Input = taskInput;
             reduceTaskParams.SerializedReduceJobState = operationParams.SerializedReduceJobState;
             reduceTaskParams.ReduceOperationSpec = operationParams.ReduceOperationSpec;
+            // The map stage shuffles via a synthetic _yql_key_hash prefix (see GenerateIntermediateTable),
+            // unlike a plain Reduce operation's real YT-sorted input. The reduce job's n-way merge reads
+            // SortBy, so give it the same [_yql_key_hash, ...] order the intermediate was written with;
+            // ReduceBy stays hash-less (the reducer groups by the real reduce key).
+            reduceTaskParams.ReduceOperationSpec.SortBy = MakeMapReduceIntermediateSortColumns(
+                operationParams.ReduceOperationSpec.SortBy.Columns.empty()
+                    ? operationParams.ReduceOperationSpec.ReduceBy
+                    : operationParams.ReduceOperationSpec.SortBy);
+            reduceTaskParams.SortByHasKeyHashPrefix = true;
 
             std::vector<TFmrTableOutputRef> outputRefs;
             std::transform(

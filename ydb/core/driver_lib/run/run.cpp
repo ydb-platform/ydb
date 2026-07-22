@@ -2127,16 +2127,16 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    if (serviceMask.EnableWorkloadManagerService) {
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {
         sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableExternalIndex) {
-        sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompDiskLimiter) {

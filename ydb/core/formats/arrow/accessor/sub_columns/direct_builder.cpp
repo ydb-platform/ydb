@@ -1,78 +1,40 @@
 #include "accessor.h"
 #include "columns_storage.h"
 #include "direct_builder.h"
+#include "encoding_builders.h"
 
 #include <util/string/escape.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <contrib/libs/simdjson/include/simdjson.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-namespace {
-
-std::string_view MakeStoredBytesView(const NBinaryJson::TBinaryJson& rec, const EValueType valueType) {
-    if (valueType == EValueType::BinaryJson) {
-        return std::string_view(rec.Data(), rec.Size());
-    }
-    AFL_VERIFY(valueType == EValueType::String)("value_type", (ui32)valueType);
-    const auto scalar = ExtractStringScalar(rec);
-    return std::string_view(scalar.data(), scalar.size());
-}
-
-template <class TArrow, class TExtractor>
-std::shared_ptr<IChunkedArray> BuildTypedPlain(const std::deque<NBinaryJson::TBinaryJson>& values,
-    const std::vector<ui32>& recordIndexes, const ui32 recordsCount, const ui32 reserveData, const TExtractor& extract) {
-    TTrivialArray::TPlainBuilder<TArrow> builder(recordsCount, reserveData);
-    for (ui32 i = 0; i < recordIndexes.size(); ++i) {
-        builder.AddValue(recordIndexes[i], extract(values[i]));
-    }
-    return builder.Finish(recordsCount);
-}
-}   // namespace
-
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    // Columns with non-binary encoding are not supported.
-    AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
-    auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
-    for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        recordsBuilder.AddRecord(RecordIndexes[idx], MakeStoredBytesView(Values[idx], valueType));
+    TEncodingSparsedBuilder builder(GetCodecForValueType(valueType), RecordIndexes.size(), DataSize);
+    for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
+        builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
     }
-    Accessor = recordsBuilder.Finish(recordsCount);
+    Accessor = builder.Finish(recordsCount);
 }
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    switch (valueType) {
-        case EValueType::BinaryJson:
-        case EValueType::String:
-            Accessor = BuildTypedPlain<arrow::BinaryType>(Values, RecordIndexes, recordsCount, DataSize,
-                [valueType](const NBinaryJson::TBinaryJson& rec) {
-                    const auto sv = MakeStoredBytesView(rec, valueType);
-                    return arrow::util::string_view(sv.data(), sv.size());
-                });
-            break;
-        case EValueType::Double:
-            // No need to reserve by size for fixed-size arrays
-            Accessor = BuildTypedPlain<arrow::DoubleType>(Values, RecordIndexes, recordsCount, 0,
-                &ExtractDoubleScalar);
-            break;
-        case EValueType::Bool:
-            Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, 0,
-                &ExtractBoolScalar);
-            break;
+    TEncodingPlainBuilder builder(GetCodecForValueType(valueType), recordsCount, DataSize);
+    for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
+        builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
     }
+    Accessor = builder.Finish(recordsCount);
 }
 
 void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {
     BuildPlainAccessor(recordsCount, valueType);
-    const TChunkConstructionData cData(
-        recordsCount, nullptr, GetArrowTypeForValueType(valueType), NSerialization::TSerializerContainer::GetDefaultSerializer());
+    const TChunkConstructionData cData(recordsCount, nullptr, GetCodecForValueType(valueType)->GetArrowType(),
+        NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }
 

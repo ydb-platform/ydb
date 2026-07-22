@@ -12,14 +12,22 @@ namespace NYdb::NBS::NBlockStore {
 
 struct TPartitionDirectServiceMock: public IPartitionDirectService
 {
+    struct TAddHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t NewHostIndex = 0;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
 
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
-    TVector<size_t> AddHostRequests;
+    TVector<TAddHostRequest> AddHostRequests;
     ui64 LsnGenerator = 0;
+    size_t BlockedGenerationCount = 0;
+    TString LastBlockedReason;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -50,14 +58,22 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(cfg);
     }
 
-    void RequestAddHost(size_t directBlockGroupId) override
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
     {
-        AddHostRequests.push_back(directBlockGroupId);
+        AddHostRequests.push_back(TAddHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .NewHostIndex = newHostIndex});
     }
 
     ui64 GenerateLsn() override
     {
         return ++LsnGenerator;
+    }
+
+    void StopTablet(const TString& reason) override
+    {
+        ++BlockedGenerationCount;
+        LastBlockedReason = reason;
     }
 };
 

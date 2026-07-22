@@ -15,10 +15,10 @@ private:
     bool IsValidFlag = false;
     bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
-    EValueType ValueType = EValueType::BinaryJson;
-    // Current value as (array, local index); the reader interprets it per ValueType.
+    std::shared_ptr<const IValueArrowCodec> Codec;
+    // Current physical position as (array, local index)
     const arrow::Array* CurrentArray = nullptr;
-    i64 LocalIndex = 0;
+    ui32 LocalIndex = 0;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
@@ -72,12 +72,14 @@ public:
     TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
         , RemappedKey(remappedKey)
-        , ValueType(valueType) {
+        , Codec(GetCodecForValueType(valueType)) {
         Initialize();
     }
+
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
-        , RemapKeys(remapKeys) {
+        , RemapKeys(remapKeys)
+        , Codec(GetCodecForValueType(EValueType::BinaryJson)) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -156,11 +158,26 @@ public:
         return KeyIndex;
     }
 
-    // The ordered iterator (compaction's reader) expects BinaryJson. BinaryJson columns pass their
-    // bytes through directly; native columns are re-encoded into an owned buffer.
-    NBinaryJson::TBinaryJson GetValueAsBinaryJson() {
+    // Re-encode the current value to BinaryJson.
+    NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+        return Codec->ReadValueView(*CurrentArray, LocalIndex).ToBinaryJson();
+    }
+
+    EValueType GetValueType() const {
+        return Codec->GetValueType();
+    }
+    const arrow::Array& GetArray() const {
+        AFL_VERIFY(IsValidFlag);
+        return *CurrentArray;
+    }
+    ui32 GetLocalIndex() const {
+        AFL_VERIFY(IsValidFlag);
+        return LocalIndex;
+    }
+    ui32 GetValueSize() const {
+        AFL_VERIFY(IsValidFlag);
+        return Codec->GetElementSize(*CurrentArray, LocalIndex);
     }
 
     NJson::TJsonValue GetValue() const;
@@ -334,7 +351,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValueAsBinaryJson(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

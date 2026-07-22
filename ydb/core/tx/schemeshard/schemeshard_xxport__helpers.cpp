@@ -30,7 +30,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransactionI
         record.SetUserSID(*xxportInfo.UserSID);
     }
 
-    SetSystemOwnerIfNeeded(record, AppData());
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
 
     return propose;
 }

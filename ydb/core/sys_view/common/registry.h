@@ -260,6 +260,7 @@ struct Schema : NIceDb::Schema {
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
         struct MaintenanceStatus               : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedSlotSize                : Column<22, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -278,6 +279,7 @@ struct Schema : NIceDb::Schema {
             State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
+            ExpectedSlotSize,
             NumActiveSlots,
             DecommitStatus,
             SlotSizeInUnits,
@@ -779,6 +781,7 @@ struct Schema : NIceDb::Schema {
         struct Action       : Column<7, NScheme::NTypeIds::Utf8> {};
         struct HasFullScan  : Column<8, NScheme::NTypeIds::Utf8> {};
         struct HasPath      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct HasStream    : Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -789,7 +792,8 @@ struct Schema : NIceDb::Schema {
             HasAppName,
             Action,
             HasFullScan,
-            HasPath>;
+            HasPath,
+            HasStream>;
     };
 
     struct ShowCreate : Table<21> {

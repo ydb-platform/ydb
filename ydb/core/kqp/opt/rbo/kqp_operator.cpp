@@ -59,8 +59,8 @@ NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
     return res;
 }
 
-// To get output IUs we check whether they're already computed in Props and return them
-// Otherwise we run an iterator and compute and cache all output IUs
+// To get output IUs we check whether they're already computed in Props and return them.
+// Otherwise we compute and cache missing output IUs for this subtree.
 const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
         ComputeOutputIUsSubtree();
@@ -69,13 +69,12 @@ const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
     return Props.OutputIUs.value();
 }
 
-// Iterate over children and compute their OutputIUs.
-// Then compute the OutputIUs for the current operator
-// (this is done because we need a smart pointer for iteration, but only have a raw this)
 void IOperator::ComputeOutputIUsSubtree() {
     for (auto& op : GetChildren()) {
         for (const auto& item : IterateSubtree(op)) {
-            item.Current->ComputeOutputIUs();
+            if (!item.Current->Props.OutputIUs.has_value()) {
+                item.Current->ComputeOutputIUs();
+            }
         }
     }
 
@@ -751,8 +750,16 @@ TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
     return "Unknown";
 }
 
-TString GetExplainJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
-    if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin) {
+TString GetExplainJoinAlgoName(const TPhysicalOpProps& props) {
+    Y_ENSURE(props.JoinAlgo.has_value(), "Join algorithm has not been selected");
+    Y_ENSURE(props.UseBlockHashJoin.has_value(), "Physical join implementation has not been selected");
+
+    if (*props.UseBlockHashJoin) {
+        return "BlockHash";
+    }
+
+    const auto joinAlgo = *props.JoinAlgo;
+    if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKqp::EJoinAlgoType::ReverseBlockJoin) {
         return "Grace";
     }
     return GetJoinAlgoName(joinAlgo);
@@ -799,8 +806,7 @@ static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& jo
 
 NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
-    const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
-    const auto joinAlgoName = GetExplainJoinAlgoName(joinAlgo);
+    const auto joinAlgoName = GetExplainJoinAlgoName(Props);
 
     if (JoinKind == "Cross") {
         res["Name"] = "CrossJoin";
@@ -1204,11 +1210,20 @@ void TOpRoot::ComputeOutputIUs() {
     Props.OutputIUs = GetInput()->GetOutputIUs();
 }
 
-// Need to override root recomputation of IUs, since it
-// needs to traverse all subplans as well.
 void TOpRoot::ComputeOutputIUsSubtree() {
-    for (const auto& it : *this) {
-        it.Current->ComputeOutputIUs();
+    for (const auto& item : *this) {
+        if (!item.Current->Props.OutputIUs.has_value()) {
+            item.Current->ComputeOutputIUs();
+        }
+    }
+    if (!Props.OutputIUs.has_value()) {
+        ComputeOutputIUs();
+    }
+}
+
+void TOpRoot::RecomputeOutputIUsSubtree() {
+    for (const auto& item : *this) {
+        item.Current->ComputeOutputIUs();
     }
     ComputeOutputIUs();
 }

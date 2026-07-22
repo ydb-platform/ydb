@@ -405,6 +405,27 @@
             "uri": "https://{canondata_backend}/1937424/d02bb271c9ab67557c669f52bc80a0a698a8a91e/resource.tar.gz#test.test_blocks-if-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-variant_item_tuple-default.txt-Debug]": [
+        {
+            "checksum": "c51dc11884e895fa059d737ee2c9c045",
+            "size": 580,
+            "uri": "https://{canondata_backend}/1946324/b9fe6a5a945e23db9e4ac84e6edac51b4a9a7c92/resource.tar.gz#test.test_blocks-variant_item_tuple-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-variant_item_tuple-default.txt-Peephole]": [
+        {
+            "checksum": "13d96e6fdc5acc50cce29fb454ffcffd",
+            "size": 744,
+            "uri": "https://{canondata_backend}/1946324/b9fe6a5a945e23db9e4ac84e6edac51b4a9a7c92/resource.tar.gz#test.test_blocks-variant_item_tuple-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-variant_item_tuple-default.txt-Results]": [
+        {
+            "checksum": "752787be97605457fe04ca12d9a6ce54",
+            "size": 839,
+            "uri": "https://{canondata_backend}/1946324/b9fe6a5a945e23db9e4ac84e6edac51b4a9a7c92/resource.tar.gz#test.test_blocks-variant_item_tuple-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[column_order-values-default.txt-Debug]": [
         {
             "checksum": "ec4c1859bead1f9b88e6239fe8d6addb",
@@ -949,6 +970,20 @@
             "checksum": "5973a226b997b414148e8f112dee51c2",
             "size": 727,
             "uri": "https://{canondata_backend}/1937424/d02bb271c9ab67557c669f52bc80a0a698a8a91e/resource.tar.gz#test.test_pg-YQL_20895_having_depth_3-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-collate_icu-default.txt-Debug]": [
+        {
+            "checksum": "1652b1b4cff4644c499e6dc69fee811c",
+            "size": 765,
+            "uri": "https://{canondata_backend}/1871102/3abca1c03e1dffe75d1d9477b6aa625e8d988fcc/resource.tar.gz#test.test_pg-collate_icu-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-collate_icu-default.txt-Results]": [
+        {
+            "checksum": "b0b6a05f71c0ea34ff54854f875e6e0f",
+            "size": 1731,
+            "uri": "https://{canondata_backend}/1871102/3abca1c03e1dffe75d1d9477b6aa625e8d988fcc/resource.tar.gz#test.test_pg-collate_icu-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-distinct_from_pg_null-default.txt-Debug]": [

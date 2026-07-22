@@ -238,8 +238,9 @@ private:
                         const TString &reason,
                         const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "Reply with %s (%s)",
-                  NKikimrNodeBroker::TStatus::ECode_Name(code).data(), reason.data());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::ReplyWithError: reply with error",
+            {"statusCode", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
+            {"reason", reason.data()});
 
         TAutoPtr<TResponseEvent> resp = new TResponseEvent;
         resp->Record.MutableStatus()->SetCode(code);
@@ -249,8 +250,9 @@ private:
 
     STFUNC(StateInit)
     {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::NODE_BROKER, "TNodeBroker::StateInit: event",
+            {"eventType", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -402,6 +404,7 @@ private:
         THashMap<ui32, TNodeInfo> Nodes;
         THashMap<ui32, TNodeInfo> ExpiredNodes;
         THashMap<ui32, TNodeInfo> RemovedNodes;
+        ui64 DeadNodesCount = 0;
         // Maps <Host/Addr:Port> to NodeID.
         THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
         // Bitmap with free Node IDs (with no lower 5 bits).

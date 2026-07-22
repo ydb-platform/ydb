@@ -7,7 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
@@ -22,7 +22,7 @@ public:
     TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
         auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
         for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i), Stats.GetValueType(i));
             AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
         return jsonPathAccessorTrie->GetAccessor(path);
@@ -50,6 +50,7 @@ public:
     class TIterator {
     private:
         ui32 KeyIndex;
+        EValueType ValueType;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
         const arrow::Array* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
@@ -59,8 +60,9 @@ public:
         void InitArrays();
 
     public:
-        TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
+        TIterator(const ui32 keyIndex, const EValueType valueType, const std::shared_ptr<IChunkedArray>& chunkedArray)
             : KeyIndex(keyIndex)
+            , ValueType(valueType)
             , GlobalChunkedArray(chunkedArray) {
             InitArrays();
         }
@@ -78,13 +80,12 @@ public:
         const arrow::Array& GetArray() const {
             return *CurrentArrayData;
         }
-        i64 GetLocalIndex() const {
+        ui32 GetLocalIndex() const {
             return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const {
-            auto view = static_cast<const arrow::BinaryArray&>(*CurrentArrayData).GetView(GetLocalIndex());
-            return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
+        NArrow::NAccessor::TJsonValueView GetValue() const {
+            return GetCodecForValueType(ValueType)->ReadValueView(*CurrentArrayData, GetLocalIndex());
         }
 
         bool HasValue() const {
@@ -128,7 +129,7 @@ public:
     };
 
     TIterator BuildIterator(const ui32 keyIndex) const {
-        return TIterator(keyIndex, Records->GetColumnVerified(keyIndex));
+        return TIterator(keyIndex, Stats.GetValueType(keyIndex), Records->GetColumnVerified(keyIndex));
     }
 
     const TDictStats& GetStats() const {

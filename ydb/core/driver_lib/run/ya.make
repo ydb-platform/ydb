@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api
@@ -165,8 +166,6 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
     ydb/services/dynamic_config
-    ydb/services/ext_index/metadata
-    ydb/services/ext_index/service
     ydb/services/fq
     ydb/services/kesus
     ydb/services/keyvalue
@@ -183,6 +182,7 @@ PEERDIR(
     ydb/services/tablet
     ydb/services/test_shard
     ydb/services/view
+    ydb/services/workload_manager/service
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy

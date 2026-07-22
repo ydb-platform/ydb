@@ -45,23 +45,55 @@ namespace NKikimr::NStorage {
         }
         SuccessfulVDisks.emplace(&GroupInfo->GetTopology());
 
+        TVector<ui32> nodesToConnect;
         for (ui32 i = 0, num = GroupInfo->GetTotalVDisksNum(); i < num; ++i) {
             const TVDiskID vdiskId = GroupInfo->GetVDiskId(i);
             const TActorId actorId = GroupInfo->GetActorId(i);
-            const ui32 flags = IEventHandle::FlagTrackDelivery |
-                (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            YDB_LOG_DEBUG("Sending TEvVStatus",
-                {"marker", "NWDC73"},
-                {"selfId", SelfId()},
-                {"VDiskId", vdiskId},
-                {"actorId", actorId});
-            Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
-            if (actorId.NodeId() != SelfId().NodeId()) {
-                NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
-                Subscriptions.try_emplace(actorId.NodeId());
+            const ui32 nodeId = actorId.NodeId();
+            if (nodeId == SelfId().NodeId()) {
+                SendVStatusQuery(actorId, vdiskId);
+            } else {
+                NodeToVDisk.emplace(nodeId, vdiskId);
+                const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
+                if (it->second) {
+                    SendVStatusQuery(actorId, vdiskId, it->second);
+                } else {
+                    VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
+                }
+                if (inserted) {
+                    nodesToConnect.push_back(nodeId);
+                }
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);
+        }
+
+        for (const ui32 nodeId : nodesToConnect) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
+        }
+    }
+
+    void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
+        YDB_LOG_DEBUG("Sending TEvVStatus",
+            {"marker", "NWDC73"},
+            {"selfId", SelfId()},
+            {"VDiskId", vdiskId},
+            {"actorId", actorId});
+
+        auto ev = std::make_unique<IEventHandle>(actorId, SelfId(), new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery);
+        if (sessionId) {
+            ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+        }
+        TActivationContext::Send(ev.release());
+    }
+
+    void TInvokeRequestHandlerActor::SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId) {
+        if (const auto it = VStatusQueriesAwaitingConnection.find(nodeId); it != VStatusQueriesAwaitingConnection.end()) {
+            auto queries = std::move(it->second);
+            VStatusQueriesAwaitingConnection.erase(it);
+            for (const auto& [actorId, vdiskId] : queries) {
+                SendVStatusQuery(actorId, vdiskId, sessionId);
+            }
         }
     }
 
@@ -90,7 +122,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::OnVStatusError(TVDiskID vdiskId) {
-        PendingVDiskIds.erase(vdiskId);
+        if (!PendingVDiskIds.erase(vdiskId)) {
+            return;
+        }
         CheckReassignGroupDisk();
     }
 
@@ -176,8 +210,6 @@ namespace NKikimr::NStorage {
         }
         const auto& ss = bsConfig.GetServiceSet();
 
-        const auto& smConfig = config.GetSelfManagementConfig();
-
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
         for (const auto& vdisk : ss.GetVDisks()) {
@@ -207,14 +239,23 @@ namespace NKikimr::NStorage {
                     std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
                         ? std::make_optional(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId))
                         : std::nullopt;
-                    Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
-                        TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                        smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
-                        smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
-                        replacedDisks, forbid, maxSlotSize,
-                        &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
-                        cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId,
-                        smConfig.GetStaticGroupSelfHealAllowedNodes(), cmd.GetFromSelfHeal());
+                    Self->AllocateStaticGroup({
+                        .Config = &config,
+                        .GroupId = vdiskId.GroupID,
+                        .GroupGeneration = vdiskId.GroupGeneration + 1,
+                        .GroupType = TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
+                        .ReplacedDisks = std::move(replacedDisks),
+                        .ForbiddenPDisks = std::move(forbid),
+                        .RequiredSpace = static_cast<i64>(maxSlotSize),
+                        .BaseConfig = &BaseConfig.value(),
+                        .ConvertToDonor = cmd.GetConvertToDonor(),
+                        .IgnoreVSlotQuotaCheck = cmd.GetIgnoreVSlotQuotaCheck(),
+                        .AllowUnusableDisks = cmd.GetAllowUnusableDisks(),
+                        .IsSelfHealReasonDecommit = cmd.GetIsSelfHealReasonDecommit(),
+                        .BridgePileId = bridgePileId,
+                        .BridgeProxyGroupId = bridgeProxyGroupId,
+                        .ApplySelfHealNodeAllowList = cmd.GetFromSelfHeal(),
+                    });
                 } catch (const TExConfigError& ex) {
                     YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
                         {"marker", "NWDC76"},

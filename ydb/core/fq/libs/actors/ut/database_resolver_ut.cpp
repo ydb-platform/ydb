@@ -47,7 +47,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         AsyncResolver = AllocateEdgeActor();
 
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
-        auto credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory("", true, "");
+        auto credentialsFactory = NYql::CreateStructuredTokenCredentialsOverTokenAccessorFactory("", true, "");
 
         DatabaseResolver = Register(CreateDatabaseResolver(
             HttpProxy,

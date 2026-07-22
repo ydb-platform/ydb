@@ -43,6 +43,8 @@ SET(ORIG_SOURCES
     mkql_block_variant_ut.cpp
     mkql_block_uuid_ut.cpp
     mkql_block_dynumber_ut.cpp
+    mkql_block_variant_item_ut.cpp
+    mkql_block_variant_node_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp

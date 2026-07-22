@@ -69,12 +69,15 @@ enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 // engaged empty value.
 struct TOperatorAnalysisProps {
     void Clear() {
+        LiveInByChild.reset();
         LiveOut.reset();
         Aliases.reset();
         NameConstraints.reset();
         InRootAliasRegion = false;
     }
 
+    // Requirements per child edge; LiveOut is their union at the output.
+    std::optional<TVector<TInfoUnitSet>> LiveInByChild;
     std::optional<TInfoUnitSet> LiveOut;
     std::optional<TPlanAliases::TAliasMap> Aliases;
     std::optional<TPlanNameConstraints> NameConstraints;
@@ -125,6 +128,9 @@ struct TPhysicalOpProps {
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
+    // Resolved physical implementation for a join. std::nullopt means that
+    // physical join selection has not run yet.
+    std::optional<bool> UseBlockHashJoin;
     std::optional<double> Cost;
 
     // CBO decision for this join's input edges.
@@ -148,6 +154,7 @@ private:
         Metadata = other.Metadata;
         Statistics = other.Statistics;
         JoinAlgo = other.JoinAlgo;
+        UseBlockHashJoin = other.UseBlockHashJoin;
         Cost = other.Cost;
         LeftShuffleBy = other.LeftShuffleBy;
         RightShuffleBy = other.RightShuffleBy;
@@ -163,8 +170,7 @@ public:
     virtual ~ILivenessContext() = default;
 
     virtual const TInfoUnitSet& GetLiveOut(IOperator* op) const = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) = 0;
+    virtual void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) = 0;
     virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
 };
 
@@ -200,8 +206,7 @@ public:
 
     /**
      * Get the information units that are in the output of this operator
-     * Currently recursively computes the correct values
-     * TODO: Add caching with the ability to invalidate
+     * Computes and caches missing output IUs for this operator subtree.
      */
     virtual const TVector<TInfoUnit>& GetOutputIUs();
 
@@ -1032,6 +1037,7 @@ public:
 
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
+    void RecomputeOutputIUsSubtree();
 
     // Lazy traversal of the whole plan, following subplan references
     TOpRange Iterate(ETraversalOrder order) {

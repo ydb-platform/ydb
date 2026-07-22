@@ -334,7 +334,8 @@ Implementation sequence:
 4. M1: root projection and column order;
 5. M4: common aggregates and unordered literal Limit;
 6. M4: Sort/TopSort, ordered literal Limit, and ordered Merge;
-7. M4: actual column-store filter pushdown from the executed OLAP dialect;
+7. M4: actual column-store filter pushdown, including exact presence tests,
+   from the executed OLAP dialect;
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
 9. M4: exact non-null integral `SafeCast` to Decimal;
@@ -594,8 +595,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   resource caps, deferred sealing, and quantified-choice fail-closed behavior.
   A focused run moves TPC-DS q42 and q50 through formula construction and proves
   q42. The remaining former String blockers now reach deeper construction caps
-  (q4, q11, q25, q29, q46, q64, q68, and q91), nullable Decimal `SafeCast`
-  (q65), or a final OLAP non-callable (q76).
+  (q4, q11, q25, q29, q46, q64, q68, and q91) or constant String-literal
+  `SafeCast` to Decimal (q65).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -648,8 +649,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   counterexample; Z3 currently returns `UNKNOWN` at the 60-second bound.
 - Actual pushed column-store filters are decoded from `OlapFilterLambda`, not
   optimizer statistics metadata. The supported Boolean/comparison subset is
-  evaluated before per-task pushed limits, rejects projections and unknown
-  process operations, and is covered by a real-host bounded proof.
+  evaluated before per-task pushed limits. Exact two-child
+  `TKqpOlapFilterUnaryOp` tuples require an Atom operator tag: `exists(x)` maps
+  to the scalar presence node and `empty(x)` to its negation. `just`, unknown or
+  non-Atom tags, malformed tuples, and unavailable physical columns fail
+  closed. `Coalesce(predicate, false)` is erased only at a positive filter
+  position propagated through AND/OR; the same node beneath NOT, a comparison,
+  or a unary presence operation fails closed. Exporter safety tests and
+  real-host `IS NULL`/`IS NOT NULL` obligations cover these boundaries. This
+  exact lowering moves TPC-DS q76 through formula construction.
 - The exact new-RBO `TPCDS_YQL` q96 schema and query pass strict initial/final
   export and produce `VERIFIED_BOUNDED` at two rows per table and two tasks. This
   covers exact Date and typed Decimal catalog columns, canonical `Void` for
@@ -661,11 +669,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete post-conditional formula-only dashboard emits TPCH q3 and
-  q19 (2/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93,
-  and q96 (12/99), for 14/121 workload queries (11.6%). Formula emission confirms
-  end-to-end model coverage at two rows per referenced table and two tasks; it
-  is not a proof by itself.
+  2026-07-22 complete post-OLAP-presence formula-only dashboard emits TPCH q3
+  and q19 (2/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q76, q88,
+  q90, q93, and q96 (13/99), for 15/121 workload queries (12.4%). Formula
+  emission confirms end-to-end model coverage at two rows per referenced table
+  and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
@@ -685,11 +693,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   ten curated proofs (8.3% of the workload). q50 emits a formula but its solver
   experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. q61's 1,572,871-byte
-  formula and q88 both return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of
-  preparation and 63,897 ms of verification. q71's 118,276,852-byte formula
-  recorded 100,948 ms in the verifier/formula-emission phase of the complete
-  run before a focused solver attempt reached the external process deadline. No
-  optimizer correctness bug is confirmed by these runs.
+  formula, q76, and q88 return `UNKNOWN` at the 60-second solver budget. q61
+  recorded 955 ms of preparation and 63,897 ms of verification. Focused q76
+  formula construction recorded 391 ms of preparation and 14,169 ms of
+  verification; its solver experiment recorded 419 ms and 88,305 ms before
+  `UNKNOWN`. q71's 118,276,852-byte formula recorded 83,339 ms in the
+  verifier/formula-emission phase of the complete run before a focused solver
+  attempt reached the external process deadline. q76 is formula-covered but is
+  not one of the ten proofs. No optimizer correctness bug is confirmed by these
+  runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q88
   investigation, and explicit unsupported/optimizer-failure inventory.

@@ -99,7 +99,7 @@ mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has two monotonic contracts. The formula-construction
 floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52, q55, q61,
-q71, q88, q90, q93, and q96; it is enforced only for a complete formula-only
+q71, q76, q88, q90, q93, and q96; it is enforced only for a complete formula-only
 suite. The proof floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52,
 q55, q90, q93, and q96; dedicated hermetic tests require each one to remain
 `VERIFIED_BOUNDED`.
@@ -143,19 +143,19 @@ StageGraph remains a separate diagnostic step.
 
 ## Current measured formula coverage
 
-The complete post-`IfPresent` full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the fourteen-query floor below and recorded a
+The complete post-OLAP-presence full-corpus dashboard was rerun on 2026-07-22 in
+formula-only mode. It emitted the fifteen-query floor below and recorded a
 current outcome for every workload entry. `FORMULA_EMITTED` is not a solver
 proof. Both complete suite reports satisfied the checked-in coverage policy.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 2 (q3, q19) | 17 | 3 | 22 |
-| TPCDS_YQL | 12 (q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93, q96) | 58 | 29 | 99 |
+| TPCDS_YQL | 13 (q3, q42, q48, q50, q52, q55, q61, q71, q76, q88, q90, q93, q96) | 57 | 29 | 99 |
 
-The supported formula slice is 14/121 queries (11.6%). This is a useful end-to-end
+The supported formula slice is 15/121 queries (12.4%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 107 workload entries or larger
+slice rather than a claim about the remaining 106 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -172,7 +172,7 @@ initial and final reason.
 | Type `Interval` | q1 | - |
 | Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
 | OLAP `string_contains` | - | q9 |
-| Unsupported OLAP non-callable node | - | q1, q5, q6, q10, q12, q14 |
+| OLAP unary operation `just` | - | q1, q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
@@ -186,9 +186,9 @@ Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
 sort key, and the widened partial/final aggregate as q3's first blockers.
 Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
 construct a complete formula for q3. Together with q19, that raises TPCH to
-2/22. q5 reaches initial `Map` and
-a final OLAP non-callable; q8 reaches `Map` at both boundaries; and q10 reaches
-initial `Map` and a final OLAP non-callable. Those queries remain unsupported.
+2/22. q5 reaches initial `Map` and final OLAP `just`; q8 reaches `Map` at both
+boundaries; and q10 reaches initial `Map` and final OLAP `just`. Those queries
+remain unsupported.
 
 ### TPC-DS inventory
 
@@ -196,7 +196,7 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 48 of the 58
+The exporter matrix below covers the boundary failures among 47 of the 57
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
 The ten queries that pass export and fail closed inside the verifier are listed
@@ -208,9 +208,10 @@ after the matrix.
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
 | Unavailable physical column `year` | - | q66 |
 | Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
-| Decimal `SafeCast` result is nullable | q18, q21, q40, q65 | q18 |
+| Nullable integral `SafeCast` to Decimal | q18 | q18 |
+| Constant String-literal `SafeCast` to Decimal | q21, q40, q65 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
-| Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q80, q82 |
+| OLAP unary operation `just` | - | q5, q21, q37, q40, q77, q80, q82 |
 | Callable `/` | q73, q78 | q73, q78 |
 | Callable `Concat` | q84 | q84 |
 | Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q79, q99 |
@@ -245,15 +246,16 @@ Decimal then moves q90 through formula construction and raises TPC-DS to 10/99.
 Exact bounded String/Utf8 comparison and ordering then move q42 and q50 through
 formula construction and raise the measured TPC-DS slice to 12/99. Every other
 former String blocker now exposes a deeper reason: q4, q11, q25, q29, q46, q64,
-and q91 reach the construction bounds enumerated above; q65 retains its initial
-nullable Decimal `SafeCast`; and q76 reaches its final OLAP non-callable. Exact
+and q91 reach the construction bounds enumerated above, while q65 retains its
+initial constant String-literal `SafeCast` to Decimal. Exact
 `If`, `Exists`, and scoped unary `IfPresent` move q34 to `Double` at both
 boundaries, q73 to `/` at both boundaries, q79 to `Substring` at both
 boundaries, and q68 through both exports to the Merge construction cap. q31
 still reaches its construction cap and q74 reaches aggregate `max`. q5 now
-reaches initial `Interval` and a final OLAP non-callable; q75 reaches `Double`
-in both snapshots; and q80 reaches initial `Interval` and a final OLAP
-non-callable.
+reaches initial `Interval` and final OLAP `just`; q75 reaches `Double` in both
+snapshots; and q80 reaches initial `Interval` and final OLAP `just`. Exact OLAP
+unary presence lowering then moves q76 through formula construction and raises
+the measured TPC-DS slice to 13/99.
 
 ## Curated proof floor and focused results
 
@@ -307,10 +309,24 @@ non-callable.
   focused run reports `UNSUPPORTED` from the verifier in under one second of
   verifier work instead of exhausting memory.
 
-- TPC-DS q71 now constructs a 118,276,852-byte SMT formula. The complete run
-  recorded 100,948 ms in its verifier/formula-emission phase. A focused solver
+- TPC-DS q71 now constructs a 118,276,852-byte SMT formula. The current complete
+  run recorded 83,339 ms in its verifier/formula-emission phase. A focused solver
   attempt reached the external solver-process deadline without producing a
   verdict, so q71 is not a bounded proof.
+
+- TPC-DS q76 now reaches formula construction through exact OLAP unary
+  presence lowering. The final two-child `TKqpOlapFilterUnaryOp` form admits
+  only Atom-tagged `exists(x)` and `empty(x)`, represented as `exists(x)` and
+  `not(exists(x))`; malformed or unknown tags, `just`, and unavailable columns
+  fail closed. `Coalesce(predicate, false)` is erased only at the filter
+  boundary and through AND/OR, never beneath NOT, comparison, or a unary
+  presence operation. Exporter fail-closed tests and real-host `IS NULL` and
+  `IS NOT NULL` obligations cover that contract and return `VERIFIED_BOUNDED`.
+  The complete dashboard recorded 360 ms of preparation and 13,561 ms of
+  verification/formula construction; a focused run recorded 391 ms and 14,169
+  ms. A focused 60-second solver experiment recorded 419 ms and 88,305 ms
+  before returning `UNKNOWN`. q76 is formula-covered, but is not a bounded
+  proof or evidence of an optimizer bug.
 
 - TPC-DS q96 is `VERIFIED_BOUNDED` with a 60000 ms solver budget, two rows per
   referenced table, and two tasks. Its obligation covers the exact benchmark

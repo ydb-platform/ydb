@@ -1,8 +1,6 @@
 #include "chunked_array_serialized.h"
 #include "column.h"
 
-#include <ydb/core/formats/arrow/accessor/common/const.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
 

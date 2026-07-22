@@ -13,6 +13,10 @@
 
 #include <util/generic/size_literals.h>
 
+#include <memory>
+#include <optional>
+#include <string>
+
 namespace NYdb::inline Dev::NTopic {
 
 //! Result of close operation.
@@ -199,12 +203,29 @@ concept Serializable =
         { Serialize(t) } -> std::convertible_to<std::string>;
     };
 
-//! Deferred publication identity for StreamWrite.
+class TDeferredPublicationAckState;
+
+//! Deferred publication for StreamWrite and deferred-publish control RPCs.
+//! Hot handles (from BeginPublication) carry internal ack-tracking state.
+//! Cold handles (constructed from known ids) have no local ack state.
 struct TDeferredPublication {
     static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
     uint64_t IntPublicationId = 0;
     std::optional<std::string> ExtPublicationId;
+
+    TDeferredPublication() = default;
+
+    explicit TDeferredPublication(uint64_t intPublicationId)
+        : IntPublicationId(intPublicationId)
+    {
+    }
+
+    TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId)
+        : IntPublicationId(intPublicationId)
+        , ExtPublicationId(std::move(extPublicationId))
+    {
+    }
 
     bool operator==(const TDeferredPublication& other) const {
         return IntPublicationId == other.IntPublicationId
@@ -214,6 +235,10 @@ struct TDeferredPublication {
     bool operator!=(const TDeferredPublication& other) const {
         return !(*this == other);
     }
+
+    // Shared ack state for hot publications. Null for cold handles (e.g. CLI-constructed).
+    // Not part of the stable public contract; used by the SDK write path and Publish/Cancel.
+    std::shared_ptr<TDeferredPublicationAckState> AckState;
 };
 
 //! Contains the message to write and all the options.

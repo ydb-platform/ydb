@@ -197,10 +197,7 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
         block.OriginalSize = data.size();
         block.OriginalDataRefs = {data};
 
-        const TDeferredPublication deferred{
-            .IntPublicationId = 42,
-            .ExtPublicationId = std::string(128, 'x'),
-        };
+        const TDeferredPublication deferred(42, std::string(128, 'x'));
         std::vector<TTestMessageWithWriteContext> messages = {{
             .CreatedAt = TInstant::MilliSeconds(123456789),
             .MessageMeta = {{"meta-key", "meta-value"}},

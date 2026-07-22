@@ -23,7 +23,7 @@ int main() {
         std::cerr << "BeginPublication failed: " << begin.GetIssues().ToString() << std::endl;
         return 1;
     }
-    const uint64_t intPublicationId = begin.GetIntPublicationId();
+    const auto& publication = begin.GetPublication();
 
     // 2. StreamWrite with deferred_publish
     auto writeSettings = NYdb::NTopic::TWriteSessionSettings()
@@ -48,14 +48,11 @@ int main() {
     }
 
     NYdb::NTopic::TWriteMessage message("payload");
-    message.DeferredPublication(NYdb::NTopic::TDeferredPublication{
-        .IntPublicationId = intPublicationId,
-        .ExtPublicationId = extPublicationId,
-    });
+    message.DeferredPublication(publication);
     session->Write(std::move(*token), std::move(message));
 
     // 3. Publish (SDK waits for write acks before the server RPC)
-    auto publish = deferredClient.Publish(intPublicationId).GetValueSync();
+    auto publish = deferredClient.Publish(publication).GetValueSync();
     if (!publish.IsSuccess()) {
         std::cerr << "Publish failed: " << publish.GetIssues().ToString() << std::endl;
         return 1;

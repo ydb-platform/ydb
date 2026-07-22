@@ -696,10 +696,11 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
-        const ui64 intPublicationId = deferredIt->second;
-        TDeferredPublishAckTracker::For(DbDriverState.get()).OnAck(intPublicationId);
+        if (deferredIt->second) {
+            deferredIt->second->OnAck();
+        }
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", intPublicationId=" << intPublicationId);
+                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", deferredPublication");
         return;
     }
 
@@ -785,10 +786,13 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
             }
             WrittenInTx[seqNo] = *tx;
         } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
-            TDeferredPublishAckTracker::For(DbDriverState.get()).OnWrite(deferred->IntPublicationId);
-            WrittenInDeferred[seqNo] = deferred->IntPublicationId;
+            if (deferred->AckState) {
+                deferred->AckState->OnWrite();
+                WrittenInDeferred[seqNo] = deferred->AckState;
+            }
             LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                     LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", intPublicationId=" << deferred->IntPublicationId);
+                     LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
+                                     << ", intPublicationId=" << deferred->IntPublicationId);
         }
 
         CurrentBatch.Add(
@@ -2034,15 +2038,16 @@ void TWriteSessionImpl::CancelTransactions()
 
     Txs.clear();
 
-    std::unordered_map<ui64, ui64> unackedByPublication;
-    for (const auto& [_, intPublicationId] : WrittenInDeferred) {
-        ++unackedByPublication[intPublicationId];
+    std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
+    for (const auto& [_, state] : WrittenInDeferred) {
+        if (state) {
+            ++unackedByState[state];
+        }
     }
     WrittenInDeferred.clear();
 
-    auto& tracker = TDeferredPublishAckTracker::For(DbDriverState.get());
-    for (const auto& [intPublicationId, unackedCount] : unackedByPublication) {
-        tracker.OnUnackedAbort(intPublicationId, unackedCount);
+    for (const auto& [state, unackedCount] : unackedByState) {
+        state->OnUnackedAbort(unackedCount);
     }
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "transaction.h"
+#include "deferred_publish_ack_tracker.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -509,7 +510,7 @@ protected:
 
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
-    std::unordered_map<ui64, ui64> WrittenInDeferred; // SeqNo -> int_publication_id
+    std::unordered_map<ui64, std::shared_ptr<TDeferredPublicationAckState>> WrittenInDeferred; // SeqNo -> ack state
 };
 
 } // namespace NYdb::NTopic

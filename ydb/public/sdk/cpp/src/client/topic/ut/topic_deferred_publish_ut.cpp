@@ -37,6 +37,22 @@ NTopic::TContinuationToken WaitForWriteToken(NTopic::IWriteSession& session) {
     return std::move(*token);
 }
 
+void WaitForWriteAcks(NTopic::IWriteSession& session, size_t expectedAcks = 1) {
+    size_t acks = 0;
+    while (acks < expectedAcks) {
+        UNIT_ASSERT_C(
+            session.WaitEvent().Wait(TDuration::Seconds(30)),
+            "timeout waiting write acks");
+        for (auto& event : session.GetEvents()) {
+            if (std::holds_alternative<NTopic::TWriteSessionEvent::TAcksEvent>(event)) {
+                ++acks;
+            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+}
+
 class TDeferredWriteHelper {
 public:
     explicit TDeferredWriteHelper(NTopic::TTopicClient& client, const std::string& topicPath)
@@ -53,22 +69,16 @@ public:
         }
     }
 
-    void WriteDeferred(
-        const std::string& payload,
-        uint64_t intPublicationId,
-        std::optional<std::string> extPublicationId = std::nullopt)
-    {
+    void WriteDeferred(const std::string& payload, const NTopic::TDeferredPublication& publication) {
         Token_ = WaitForWriteToken(*Session_);
         NTopic::TWriteMessage message(payload);
-        NTopic::TDeferredPublication deferred{
-            .IntPublicationId = intPublicationId,
-        };
-        if (extPublicationId) {
-            deferred.ExtPublicationId = *extPublicationId;
-        }
-        message.DeferredPublication(std::move(deferred));
+        message.DeferredPublication(publication);
         Session_->Write(std::move(*Token_), std::move(message));
         Token_.reset();
+    }
+
+    NTopic::IWriteSession& Session() {
+        return *Session_;
     }
 
 private:
@@ -166,6 +176,10 @@ Y_UNIT_TEST(BeginPublicationCreatesPublication) {
     auto begin = client.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
     UNIT_ASSERT_GT(begin.GetIntPublicationId(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(begin.GetPublication().IntPublicationId, begin.GetIntPublicationId());
+    UNIT_ASSERT(begin.GetPublication().ExtPublicationId.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(*begin.GetPublication().ExtPublicationId, extId);
+    UNIT_ASSERT(begin.GetPublication().AckState != nullptr);
 
     auto list = client.ListPublications().GetValueSync();
     UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
@@ -186,12 +200,13 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
 
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
 
     // Keep write session alive across Publish: no explicit ack wait; Publish waits internally.
     TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    writer.WriteDeferred(payload, publication);
 
-    auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
+    auto publish = deferredClient.Publish(publication).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 
     const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
@@ -211,11 +226,15 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
 
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    NTopic::TDeferredPublication writePublication = publication;
+    writePublication.ExtPublicationId.reset();
 
     TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred(payload, begin.GetIntPublicationId());
+    writer.WriteDeferred(payload, writePublication);
 
-    auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
+    auto publish = deferredClient.Publish(publication).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 
     const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
@@ -235,11 +254,12 @@ Y_UNIT_TEST(CancelDiscardsData) {
 
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
 
     TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    writer.WriteDeferred(payload, publication);
 
-    auto cancel = deferredClient.CancelPublication(begin.GetIntPublicationId()).GetValueSync();
+    auto cancel = deferredClient.CancelPublication(publication).GetValueSync();
     UNIT_ASSERT_C(cancel.IsSuccess(), cancel.GetIssues().ToString());
 
     const auto messages = ReadNoMessages(topicClient, topicPath, TEST_CONSUMER);
@@ -258,14 +278,15 @@ Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
 
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
 
     TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred(payload, begin.GetIntPublicationId(), extId);
+    writer.WriteDeferred(payload, publication);
 
     const auto messagesBeforePublish = ReadNoMessages(topicClient, topicPath, TEST_CONSUMER);
     UNIT_ASSERT_VALUES_EQUAL(messagesBeforePublish.size(), 0u);
 
-    auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
+    auto publish = deferredClient.Publish(publication).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 
     const auto messagesAfterPublish = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
@@ -284,16 +305,45 @@ Y_UNIT_TEST(RepeatFinalizeNotFound) {
 
     auto begin = deferredClient.BeginPublication(extId).GetValueSync();
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
 
     TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred("payload", begin.GetIntPublicationId(), extId);
+    writer.WriteDeferred("payload", publication);
 
-    auto publish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
+    auto publish = deferredClient.Publish(publication).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 
-    auto repeatPublish = deferredClient.Publish(begin.GetIntPublicationId()).GetValueSync();
+    auto repeatPublish = deferredClient.Publish(publication).GetValueSync();
     UNIT_ASSERT(!repeatPublish.IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(repeatPublish.GetStatus(), EStatus::NOT_FOUND);
+}
+
+Y_UNIT_TEST(ColdPublishByIntPublicationId) {
+    TTopicSdkTestSetup setup("ColdPublishByIntPublicationId", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-cold-publish";
+    const std::string payload = "sdk-cold-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& hotPublication = begin.GetPublication();
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, hotPublication);
+    WaitForWriteAcks(writer.Session());
+
+    // CLI-style cold handle: ids only, no local ack state.
+    NTopic::TDeferredPublication coldPublication(hotPublication.IntPublicationId);
+    auto publish = deferredClient.Publish(coldPublication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
 }
 
 Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
@@ -313,11 +363,7 @@ Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
     auto token = WaitForWriteToken(*session);
 
     NTopic::TWriteMessage message("payload");
-    NTopic::TDeferredPublication deferred{
-        .IntPublicationId = begin.GetIntPublicationId(),
-        .ExtPublicationId = "ext-sdk-deferred-tx",
-    };
-    message.DeferredPublication(std::move(deferred));
+    message.DeferredPublication(begin.GetPublication());
 
     struct TFakeTransaction : public TTransactionBase {
         TFakeTransaction()

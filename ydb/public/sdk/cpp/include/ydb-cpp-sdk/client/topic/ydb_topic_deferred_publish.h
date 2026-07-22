@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publish_limits.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/datetime/base.h>
@@ -63,12 +64,14 @@ struct TBeginPublicationResult : public TStatus {
         : TStatus(std::move(status))
     {}
 
-    TBeginPublicationResult(TStatus&& status, uint64_t intPublicationId);
+    TBeginPublicationResult(TStatus&& status, TDeferredPublication&& publication);
+
+    const TDeferredPublication& GetPublication() const;
 
     uint64_t GetIntPublicationId() const;
 
 private:
-    uint64_t IntPublicationId_ = 0;
+    TDeferredPublication Publication_;
 };
 
 struct TPublishResult : public TStatus {
@@ -126,11 +129,11 @@ public:
         const TBeginPublicationSettings& settings = {});
 
     TAsyncPublishResult Publish(
-        uint64_t intPublicationId,
+        const TDeferredPublication& publication,
         const TPublishSettings& settings = {});
 
     TAsyncCancelPublicationResult CancelPublication(
-        uint64_t intPublicationId,
+        const TDeferredPublication& publication,
         const TCancelPublicationSettings& settings = {});
 
     TAsyncListPublicationsResult ListPublications(

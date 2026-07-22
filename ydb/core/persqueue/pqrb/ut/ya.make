@@ -1,4 +1,4 @@
-GTEST()
+UNITTEST()
 
 SIZE(MEDIUM)
 

@@ -30,6 +30,8 @@ FORMAT = "ydb-rbo-semantic-snapshot"
 VERSION = 1
 MAX_STATIC_IN_ITEMS = 512
 MAX_BOUND_DEPTH = 64
+MAX_EXPR_NODES = 1024
+MAX_EXPR_DEPTH = 128
 JOIN_KINDS = frozenset(
     {
         "cross",
@@ -283,6 +285,26 @@ def _fail(path: str, message: str) -> None:
     raise SnapshotError(f"{path}: {message}")
 
 
+@dataclass(slots=True)
+class _ExprBudget:
+    """One expanded-node and structural-depth budget for a complete expression."""
+
+    nodes: int = 0
+
+    def charge(self, path: str, depth: int) -> None:
+        if depth > MAX_EXPR_DEPTH:
+            _fail(
+                path,
+                f"expression structural depth exceeds the audit limit of {MAX_EXPR_DEPTH}",
+            )
+        self.nodes += 1
+        if self.nodes > MAX_EXPR_NODES:
+            _fail(
+                path,
+                f"expanded expression node count exceeds the audit limit of {MAX_EXPR_NODES}",
+            )
+
+
 def _object(value: Any, path: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         _fail(path, "expected an object")
@@ -389,7 +411,30 @@ def _decimal_literal(value: Any, scalar_type: str, path: str) -> decimal.Literal
     _fail(f"{path}.kind", f"unsupported Decimal literal kind {kind!r}")
 
 
-def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
+def _parse_expr(
+    value: Any,
+    path: str,
+    bound_depth: int = 0,
+    *,
+    budget: _ExprBudget | None = None,
+    structural_depth: int = 1,
+) -> Expr:
+    active_budget = _ExprBudget() if budget is None else budget
+    active_budget.charge(path, structural_depth)
+
+    def parse_child(
+        child: Any,
+        child_path: str,
+        child_bound_depth: int = bound_depth,
+    ) -> Expr:
+        return _parse_expr(
+            child,
+            child_path,
+            child_bound_depth,
+            budget=active_budget,
+            structural_depth=structural_depth + 1,
+        )
+
     obj = _object(value, path)
     kind = _string(obj.get("kind"), f"{path}.kind")
 
@@ -434,7 +479,7 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=tuple(
-                _parse_expr(arg, f"{path}.args[{index}]", bound_depth)
+                parse_child(arg, f"{path}.args[{index}]")
                 for index, arg in enumerate(raw_args)
             ),
         )
@@ -443,14 +488,14 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         _keys(obj, {"kind", "arg"}, path)
         return Expr(
             kind=kind,
-            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
         )
 
     if kind == "exists":
         _keys(obj, {"kind", "arg"}, path)
         return Expr(
             kind=kind,
-            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
         )
 
     if kind == "in":
@@ -464,9 +509,9 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["lookup"], f"{path}.lookup", bound_depth),
+                parse_child(obj["lookup"], f"{path}.lookup"),
                 *(
-                    _parse_expr(item, f"{path}.items[{index}]", bound_depth)
+                    parse_child(item, f"{path}.items[{index}]")
                     for index, item in enumerate(raw_items)
                 ),
             ),
@@ -479,8 +524,8 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["left"], f"{path}.left", bound_depth),
-                _parse_expr(obj["right"], f"{path}.right", bound_depth),
+                parse_child(obj["left"], f"{path}.left"),
+                parse_child(obj["right"], f"{path}.right"),
             ),
             null_safe=_bool(obj.get("null_safe", False), f"{path}.null_safe"),
         )
@@ -490,8 +535,8 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["left"], f"{path}.left", bound_depth),
-                _parse_expr(obj["right"], f"{path}.right", bound_depth),
+                parse_child(obj["left"], f"{path}.left"),
+                parse_child(obj["right"], f"{path}.right"),
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
@@ -501,7 +546,7 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         _keys(obj, {"kind", "arg", "type", "nullable"}, path)
         return Expr(
             kind=kind,
-            args=(_parse_expr(obj["arg"], f"{path}.arg", bound_depth),),
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
@@ -515,9 +560,9 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["condition"], f"{path}.condition", bound_depth),
-                _parse_expr(obj["then"], f"{path}.then", bound_depth),
-                _parse_expr(obj["else"], f"{path}.else", bound_depth),
+                parse_child(obj["condition"], f"{path}.condition"),
+                parse_child(obj["then"], f"{path}.then"),
+                parse_child(obj["else"], f"{path}.else"),
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
@@ -534,9 +579,9 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=(
-                _parse_expr(obj["optional"], f"{path}.optional", bound_depth),
-                _parse_expr(obj["present"], f"{path}.present", bound_depth + 1),
-                _parse_expr(obj["missing"], f"{path}.missing", bound_depth),
+                parse_child(obj["optional"], f"{path}.optional"),
+                parse_child(obj["present"], f"{path}.present", bound_depth + 1),
+                parse_child(obj["missing"], f"{path}.missing"),
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
@@ -548,7 +593,7 @@ def _parse_expr(value: Any, path: str, bound_depth: int = 0) -> Expr:
         return Expr(
             kind=kind,
             args=tuple(
-                _parse_expr(arg, f"{path}.args[{index}]", bound_depth)
+                parse_child(arg, f"{path}.args[{index}]")
                 for index, arg in enumerate(raw_args)
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
@@ -969,9 +1014,12 @@ def parse_snapshot(value: Any) -> Snapshot:
 def load_snapshot(path: str | Path) -> Snapshot:
     try:
         with Path(path).open("r", encoding="utf-8") as stream:
-            return parse_snapshot(json.load(stream))
+            value = json.load(stream)
     except json.JSONDecodeError as error:
         raise SnapshotError(f"{path}: invalid JSON: {error}") from error
+    except RecursionError as error:
+        raise SnapshotError(f"{path}: JSON nesting exceeds the decoder limit") from error
+    return parse_snapshot(value)
 
 
 def _unique(values: Sequence[str], path: str) -> None:

@@ -117,7 +117,7 @@ std::vector<std::string> ReadMessages(
             messages.emplace_back(TString(message.GetData()));
         }
         if (messages.size() >= expectedCount) {
-            done.SetValue();
+            done.TrySetValue();
         }
     }, true);
 
@@ -144,7 +144,7 @@ std::vector<std::string> ReadNoMessages(
         for (const auto& message : event.GetMessages()) {
             messages.emplace_back(TString(message.GetData()));
         }
-        done.SetValue();
+        done.TrySetValue();
     }, true);
 
     auto session = client.CreateReadSession(settings);

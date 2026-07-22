@@ -22,6 +22,7 @@ from .types import (
     is_ordered_type,
     is_scalar_type,
     ordering_comparison_compatible,
+    static_in_comparison_compatible,
 )
 
 
@@ -359,6 +360,12 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | deci
     )
     if not valid:
         _fail(path, f"value does not have type {scalar_type!r}")
+    if scalar_family == "string":
+        assert isinstance(value, str)
+        try:
+            value.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            _fail(path, f"{scalar_type} literal is not valid Unicode")
     return value
 
 
@@ -955,7 +962,7 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
                 _fail(item_path, f"IN items must have one type, starting with {item_name!r}")
             if decimal.is_type(lookup.name) or decimal.is_type(item.name):
                 _fail(item_path, "Decimal IN is not supported")
-            if not equality_comparison_compatible(lookup.name, item.name):
+            if not static_in_comparison_compatible(lookup.name, item.name):
                 _fail(
                     item_path,
                     "IN item is not equality-compatible with its lookup: "
@@ -976,7 +983,7 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         ):
             _fail(path, "null-safe Decimal equality requires exactly matching types")
         if expr.kind != "eq" and not ordering_comparison_compatible(left.name, right.name):
-            _fail(path, f"{expr.kind} requires integer, Date, or Decimal arguments")
+            _fail(path, f"{expr.kind} requires integer, String/Utf8, Date, or Decimal arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
     if expr.kind in {"add", "sub", "mul", "div"}:
@@ -1300,7 +1307,7 @@ def _validate_stage_graph(
                 _fail(
                     f"{edge_path}.order",
                     f"ordering type {columns[item.column].type!r} is unsupported; "
-                    "modeled types are integers, Date, and Decimal",
+                    "modeled types are integers, String/Utf8, Date, and Decimal",
                 )
 
     for stage in graph.stages:
@@ -1562,7 +1569,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(
                         f"node {node.id!r}.order[{index}]",
                         f"ordering type {result[item.column].type!r} is unsupported; "
-                        "modeled types are integers, Date, and Decimal",
+                        "modeled types are integers, String/Utf8, Date, and Decimal",
                     )
 
         elif isinstance(node, Aggregate):

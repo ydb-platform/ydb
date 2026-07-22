@@ -468,6 +468,14 @@ bool IsIntegerType(TStringBuf type) {
     return Types.contains(type);
 }
 
+bool IsStringType(TStringBuf type) {
+    return type == "String" || type == "Utf8";
+}
+
+bool StringComparisonCompatible(TStringBuf left, TStringBuf right) {
+    return IsStringType(left) && IsStringType(right);
+}
+
 TString MetadataTypeName(const TKikimrColumnMetadata& column) {
     if (column.TypeInfo.GetTypeId() == NScheme::NTypeIds::Decimal) {
         const auto& decimal = column.TypeInfo.GetDecimalType();
@@ -517,7 +525,7 @@ bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
 
 bool EqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
     // Static SQL IN has a separate, deliberately narrow audit surface.  Do
-    // not let new Decimal comparison support widen it implicitly.
+    // not add broader scalar Decimal or cross String/Utf8 compatibility here.
     return (!IsCanonicalDecimalType(left) && !IsCanonicalDecimalType(right)) &&
         (left == right || IntegerComparisonCompatible(left, right));
 }
@@ -573,17 +581,20 @@ bool DecimalComparisonCompatible(TStringBuf left, TStringBuf right) {
 
 bool ScalarEqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
     return EqualityComparisonCompatible(left, right) ||
+        StringComparisonCompatible(left, right) ||
         DecimalComparisonCompatible(left, right);
 }
 
 bool ScalarOrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
     return IntegerComparisonCompatible(left, right) ||
         (left == "Date" && right == "Date") ||
+        StringComparisonCompatible(left, right) ||
         DecimalComparisonCompatible(left, right);
 }
 
 bool IsModeledOrderingType(TStringBuf type) {
-    return IsIntegerType(type) || type == "Date" || IsCanonicalDecimalType(type);
+    return IsIntegerType(type) || type == "Date" || IsStringType(type) ||
+        IsCanonicalDecimalType(type);
 }
 
 TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
@@ -2104,7 +2115,7 @@ private:
                         Unsupported(TStringBuilder()
                             << "Sort ordering column " << column
                             << " has unsupported type " << type
-                            << "; modeled types are integers, Date, and Decimal");
+                            << "; modeled types are integers, Date, String, Utf8, and Decimal");
                     }
 
                     auto item = JsonMap();
@@ -2842,7 +2853,7 @@ private:
                     Unsupported(TStringBuilder()
                         << "StageGraph Merge ordering column " << column
                         << " has unsupported type " << type
-                        << "; modeled types are integers, Date, and Decimal");
+                        << "; modeled types are integers, Date, String, Utf8, and Decimal");
                 }
                 auto item = JsonMap();
                 item["column"] = column;

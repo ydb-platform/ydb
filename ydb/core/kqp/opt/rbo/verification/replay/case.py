@@ -24,6 +24,7 @@ from ..rbo_verifier.ir import (
     UnionAll,
     parse_snapshot,
 )
+from ..rbo_verifier.string_order import MAX_STRING_BYTES
 from ..rbo_verifier.types import family
 from .model import (
     InconclusiveReplay,
@@ -38,7 +39,6 @@ from .model import (
 
 TRACE_FORMAT = "ydb-rbo-concrete-trace"
 TRACE_VERSION = 1
-MAX_CELL_BYTES = 1_000_000
 INTEGER_TYPE = re.compile(r"(Uint|Int)(8|16|32|64)\Z")
 IDENTITY_FIELDS = ("cluster", "path", "path_id", "sys_view", "version")
 
@@ -428,7 +428,7 @@ def _validate_value(value: Any, column: Column) -> Any:
             encoded = value.encode("utf-8", errors="strict")
         except UnicodeError as error:
             raise ReplayError(f"column {column.name!r} witness is not valid Unicode") from error
-        if len(encoded) > MAX_CELL_BYTES:
+        if len(encoded) > MAX_STRING_BYTES:
             raise ReplayError(f"column {column.name!r} witness exceeds the cell-size audit cap")
         return value
     if column.type == "Date":

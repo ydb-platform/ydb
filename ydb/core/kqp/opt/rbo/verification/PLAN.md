@@ -79,6 +79,7 @@ The trusted Python code is deliberately split into small semantic modules:
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
+rbo_verifier/string_order.py exact finite String/Utf8 byte-order quotient
 rbo_verifier/decimal.py     exact Decimal values, comparison, arithmetic, and ordering
 rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
 rbo_verifier/relation.py    bounded bag/sequence operator semantics
@@ -106,7 +107,8 @@ The explicit scalar core initially contains:
 - column access, typed literal, and typed NULL;
 - SQL/YQL three-valued `AND`, `OR`, and `NOT`;
 - ordinary nullable equality, null-safe equality, integer ordering when YQL's
-  common integer type preserves both operands exactly, and same-type `Date`
+  common integer type preserves both operands exactly, cross-identity
+  `String`/`Utf8` equality and unsigned raw-byte ordering, and same-type `Date`
   ordering; exact Decimal equality and ordering use YDB `DataCompare`
   alignment for Decimal/Decimal and Decimal/integer operands;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
@@ -194,12 +196,42 @@ are emitted as ordered UF arguments. Source positions, allocations, IU names,
 and DAG sharing are deliberately absent. The exporter caps this representation
 at 256 expanded nodes, nesting depth 64, and 64 KiB.
 
-Version-one strings have equality-only uninterpreted-atom semantics. Literals
-receive deterministic integer atom IDs, while other integer IDs decode to
-collision-checked placeholder strings for replay. This avoids placing Z3's
-version-dependent SMT string parser in the trusted path; string operations stay
-opaque until explicitly modeled. Because those atoms have no YDB ordering,
-`Sort` and `Merge` on `String` or `Utf8` fail closed during snapshot validation.
+Version-one `String` and `Utf8` values share one exact bounded integer-rank
+quotient of YDB's unsigned UTF-8/raw-byte lexicographic order, without collation
+or Unicode normalization. This keeps Z3 string theory and parsing outside the
+trusted path. Ordinary and null-safe equality and ordinary ordering accept
+either identity on either side. HashShuffle uses the same symbolic hash family
+for both identities because the runtime hashes their raw bytes identically;
+their snapshot type identities remain distinct. Static `IN` deliberately keeps
+its narrower exact-type string gate.
+
+The SMT script first collects every strict-UTF-8 literal and every distinct
+observable nonliteral string term in both plans. Given `M` such terms, the
+quotient keeps `M` valid-UTF-8 concrete representatives in every infinite open
+literal interval and `min(M, interval size)` representatives in the only finite
+byte-order gaps: below NUL prefixes and between a prefix and its NUL extensions.
+Sorting distinct assigned values within each interval and mapping them to those
+representatives proves preservation of all observed equalities and comparisons;
+the converse holds because every rank has one listed concrete representative.
+NUL extensions of complete UTF-8 literals keep witness representatives valid
+UTF-8 and replayable, including for equivalence classes containing arbitrary
+`String` bytes.
+
+The universe is built only when SMT rendering seals the script. Sealing fixes
+literal ranks, bounds every registered term, and exposes the complete rank-to-
+representative map to witness decoding; later registration and out-of-universe
+ranks fail closed. Construction is preflight-capped at 65,536 representatives,
+64 MiB of total encoded representative bytes, and 1,000,000 bytes per value.
+The per-value cap is shared with inspection and replay. A string-valued term
+depending on a sequence ordinal that family comparison may rebind under a
+quantifier also fails closed: a top-level finite-domain assertion would not
+constrain all rebound valuations.
+
+The same choice-independence audit applies to every top-level source, catalog,
+and opaque-result domain invariant: any such invariant that depends on a
+rebound sequence ordinal fails closed, not only String rank bounds.
+Global invariants render before the ordinary counterexample obligation even
+when deferred String sealing registers them later.
 
 Version-one `Date` is the exact unsigned day-since-epoch domain
 `[0, NUdf::MAX_DATE)`. Numeric literals are range-checked, source slots and
@@ -293,7 +325,8 @@ Implementation sequence:
 13. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
     Sort, Merge, and latent sequences;
 14. M4: quantifier-scoped shared-term SMT rendering;
-15. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+15. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
+16. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -461,6 +494,11 @@ distinct occurrences and broadcast multiplicity while checking exact guarded
 values for exclusive task copies. SMT tests lock typed quantifier shadowing,
 hygienic dependency-ordered `let` bindings, and the rule that shared terms in a
 quantified body stay inside that scope.
+String-order tests exhaust small byte alphabets and literal/term bounds, finite
+prefix/NUL gaps, Unicode normalization distinctions, valid-UTF-8 replay
+representatives, sealing, budget rejection, and quantified-choice fail-closed
+behavior. C++ runtime oracles lock the shared unsigned-byte comparator and
+type-independent String/Utf8 hash contract.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -529,6 +567,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A real-host ordered test captures logical Sort+Limit and the transformed
   per-task TopSort+Merge+final-Limit program, then constructs or solves the
   normal equivalence obligation.
+- `String` and `Utf8` use an exact bounded unsigned-byte-order quotient for
+  cross-identity equality and scalar ordering and for Sort, TopSort, and Merge.
+  HashShuffle shares their type-independent raw-byte hash family. Exhaustive
+  quotient/reference tests and C++ comparator/hash oracles cover NUL-prefix
+  gaps, non-normalized Unicode, arbitrary `String` bytes, replayable witnesses,
+  resource caps, deferred sealing, and quantified-choice fail-closed behavior.
+  A focused run moves TPC-DS q42 and q50 through formula construction and proves
+  q42. The remaining former String blockers now reach deeper construction caps
+  (q4, q11, q25, q29, q46, q64, and q91), nullable Decimal `SafeCast` (q65),
+  `IfPresent` (q68), or a final OLAP non-callable (q76).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -586,27 +634,30 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete formula-only baseline emits TPCH q3 (1/22) and TPC-DS q3,
-  q48, q52, q55, q61, q71, q88, q90, q93, and q96 (10/99), for 11/121
-  workload queries (9.1%). Formula emission confirms
+  2026-07-22 complete post-String-order formula-only dashboard emits TPCH q3
+  (1/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93, and
+  q96 (12/99), for 13/121 workload queries (10.7%). Formula emission confirms
   end-to-end model coverage at two rows per referenced table and two tasks; it
   is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
   before allocating its 32768-pair join matrix.
-- A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q48, q52, q55, q90, q93, and q96 with a fixed 60-second per-query
-  budget. q48 recorded 179 ms of preparation and 2,997 ms of verification in a
-  proof-floor `VERIFIED_BOUNDED` run. The same run recorded 227 ms of q90
-  preparation and 7,299 ms of verification before returning
-  `VERIFIED_BOUNDED`. These are eight curated proofs (6.6% of the workload).
-  q61's 1,572,871-byte formula and q88 both
-  return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of preparation and 63,897
-  ms of verification. q71's 118,276,852-byte formula recorded 100,948 ms in the
-  verifier/formula-emission phase of the complete run before a focused solver
-  attempt reached the external process deadline. No optimizer correctness bug
-  is confirmed by these runs.
+- A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3 and
+  TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a fixed 60-second
+  per-query budget. The complete current-code run recorded 131 ms of preparation
+  and 11,845 ms of verification for TPCH q3, and 95 ms of preparation and
+  15,210 ms of verification for q42. q48 recorded 179 ms of
+  preparation and 2,997 ms of verification in a proof-floor run; that run also
+  recorded 227 ms of q90 preparation and 7,299 ms of verification. These are
+  nine curated proofs (7.4% of the workload). q50 emits a formula but its solver
+  experiment ended `SOLVER_ERROR` after the external process exceeded its
+  65.0-second deadline; it is not part of the proof floor. q61's 1,572,871-byte
+  formula and q88 both return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of
+  preparation and 63,897 ms of verification. q71's 118,276,852-byte formula
+  recorded 100,948 ms in the verifier/formula-emission phase of the complete
+  run before a focused solver attempt reached the external process deadline. No
+  optimizer correctness bug is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q88
   investigation, and explicit unsupported/optimizer-failure inventory.
@@ -634,7 +685,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the eight curated workload proofs have separate
+- Formula construction and the nine curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

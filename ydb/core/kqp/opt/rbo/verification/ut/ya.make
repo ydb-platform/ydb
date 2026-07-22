@@ -13,6 +13,8 @@ TEST_SRCS(
     test_sql_in.py
     test_stage_compaction.py
     test_stagegraph_reference.py
+    test_string_order.py
+    test_string_proof.py
     test_smt.py
     test_verify.py
 )

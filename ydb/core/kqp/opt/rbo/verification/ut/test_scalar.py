@@ -11,6 +11,9 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     date_domain,
     integer_domain,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.string_order import (
+    StringOrderUniverse,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
     DATE,
     INTEGER_TYPES,
@@ -337,6 +340,100 @@ class DateScalarTest(unittest.TestCase):
         result = Encoder(smt.Script()).evaluate(
             expression,
             {"d": Value(DATE, smt.TRUE, smt.ZERO)},
+        )
+        self.assertEqual(result.is_null, smt.TRUE)
+        self.assertEqual(Encoder.is_true(result), smt.FALSE)
+
+
+class StringScalarTest(unittest.TestCase):
+    def test_opaque_string_results_are_bounded_to_the_finite_universe(self):
+        script = smt.Script()
+        result = Encoder(script).evaluate(
+            Expr(
+                kind="opaque",
+                result_type="Utf8",
+                nullable=False,
+                fingerprint="string-result",
+            ),
+            {},
+        )
+
+        formula = script.render()
+
+        self.assertEqual(result.value.operation, "f_0")
+        self.assertIn("(assert (and (not (< f_0 0)) (< f_0 1)))", formula)
+        self.assertEqual(script.string_literals, {0: ""})
+
+    def test_all_comparisons_use_raw_byte_ranks_across_string_types(self):
+        values = ("", "\0", "a", "a\0", "e\u0301", "é", "😀")
+        universe = StringOrderUniverse(values, 0)
+        operations = {
+            "eq": lambda left, right: left == right,
+            "lt": lambda left, right: left < right,
+            "lte": lambda left, right: left <= right,
+            "gt": lambda left, right: left > right,
+            "gte": lambda left, right: left >= right,
+        }
+        for left_type, right_type in (
+            ("String", "String"),
+            ("Utf8", "Utf8"),
+            ("String", "Utf8"),
+            ("Utf8", "String"),
+        ):
+            for kind, reference in operations.items():
+                expression = Expr(
+                    kind=kind,
+                    args=(
+                        Expr(kind="column", column="left"),
+                        Expr(kind="column", column="right"),
+                    ),
+                )
+                for left in values:
+                    for right in values:
+                        result = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "left": Value(
+                                    left_type,
+                                    smt.FALSE,
+                                    smt.int_value(universe.rank(left)),
+                                ),
+                                "right": Value(
+                                    right_type,
+                                    smt.FALSE,
+                                    smt.int_value(universe.rank(right)),
+                                ),
+                            },
+                        )
+                        left_bytes = left.encode("utf-8")
+                        right_bytes = right.encode("utf-8")
+                        with self.subTest(
+                            left_type=left_type,
+                            right_type=right_type,
+                            kind=kind,
+                            left=left,
+                            right=right,
+                        ):
+                            self.assertEqual(result.is_null, smt.FALSE)
+                            self.assertEqual(
+                                result.value,
+                                smt.bool_value(reference(left_bytes, right_bytes)),
+                            )
+
+    def test_nullable_string_comparison_is_sql_unknown(self):
+        expression = Expr(
+            kind="lt",
+            args=(
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            ),
+        )
+        result = Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "left": Value("String", smt.TRUE, smt.ZERO),
+                "right": Value("Utf8", smt.FALSE, smt.ZERO),
+            },
         )
         self.assertEqual(result.is_null, smt.TRUE)
         self.assertEqual(Encoder.is_true(result), smt.FALSE)

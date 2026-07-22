@@ -239,6 +239,19 @@ void CreateOrderedColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateTextOrderedColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboTextOrdered` (
+            Id Uint64 NOT NULL,
+            Bytes String,
+            Text Utf8,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void CreateSqlInColumnTable(TKikimrRunner& kikimr) {
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto result = session.ExecuteSchemeQuery(R"(
@@ -666,6 +679,91 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             final["plan"]["root"].GetStringSafe(),
             finalLimit["id"].GetStringSafe());
 
+        const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "merge");
+        UNIT_ASSERT_VALUES_EQUAL(
+            edges[0]["order"].GetArraySafe(),
+            finalSort["order"].GetArraySafe());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesStringAndUtf8TopSortAndMerge) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Bytes, Text
+                FROM `/Root/RboTextOrdered`
+                WHERE Bytes >= "binary\x00tail"
+                    AND Text >= Utf8("Cafe\xCC\x81/привет")
+                ORDER BY Bytes DESC, Text ASC
+                LIMIT 1;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertTextSchema = [](const NJson::TJsonValue& snapshot) {
+            THashMap<TString, TString> types;
+            for (const auto& table : snapshot["schema"]["tables"].GetArraySafe()) {
+                if (!table["name"].GetStringSafe().Contains("/Root/RboTextOrdered")) {
+                    continue;
+                }
+                for (const auto& column : table["columns"].GetArraySafe()) {
+                    types[column["name"].GetStringSafe()] =
+                        column["type"].GetStringSafe();
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(types["Bytes"], "String");
+            UNIT_ASSERT_VALUES_EQUAL(types["Text"], "Utf8");
+        };
+        assertTextSchema(initial);
+        assertTextSchema(final);
+
+        TVector<const NJson::TJsonValue*> literals;
+        CollectExpressions(initial["plan"], "literal", literals);
+        THashMap<TString, TString> textLiterals;
+        for (const auto* literal : literals) {
+            const TString type = (*literal)["type"].GetStringSafe();
+            if (type == "String" || type == "Utf8") {
+                textLiterals[type] = (*literal)["value"].GetStringSafe();
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            textLiterals["String"],
+            TString("binary\0tail", 11));
+        UNIT_ASSERT_VALUES_EQUAL(
+            textLiterals["Utf8"],
+            TString("Cafe\xCC\x81/привет"));
+
+        const auto& initialSort = OnlyPlanNode(initial, "sort");
+        AssertSort(initialSort, "undefined", false);
+        AssertLimit(OnlyPlanNode(initial, "limit"), "undefined");
+
+        const auto& finalSort = OnlyPlanNode(final, "sort");
+        AssertSort(finalSort, "intermediate", true);
+        AssertLimit(OnlyPlanNode(final, "limit"), "final");
         const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "merge");

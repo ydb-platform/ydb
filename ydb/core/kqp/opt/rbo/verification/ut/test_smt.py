@@ -50,12 +50,107 @@ class SmtTest(unittest.TestCase):
         self.assertEqual(smt.atom_value(bindings[1][1]), -3)
         self.assertEqual(smt.atom_value(bindings[2][1]), 'a"b')
 
-    def test_strings_are_injective_equality_only_atoms(self):
+    def test_string_literals_receive_byte_ordered_ranks_when_sealed(self):
         script = smt.Script()
-        self.assertEqual(script.string_atom("é"), smt.int_value(0))
-        self.assertEqual(script.string_atom("u{e9}"), smt.int_value(1))
-        self.assertEqual(script.string_atom("é"), smt.int_value(0))
-        self.assertEqual(script.string_literals, {0: "é", 1: "u{e9}"})
+        accented = script.string_atom("é")
+        ascii_text = script.string_atom("u{e9}")
+        self.assertIs(script.string_atom("é"), accented)
+        self.assertNotEqual(accented, ascii_text)
+
+        formula = script.render()
+
+        self.assertIn("(assert (= v_0 1))", formula)
+        self.assertIn("(assert (= v_1 0))", formula)
+        self.assertEqual(script.string_literals, {0: "u{e9}", 1: "é"})
+
+    def test_observed_string_terms_are_bounded_to_replayable_ranks(self):
+        script = smt.Script()
+        value = script.fresh_constant("source_string", smt.INT)
+        script.register_string_term(value)
+        script.string_atom("a")
+        script.string_atom("c")
+
+        formula = script.render()
+
+        self.assertIn("(assert (and (not (< v_0 0)) (< v_0 5)))", formula)
+        self.assertEqual(
+            script.string_literals,
+            {0: "\0", 1: "a", 2: "a\0", 3: "c", 4: "c\0"},
+        )
+
+    def test_string_registration_fails_closed_after_sealing(self):
+        script = smt.Script()
+        existing = script.string_atom("a")
+        script.render()
+        self.assertIs(script.string_atom("a"), existing)
+        with self.assertRaisesRegex(smt.SmtError, "after.*sealed"):
+            script.string_atom("b")
+        with self.assertRaisesRegex(smt.SmtError, "after.*sealed"):
+            script.register_string_term(smt.symbol("late", smt.INT))
+
+    def test_string_terms_depending_on_quantified_choices_fail_closed(self):
+        script = smt.Script()
+        choice = script.fresh_constant("ordinal", smt.INT)
+        function = script.fresh_function("string_result", (smt.INT,), smt.INT)
+        script.register_quantified_choice(choice)
+        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
+            script.register_string_term(function(choice))
+
+        reverse = smt.Script()
+        later_choice = reverse.fresh_constant("ordinal", smt.INT)
+        later_function = reverse.fresh_function("string_result", (smt.INT,), smt.INT)
+        reverse.register_string_term(later_function(later_choice))
+        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
+            reverse.register_quantified_choice(later_choice)
+
+    def test_global_invariants_depending_on_quantified_choices_fail_closed(self):
+        script = smt.Script()
+        choice = script.fresh_constant("ordinal", smt.INT)
+        function = script.fresh_function("bounded_result", (smt.INT,), smt.INT)
+        script.register_quantified_choice(choice)
+        with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
+            script.assert_global(smt.lt(function(choice), smt.int_value(10)))
+
+        reverse = smt.Script()
+        later_choice = reverse.fresh_constant("ordinal", smt.INT)
+        later_function = reverse.fresh_function("bounded_result", (smt.INT,), smt.INT)
+        reverse.assert_global(smt.lt(later_function(later_choice), smt.int_value(10)))
+        with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
+            reverse.register_quantified_choice(later_choice)
+
+    def test_global_invariants_render_before_ordinary_obligations(self):
+        script = smt.Script()
+        ordinary = script.fresh_constant("ordinary", smt.BOOL)
+        global_invariant = script.fresh_constant("global", smt.BOOL)
+        script.assert_(ordinary)
+        script.assert_global(global_invariant)
+
+        formula = script.render()
+
+        self.assertEqual(script.assertions, (ordinary, global_invariant))
+        self.assertLess(
+            formula.index("(assert v_1)"),
+            formula.index("(assert v_0)"),
+        )
+
+    def test_deferred_string_domains_render_before_the_obligation(self):
+        script = smt.Script()
+        value = script.fresh_constant("string", smt.INT)
+        obligation = script.fresh_constant("obligation", smt.BOOL)
+        script.register_string_term(value)
+        script.string_atom("literal")
+        script.assert_(obligation)
+
+        formula = script.render()
+
+        self.assertLess(
+            formula.index("(assert (= v_2"),
+            formula.index("(assert v_1)"),
+        )
+        self.assertLess(
+            formula.index("(assert (and (not (< v_0 0))"),
+            formula.index("(assert v_1)"),
+        )
 
     def test_python_boolean_is_not_an_smt_boolean(self):
         with self.assertRaises(smt.SmtError):

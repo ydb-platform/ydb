@@ -224,12 +224,14 @@ class Database:
                         f"{table.name}_{slot}_{column.name}_value",
                         smt_sort(column.type),
                     )
-                    if column.type == DATE:
-                        script.assert_(date_domain(value))
+                    if family(column.type) == "string":
+                        script.register_string_term(value)
+                    elif column.type == DATE:
+                        script.assert_global(date_domain(value))
                     elif family(column.type) == "int":
-                        script.assert_(integer_domain(value, column.type))
+                        script.assert_global(integer_domain(value, column.type))
                     elif decimal.is_type(column.type):
-                        script.assert_(decimal.domain(value, column.type))
+                        script.assert_global(decimal.domain(value, column.type))
                     values[column.name] = Value(column.type, is_null, value)
                     cells[column.name] = WitnessCell(column.type, is_null, value)
                 rows.append(
@@ -268,7 +270,7 @@ class Database:
                                         ),
                                     )
                                 )
-                        script.assert_(
+                        script.assert_global(
                             smt.not_(
                                 smt.and_(left_row.present, right_row.present, *equal_columns)
                             )
@@ -1305,6 +1307,8 @@ def _fresh_ordinals(
         script.fresh_constant(f"{hint}:{index}", smt.INT)
         for index in range(row_count)
     )
+    for ordinal in ordinals:
+        script.register_quantified_choice(ordinal)
     return ordinals, tuple(
         OrdinalChoice(ordinal, row_count) for ordinal in ordinals
     )
@@ -1392,7 +1396,7 @@ def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term
         raise RelationError("sort comparison type mismatch")
     if not is_ordered_type(left.type):
         raise RelationError(
-            "sort comparison requires integer, Date, or Decimal values"
+            "sort comparison requires integer, String/Utf8, Date, or Decimal values"
         )
     null_before = (
         smt.and_(left.is_null, smt.not_(right.is_null))

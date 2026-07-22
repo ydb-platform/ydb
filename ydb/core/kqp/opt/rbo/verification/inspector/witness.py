@@ -6,12 +6,10 @@ from typing import Any, Mapping
 
 from ..rbo_verifier import decimal, smt
 from ..rbo_verifier.relation import WitnessCell
+from ..rbo_verifier.string_order import MAX_STRING_BYTES
 from ..rbo_verifier.types import MAX_DATE, family, integer_bounds
 from ..rbo_verifier.verify import Problem
 from .plan import InspectionError
-
-
-MAX_WITNESS_STRING_BYTES = 1_000_000
 
 
 class InvalidWitness(InspectionError):
@@ -66,20 +64,33 @@ def bind_witness(
             })
         normalized[table] = checked_rows
 
+    # Register every fixed text value before adding any assertion.  This lets
+    # the deferred order universe include the concrete witness and preserves
+    # the inspector's atomic-rejection contract if the script was already
+    # sealed by an earlier formula render.
+    try:
+        for table, symbolic_rows in problem.witness.items():
+            for slot, row in enumerate(normalized[table]):
+                for name, cell in symbolic_rows[slot].cells.items():
+                    if row[name] is not None and family(cell.type) == "string":
+                        problem.script.string_atom(row[name])
+    except smt.SmtError as error:
+        raise InvalidWitness(str(error)) from error
+
     for table, symbolic_rows in problem.witness.items():
         rows = normalized[table]
         for slot, symbolic_row in enumerate(symbolic_rows):
             if slot >= len(rows):
-                problem.script.assert_(smt.not_(symbolic_row.present))
+                problem.script.assert_global(smt.not_(symbolic_row.present))
                 continue
-            problem.script.assert_(symbolic_row.present)
+            problem.script.assert_global(symbolic_row.present)
             for name, cell in symbolic_row.cells.items():
                 value = rows[slot][name]
                 if value is None:
-                    problem.script.assert_(cell.is_null)
+                    problem.script.assert_global(cell.is_null)
                 else:
-                    problem.script.assert_(smt.not_(cell.is_null))
-                    problem.script.assert_(smt.eq(
+                    problem.script.assert_global(smt.not_(cell.is_null))
+                    problem.script.assert_global(smt.eq(
                         cell.value,
                         _encode_value(problem.script, cell.type, value),
                     ))
@@ -118,7 +129,7 @@ def _validate_cell(
             encoded = value.encode("utf-8", errors="strict")
         except UnicodeError as error:
             raise InvalidWitness(f"{context} is not valid Unicode") from error
-        if len(encoded) > MAX_WITNESS_STRING_BYTES:
+        if len(encoded) > MAX_STRING_BYTES:
             raise InvalidWitness(f"{context} exceeds the witness cell-size audit cap")
     elif scalar_family == "atom" and decimal.is_type(cell.type):
         decimal_type = decimal.parse_type(cell.type)

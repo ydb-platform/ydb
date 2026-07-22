@@ -1993,8 +1993,6 @@ Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
     UNIT_ASSERT_VALUES_EQUAL(*message, TString(payload));
 }
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST(PublishAfterStreamWriteToTwoPartitionsMakesDataVisible) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-two-partitions-topic", "ext-two-partitions");
 
@@ -2057,7 +2055,6 @@ Y_UNIT_TEST(CancelAfterStreamWriteToTwoPartitionsClearsRegistryWithoutData) {
     UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 1).Defined());
 }
 
->>>>>>> a87284b65c8 (Run deferred publish finalize KQP ops as metadata@system (#47232))
 Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-topic", "ext-cancel");
 

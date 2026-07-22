@@ -322,14 +322,6 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
     return cpuManager;
 }
 
-static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId service)
-{
-    for (auto &pr : setup->LocalServices)
-        if (pr.first == service)
-            return true;
-    return false;
-}
-
 TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))

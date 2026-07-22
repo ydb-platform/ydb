@@ -210,7 +210,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);

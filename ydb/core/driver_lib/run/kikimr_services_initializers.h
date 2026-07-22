@@ -32,6 +32,15 @@ namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
 
+inline bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId service) {
+    for (auto& pr : setup->LocalServices) {
+        if (pr.first == service) {
+            return true;
+        }
+    }
+    return false;
+}
+
 class IKikimrServicesInitializer : public IServiceInitializer {
 protected:
     NKikimrConfig::TAppConfig& Config;

@@ -1626,6 +1626,7 @@ void TSchemeShard::InitRootShred() {
 
 void TSchemeShard::RunRootShred() {
     Execute(CreateTxRunShred(), this->ActorContext());
+}
 
 } // namespace NSchemeShard
 } // namespace NKikimr

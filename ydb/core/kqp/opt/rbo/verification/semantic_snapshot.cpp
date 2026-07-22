@@ -1859,6 +1859,15 @@ bool IsDateArithmetic(const TExprNode& node) {
         data->GetSlot() == NUdf::EDataSlot::Date;
 }
 
+class TRestrictedConcatAuditor;
+
+class TRestrictedConcatAuditToken {
+    friend class TRestrictedConcatAuditor;
+
+private:
+    TRestrictedConcatAuditToken() = default;
+};
+
 class TOpaqueExpressionEncoder {
 public:
     TOpaqueExpressionEncoder(
@@ -1868,6 +1877,16 @@ public:
         : RowArgument(rowArgument)
         , VisibleColumns(visibleColumns)
         , BoundArguments(std::move(boundArguments))
+    {
+    }
+
+    TOpaqueExpressionEncoder(
+        TRestrictedConcatAuditToken,
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+        , AllowRestrictedConcat(true)
     {
     }
 
@@ -2051,7 +2070,13 @@ private:
 
         switch (node.Type()) {
             case TExprNode::Callable:
-                CheckOpaqueCallable(node, allowExactUint32LiteralConversion);
+                if (node.IsCallable("Concat")) {
+                    if (!AllowRestrictedConcat) {
+                        Unsupported("Unsupported scalar callable Concat");
+                    }
+                } else {
+                    CheckOpaqueCallable(node, allowExactUint32LiteralConversion);
+                }
                 AppendIdentityField(out, "node", "callable");
                 AppendIdentityField(out, "content", node.Content());
                 break;
@@ -2091,6 +2116,215 @@ private:
     TVector<TExternalArgument> ExternalArguments;
     size_t NodeCount = 0;
     bool AllowNestedIfPresent = false;
+    bool AllowRestrictedConcat = false;
+};
+
+// NDataShard::NLimits::MaxWriteValueSize caps an ordinary stored value at
+// 16 MiB (ydb/core/tx/datashard/const.h), with write-path enforcement in
+// ydb/core/tx/datashard/datashard_write_operation.cpp and
+// ydb/core/tx/datashard/datashard_common_upload.cpp.
+constexpr ui64 MaxDatashardStoredStringBytes = 16ULL * 1024 * 1024;
+
+// Column-store String values use Arrow BinaryType
+// (ydb/core/formats/arrow/switch/switch_type.h) and reach MiniKQL through the
+// matching block traits (yql/essentials/public/udf/arrow/dispatch_traits.h).
+// BinaryType uses signed 32-bit offsets
+// (contrib/libs/apache/arrow/cpp/src/arrow/type.h), and Arrow
+// validation requires nonnegative, monotonic offsets within the value buffer
+// (contrib/libs/apache/arrow/cpp/src/arrow/array/validate.cc). Thus one logical
+// value is at most INT32_MAX bytes regardless of the compressed persistence
+// path; blob-size limits are deliberately not used as a cell-size premise.
+constexpr ui64 MaxOlapStoredStringBytes =
+    static_cast<ui64>(std::numeric_limits<i32>::max());
+
+struct TStoredStringProvenance {
+    bool Nullable;
+    ui64 MaximumBytes;
+};
+
+using TStoredStringColumns = THashMap<TString, TStoredStringProvenance>;
+
+// MiniKQL grows Concat's ui32 allocation capacity by 50 percent in
+// yql/essentials/minikql/mkql_string_util.cpp.  This is the largest result for
+// which `size + size / 2` cannot wrap that capacity.
+constexpr ui64 MaxConcatAllocationBytes =
+    2ULL * std::numeric_limits<ui32>::max() / 3;
+static_assert(
+    MaxConcatAllocationBytes + MaxConcatAllocationBytes / 2 <=
+    std::numeric_limits<ui32>::max());
+static_assert(
+    MaxConcatAllocationBytes + 1 + (MaxConcatAllocationBytes + 1) / 2 >
+    std::numeric_limits<ui32>::max());
+static_assert(MaxOlapStoredStringBytes < MaxConcatAllocationBytes);
+static_assert(2 * MaxOlapStoredStringBytes > MaxConcatAllocationBytes);
+static_assert(2 * MaxDatashardStoredStringBytes < MaxConcatAllocationBytes);
+
+class TRestrictedConcatAuditor {
+public:
+    TRestrictedConcatAuditor(
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns,
+        const TStoredStringColumns& storedStringColumns)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+        , StoredStringColumns(storedStringColumns)
+    {
+    }
+
+    NJson::TJsonValue ExportAsOpaque(
+        const TExprNode& root,
+        TExactScalarBudget& budget,
+        size_t argumentDepth)
+    {
+        Audit(root);
+        return TOpaqueExpressionEncoder(
+            TRestrictedConcatAuditToken{},
+            RowArgument,
+            VisibleColumns).Export(root, budget, argumentDepth);
+    }
+
+private:
+    void Audit(const TExprNode& root) {
+        if (!root.IsCallable("Concat")) {
+            Fail("root is not Concat");
+        }
+        Visit(root, 0);
+        if (StoredMemberCount == 0) {
+            Fail("contains no storage-bounded String member");
+        }
+    }
+
+    static constexpr size_t MaxNodes = 256;
+    static constexpr size_t MaxDepth = 64;
+    static constexpr size_t MaxStoredMembers = 2;
+
+    [[noreturn]] void Fail(TStringBuf reason) const {
+        Unsupported(TStringBuilder() << "Restricted Concat: " << reason);
+    }
+
+    void CheckStringType(const TExprNode& node, bool nullable) const {
+        if (!IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::String,
+                nullable))
+        {
+            Fail(nullable
+                ? "node is not exactly Optional<String>"
+                : "node is not exactly non-null String");
+        }
+    }
+
+    void AddMaximumBytes(ui64 bytes) {
+        if (bytes > MaxConcatAllocationBytes - MaximumBytes) {
+            Fail("maximum byte length exceeds the safe Concat allocation bound");
+        }
+        MaximumBytes += bytes;
+    }
+
+    void AddLiteralBytes(size_t bytes) {
+        AddMaximumBytes(bytes);
+    }
+
+    void AddStoredMember(ui64 maximumBytes) {
+        if (++StoredMemberCount > MaxStoredMembers) {
+            Fail("contains more than two stored-member occurrences");
+        }
+        AddMaximumBytes(maximumBytes);
+    }
+
+    void CheckMember(const TExprNode& node, bool nullable) {
+        CheckStringType(node, nullable);
+        if (node.ChildrenSize() != 2 ||
+            node.Child(0) != RowArgument ||
+            !node.Child(1)->IsAtom())
+        {
+            Fail("has a malformed stored member");
+        }
+        const TString column(node.Child(1)->Content());
+        if (!VisibleColumns.contains(column)) {
+            Fail(TStringBuilder()
+                << "member " << column << " is not visible at the Map input");
+        }
+        const auto* provenance = StoredStringColumns.FindPtr(column);
+        if (!provenance) {
+            Fail(TStringBuilder()
+                << "member " << column
+                << " has no storage-bounded String provenance");
+        }
+        if (provenance->Nullable != nullable) {
+            Fail(TStringBuilder()
+                << "member " << column
+                << " storage provenance is "
+                << (provenance->Nullable ? "nullable" : "non-null")
+                << " but the expression is "
+                << (nullable ? "nullable" : "non-null"));
+        }
+        AddStoredMember(provenance->MaximumBytes);
+    }
+
+    void CheckLiteral(const TExprNode& node, bool requireEmpty = false) {
+        CheckStringType(node, false);
+        if (!node.IsCallable("String") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom())
+        {
+            Fail("literal is not canonical String data");
+        }
+        LiteralExpr(node);
+        const size_t bytes = node.Child(0)->Content().size();
+        if (requireEmpty && bytes != 0) {
+            Fail("nullable stored member fallback is not the empty String");
+        }
+        AddLiteralBytes(bytes);
+    }
+
+    void CheckNullableStoredMember(const TExprNode& node) {
+        CheckStringType(node, false);
+        if (!node.IsCallable("Coalesce") || node.ChildrenSize() != 2) {
+            Fail("nullable stored member is not canonical Coalesce");
+        }
+        CheckMember(*node.Child(0), true);
+        CheckLiteral(*node.Child(1), true);
+    }
+
+    void Visit(const TExprNode& node, size_t depth) {
+        if (++NodeCount > MaxNodes || depth > MaxDepth) {
+            Fail("exceeds the scalar audit limit");
+        }
+        CheckScalarSafetyMetadata(node);
+
+        if (node.IsCallable("Concat")) {
+            CheckStringType(node, false);
+            if (node.ChildrenSize() != 2) {
+                Fail("is not binary");
+            }
+            Visit(*node.Child(0), depth + 1);
+            Visit(*node.Child(1), depth + 1);
+            return;
+        }
+        if (node.IsCallable("String")) {
+            CheckLiteral(node);
+            return;
+        }
+        if (node.IsCallable("Member")) {
+            CheckMember(node, false);
+            return;
+        }
+        if (node.IsCallable("Coalesce")) {
+            CheckNullableStoredMember(node);
+            return;
+        }
+        Fail(TStringBuilder()
+            << "contains unsupported callable " << node.Content());
+    }
+
+private:
+    const TExprNode* RowArgument;
+    const THashSet<TString>& VisibleColumns;
+    const TStoredStringColumns& StoredStringColumns;
+    size_t NodeCount = 0;
+    size_t StoredMemberCount = 0;
+    ui64 MaximumBytes = 0;
 };
 
 NJson::TJsonValue ExportExprNode(
@@ -2841,6 +3075,39 @@ NJson::TJsonValue ExportExpr(
     return result;
 }
 
+NJson::TJsonValue ExportExpr(
+    const TExpression& expression,
+    const THashSet<TString>& visibleColumns,
+    const TStoredStringColumns& storedStringColumns)
+{
+    if (!expression.Node ||
+        !expression.Node->IsLambda() ||
+        expression.Node->ChildrenSize() != 2)
+    {
+        Unsupported("RBO expression is not a one-body lambda");
+    }
+    const auto* arguments = expression.Node->Child(0);
+    if (!arguments->IsArguments() ||
+        arguments->ChildrenSize() != 1 ||
+        !arguments->Child(0)->IsArgument())
+    {
+        Unsupported("RBO expression does not have exactly one row argument");
+    }
+    const auto body = expression.GetExpressionBody();
+    if (!body->IsCallable("Concat")) {
+        return ExportExpr(expression, visibleColumns);
+    }
+
+    TExactScalarBudget budget;
+    budget.Charge(1);
+    auto result = TRestrictedConcatAuditor(
+        arguments->Child(0),
+        visibleColumns,
+        storedStringColumns).ExportAsOpaque(*body, budget, 2);
+    AuditExactScalarExpression(result);
+    return result;
+}
+
 using TOlapColumnMap = THashMap<TString, TString>;
 
 NJson::TJsonValue ExportOlapScalar(
@@ -3341,10 +3608,180 @@ private:
 
         const TString id = TStringBuilder() << "n" << Ids.size();
         auto node = ExportOperator(*op, id, children);
+        TrackStoredStringOutputs(*op);
         Ids.emplace(op.Get(), id);
         NodeOrder.push_back(op.Get());
         Nodes.AppendValue(std::move(node));
         return id;
+    }
+
+    const TStoredStringColumns& StoredStringOutputs(const IOperator& op) const {
+        const auto* result = StoredStringOutputMap.FindPtr(&op);
+        if (!result) {
+            Unsupported("Stored String provenance is unavailable for an operator input");
+        }
+        return *result;
+    }
+
+    void TrackStoredStringOutputs(IOperator& base) {
+        TStoredStringColumns result;
+
+        switch (base.GetKind()) {
+            case EOperator::EmptySource:
+                break;
+
+            case EOperator::Source: {
+                auto& read = static_cast<TOpRead&>(base);
+                const auto table = TableReference(read, Cluster);
+                const auto* catalogTable = Catalog.FindPtr(table.Identity);
+                if (!catalogTable) {
+                    Unsupported("Stored String provenance has no catalog table");
+                }
+                if ((*catalogTable)->MaximumStoredStringCellBytes == 0 ||
+                    !TKqpTable(read.TableCallable).SysView().StringValue().empty())
+                {
+                    break;
+                }
+                TStoredStringColumns stringColumns;
+                for (const auto& column : (*catalogTable)->Columns) {
+                    if (column.Type == "String") {
+                        stringColumns.emplace(
+                            column.Name,
+                            TStoredStringProvenance{
+                                column.Nullable,
+                                (*catalogTable)->MaximumStoredStringCellBytes});
+                    }
+                }
+                // A scan's serialized semantics come from this captured catalog
+                // and its source/output mapping.  The initial RBO boundary can
+                // legitimately precede operator type annotation; the Concat
+                // auditor still requires each Member annotation to match the
+                // catalog nullability carried here.
+                for (size_t index = 0; index < read.Columns.size(); ++index) {
+                    const auto* provenance = stringColumns.FindPtr(read.Columns[index]);
+                    const TString output = read.OutputIUs[index].GetFullName();
+                    if (provenance) {
+                        result.emplace(output, *provenance);
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Map: {
+                auto& map = static_cast<TOpMap&>(base);
+                const auto& input = StoredStringOutputs(*map.GetInput());
+                THashSet<TString> renameSources;
+                for (const auto& element : map.MapElements) {
+                    if (element.IsRename()) {
+                        renameSources.insert(element.GetRename().GetFullName());
+                    }
+                }
+                for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+                    const TString name = iu.GetFullName();
+                    if (!renameSources.contains(name) &&
+                        input.contains(name))
+                    {
+                        result.emplace(name, *input.FindPtr(name));
+                    }
+                }
+                for (const auto& element : map.MapElements) {
+                    if (element.IsRename() &&
+                        input.contains(element.GetRename().GetFullName()))
+                    {
+                        result.emplace(
+                            element.GetElementName().GetFullName(),
+                            *input.FindPtr(element.GetRename().GetFullName()));
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Filter:
+            case EOperator::Limit:
+            case EOperator::Sort: {
+                const auto& input = base.GetChildren().front();
+                const auto outputNames = OutputNames(base);
+                for (const auto& [name, provenance] : StoredStringOutputs(*input)) {
+                    if (outputNames.contains(name)) {
+                        result.emplace(name, provenance);
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Aggregate: {
+                auto& aggregate = static_cast<TOpAggregate&>(base);
+                if (!aggregate.IsDistinctAll()) {
+                    const auto& input = StoredStringOutputs(*aggregate.GetInput());
+                    for (const auto& key : aggregate.GetKeyColumns()) {
+                        const TString name = key.GetFullName();
+                        if (input.contains(name)) {
+                            result.emplace(name, *input.FindPtr(name));
+                        }
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Join: {
+                auto& join = static_cast<TOpJoin&>(base);
+                const auto& outputNames = OutputNames(base);
+                const TString kind = JoinKind(join.JoinKind);
+                const bool keepLeft =
+                    kind != "right_semi" && kind != "right_anti";
+                const bool keepRight =
+                    kind != "left_semi" && kind != "left_anti";
+                const bool nullableLeft =
+                    kind == "right" || kind == "full" || kind == "exclusion";
+                const bool nullableRight =
+                    kind == "left" || kind == "full" || kind == "exclusion";
+                const auto propagate = [&](IOperator& child, bool keep, bool forceNullable) {
+                    if (!keep) {
+                        return;
+                    }
+                    for (const auto& [name, provenance] : StoredStringOutputs(child)) {
+                        if (outputNames.contains(name)) {
+                            result.emplace(
+                                name,
+                                TStoredStringProvenance{
+                                    provenance.Nullable || forceNullable,
+                                    provenance.MaximumBytes});
+                        }
+                    }
+                };
+                propagate(*join.GetLeftInput(), keepLeft, nullableLeft);
+                propagate(*join.GetRightInput(), keepRight, nullableRight);
+                break;
+            }
+
+            case EOperator::UnionAll: {
+                auto& unionAll = static_cast<TOpUnionAll&>(base);
+                const auto& left = StoredStringOutputs(*unionAll.GetLeftInput());
+                const auto& right = StoredStringOutputs(*unionAll.GetRightInput());
+                for (const auto& iu : unionAll.Columns) {
+                    const TString name = iu.GetFullName();
+                    const auto* leftProvenance = left.FindPtr(name);
+                    const auto* rightProvenance = right.FindPtr(name);
+                    if (leftProvenance && rightProvenance) {
+                        result.emplace(
+                            name,
+                            TStoredStringProvenance{
+                                leftProvenance->Nullable || rightProvenance->Nullable,
+                                std::max(
+                                    leftProvenance->MaximumBytes,
+                                    rightProvenance->MaximumBytes)});
+                    }
+                }
+                break;
+            }
+
+            default:
+                Unsupported("Stored String provenance reached an unsupported operator");
+        }
+
+        if (!StoredStringOutputMap.emplace(&base, std::move(result)).second) {
+            Unsupported("Stored String provenance was recorded twice");
+        }
     }
 
     NJson::TJsonValue ExportOperator(IOperator& base, const TString& id, const TVector<TString>& children) {
@@ -3468,7 +3905,10 @@ private:
                     column["output"] = output;
                     column["expression"] = element.IsRename()
                         ? ColumnExpr(element.GetRename().GetFullName())
-                        : ExportExpr(element.GetExpression(), inputNames);
+                        : ExportExpr(
+                            element.GetExpression(),
+                            inputNames,
+                            StoredStringOutputs(*map.GetInput()));
                     columns.AppendValue(std::move(column));
                 }
                 if (outputs.empty()) {
@@ -3802,6 +4242,7 @@ private:
     TString Cluster;
     bool StageGraphPresent = false;
     THashMap<TString, const TSemanticSnapshotCatalogTableV1*> Catalog;
+    THashMap<const IOperator*, TStoredStringColumns> StoredStringOutputMap;
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     TVector<IOperator*> NodeOrder;
@@ -4655,6 +5096,13 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
 
             TSemanticSnapshotCatalogTableV1 table;
             table.Name = identity;
+            if (metadata.Kind == EKikimrTableKind::Datashard) {
+                table.MaximumStoredStringCellBytes =
+                    MaxDatashardStoredStringBytes;
+            } else if (metadata.Kind == EKikimrTableKind::Olap) {
+                table.MaximumStoredStringCellBytes =
+                    MaxOlapStoredStringBytes;
+            }
             THashSet<TString> emitted;
             auto appendColumn = [&](const TString& name) {
                 if (!columns.contains(name) || !emitted.insert(name).second) {

@@ -78,6 +78,7 @@ const TKikimrTableDescription& AddTable(
     table.Metadata->DoesExist = true;
     table.Metadata->PathId = TKikimrPathId(1, ctx.Tables->GetTables().size());
     table.Metadata->SchemaVersion = 1;
+    table.Metadata->Kind = EKikimrTableKind::Datashard;
     table.Metadata->KeyColumnNames = keyColumns;
 
     ui32 id = 1;
@@ -1253,6 +1254,70 @@ NJson::TJsonValue ExportMapExpression(
     return columns.back()["expression"];
 }
 
+TIntrusivePtr<TOpMap> MakeComputedMap(
+    TExportTestContext& ctx,
+    TIntrusivePtr<IOperator> input,
+    TStringBuf output,
+    TExprNode::TPtr expression)
+{
+    return MakeIntrusive<TOpMap>(
+        std::move(input),
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit(TString(output)),
+            TExpression(
+                std::move(expression),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps))});
+}
+
+TExprNode::TPtr StringLiteral(TExportTestContext& ctx, TStringBuf value) {
+    return TypedLiteral(
+        ctx,
+        "String",
+        value,
+        ScalarType(ctx, NUdf::EDataSlot::String));
+}
+
+TExprNode::TPtr StringConcat(
+    TExportTestContext& ctx,
+    TExprNode::TPtr left,
+    TExprNode::TPtr right)
+{
+    return TypedCallable(
+        ctx,
+        "Concat",
+        {std::move(left), std::move(right)},
+        ScalarType(ctx, NUdf::EDataSlot::String));
+}
+
+TExprNode::TPtr NonNullStoredString(
+    TExportTestContext& ctx,
+    TStringBuf column)
+{
+    return TypedMember(
+        ctx,
+        column,
+        ScalarType(ctx, NUdf::EDataSlot::String));
+}
+
+TExprNode::TPtr CoalescedStoredString(
+    TExportTestContext& ctx,
+    TStringBuf column)
+{
+    return TypedCallable(
+        ctx,
+        "Coalesce",
+        {
+            TypedMember(
+                ctx,
+                column,
+                ScalarType(ctx, NUdf::EDataSlot::String, true)),
+            StringLiteral(ctx, ""),
+        },
+        ScalarType(ctx, NUdf::EDataSlot::String));
+}
+
 TExprNode::TPtr WideBooleanAnd(TExportTestContext& ctx, size_t nodes) {
     UNIT_ASSERT(nodes >= 2);
     const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
@@ -1358,6 +1423,738 @@ TString ExportDeterministicStageGraph() {
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
+    }
+
+    Y_UNIT_TEST(ExportsOnlyAuditedStoredStringConcatShapes) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Concat", {
+            {"id", "String", true},
+            {"first", "String", false},
+            {"last", "String", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"id", "first", "last"});
+
+        auto q5 = StringConcat(
+            ctx,
+            StringLiteral(ctx, "store"),
+            NonNullStoredString(ctx, "a.id"));
+        auto twoMembers = StringConcat(
+            ctx,
+            StringConcat(
+                ctx,
+                CoalescedStoredString(ctx, "a.last"),
+                StringLiteral(ctx, ", ")),
+            CoalescedStoredString(ctx, "a.first"));
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("q5"),
+                    TExpression(q5, &ctx.ExprCtx, &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("two_members"),
+                    TExpression(twoMembers, &ctx.ExprCtx, &ctx.ExpressionProps)),
+            });
+        TOpRoot root(map, TPositionHandle(), {"q5", "two_members"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
+        THashMap<TString, const NJson::TJsonValue*> expressions;
+        for (const auto& column : columns) {
+            expressions.emplace(
+                column["output"].GetStringSafe(),
+                &column["expression"]);
+        }
+
+        for (const TString& output : {TString("q5"), TString("two_members")}) {
+            const auto& expression = **expressions.FindPtr(output);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "String");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_STRING_CONTAINS(
+                expression["fingerprint"].GetStringSafe(),
+                "Concat");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            (**expressions.FindPtr("q5"))["args"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (**expressions.FindPtr("two_members"))["args"].GetArraySafe().size(),
+            2);
+    }
+
+    Y_UNIT_TEST(RestrictedStoredStringConcatFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/LiteralOnly", {
+                {"id", "Int32", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"id"});
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "left"),
+                    StringLiteral(ctx, "right")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "no storage-bounded String member");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Utf8", {
+                {"text", "Utf8", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {{"a.text", NUdf::EDataSlot::Utf8}});
+            auto expression = TypedCallable(
+                ctx,
+                "Concat",
+                {
+                    TypedLiteral(
+                        ctx,
+                        "Utf8",
+                        "prefix",
+                        ScalarType(ctx, NUdf::EDataSlot::Utf8)),
+                    TypedMember(
+                        ctx,
+                        "a.text",
+                        ScalarType(ctx, NUdf::EDataSlot::Utf8)),
+                },
+                ScalarType(ctx, NUdf::EDataSlot::Utf8));
+            auto map = MakeComputedMap(ctx, read, "result", std::move(expression));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Restricted Concat");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Nullable", {
+                {"text", "String", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto badCoalesce = TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    TypedMember(
+                        ctx,
+                        "a.text",
+                        ScalarType(ctx, NUdf::EDataSlot::String, true)),
+                    StringLiteral(ctx, "not empty"),
+                },
+                ScalarType(ctx, NUdf::EDataSlot::String));
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(ctx, std::move(badCoalesce), StringLiteral(ctx, "!")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "empty String");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Three", {
+                {"x", "String", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x"});
+            SetOutputType(ctx, *read, {
+                {"a.x", NUdf::EDataSlot::String},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringConcat(
+                        ctx,
+                        NonNullStoredString(ctx, "a.x"),
+                        NonNullStoredString(ctx, "a.x")),
+                    NonNullStoredString(ctx, "a.x")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "two stored-member");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/DirectOptional", {
+                {"text", "String", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "prefix"),
+                    TypedMember(
+                        ctx,
+                        "a.text",
+                        ScalarType(ctx, NUdf::EDataSlot::String, true))));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "non-null String");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Computed", {
+                {"stored", "String", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"stored"});
+            SetOutputType(ctx, *read, {
+                {"a.stored", NUdf::EDataSlot::String},
+            });
+            auto computed = MakeComputedMap(
+                ctx,
+                read,
+                "computed",
+                StringLiteral(ctx, "small"));
+            auto concat = MakeComputedMap(
+                ctx,
+                computed,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "prefix"),
+                    NonNullStoredString(ctx, "computed")));
+            TOpRoot root(concat, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "no storage-bounded");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapTwoCells", {
+                {"text", "String", false},
+            });
+            table.Metadata->Kind = EKikimrTableKind::Olap;
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    CoalescedStoredString(ctx, "a.text"),
+                    CoalescedStoredString(ctx, "a.text")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "safe Concat allocation bound");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Nested", {
+                {"stored", "String", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"stored"});
+            SetOutputType(ctx, *read, {
+                {"a.stored", NUdf::EDataSlot::String},
+            });
+            auto concat = StringConcat(
+                ctx,
+                StringLiteral(ctx, "prefix"),
+                NonNullStoredString(ctx, "a.stored"));
+            auto comparison = TypedCallable(
+                ctx,
+                "==",
+                {std::move(concat), StringLiteral(ctx, "value")},
+                ScalarType(ctx, NUdf::EDataSlot::Bool));
+            auto map = MakeComputedMap(ctx, read, "result", std::move(comparison));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar callable Concat");
+        }
+
+        for (const bool olapSysView : {false, true}) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/SysView", {
+                {"generated", "String", true},
+            });
+            table.Metadata->Kind = olapSysView
+                ? EKikimrTableKind::Olap
+                : EKikimrTableKind::SysView;
+            table.Metadata->SysView = olapSysView ? "top_queries" : "";
+            auto read = MakeRead(ctx, table, "a", {"generated"});
+            SetOutputType(ctx, *read, {
+                {"a.generated", NUdf::EDataSlot::String},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "prefix"),
+                    NonNullStoredString(ctx, "a.generated")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "no storage-bounded");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/CatalogNullability", {
+                {"text", "String", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"text"});
+            SetOutputType(ctx, *read, {
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "prefix"),
+                    CoalescedStoredString(ctx, "a.text")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "storage provenance is non-null but the expression is nullable");
+        }
+    }
+
+    Y_UNIT_TEST(StoredStringConcatProvenanceUsesOnlyPreservingEdges) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/PassThrough", {
+                {"text", "String", true},
+                {"flag", "Bool", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"text", "flag"});
+            const TVector<TOutputTypeSpec> types = {
+                {"a.text", NUdf::EDataSlot::String},
+                {"a.flag", NUdf::EDataSlot::Bool},
+            };
+            SetOutputType(ctx, *read, types);
+
+            const auto pos = TPositionHandle();
+            auto filter = MakeIntrusive<TOpFilter>(
+                read,
+                pos,
+                TExpression(
+                    TypedMember(
+                        ctx,
+                        "a.flag",
+                        ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            SetOutputType(ctx, *filter, types);
+            auto limit = MakeIntrusive<TOpLimit>(
+                filter,
+                pos,
+                MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+                EOpPhase::Undefined);
+            SetOutputType(ctx, *limit, types);
+            auto sort = MakeIntrusive<TOpSort>(
+                limit,
+                pos,
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("a.text"), true, false),
+            });
+            SetOutputType(ctx, *sort, types);
+            auto rename = MakeCopyMap(ctx, sort, "renamed", "a.text");
+            SetOutputType(ctx, *rename, {
+                {"a.flag", NUdf::EDataSlot::Bool},
+                {"renamed", NUdf::EDataSlot::String},
+            });
+            auto concat = MakeComputedMap(
+                ctx,
+                rename,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "prefix"),
+                    NonNullStoredString(ctx, "renamed")));
+            TOpRoot root(concat, pos, {"result"});
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Aggregate", {
+                {"key", "String", true},
+                {"value", "Int64", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"key", "value"});
+            SetOutputType(ctx, *read, {
+                {"a.key", NUdf::EDataSlot::String},
+                {"a.value", NUdf::EDataSlot::Int64},
+            });
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.value"),
+                    "count",
+                    TInfoUnit("count"))},
+                TVector<TInfoUnit>{TInfoUnit("a.key")},
+                EOpPhase::Undefined,
+                false,
+                TPositionHandle());
+            SetOutputType(ctx, *aggregate, {
+                {"a.key", NUdf::EDataSlot::String},
+                {"count", NUdf::EDataSlot::Uint64},
+            });
+            auto concat = MakeComputedMap(
+                ctx,
+                aggregate,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "group"),
+                    NonNullStoredString(ctx, "a.key")));
+            TOpRoot root(concat, TPositionHandle(), {"result"});
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        }
+
+        {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/JoinLeft", {
+                {"k", "Int32", true},
+                {"text", "String", true},
+            });
+            AddTable(ctx, "/Root/JoinRight", {
+                {"k", "Int32", true},
+                {"text", "String", true},
+            });
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinLeft"),
+                "a",
+                {"k", "text"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinRight"),
+                "b",
+                {"k", "text"});
+            SetOutputType(ctx, *left, {
+                {"a.k", NUdf::EDataSlot::Int32},
+                {"a.text", NUdf::EDataSlot::String},
+            });
+            SetOutputType(ctx, *right, {
+                {"b.k", NUdf::EDataSlot::Int32},
+                {"b.text", NUdf::EDataSlot::String},
+            });
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                TPositionHandle(),
+                "Left",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{
+                    {TInfoUnit("a.k"), TInfoUnit("b.k")},
+                },
+                TVector<TExpression>{});
+            SetOutputType(ctx, *join, {
+                {"a.k", NUdf::EDataSlot::Int32},
+                {"a.text", NUdf::EDataSlot::String},
+                {"b.k", NUdf::EDataSlot::Int32},
+                {"b.text", NUdf::EDataSlot::String, true},
+            });
+            auto concat = MakeIntrusive<TOpMap>(
+                join,
+                TPositionHandle(),
+                TVector<TMapElement>{
+                    TMapElement(
+                        TInfoUnit("left_result"),
+                        TExpression(
+                            StringConcat(
+                                ctx,
+                                StringLiteral(ctx, "left"),
+                                NonNullStoredString(ctx, "a.text")),
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps)),
+                    TMapElement(
+                        TInfoUnit("right_result"),
+                        TExpression(
+                            StringConcat(
+                                ctx,
+                                StringLiteral(ctx, "right"),
+                                CoalescedStoredString(ctx, "b.text")),
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps)),
+                });
+            TOpRoot root(
+                concat,
+                TPositionHandle(),
+                {"left_result", "right_result"});
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        }
+
+        {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/UnionLeft", {{"text", "String", true}});
+            AddTable(ctx, "/Root/UnionRight", {{"text", "String", true}});
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/UnionLeft"),
+                "u",
+                {"text"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/UnionRight"),
+                "u",
+                {"text"});
+            SetOutputType(ctx, *left, {{"u.text", NUdf::EDataSlot::String}});
+            SetOutputType(ctx, *right, {{"u.text", NUdf::EDataSlot::String}});
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                left,
+                right,
+                TPositionHandle(),
+                TVector<TInfoUnit>{TInfoUnit("u.text")});
+            SetOutputType(ctx, *unionAll, {
+                {"u.text", NUdf::EDataSlot::String},
+            });
+            auto concat = MakeComputedMap(
+                ctx,
+                unionAll,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "union"),
+                    NonNullStoredString(ctx, "u.text")));
+            TOpRoot root(concat, TPositionHandle(), {"result"});
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        }
+
+        for (const TStringBuf joinKind : {TStringBuf("LeftSemi"), TStringBuf("LeftOnly")}) {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/SemiLeft", {{"k", "Int32", true}});
+            AddTable(ctx, "/Root/SemiRight", {
+                {"k", "Int32", true},
+                {"text", "String", true},
+            });
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/SemiLeft"),
+                "a",
+                {"k"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/SemiRight"),
+                "b",
+                {"k", "text"});
+            SetOutputType(ctx, *left, {{"a.k", NUdf::EDataSlot::Int32}});
+            SetOutputType(ctx, *right, {
+                {"b.k", NUdf::EDataSlot::Int32},
+                {"b.text", NUdf::EDataSlot::String},
+            });
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                TPositionHandle(),
+                TString(joinKind),
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{
+                    {TInfoUnit("a.k"), TInfoUnit("b.k")},
+                },
+                TVector<TExpression>{});
+            SetOutputType(ctx, *join, {{"a.k", NUdf::EDataSlot::Int32}});
+            auto concat = MakeComputedMap(
+                ctx,
+                join,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "dropped"),
+                    NonNullStoredString(ctx, "b.text")));
+            TOpRoot root(concat, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "not visible at the Map input");
+        }
+
+        {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/UnionNonNullLeft", {{"text", "String", true}});
+            AddTable(ctx, "/Root/UnionNullableRight", {{"text", "String", false}});
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/UnionNonNullLeft"),
+                "u",
+                {"text"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/UnionNullableRight"),
+                "u",
+                {"text"});
+            // Stale equal annotations must not wash out the catalog nullability.
+            SetOutputType(ctx, *left, {{"u.text", NUdf::EDataSlot::String}});
+            SetOutputType(ctx, *right, {{"u.text", NUdf::EDataSlot::String}});
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                left,
+                right,
+                TPositionHandle(),
+                TVector<TInfoUnit>{TInfoUnit("u.text")});
+            SetOutputType(ctx, *unionAll, {
+                {"u.text", NUdf::EDataSlot::String},
+            });
+            auto concat = MakeComputedMap(
+                ctx,
+                unionAll,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "union"),
+                    NonNullStoredString(ctx, "u.text")));
+            TOpRoot root(concat, TPositionHandle(), {"result"});
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "storage provenance is nullable but the expression is non-null");
+        }
+    }
+
+    Y_UNIT_TEST(StoredStringConcatJoinProvenanceMatchesEveryJoinKind) {
+        struct TJoinCase {
+            TStringBuf Kind;
+            bool KeepLeft;
+            bool KeepRight;
+            bool NullableLeft;
+            bool NullableRight;
+        };
+        const TJoinCase cases[] = {
+            {"Cross",      true,  true,  false, false},
+            {"Inner",      true,  true,  false, false},
+            {"Left",       true,  true,  false, true},
+            {"Right",      true,  true,  true,  false},
+            {"Full",       true,  true,  true,  true},
+            {"Exclusion",  true,  true,  true,  true},
+            {"LeftSemi",   true,  false, false, false},
+            {"LeftOnly",   true,  false, false, false},
+            {"RightSemi",  false, true,  false, false},
+            {"RightOnly",  false, true,  false, false},
+        };
+
+        for (const auto& test : cases) {
+            for (const bool inspectLeft : {true, false}) {
+                TExportTestContext ctx;
+                AddTable(ctx, "/Root/JoinLeft", {
+                    {"k", "Int32", true},
+                    {"text", "String", true},
+                });
+                AddTable(ctx, "/Root/JoinRight", {
+                    {"k", "Int32", true},
+                    {"text", "String", true},
+                });
+                auto left = MakeRead(
+                    ctx,
+                    ctx.Tables->ExistingTable("ut", "/Root/JoinLeft"),
+                    "a",
+                    {"k", "text"});
+                auto right = MakeRead(
+                    ctx,
+                    ctx.Tables->ExistingTable("ut", "/Root/JoinRight"),
+                    "b",
+                    {"k", "text"});
+                SetOutputType(ctx, *left, {
+                    {"a.k", NUdf::EDataSlot::Int32},
+                    {"a.text", NUdf::EDataSlot::String},
+                });
+                SetOutputType(ctx, *right, {
+                    {"b.k", NUdf::EDataSlot::Int32},
+                    {"b.text", NUdf::EDataSlot::String},
+                });
+
+                TVector<std::pair<TInfoUnit, TInfoUnit>> keys;
+                if (test.Kind != "Cross") {
+                    keys.emplace_back(TInfoUnit("a.k"), TInfoUnit("b.k"));
+                }
+                auto join = MakeIntrusive<TOpJoin>(
+                    left,
+                    right,
+                    TPositionHandle(),
+                    TString(test.Kind),
+                    std::move(keys),
+                    TVector<TExpression>{});
+
+                TVector<TOutputTypeSpec> outputs;
+                const auto appendSide = [&](TStringBuf alias, bool keep, bool nullable) {
+                    if (keep) {
+                        outputs.push_back({
+                            TStringBuilder() << alias << ".k",
+                            NUdf::EDataSlot::Int32,
+                            nullable});
+                        outputs.push_back({
+                            TStringBuilder() << alias << ".text",
+                            NUdf::EDataSlot::String,
+                            nullable});
+                    }
+                };
+                appendSide("a", test.KeepLeft, test.NullableLeft);
+                appendSide("b", test.KeepRight, test.NullableRight);
+                SetOutputType(ctx, *join, outputs);
+
+                const bool keep = inspectLeft ? test.KeepLeft : test.KeepRight;
+                const bool nullable = inspectLeft
+                    ? test.NullableLeft
+                    : test.NullableRight;
+                const TStringBuf column = inspectLeft ? "a.text" : "b.text";
+                auto member = nullable
+                    ? CoalescedStoredString(ctx, column)
+                    : NonNullStoredString(ctx, column);
+                auto concat = MakeComputedMap(
+                    ctx,
+                    join,
+                    "result",
+                    StringConcat(
+                        ctx,
+                        StringLiteral(ctx, "prefix"),
+                        std::move(member)));
+                TOpRoot root(concat, TPositionHandle(), {"result"});
+                const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+                const TString label = TStringBuilder()
+                    << test.Kind << '/' << (inspectLeft ? "left" : "right");
+                if (keep) {
+                    UNIT_ASSERT_C(result.IsSupported(),
+                        label << ": " << result.UnsupportedReason);
+                } else {
+                    UNIT_ASSERT_C(!result.IsSupported(), label);
+                    UNIT_ASSERT_STRING_CONTAINS(
+                        result.UnsupportedReason,
+                        "not visible at the Map input");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(StageGraphOutputIgnoresRandomRuntimeGuids) {

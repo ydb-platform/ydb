@@ -27,6 +27,9 @@ struct TSemanticSnapshotCatalogTableV1 {
     // Length-prefixed cluster/path/path-id/sys-view/schema-version identity.
     // This exact string is also used by scan nodes and as the witness table key.
     TString Name;
+    // Internal exporter evidence; deliberately absent from snapshot JSON.
+    // Zero means that no universal logical String-cell bound was established.
+    ui64 MaximumStoredStringCellBytes = 0;
     TVector<TSemanticSnapshotCatalogColumnV1> Columns;
     TVector<TSemanticSnapshotCatalogKeyV1> UniqueKeys;
 };

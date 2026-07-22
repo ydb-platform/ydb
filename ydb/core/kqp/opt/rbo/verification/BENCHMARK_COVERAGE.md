@@ -98,12 +98,12 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has three monotonic contracts. The verifier-entry floor
-requires TPC-DS q65 to keep passing both snapshot exporters and invoke the
-verifier; its current verifier-side `UNSUPPORTED` result does not count as a
-formula, while any later formula or proof still satisfies this depth floor. The
-formula-construction floor requires TPCH q3 and q19 plus TPC-DS q3, q15, q19,
-q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90,
-q93, q96, and q99.
+requires TPC-DS q5, q65, and q80 to keep passing both snapshot exporters and
+invoke the verifier; their current verifier-side `UNSUPPORTED` results do not
+count as formulas, while any later formula or proof still satisfies this depth
+floor. The formula-construction floor requires TPCH q3 and q19 plus TPC-DS q3,
+q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
+q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
 requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96;
 dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
@@ -149,8 +149,8 @@ StageGraph remains a separate diagnostic step.
 The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
 formula-only mode. It emitted the 23-query floor below and recorded an
 outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
-complete suite reports satisfied the checked-in coverage policy, including the
-newly required TPC-DS q37, q40, and q82 formulas.
+measured suites meet the updated checked-in floors: q5, q65, and q80 reach
+verifier entry.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -200,10 +200,10 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 37 of the 49
+The exporter matrix below covers the boundary failures among 35 of the 49
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
-The twelve queries that pass export and fail closed inside the verifier are listed
+The fourteen queries that pass export and fail closed inside the verifier are listed
 after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -215,8 +215,8 @@ after the matrix.
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `/` | q73, q78 | q73, q78 |
-| Callable `Concat` | q5, q80, q84 | q5, q80, q84 |
 | Callable `Unwrap` | q8, q38, q87 | q8, q38, q87 |
+| Restricted `Concat` exceeds its allocation-totality bound | q84 | q84 |
 | Type `Double` | q7, q13, q21, q22, q26, q34, q75, q85 | q7, q13, q21, q22, q26, q34, q75, q85 |
 | Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 
@@ -224,6 +224,9 @@ After both snapshots export, q4 fails before materializing a 13,824-row join
 output above the 4,096-row relation bound. q11's join matching and q25/q29's
 grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
+q5 fails closed because its Decimal `sum` cannot establish finite accumulator
+headroom. q80's grouped aggregate requires 82,944 candidate-row pairs above the
+16,384-pair construction bound.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
 rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
@@ -231,7 +234,9 @@ and fails closed because aggregate `avg` is not modeled. q77 passes both
 exports and fails closed because its Decimal `sum` cannot establish the finite
 headroom required for order-independent partial aggregation. The focused q68 run
 passed both snapshot exports and reached its Merge audit cap after 11,175 ms of
-verifier work.
+verifier work. The complete dashboard took 349,431 ms to reach q91's Merge cap;
+that late preflight is a known construction-performance gap, not a correctness
+candidate.
 
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
@@ -284,11 +289,12 @@ in `[-49672, 49672]`. MiniKQL parses the Date; an invalid input or arithmetic
 result outside `[0, 49673)` becomes typed Date NULL. The corresponding OLAP
 `just` is erased only around a direct valid non-null Date literal. The exporter
 folds the complete shape to existing Date literal/NULL nodes, so no Interval IR
-or Python evaluator support is added. This moves q37, q40, and q82 through
-formula construction and raises TPC-DS to 21/99. q5 and q80 now join q84 at
-unsupported `Concat`; q21 reaches `Double`; q72 remains outside the gate because
-its dynamic Date expression does not have the exact Optional-Date cast shape;
-and q77 reaches the verifier's Decimal-SUM headroom gate.
+or Python evaluator support is added. This moved q37, q40, and q82 through
+formula construction and raised TPC-DS to 21/99. Before restricted Concat was
+added, q5, q80, and q84 then stopped at `Concat`; q21 reaches `Double`; q72
+remains outside the Date gate because its dynamic expression does not have the
+exact Optional-Date cast shape; and q77 reaches the verifier's Decimal-SUM
+headroom gate.
 
 ## Curated proof floor and focused results
 
@@ -373,6 +379,31 @@ and q77 reaches the verifier's Decimal-SUM headroom gate.
   process deadline. That focused `ya` experiment failed as designed on the
   solver error; it is neither a proof nor a counterexample. The proof floor
   remains ten.
+
+- Restricted stored-String `Concat` is admitted only as a Map-body root whose
+  binary tree contains canonical String literals and one or two catalog-backed
+  stored String occurrences. A nullable occurrence must be exactly
+  `Coalesce(member, String(""))`. Structural provenance excludes system views,
+  generated/external values, and computed strings; it follows only preserving
+  operators, widens outer-join sides, drops semi/anti sides, and ORs UnionAll
+  nullability. The final Member annotation must match the catalog-derived
+  nullability. Datashard's 16 MiB value cap and Olap's `INT32_MAX` Arrow
+  Binary-cell bound are charged per occurrence; MiniKQL's allocation-capacity
+  bound must then prove the whole tree total before it is encoded as one
+  syntax-preserving opaque function. One generic Olap occurrence can pass when
+  its exact literals fit the remaining allocation headroom; any two generic
+  Olap occurrences fail closed. Generic or nested-parent `Concat`, `Utf8`,
+  nonempty fallbacks,
+  and every unproved shape fail closed. Focused C++ tests cover the grammar,
+  provenance failures, all ten join kinds, and the two-Olap-occurrence
+  rejection; a one-Olap-occurrence real-host initial/final obligation is
+  `VERIFIED_BOUNDED`.
+  The complete dashboard records q5 as verifier-side `UNSUPPORTED` on Decimal
+  SUM headroom after 1,800 ms of preparation and 822 ms of verifier work, and
+  q80 on its 82,944-pair grouped aggregate after 1,946 ms and 11,975 ms. q84's
+  two Olap String occurrences exceed the allocation-totality bound and remain
+  unsupported. The policy pins q5/q80 at verifier entry; the formula slice
+  remains 23/121 and the proof floor remains ten.
 
 - Decimal aggregate `max` is exact only when its input and output have the same
   canonical Decimal type and phase-aware nullability. It ignores NULL and uses

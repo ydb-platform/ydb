@@ -56,6 +56,9 @@ struct TJoinTestData {
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
     TBlockHashJoinSettings JoinSettings;
+    TDqProgramBuilder::TScalarJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TScalarJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TScalarJoinCommonFilterLambda CommonFilter;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -965,6 +968,162 @@ TJoinTestData ScalarPayloadInnerJoinTestData() {
     return td;
 }
 
+// Predicate helpers. The lambdas are invoked lazily inside DqScalarHashJoin with the wide-row
+// argument nodes, so they fetch the program builder from the (still alive) setup at build time.
+TDqProgramBuilder::TScalarJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
+                                                                  ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+TDqProgramBuilder::TScalarJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* setup, ui32 column, ui64 value) {
+    return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Less(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// right[column] > left[column]
+TDqProgramBuilder::TScalarJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(right[column], left[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
+// Base data for filter tests. Columns per side: (key ui64, value ui64), joined on column 0.
+// left:  (1,5) (2,20) (3,30)
+// right: (1,100) (2,50) (3,60)
+TJoinTestData FilterBaseInnerData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// Left filter col1 > 10 drops left key 1 (value 5).
+TJoinTestData LeftFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+// Right filter col1 < 80 drops right key 1 (value 100).
+TJoinTestData RightFilterInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    return td;
+}
+
+// Common filter right.col1 > left.col1. With base data all three matched pairs pass (100>5, 50>20,
+// 60>30), so use a dataset where the predicate is discriminating.
+TJoinTestData CommonFilterInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    // key1: 100>5 keep, key2: 50>60 drop, key3: 60>30 keep
+    TVector<ui64> expLeftKeys = {1, 3};
+    TVector<ui64> expLeftVals = {5, 30};
+    TVector<ui64> expRightKeys = {1, 3};
+    TVector<ui64> expRightVals = {100, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+// All three filters together.
+// left filter col1 > 10 (drops left key1), right filter col1 < 80 (drops right key1),
+// common filter right.col1 > left.col1 (key2 50>20 keep, key3 60>30 keep).
+TJoinTestData AllFiltersInnerTestData() {
+    auto td = FilterBaseInnerData();
+    auto& setup = *td.Setup;
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {2, 3};
+    TVector<ui64> expRightVals = {50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+// LEFT join with a left-only filter (col1 > 10). Because the ON-predicate is not a WHERE clause,
+// left rows failing it must still be preserved (null-padded), not dropped.
+// left:  (1,5) (2,20) (3,30)   right: (1,100) (2,50) (3,60)
+TJoinTestData LeftJoinLeftFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // key1 (val 5) fails the filter -> null-padded; key2/key3 match.
+    TVector<ui64> expLeftKeys = {1, 2, 3};
+    TVector<ui64> expLeftVals = {5, 20, 30};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, 2, 3};
+    TVector<std::optional<ui64>> expRightVals = {std::nullopt, 50, 60};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    return td;
+}
+
+// LEFT join with a common filter (right.col1 > left.col1). Left rows whose only match is rejected
+// by the filter, as well as left rows with no key match, are emitted null-padded.
+// left:  (1,5) (2,60) (3,30) (4,7)   right: (1,100) (2,50) (3,60)
+TJoinTestData LeftJoinCommonFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<ui64> leftVals = {5, 60, 30, 7};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // key1: 100>5 keep; key2: 50>60 reject -> null-pad; key3: 60>30 keep; key4: no match -> null-pad.
+    TVector<ui64> expLeftKeys = {1, 2, 3, 4};
+    TVector<ui64> expLeftVals = {5, 60, 30, 7};
+    TVector<std::optional<ui64>> expRightKeys = {1, std::nullopt, 3, std::nullopt};
+    TVector<std::optional<ui64>> expRightVals = {100, std::nullopt, 60, std::nullopt};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+
+    td.Kind = EJoinKind::Left;
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -982,6 +1141,9 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     descr.SliceBlocks = td.SliceBlocks;
     descr.ScalarizeLeftColumns = td.ScalarizeLeftColumns;
     descr.ScalarizeRightColumns = td.ScalarizeRightColumns;
+    descr.LeftFilter = td.LeftFilter;
+    descr.RightFilter = td.RightFilter;
+    descr.CommonFilter = td.CommonFilter;
     return descr;
 }
 
@@ -1151,6 +1313,49 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBlockJoinScalarColumn) {
         Test(ScalarPayloadInnerJoinTestData(), true);
+    }
+
+    // Non-equi join filters: applied at match time. Exercised for both scalar and block joins.
+    Y_UNIT_TEST(TestScalarHashLeftFilter) {
+        Test(LeftFilterInnerTestData(), false);
+    }
+
+    Y_UNIT_TEST(TestScalarHashRightFilter) {
+        Test(RightFilterInnerTestData(), false);
+    }
+
+    Y_UNIT_TEST(TestScalarHashCommonFilter) {
+        Test(CommonFilterInnerTestData(), false);
+    }
+
+    Y_UNIT_TEST(TestScalarHashAllFilters) {
+        Test(AllFiltersInnerTestData(), false);
+    }
+
+    Y_UNIT_TEST(TestBlockHashLeftFilter) {
+        Test(LeftFilterInnerTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockHashRightFilter) {
+        Test(RightFilterInnerTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockHashCommonFilter) {
+        Test(CommonFilterInnerTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockHashAllFilters) {
+        Test(AllFiltersInnerTestData(), true);
+    }
+
+    // LEFT join filter correctness: preserved (left) rows must be null-padded when their matches
+    // are rejected by the filter (or when there is no key match at all).
+    Y_UNIT_TEST(TestBlockHashLeftJoinLeftFilter) {
+        Test(LeftJoinLeftFilterTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockHashLeftJoinCommonFilter) {
+        Test(LeftJoinCommonFilterTestData(), true);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

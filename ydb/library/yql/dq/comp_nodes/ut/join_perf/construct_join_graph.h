@@ -22,6 +22,10 @@ struct TJoinDescription {
     bool SliceBlocks = false;
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
+    // Optional non-equi join filters (supported by kScalarHash and kBlockHash).
+    TDqProgramBuilder::TScalarJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TScalarJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TScalarJoinCommonFilterLambda CommonFilter;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

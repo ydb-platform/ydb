@@ -1273,7 +1273,8 @@ def _validate_stage_graph(
             if not is_ordered_type(columns[item.column].type):
                 _fail(
                     f"{edge_path}.order",
-                    "only integer and Date ordering is modeled",
+                    f"ordering type {columns[item.column].type!r} is unsupported; "
+                    "modeled types are integers, Date, and Decimal",
                 )
 
     for stage in graph.stages:
@@ -1534,7 +1535,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if not is_ordered_type(result[item.column].type):
                     _fail(
                         f"node {node.id!r}.order[{index}]",
-                        "only integer and Date ordering is modeled",
+                        f"ordering type {result[item.column].type!r} is unsupported; "
+                        "modeled types are integers, Date, and Decimal",
                     )
 
         elif isinstance(node, Aggregate):

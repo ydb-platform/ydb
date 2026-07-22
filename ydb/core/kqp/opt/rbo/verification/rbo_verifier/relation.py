@@ -28,7 +28,7 @@ from .ir import (
 )
 from .scalar import Encoder as ScalarEncoder
 from .scalar import Value, date_domain, integer_domain, smt_sort
-from .types import DATE, family
+from .types import DATE, family, is_decimal_type, is_ordered_type
 
 
 @dataclass(frozen=True, slots=True)
@@ -897,8 +897,10 @@ def _row_leq(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
 def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term:
     if left.type != right.type:
         raise RelationError("sort comparison type mismatch")
-    if family(left.type) not in {"int", "date"}:
-        raise RelationError("sort comparison requires integer or Date values")
+    if not is_ordered_type(left.type):
+        raise RelationError(
+            "sort comparison requires integer, Date, or Decimal values"
+        )
     null_before = (
         smt.and_(left.is_null, smt.not_(right.is_null))
         if order.nulls_first
@@ -907,6 +909,9 @@ def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term
     if left.value.sort == smt.BOOL:
         ascending = smt.and_(smt.not_(left.value), right.value)
         descending = smt.and_(left.value, smt.not_(right.value))
+    elif is_decimal_type(left.type):
+        ascending = decimal.sort_less(left.value, right.value)
+        descending = decimal.sort_less(right.value, left.value)
     else:
         ascending = smt.lt(left.value, right.value)
         descending = smt.lt(right.value, left.value)

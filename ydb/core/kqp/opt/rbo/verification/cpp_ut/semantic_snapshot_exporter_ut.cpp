@@ -18,6 +18,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_type_ops.h>
 
 #include <algorithm>
 #include <initializer_list>
@@ -3243,7 +3244,33 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(ExportsDateSortAndRejectsTextAndDecimalOrdering) {
+    Y_UNIT_TEST(DecimalOrderingContractMatchesRuntimeComparator) {
+        using NYql::NDecimal::Inf;
+        using NYql::NDecimal::Nan;
+        using NYql::NDecimal::TInt128;
+
+        const TVector<TInt128> values = {
+            -Inf(),
+            TInt128(-1),
+            TInt128(0),
+            TInt128(1),
+            Inf(),
+            Nan(),
+        };
+        for (size_t left = 0; left < values.size(); ++left) {
+            for (size_t right = 0; right < values.size(); ++right) {
+                const auto comparison =
+                    NUdf::CompareValues<NUdf::EDataSlot::Decimal>(
+                        NUdf::TUnboxedValuePod(values[left]),
+                        NUdf::TUnboxedValuePod(values[right]));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    comparison,
+                    left == right ? 0 : (left < right ? -1 : 1));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExportsDateAndDecimalSortAndRejectsTextOrdering) {
         const auto pos = TPositionHandle();
         {
             TExportTestContext ctx;
@@ -3271,18 +3298,40 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!order["nulls_first"].GetBooleanSafe());
         }
 
-        for (const TString typeName : {"String", "Utf8", "Decimal(5,2)"}) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/DecimalSort", {
+                {"value", "Decimal(5,2)", false},
+            });
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            auto read = MakeRead(ctx, table, "a", {"value"});
+            SetExactOutputType(ctx, *read, {{"a.value", optionalDecimal}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("a.value"), false, true)});
+            SetExactOutputType(ctx, *sort, {{"a.value", optionalDecimal}});
+            TOpRoot root(sort, pos, {"a.value"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                snapshot["schema"]["tables"][0]["columns"][0]["type"].GetStringSafe(),
+                "Decimal(5,2)");
+            const auto& order = FindNode(snapshot, "sort")["order"][0];
+            UNIT_ASSERT_VALUES_EQUAL(order["column"].GetStringSafe(), "a.value");
+            UNIT_ASSERT(!order["ascending"].GetBooleanSafe());
+            UNIT_ASSERT(order["nulls_first"].GetBooleanSafe());
+        }
+
+        for (const TString typeName : {"String", "Utf8"}) {
             TExportTestContext ctx;
             const TTypeAnnotationNode* dataType = nullptr;
             if (typeName == "String") {
                 dataType = ScalarType(ctx, NUdf::EDataSlot::String);
-            } else if (typeName == "Utf8") {
-                dataType = ScalarType(ctx, NUdf::EDataSlot::Utf8);
             } else {
-                dataType = ctx.ExprCtx.MakeType<TDataExprParamsType>(
-                    NUdf::EDataSlot::Decimal,
-                    "5",
-                    "2");
+                dataType = ScalarType(ctx, NUdf::EDataSlot::Utf8);
             }
             const auto* optionalType = ctx.ExprCtx.MakeType<TOptionalExprType>(dataType);
             const auto& table = AddTable(ctx, "/Root/NonOrdered", {
@@ -3301,7 +3350,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_C(!result.IsSupported(), typeName);
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "Sort ordering is modeled only for integers and Date");
+                TStringBuilder()
+                    << "Sort ordering column a.value has unsupported type "
+                    << typeName);
         }
     }
 
@@ -3947,6 +3998,42 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(order[1]["column"].GetStringSafe(), "a.x");
         UNIT_ASSERT_VALUES_EQUAL(order[1]["ascending"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(order[1]["nulls_first"].GetBooleanSafe(), true);
+    }
+
+    Y_UNIT_TEST(ExportsDecimalMergeOrdering) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DecimalMerge", {
+            {"value", "Decimal(7,2)", false},
+        });
+        const auto* optionalDecimal = DecimalType(ctx, "7", "2", true);
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetExactOutputType(ctx, *read, {{"a.value", optionalDecimal}});
+        auto project = MakeCopyMap(ctx, read, "result", "a.value");
+        TOpRoot root(project, TPositionHandle(), {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        project->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TMergeConnection>(
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("a.value"), false, true),
+                },
+                graph.GetOutputIndex(producer)));
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& edge = snapshot["stage_graph"]["edges"][0];
+        UNIT_ASSERT_VALUES_EQUAL(edge["kind"].GetStringSafe(), "merge");
+        const auto& order = edge["order"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(order.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(order[0]["column"].GetStringSafe(), "a.value");
+        UNIT_ASSERT(!order[0]["ascending"].GetBooleanSafe());
+        UNIT_ASSERT(order[0]["nulls_first"].GetBooleanSafe());
     }
 
     Y_UNIT_TEST(UnsupportedSourceConnectionAndStorageFailClosed) {

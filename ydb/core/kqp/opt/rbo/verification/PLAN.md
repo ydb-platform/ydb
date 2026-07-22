@@ -75,7 +75,7 @@ The trusted Python code is deliberately split into small semantic modules:
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
-rbo_verifier/decimal.py     exact Decimal values, comparison, and arithmetic
+rbo_verifier/decimal.py     exact Decimal values, comparison, arithmetic, and ordering
 rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
 rbo_verifier/relation.py    bounded bag/sequence operator semantics
 rbo_verifier/stages.py      two-task StageGraph and connection semantics
@@ -204,7 +204,15 @@ ties-to-even rounding for either sign. `DecimalMul` with an integer right
 operand does not rescale, so it preserves the left Decimal scale. NaN,
 infinity-times-zero, signed infinity, and finite overflow—including a finite
 result that numerically collides with the in-band NaN code—are handled before
-the result is decoded. Decimal division, general casts, `IN`, Sort/Merge keys,
+the result is decoded.
+
+Decimal Sort, TopSort, and Merge use the MiniKQL/DQ runtime comparator,
+not ordinary `DataCompare`: raw signed 128-bit codes form the total non-null
+order `-Inf < finite values < +Inf < NaN`, reversed for descending. Raw code
+equality makes two NaNs a sort tie. One order item retains one exact canonical
+`Decimal(p,s)` identity without scale alignment; separate tuple keys may have
+different Decimal identities. NULL placement continues to use the pre-physical
+snapshot's explicit `nulls_first` field. Decimal division, general casts, `IN`,
 and aggregate functions remain unsupported.
 
 ## Relational semantics
@@ -225,7 +233,8 @@ Implementation sequence:
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
 9. M4: exact canonical Decimal `+`, `-`, and `DecimalMul`;
-10. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+10. M4: exact Decimal Sort, TopSort, and Merge ordering;
+11. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -351,6 +360,12 @@ alignment tests use `NDecimal` as an oracle, while arithmetic exporter tests
 audit the signature gates. Normal verifier tests prove unchanged
 `add`/`sub`/`mul` across a staged Map and require operation mutations to produce
 solver counterexamples.
+Decimal ordering is exhaustively checked on every legal finite code through
+precision two plus specials, directions, explicit NULL placement, NaN ties,
+TopSort prefixes, and two-task Merge. A C++ oracle locks the stated total order
+to `NUdf::CompareValues<Decimal>`. A real-host Decimal query verifies the
+bounded two-row/two-task pre-physical logical Sort+Limit to staged
+TopSort+Merge+final-Limit transformation pair.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -433,10 +448,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   complete non-null integer constant casts are modeled. Canonical same-type
   Decimal `+`/`-` and `DecimalMul` with a same-type Decimal or integer right
   operand have exact `NDecimal` special, ties-to-even, scale, and overflow
-  semantics. General casts, Decimal division, `IN`, Sort/Merge keys, and
-  aggregate functions still fail closed. Exhaustive rational references,
-  adversarial arithmetic cases, signature and mutation tests, and green
-  real-host Decimal filter and arithmetic obligations cover this boundary.
+  semantics. Sort, TopSort, and Merge use the distinct raw-code total order,
+  including ordered NaN and exact Decimal key identity. General casts, Decimal
+  division, `IN`, and aggregate functions still fail closed. Exhaustive
+  rational and ordering references, adversarial arithmetic cases, signature
+  and mutation tests, and green real-host Decimal filter, arithmetic, and
+  ordered obligations cover this boundary.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -458,10 +475,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   emits its two-row/two-task SMT obligation. This is formula coverage, not a
   solver proof; the focused formula-only run took 365116 ms and no Z3 executable
   was present.
-- Focused Decimal-arithmetic corpus reruns move the affected TPCH and TPC-DS
-  queries past `DecimalMul`, `+`, and `-` to deeper sort, division, cast,
-  Map/OLAP, Double, or Interval blockers. No additional formula is emitted: the
-  complete floors remain TPCH 0/22 and TPC-DS 3/99.
+- Focused Decimal-arithmetic and ordering corpus reruns move the affected TPCH
+  and TPC-DS queries past `DecimalMul`, `+`, `-`, and Decimal order keys. TPCH
+  q3 and TPC-DS q3, q52, q55, q71, and q93 now reach the narrower verifier-level
+  Decimal `sum` gap; String keys remain fail-closed. No additional formula is
+  emitted: the complete floors remain TPCH 0/22 and TPC-DS 3/99.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
   and explicit unsupported/optimizer-failure inventory.

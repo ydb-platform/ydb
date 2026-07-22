@@ -946,6 +946,73 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesDecimalTopSortAndMerge) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateDecimalColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, D
+                FROM `/Root/RboDecimal`
+                ORDER BY D DESC
+                LIMIT 1;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertDecimalSort = [](const NJson::TJsonValue& sort) {
+            const auto& order = sort["order"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(order.size(), 1);
+            UNIT_ASSERT(!order[0]["ascending"].GetBooleanSafe());
+            UNIT_ASSERT(order[0]["nulls_first"].GetBooleanSafe());
+        };
+        const auto& initialSort = OnlyPlanNode(initial, "sort");
+        const auto& finalSort = OnlyPlanNode(final, "sort");
+        assertDecimalSort(initialSort);
+        assertDecimalSort(finalSort);
+        UNIT_ASSERT(initialSort["limit"].IsNull());
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalSort["limit"]["value"].GetUIntegerSafe(),
+            1);
+
+        const auto& edges = final["stage_graph"]["edges"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(edges.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(edges[0]["kind"].GetStringSafe(), "merge");
+        UNIT_ASSERT_VALUES_EQUAL(
+            edges[0]["order"].GetArraySafe(),
+            finalSort["order"].GetArraySafe());
+
+        bool sawDecimal = false;
+        for (const auto& table : initial["schema"]["tables"].GetArraySafe()) {
+            for (const auto& column : table["columns"].GetArraySafe()) {
+                sawDecimal = sawDecimal ||
+                    column["type"].GetStringSafe() == "Decimal(7,2)";
+            }
+        }
+        UNIT_ASSERT(sawDecimal);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);

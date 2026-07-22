@@ -9,7 +9,8 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, and
-exact Decimal comparison/arithmetic, and benchmark-dashboard parts of M4.
+exact Decimal comparison/arithmetic/ordering, and benchmark-dashboard parts of
+M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -120,6 +121,15 @@ equality is admitted only for exactly identical Decimal types and compares the
 encoded non-null values, including NaN; its usual both-NULL/one-NULL behavior is
 unchanged.
 
+Decimal Sort, TopSort, and Merge deliberately use a different comparison.
+MiniKQL orders the raw signed 128-bit codes, giving the total non-null order
+`-Inf < finite values < +Inf < NaN`; descending reverses it. NaN therefore ties
+with NaN instead of making the ordering predicate false. Every order item keeps
+one exact canonical `Decimal(p,s)` identity. Separate tuple keys may have
+different Decimal identities, but one key is never scale-aligned as if it were
+a scalar `DataCompare` expression. Explicit `nulls_first` remains orthogonal to
+that non-null order at the selected pre-physical boundary.
+
 Decimal arithmetic is deliberately canonical and narrow. The exporter accepts
 only binary `+` and `-` with both operands and the result having one exact
 canonical `Decimal(p,s)` type, or binary `DecimalMul` whose left operand and
@@ -186,10 +196,10 @@ producer-order-preserving interleavings.
 `String` and `Utf8` remain equality-only uninterpreted atoms. Date is an exact
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
 Merge. Decimal has exact literals, its legal typed domain, and the comparison
-and arithmetic semantics above. Decimal division, general casts, static `IN`,
-Sort/Merge ordering, and aggregate functions remain unsupported. String, Utf8,
-and Decimal sort keys therefore return `UNSUPPORTED` during strict validation
-instead of inventing an ordering.
+and arithmetic semantics above, plus exact raw-code Sort/TopSort/Merge ordering.
+Decimal division, general casts, static `IN`, and aggregate functions remain
+unsupported. String and Utf8 sort keys therefore return `UNSUPPORTED` during
+strict validation instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
@@ -354,7 +364,10 @@ at both real-host boundaries and proves its normal two-row/two-task obligation.
 A Decimal arithmetic query checks `+`, `-`, same-type multiplication, integer-
 right multiplication, and YQL's normalization of the reversed SQL spelling at
 both boundaries, then proves the two-row/two-task obligation. All equivalent
-real-host fixtures require `VERIFIED_BOUNDED` from the hermetic solver.
+real-host fixtures require `VERIFIED_BOUNDED` from the hermetic solver. A
+separate Decimal ordered query covers logical Sort+Limit and the transformed
+per-task TopSort+Merge+final-Limit path. That proof ends before physical
+lowering, consistent with the boundary caveat above.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \

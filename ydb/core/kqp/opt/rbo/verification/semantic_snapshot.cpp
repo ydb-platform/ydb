@@ -579,7 +579,7 @@ bool ScalarOrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
 }
 
 bool IsModeledOrderingType(TStringBuf type) {
-    return IsIntegerType(type) || type == "Date";
+    return IsIntegerType(type) || type == "Date" || IsCanonicalDecimalType(type);
 }
 
 TString ScalarTypeName(const TExprNode& node, bool* nullable = nullptr) {
@@ -1994,8 +1994,13 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Sort key " << column);
                     }
-                    if (!IsModeledOrderingType(TypeName(OutputType(*sort.GetInput(), column)))) {
-                        Unsupported("Sort ordering is modeled only for integers and Date");
+                    const TString type = TypeName(
+                        OutputType(*sort.GetInput(), column));
+                    if (!IsModeledOrderingType(type)) {
+                        Unsupported(TStringBuilder()
+                            << "Sort ordering column " << column
+                            << " has unsupported type " << type
+                            << "; modeled types are integers, Date, and Decimal");
                     }
 
                     auto item = JsonMap();
@@ -2727,8 +2732,13 @@ private:
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
                 }
-                if (!IsModeledOrderingType(TypeName(OutputType(*boundary.ProducerNode, column)))) {
-                    Unsupported("StageGraph Merge ordering is modeled only for integers and Date");
+                const TString type = TypeName(
+                    OutputType(*boundary.ProducerNode, column));
+                if (!IsModeledOrderingType(type)) {
+                    Unsupported(TStringBuilder()
+                        << "StageGraph Merge ordering column " << column
+                        << " has unsupported type " << type
+                        << "; modeled types are integers, Date, and Decimal");
                 }
                 auto item = JsonMap();
                 item["column"] = column;

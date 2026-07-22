@@ -118,4 +118,8 @@ def family(scalar_type: str) -> str:
 
 
 def is_ordered_type(scalar_type: str) -> bool:
-    return scalar_type in INTEGER_TYPES or scalar_type == DATE
+    return (
+        scalar_type in INTEGER_TYPES
+        or scalar_type == DATE
+        or is_decimal_type(scalar_type)
+    )

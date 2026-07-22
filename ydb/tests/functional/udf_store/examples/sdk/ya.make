@@ -15,9 +15,9 @@ WHOLE_ARCHIVE(
     contrib/restricted/emscripten/system/lib/dlmalloc
     contrib/restricted/emscripten/system/lib/standalonewasm
     contrib/restricted/emscripten/system/lib/libc/musl/src/network
-    # contrib/libs/cxxsupp/libcxx
-    # contrib/libs/cxxsupp/libcxxabi
-    # util
+    contrib/libs/cxxsupp/libcxx
+    contrib/libs/cxxsupp/libcxxabi
+    util
 )
 
 PEERDIR(
@@ -25,9 +25,9 @@ PEERDIR(
     contrib/restricted/emscripten/system/lib/dlmalloc
     contrib/restricted/emscripten/system/lib/standalonewasm
     contrib/restricted/emscripten/system/lib/libc/musl/src/network
-    # contrib/libs/cxxsupp/libcxx
-    # contrib/libs/cxxsupp/libcxxabi
-    # util
+    contrib/libs/cxxsupp/libcxx
+    contrib/libs/cxxsupp/libcxxabi
+    util
 )
 
 END()

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(120)
+SPLIT_FACTOR(200)
 
 REQUIREMENTS(cpu:4)
 

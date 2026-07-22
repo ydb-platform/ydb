@@ -142,4 +142,86 @@ TEST(TPartitionsLocationQueue, HappyPathAfterPipesReady) {
     ASSERT_FALSE(response->Record.GetStatus());
 }
 
+TEST(TPartitionsLocationQueue, SinglePartitionNotBlockedByAllPartitions) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    const ui64 deadTabletId = MakeTabletID(false, 999);
+
+    TVector<THolder<IEventHandle>> delayedConnects;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* msg = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
+            if (msg->TabletId == tc.TabletId && msg->Status == NKikimrProto::OK) {
+                delayedConnects.emplace_back(ev.Release());
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare(
+        "topic",
+        {{0, {tc.TabletId, 1}}, {1, {deadTabletId, 2}}},
+        /*ssId=*/1,
+        tc
+    );
+
+    ASSERT_FALSE(delayedConnects.empty());
+
+    // Head of queue: all partitions (blocked on dead tablet).
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        new TEvPersQueue::TEvGetPartitionsLocation(),
+        0,
+        GetPipeConfigWithRetries()
+    );
+
+    // Behind it: only partition 0 (same tablet as delayed pipe).
+    auto* specific = new TEvPersQueue::TEvGetPartitionsLocation();
+    specific->Record.AddPartitions(0);
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        specific,
+        0,
+        GetPipeConfigWithRetries()
+    );
+
+    auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::MilliSeconds(200)
+    );
+    ASSERT_FALSE(earlyResponse) << "Neither request can be answered before partition-0 pipe is ready";
+
+    tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    for (auto& ev : delayedConnects) {
+        tc.Runtime->Send(ev.Release());
+    }
+
+    // Specific request must be answered without waiting for the all-partitions request.
+    auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::Seconds(10)
+    );
+    ASSERT_TRUE(response);
+    ASSERT_TRUE(response->Record.GetStatus());
+    ASSERT_EQ(response->Record.LocationsSize(), 1u);
+    ASSERT_EQ(response->Record.GetLocations(0).GetPartitionId(), 0u);
+
+    auto stillWaiting = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::MilliSeconds(200)
+    );
+    ASSERT_FALSE(stillWaiting) << "All-partitions request must stay queued while dead tablet is down";
+
+    tc.Runtime->ResetScheduledCount();
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(1));
+
+    auto expired = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
+        TDuration::Seconds(10)
+    );
+    ASSERT_TRUE(expired);
+    ASSERT_FALSE(expired->Record.GetStatus());
+}
+
 } // namespace NKikimr::NPQ

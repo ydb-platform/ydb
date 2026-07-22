@@ -52,6 +52,7 @@ private:
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
                           const TVector<TNodeInfo*>& nodes);
     void AddTopicError(TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode);
+    void ApplyPendingTopicResponses();
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);

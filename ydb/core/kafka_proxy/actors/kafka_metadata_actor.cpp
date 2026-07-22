@@ -355,6 +355,28 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
     }
 }
 
+void TKafkaMetadataActor::ApplyPendingTopicResponses() {
+    while (!PendingTopicResponses.empty()) {
+        auto& [index, ev] = *PendingTopicResponses.begin();
+        auto& topic = Response->Topics[index];
+        if (!WithProxy) {
+            auto topicNodes = CheckTopicNodes(ev.Get());
+            if (topicNodes.empty()) {
+                // Already tried YDB discovery. Throw error
+                YDB_LOG_ERROR("Could not discovery kafka port for topic",
+                    {LogPrefix()},
+                    {"topicName", topic.Name});
+                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
+            } else {
+                AddTopicResponse(topic, ev.Get(), topicNodes);
+            }
+        } else {
+            AddTopicResponse(topic, ev.Get(), {});
+        }
+        PendingTopicResponses.erase(PendingTopicResponses.begin());
+    }
+}
+
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     auto Respond = [&] {
         CancelRequestTimeout();
@@ -374,25 +396,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-    while (!PendingTopicResponses.empty()) {
-        auto& [index, ev] = *PendingTopicResponses.begin();
-        auto& topic = Response->Topics[index];
-        if (!WithProxy) {
-            auto topicNodes = CheckTopicNodes(ev.Get());
-            if (topicNodes.empty()) {
-                    // Already tried YDB discovery. Throw error
-                    YDB_LOG_ERROR("Could not discovery kafka port for topic",
-                        {LogPrefix()},
-                        {"topicName", topic.Name});
-                    AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            } else {
-                AddTopicResponse(topic, ev.Get(), topicNodes);
-            }
-        } else {
-            AddTopicResponse(topic, ev.Get(), {});
-        }
-        PendingTopicResponses.erase(PendingTopicResponses.begin());
-    }
+    ApplyPendingTopicResponses();
 
     if (NeedAllNodes) {
         for (const auto& [id, nodeInfo] : Nodes)
@@ -412,10 +416,16 @@ void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorCo
 }
 
 void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
+    ApplyPendingTopicResponses();
+
     ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
     for (auto& topic : Response->Topics) {
-        AddTopicError(topic, ErrorCode);
+        // Keep already completed topics (success or earlier error); fail only unfinished ones.
+        if (topic.ErrorCode == EKafkaErrors::NONE_ERROR && topic.Partitions.empty()) {
+            topic.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+        }
     }
+
     CancelRequestTimeout();
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
     Die(ctx);

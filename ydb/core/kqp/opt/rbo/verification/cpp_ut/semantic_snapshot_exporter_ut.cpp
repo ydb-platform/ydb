@@ -1498,6 +1498,182 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsAllIntegralDataComparisonPairs) {
+        struct TIntegralCase {
+            NUdf::EDataSlot Slot;
+            TString Type;
+        };
+        const TVector<TIntegralCase> integralCases = {
+            {NUdf::EDataSlot::Int8, "Int8"},
+            {NUdf::EDataSlot::Int16, "Int16"},
+            {NUdf::EDataSlot::Int32, "Int32"},
+            {NUdf::EDataSlot::Int64, "Int64"},
+            {NUdf::EDataSlot::Uint8, "Uint8"},
+            {NUdf::EDataSlot::Uint16, "Uint16"},
+            {NUdf::EDataSlot::Uint32, "Uint32"},
+            {NUdf::EDataSlot::Uint64, "Uint64"},
+        };
+        struct TComparisonCase {
+            TString Callable;
+            TString Kind;
+            bool Negated = false;
+            bool NullSafe = false;
+        };
+        const TVector<TComparisonCase> comparisonCases = {
+            {"==", "eq"},
+            {"!=", "eq", true},
+            {"IsNotDistinctFrom", "eq", false, true},
+            {"<", "lt"},
+            {"<=", "lte"},
+            {">", "gt"},
+            {">=", "gte"},
+        };
+
+        for (const auto& left : integralCases) {
+            for (const auto& right : integralCases) {
+                for (ui32 nullMask = 0; nullMask < 4; ++nullMask) {
+                    TExportTestContext ctx;
+                    const bool leftNullable = nullMask & 1;
+                    const bool rightNullable = nullMask & 2;
+                    const auto operand = [&](const TIntegralCase& type, bool nullable) {
+                        auto value = TypedLiteral(
+                            ctx,
+                            type.Type,
+                            "0",
+                            ScalarType(ctx, type.Slot));
+                        return nullable
+                            ? TypedCallable(
+                                ctx,
+                                "Just",
+                                {std::move(value)},
+                                ScalarType(ctx, type.Slot, true))
+                            : std::move(value);
+                    };
+
+                    TExprNode::TListType comparisons;
+                    for (const auto& comparison : comparisonCases) {
+                        comparisons.push_back(TypedCallable(
+                            ctx,
+                            comparison.Callable,
+                            {
+                                operand(left, leftNullable),
+                                operand(right, rightNullable),
+                            },
+                            ScalarType(
+                                ctx,
+                                NUdf::EDataSlot::Bool,
+                                !comparison.NullSafe &&
+                                    (leftNullable || rightNullable))));
+                    }
+                    const auto expression = ExportMapExpression(
+                        ctx,
+                        "a",
+                        TypedCallable(
+                            ctx,
+                            "And",
+                            std::move(comparisons),
+                            ScalarType(
+                                ctx,
+                                NUdf::EDataSlot::Bool,
+                                leftNullable || rightNullable)));
+
+                    const auto& args = expression["args"].GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(args.size(), comparisonCases.size());
+                    for (ui32 index = 0; index < comparisonCases.size(); ++index) {
+                        const auto& comparison = comparisonCases[index];
+                        const auto& actual = args[index];
+                        if (comparison.Negated) {
+                            UNIT_ASSERT_VALUES_EQUAL(
+                                actual["kind"].GetStringSafe(),
+                                "not");
+                            UNIT_ASSERT_VALUES_EQUAL(
+                                actual["arg"]["kind"].GetStringSafe(),
+                                comparison.Kind);
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(
+                                actual["kind"].GetStringSafe(),
+                                comparison.Kind);
+                        }
+                        if (comparison.NullSafe) {
+                            UNIT_ASSERT(actual["null_safe"].GetBooleanSafe());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExportsQ8ShapedUint64GreaterThanInt32) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Q8IntegralComparison", {
+            {"x", "Uint64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x"});
+        const auto* optionalUint64 = ScalarType(
+            ctx,
+            NUdf::EDataSlot::Uint64,
+            true);
+        const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        SetExactOutputType(ctx, *read, {{"a.x", optionalUint64}});
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TExpression(
+                    TypedCallable(
+                        ctx,
+                        ">",
+                        {
+                            TypedMember(ctx, "a.x", optionalUint64),
+                            TypedLiteral(ctx, "Int32", "6", int32),
+                        },
+                        ScalarType(ctx, NUdf::EDataSlot::Bool, true)),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        TOpRoot root(map, TPositionHandle(), {"result"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& expression = FindNode(snapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "gt");
+        UNIT_ASSERT_VALUES_EQUAL(expression["left"]["column"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Int32");
+    }
+
+    Y_UNIT_TEST(IntegralDataComparisonExpansionRejectsNonIntegralMismatches) {
+        for (const TStringBuf callable : {
+            TStringBuf("=="), TStringBuf("!="), TStringBuf("IsNotDistinctFrom"),
+            TStringBuf("<"), TStringBuf("<="), TStringBuf(">"), TStringBuf(">=")})
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedLiteral(
+                            ctx,
+                            "Bool",
+                            "false",
+                            ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                        TypedLiteral(
+                            ctx,
+                            "Int8",
+                            "0",
+                            ScalarType(ctx, NUdf::EDataSlot::Int8)),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_C(!result.IsSupported(), callable);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "comparison operand types differ");
+        }
+    }
+
     Y_UNIT_TEST(ExportsSameTypeDateOrderingAndRejectsNumericCarrierSubstitution) {
         {
             TExportTestContext ctx;
@@ -4713,25 +4889,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ["expression"]["kind"].GetStringSafe(),
             "gte");
 
-        TExportTestContext lossy;
-        const auto* int8Type = ScalarType(lossy, NUdf::EDataSlot::Int8);
-        const auto* uint8Type = ScalarType(lossy, NUdf::EDataSlot::Uint8);
-        const auto* lossyBoolType = ScalarType(lossy, NUdf::EDataSlot::Bool);
-        const auto lossyResult = ExportMapExpressionResult(
-            lossy,
-            "a",
-            TypedCallable(
-                lossy,
-                "==",
-                {
-                    TypedMember(lossy, "a.x", int8Type),
-                    TypedLiteral(lossy, "Uint8", "30", uint8Type),
-                },
-                lossyBoolType));
-        UNIT_ASSERT(!lossyResult.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            lossyResult.UnsupportedReason,
-            "comparison operand types differ");
     }
 
     Y_UNIT_TEST(UnsafeOrUnauditedOpaqueExpressionsFailClosed) {

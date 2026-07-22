@@ -14,6 +14,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
     INTEGER_TYPES,
     integer_bounds,
+    static_in_comparison_compatible,
 )
 
 
@@ -394,15 +395,14 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "scan predicate must be Boolean"):
             parse_snapshot(non_boolean)
 
-    def test_ordered_comparison_requires_losslessly_compatible_integer_types(self):
+    def test_ordered_comparison_requires_supported_scalar_families(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][1]["predicate"] = {
             "kind": "lt",
             "left": {"kind": "column", "column": "a.k"},
             "right": {"kind": "literal", "type": "Uint64", "value": 1},
         }
-        with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
-            parse_snapshot(value)
+        parse_snapshot(value)
 
         value["schema"]["tables"][0]["columns"][0]["type"] = "String"
         value["plan"]["nodes"][1]["predicate"]["right"] = {
@@ -425,27 +425,57 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "valid only for equality"):
             parse_snapshot(value)
 
-    def test_lossless_mixed_width_integer_comparisons_are_supported(self):
-        value = minimal_snapshot()
-        value["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
-        value["plan"]["nodes"][1]["predicate"] = {
-            "kind": "gte",
-            "left": {"kind": "column", "column": "a.k"},
-            "right": {"kind": "literal", "type": "Int32", "value": 30},
-        }
-        parse_snapshot(value)
+    def test_every_integral_pair_is_admitted_by_every_ordinary_comparison(self):
+        for left_type in sorted(INTEGER_TYPES):
+            for right_type in sorted(INTEGER_TYPES):
+                for kind, null_safe in (
+                    ("eq", False),
+                    ("eq", True),
+                    ("lt", False),
+                    ("lte", False),
+                    ("gt", False),
+                    ("gte", False),
+                ):
+                    value = minimal_snapshot()
+                    value["schema"]["tables"][0]["columns"][0].update(
+                        type=left_type,
+                        nullable=True,
+                    )
+                    value["plan"]["nodes"][1]["predicate"] = {
+                        "kind": kind,
+                        "left": {"kind": "column", "column": "a.k"},
+                        "right": {
+                            "kind": "literal",
+                            "type": right_type,
+                            "value": 0,
+                        },
+                    }
+                    if null_safe:
+                        value["plan"]["nodes"][1]["predicate"]["null_safe"] = True
+                    with self.subTest(
+                        left_type=left_type,
+                        right_type=right_type,
+                        kind=kind,
+                        null_safe=null_safe,
+                    ):
+                        parse_snapshot(value)
 
-        value["schema"]["tables"][0]["columns"][0]["type"] = "Int16"
-        value["plan"]["nodes"][1]["predicate"]["right"] = {
-            "kind": "literal",
-            "type": "Uint8",
-            "value": 30,
-        }
-        parse_snapshot(value)
-
-        value["schema"]["tables"][0]["columns"][0]["type"] = "Int8"
-        with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
-            parse_snapshot(value)
+    def test_static_in_keeps_its_narrow_lossless_integer_gate(self):
+        for left_type in sorted(INTEGER_TYPES):
+            for right_type in sorted(INTEGER_TYPES):
+                left_signed = left_type.startswith("Int")
+                right_signed = right_type.startswith("Int")
+                if left_signed == right_signed:
+                    expected = True
+                else:
+                    signed_type = left_type if left_signed else right_type
+                    unsigned_type = right_type if left_signed else left_type
+                    expected = int(signed_type[3:]) > int(unsigned_type[4:])
+                with self.subTest(left_type=left_type, right_type=right_type):
+                    self.assertEqual(
+                        static_in_comparison_compatible(left_type, right_type),
+                        expected,
+                    )
 
     def test_integer_literals_must_fit_their_declared_width(self):
         cases = {

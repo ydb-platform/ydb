@@ -903,6 +903,69 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesMixedSignedUnsignedComparison) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT COUNT(*) > 1 AS HasMultipleRows
+                FROM `/Root/RboOrdered`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertComparison = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> comparisons;
+            CollectExpressions(snapshot["plan"], "gt", comparisons);
+            UNIT_ASSERT_VALUES_EQUAL(comparisons.size(), 1);
+            const auto& comparison = *comparisons.front();
+            UNIT_ASSERT_VALUES_EQUAL(
+                comparison["left"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                comparison["right"]["type"].GetStringSafe(),
+                "Int32");
+            UNIT_ASSERT_VALUES_EQUAL(
+                comparison["right"]["value"].GetIntegerSafe(),
+                1);
+
+            const TString leftColumn =
+                comparison["left"]["column"].GetStringSafe();
+            bool foundUint64AggregateOutput = false;
+            for (const auto* aggregate : PlanNodes(snapshot, "aggregate")) {
+                for (const auto& trait : (*aggregate)["aggregates"].GetArraySafe()) {
+                    foundUint64AggregateOutput =
+                        foundUint64AggregateOutput ||
+                        (trait["output"].GetStringSafe() == leftColumn &&
+                         trait["type"].GetStringSafe() == "Uint64");
+                }
+            }
+            UNIT_ASSERT(foundUint64AggregateOutput);
+        };
+        assertComparison(initial);
+        assertComparison(final);
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableLookups) {
         TKikimrRunner kikimr;
         CreateSqlInColumnTable(kikimr);

@@ -9,10 +9,11 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
-restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact String/Utf8
-comparison and ordering, exact partial integral `SafeCast`, exact Decimal
-comparison/integral-cast/arithmetic/ordering/SUM, and benchmark-dashboard parts
-of M4.
+restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
+ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
+partial integral `SafeCast`, exact Decimal semantics for comparison, integral
+casts, arithmetic, ordering, and `SUM`, plus the benchmark-dashboard parts of
+M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -151,13 +152,15 @@ arithmetic identity.
 
 Static `SqlIn` is exact for a deliberately narrow shape: a direct raw tuple or
 `AsList` with 1..512 recursively supported, non-null items of one scalar type.
-That type is identical to the lookup type, or is an integer type using the same
-lossless common-type gate as ordinary equality. It evaluates as the SQL
-three-valued OR of those equalities, so only a nullable lookup can make the
-Boolean result nullable. `ansi`, `warnNoAnsi`, `isCompact`, and
-`nullsProcessed` normalize to the same node under this gate. Dynamic, empty,
-oversized, nullable, heterogeneous-item, lossy or non-integer mixed-type,
-`tableSource`, malformed-option, and unknown-option forms fail closed.
+That type is identical to the lookup type, or both are integers for which one
+lossless common type represents both domains: equal signedness, or a signed
+width greater than the unsigned width. This gate is deliberately narrower than
+ordinary integral comparison. Membership evaluates as the SQL three-valued OR
+of those equalities, so only a nullable lookup can make the Boolean result
+nullable. `ansi`, `warnNoAnsi`, `isCompact`, and `nullsProcessed` normalize to
+the same node under this gate. Dynamic, empty, oversized, nullable,
+heterogeneous-item, lossy or non-integer mixed-type, `tableSource`,
+malformed-option, and unknown-option forms fail closed.
 
 `Exists` is the exact non-null presence test for one scalar value. `If` models
 MiniKQL's lazy branch selection, including NULL propagation from an optional
@@ -228,13 +231,27 @@ value-specific incomplete literals use `cast_decimal`. `Convert`, `StrictCast`,
 nullable source/target/result shapes, zero-integral-digit targets, and
 non-integer Decimal cast sources remain outside this explicit gate.
 
-The explicit comparison core accepts unequal integer widths only when YQL's
-common integer type represents both operands without wrapping: equal signedness,
-or a signed type wider than the unsigned type. This covers the canonical
-`Int64`-column/`Int32`-literal benchmark form while mixed-width cases that would
-bitcast or wrap still fail closed. `String` and `Utf8` are mutually compatible
-under the raw-byte comparison above. Date comparison requires Date on both
-sides.
+The explicit ordinary comparison core accepts every pair drawn from signed and
+unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
+and ordering. MiniKQL `DataCompare` uses sign-aware mathematical-integer
+semantics for these pairs: a negative signed value remains below every unsigned
+value, rather than being converted or wrapped to the unsigned width. The SMT
+carrier is already a mathematical integer, and the exact declared-width domain
+constraints on literals, source cells, and non-null opaque results make that
+encoding exact: width `w` is constrained to `[-2^(w-1), 2^(w-1)-1]` for signed
+types and `[0, 2^w-1]` for unsigned types. Ordinary equality and ordering return
+SQL NULL if either operand is NULL. Null-safe equality is always non-null: two
+NULLs are equal, one NULL is unequal, and two values use the same mathematical
+comparison.
+Static `IN` deliberately retains its separate lossless-common-type gate above.
+`String` and `Utf8` are mutually compatible under the raw-byte comparison
+above. Date comparison requires Date on both sides.
+
+This expansion removes TPC-DS q8's former `Uint64 > Int32` snapshot blocker.
+The focused real-host run prepared q8 in 480 ms, then failed closed before
+verifier construction (`verify_ms = 0`) on unsupported scalar callable
+`Unwrap` at both the initial and final boundaries. It therefore changes neither
+the 20/121 formula-construction slice nor the ten-query proof floor.
 
 Ordinary Decimal `=`, `<`, `<=`, `>`, and `>=` are strict on NULL; NaN makes
 every ordinary comparison false, and infinities participate in the YDB order.
@@ -430,8 +447,8 @@ The exporter also emits `predicate` on every scan, with legacy absence meaning
 rather than `OriginalPredicate` statistics metadata. Version one accepts only a
 one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
 its scalar subset is physical columns, supported literals, Boolean
-AND/OR/NOT, equality, the compatible integer, String/Utf8, Date, or Decimal
-ordering described above, and exact presence tests. A
+AND/OR/NOT, the equality and ordering families described above (including
+all-pairs ordinary integral `DataCompare`), and exact presence tests. A
 `TKqpOlapFilterUnaryOp` is admitted only as an exact two-child tuple whose
 operator is the Atom `exists` or `empty`; its recursively decoded argument is
 lowered respectively to `exists(x)` or `not(exists(x))`. A non-Atom or unknown
@@ -551,9 +568,12 @@ checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
 solver budget. Nullable `String IN ('first', 'second')` and
 `Int64 IN (Int32...)` expressions exercise both static-membership type gates
-through the real host and prove the normal obligation. A native Decimal
-column filter likewise checks exact tagged literals and comparison predicates
-at both real-host boundaries and proves its normal two-row/two-task obligation.
+through the real host and prove the normal obligation. A separate
+`COUNT(*) > 1` query captures ordinary `Uint64 > Int32` comparison at both
+real-host boundaries and returns `VERIFIED_BOUNDED` at two rows and two tasks.
+A native Decimal column filter likewise checks exact tagged literals and
+comparison predicates at both real-host boundaries and proves its normal
+two-row/two-task obligation.
 A Decimal cast query checks `COUNT(*)` and `1 + COUNT(*)` as non-null `Uint64`
 expressions cast to `Decimal(15,4)` at both boundaries, then proves the normal
 two-row/two-task obligation.

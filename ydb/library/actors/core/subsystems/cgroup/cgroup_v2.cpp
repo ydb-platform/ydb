@@ -1,6 +1,7 @@
 #include "cgroup_v2.h"
 
 #include "cgroup_events.h"
+#include "cgroup_helpers.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -20,26 +21,10 @@ namespace NActors {
 
     namespace {
 
-        std::optional<TString> TryReadFile(const TFsPath& path) {
-            try {
-                return TFileInput(path.GetPath()).ReadAll();
-            } catch (...) {
-                return std::nullopt;
-            }
-        }
-
-        std::optional<ui64> TryReadUInt(const TFsPath& path) {
-            auto content = TryReadFile(path);
-            if (!content) {
-                return std::nullopt;
-            }
-
-            ui64 value = 0;
-            if (!TryFromString(StripString(*content), value)) {
-                return std::nullopt;
-            }
-            return value;
-        }
+        using NCGroupDetail::MakeCGroupDirectory;
+        using NCGroupDetail::ParseKeyValueFile;
+        using NCGroupDetail::TryReadFile;
+        using NCGroupDetail::TryReadUInt;
 
         std::optional<TCGroupV2Limit> TryReadLimit(const TFsPath& path) {
             auto content = TryReadFile(path);
@@ -57,24 +42,6 @@ namespace NActors {
                 return std::nullopt;
             }
             return TCGroupV2Limit{.Value = parsed};
-        }
-
-        template<class TCallback>
-        void ParseKeyValueFile(const TString& content, TCallback&& callback) {
-            TStringInput input(content);
-            TString line;
-            while (input.ReadLine(line)) {
-                TVector<TString> fields;
-                StringSplitter(line).Split(' ').SkipEmpty().Collect(&fields);
-                if (fields.size() != 2) {
-                    continue;
-                }
-
-                ui64 value = 0;
-                if (TryFromString(fields[1], value)) {
-                    callback(TStringBuf(fields[0]), value);
-                }
-            }
         }
 
         std::optional<TString> FindUnifiedCGroupPath(const TString& procSelfCGroup) {
@@ -99,13 +66,6 @@ namespace NActors {
                 return path;
             }
             return std::nullopt;
-        }
-
-        TFsPath MakeCGroupDirectory(const TString& root, const TString& cGroupPath) {
-            if (cGroupPath == "/") {
-                return TFsPath(root);
-            }
-            return TFsPath(root) / cGroupPath.substr(1);
         }
 
         std::optional<TCGroupV2CpuStats> ReadCpuStats(const TFsPath& directory) {

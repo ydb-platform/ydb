@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/system/yassert.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -30,6 +32,10 @@ namespace NActors {
 
     class TSubSystemDependencyExpression {
     public:
+        // Keep the expanded DNF small enough to avoid accidental combinatorial
+        // growth while constructing dependency expressions.
+        static constexpr size_t MaxAlternatives = 100;
+
         explicit TSubSystemDependencyExpression(TSubSystemTypeId subsystem)
             : Alternatives{{{subsystem}}}
         {
@@ -42,6 +48,13 @@ namespace NActors {
         friend TSubSystemDependencyExpression operator&&(
                 const TSubSystemDependencyExpression& left,
                 const TSubSystemDependencyExpression& right) {
+            Y_ABORT_UNLESS(
+                left.Alternatives.size() <= MaxAlternatives &&
+                (left.Alternatives.empty() ||
+                    right.Alternatives.size() <= MaxAlternatives / left.Alternatives.size()),
+                "actor subsystem dependency expression has more than %zu alternatives",
+                MaxAlternatives);
+
             TSubSystemDependencies dependencies;
             dependencies.reserve(left.Alternatives.size() * right.Alternatives.size());
             for (const auto& leftAlternative : left.Alternatives) {
@@ -69,6 +82,12 @@ namespace NActors {
         friend TSubSystemDependencyExpression operator||(
                 TSubSystemDependencyExpression left,
                 TSubSystemDependencyExpression right) {
+            Y_ABORT_UNLESS(
+                left.Alternatives.size() <= MaxAlternatives &&
+                right.Alternatives.size() <= MaxAlternatives - left.Alternatives.size(),
+                "actor subsystem dependency expression has more than %zu alternatives",
+                MaxAlternatives);
+
             left.Alternatives.reserve(
                 left.Alternatives.size() + right.Alternatives.size());
             for (auto& alternative : right.Alternatives) {

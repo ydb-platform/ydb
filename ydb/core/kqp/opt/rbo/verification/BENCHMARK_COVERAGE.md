@@ -196,10 +196,10 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 42 of the 52
+The exporter matrix below covers the boundary failures among 41 of the 52
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
-The ten queries that pass export and fail closed inside the verifier are listed
+The eleven queries that pass export and fail closed inside the verifier are listed
 after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -209,14 +209,13 @@ after the matrix.
 | Unavailable physical column `year` | - | q66 |
 | Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
-| Constant String-literal `SafeCast` to Decimal | q21, q40, q65 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | OLAP unary operation `just` | - | q5, q21, q37, q40, q77, q80, q82 |
 | Callable `/` | q73, q78 | q73, q78 |
 | Callable `Concat` | q84 | q84 |
 | Callable `Unwrap` | q8, q38, q87 | q8, q38, q87 |
 | Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q34, q75, q85 |
-| Type `Interval` | q5, q37, q72, q77, q80, q82 | q72 |
+| Type `Interval` | q5, q21, q37, q40, q72, q77, q80, q82 | q72 |
 
 After both snapshots export, q4 fails before materializing a 13,824-row join
 output above the 4,096-row relation bound. q11's join matching and q25/q29's
@@ -224,9 +223,10 @@ grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
-fails closed because aggregate `max` is not modeled. The focused q68 run passed
-both snapshot exports and reached that Merge audit cap after 11,175 ms of
-verifier work.
+fails closed because aggregate `max` is not modeled. q65 now passes both exports
+and fails closed because aggregate `avg` is not modeled. The focused q68 run
+passed both snapshot exports and reached that Merge audit cap after 11,175 ms
+of verifier work.
 
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
@@ -245,8 +245,10 @@ Decimal then moves q90 through formula construction and raises TPC-DS to 10/99.
 Exact bounded String/Utf8 comparison and ordering then move q42 and q50 through
 formula construction and raise the measured TPC-DS slice to 12/99. Every other
 former String blocker now exposes a deeper reason: q4, q11, q25, q29, q46, q64,
-and q91 reach the construction bounds enumerated above, while q65 retains its
-initial constant String-literal `SafeCast` to Decimal. Exact
+and q91 reach the construction bounds enumerated above. Exact direct
+String/Utf8-literal `SafeCast` to optional Decimal then moves q21 and q40 to
+initial `Interval` and final OLAP `just`, while q65 passes both exports and
+reaches verifier aggregate `avg`. Exact
 `If`, `Exists`, and scoped unary `IfPresent` move q34 to `Double` at both
 boundaries, q73 to `/` at both boundaries, q79 to the formerly opaque
 `Substring` at both boundaries, and q68 through both exports to the Merge
@@ -265,7 +267,8 @@ deliberately broader than static `IN`, which retains its lossless-common-type
 gate. q8 passes its former `Uint64 > Int32` blocker and now fails closed on
 unsupported scalar callable `Unwrap` at both snapshot boundaries. Exact partial
 integral `SafeCast` removes q79's subsequent false-positive witness. Neither
-change alters the formula-construction count.
+that change nor direct text-literal Decimal-cast normalization alters the
+formula-construction count.
 
 ## Curated proof floor and focused results
 
@@ -314,6 +317,20 @@ change alters the formula-construction count.
   scale multiplication and signed-infinity saturation. The proof-floor run
   spent 227 ms preparing the query and 7,299 ms in verification before returning
   `VERIFIED_BOUNDED`; the checked-in floor retains that proof obligation.
+
+- Direct String/Utf8-literal `SafeCast` is normalized only for a non-empty
+  7-bit-ASCII, non-null literal and an exactly matching
+  `Optional<Decimal(p,s)>` result, descriptor, outer annotation, nested item
+  annotation, and `MayFail | MayLoseData` cast classification. The exporter
+  calls `FromStringEx`: parser errors become typed NULL, finite results preserve
+  round-half-to-even behavior, NaN and signed infinities remain tagged
+  specials, overflow saturates to signed infinity, and underflow may round to
+  zero; a successful nonnormal finite result fails closed. The result reuses
+  existing Decimal literal/NULL snapshot nodes, with no Python IR change.
+  Focused q21 and q40 now reach initial `Interval` and final OLAP `just`. q65
+  passes both exports, then reports unmodeled aggregate `avg` after 231 ms of
+  preparation and 255 ms of verifier work. No formula is emitted, so coverage
+  remains 20/121 and the proof floor remains ten.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
   `DecimalDiv` support. A focused solver run spent 955 ms preparing the query

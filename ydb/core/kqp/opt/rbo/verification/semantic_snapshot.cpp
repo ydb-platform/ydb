@@ -512,16 +512,9 @@ NJson::TJsonValue LiteralExpr(const TExprNode& node) {
 NJson::TJsonValue DecimalValueExpr(
     TStringBuf type,
     const TDecimalParameters& parameters,
+    NYql::NDecimal::TInt128 value,
     TStringBuf text)
 {
-    const auto value = NYql::NDecimal::FromString(
-        text,
-        parameters.Precision,
-        parameters.Scale);
-    if (NYql::NDecimal::IsError(value)) {
-        Unsupported(TStringBuilder() << "Invalid " << type << " literal " << text);
-    }
-
     auto encoded = JsonMap();
     if (NYql::NDecimal::IsNan(value)) {
         encoded["kind"] = "nan";
@@ -549,6 +542,21 @@ NJson::TJsonValue DecimalValueExpr(
     result["type"] = TString(type);
     result["value"] = std::move(encoded);
     return result;
+}
+
+NJson::TJsonValue DecimalValueExpr(
+    TStringBuf type,
+    const TDecimalParameters& parameters,
+    TStringBuf text)
+{
+    const auto value = NYql::NDecimal::FromString(
+        text,
+        parameters.Precision,
+        parameters.Scale);
+    if (NYql::NDecimal::IsError(value)) {
+        Unsupported(TStringBuilder() << "Invalid " << type << " literal " << text);
+    }
+    return DecimalValueExpr(type, parameters, value, text);
 }
 
 NJson::TJsonValue DecimalLiteralExpr(const TExprNode& node) {
@@ -914,6 +922,115 @@ NJson::TJsonValue DecimalConstantCastExpr(const TExprNode& node) {
             << " constant Decimal cast is not complete");
     }
     return DecimalValueExpr(resultType, *parameters, source.Child(0)->Content());
+}
+
+bool IsStringDecimalSafeCastCandidate(const TExprNode& node) {
+    return node.IsCallable("SafeCast") &&
+        node.ChildrenSize() == 2 &&
+        node.Child(0)->GetTypeAnn() &&
+        IsStringType(ScalarTypeName(*node.Child(0)));
+}
+
+NJson::TJsonValue StringLiteralDecimalSafeCastExpr(const TExprNode& node) {
+    if (!node.IsCallable("SafeCast")) {
+        Unsupported("String literal Decimal cast must use SafeCast");
+    }
+    CheckScalarArity(node, 2, 2);
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    const auto parameters = ParseCanonicalDecimalType(resultType);
+    if (!parameters || !resultNullable) {
+        Unsupported(
+            "String literal Decimal SafeCast must have an optional canonical Decimal result");
+    }
+
+    const auto targetAnnotation = node.Child(1)->GetTypeAnn();
+    if (!targetAnnotation || targetAnnotation->GetKind() != ETypeAnnotationKind::Type) {
+        Unsupported("String literal Decimal SafeCast target annotation is not Type");
+    }
+
+    bool targetNullable = false;
+    const TString targetType = DataTypeDescriptorName(
+        *node.Child(1),
+        &targetNullable);
+    if (!targetNullable || targetType != resultType) {
+        Unsupported(
+            "String literal Decimal SafeCast target does not match its optional result");
+    }
+
+    const auto& itemDescriptor = *node.Child(1)->Child(0);
+    const auto itemAnnotation = itemDescriptor.GetTypeAnn();
+    bool itemAnnotationNullable = false;
+    if (!itemAnnotation ||
+        itemAnnotation->GetKind() != ETypeAnnotationKind::Type ||
+        TypeName(
+            itemAnnotation->Cast<TTypeExprType>()->GetType(),
+            &itemAnnotationNullable) != targetType ||
+        itemAnnotationNullable)
+    {
+        Unsupported(
+            "String literal Decimal SafeCast item annotation disagrees with its descriptor");
+    }
+
+    bool annotationNullable = false;
+    if (TypeName(
+            targetAnnotation->Cast<TTypeExprType>()->GetType(),
+            &annotationNullable) != targetType ||
+        annotationNullable != targetNullable)
+    {
+        Unsupported(
+            "String literal Decimal SafeCast target annotation disagrees with its descriptor");
+    }
+
+    const auto& source = *node.Child(0);
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    if (sourceNullable || !IsStringType(sourceType) ||
+        !source.IsCallable(sourceType) ||
+        source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom())
+    {
+        Unsupported(
+            "String literal Decimal SafeCast source must be a direct non-null String or Utf8 literal");
+    }
+    LiteralExpr(source);
+
+    const TStringBuf text = source.Child(0)->Content();
+    if (text.empty() || !std::all_of(
+            text.begin(),
+            text.end(),
+            [](char value) {
+                return static_cast<unsigned char>(value) <= 0x7f;
+            }))
+    {
+        Unsupported(
+            "String literal Decimal SafeCast source must be non-empty 7-bit ASCII");
+    }
+
+    constexpr NUdf::TCastResultOptions ExpectedCast =
+        static_cast<NUdf::TCastResultOptions>(
+            NUdf::ECastOptions::MayFail |
+            NUdf::ECastOptions::MayLoseData);
+    if (CastResult<false>(
+            source.GetTypeAnn(),
+            itemAnnotation->Cast<TTypeExprType>()->GetType()) != ExpectedCast)
+    {
+        Unsupported(
+            "String literal Decimal SafeCast is not a reviewed partial conversion");
+    }
+
+    const auto value = NYql::NDecimal::FromStringEx(
+        text,
+        parameters->Precision,
+        parameters->Scale);
+    if (NYql::NDecimal::IsError(value)) {
+        auto result = JsonMap();
+        result["kind"] = "null";
+        result["type"] = resultType;
+        return result;
+    }
+    return DecimalValueExpr(resultType, *parameters, value, text);
 }
 
 TString CheckIntegralDecimalSafeCastCallable(const TExprNode& node) {
@@ -1426,6 +1543,10 @@ void CheckOpaqueCallable(
 
     if (name == "SafeCast" || name == "Convert") {
         if (ParseCanonicalDecimalType(ScalarTypeName(node))) {
+            if (IsStringDecimalSafeCastCandidate(node)) {
+                StringLiteralDecimalSafeCastExpr(node);
+                return;
+            }
             if (name == "SafeCast") {
                 CheckIntegralDecimalSafeCastCallable(node);
                 return;
@@ -2082,6 +2203,18 @@ NJson::TJsonValue ExportExprNode(
     if (node.IsCallable("SafeCast") &&
         ParseCanonicalDecimalType(ScalarTypeName(node)))
     {
+        if (IsStringDecimalSafeCastCandidate(node)) {
+            auto result = StringLiteralDecimalSafeCastExpr(node);
+
+            // Keep the closed-world safety and metadata audit even though this
+            // fixed conversion is normalized to a literal or typed NULL.
+            TOpaqueExpressionEncoder(
+                rowArgument,
+                visibleColumns,
+                boundArguments).Validate(node);
+            return result;
+        }
+
         const TString resultType = CheckIntegralDecimalSafeCastCallable(node);
         if (IsCompleteIntegerLiteralDecimalCast(node)) {
             return DecimalConstantCastExpr(node);
@@ -2612,6 +2745,9 @@ NJson::TJsonValue ExportOlapScalar(
         ParseCanonicalDecimalType(ScalarTypeName(*node)))
     {
         budget.Charge(normalizedDepth);
+        if (IsStringDecimalSafeCastCandidate(*node)) {
+            return StringLiteralDecimalSafeCastExpr(*node);
+        }
         return DecimalConstantCastExpr(*node);
     }
 

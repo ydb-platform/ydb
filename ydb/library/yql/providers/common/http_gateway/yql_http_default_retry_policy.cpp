@@ -28,6 +28,7 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_BAD_DOWNLOAD_RESUME,
         CURLE_SEND_ERROR,
         CURLE_RECV_ERROR,
+        CURLE_PARTIAL_FILE,
         CURLE_NO_CONNECTION_AVAILABLE,
         CURLE_GOT_NOTHING,
         CURLE_COULDNT_RESOLVE_HOST

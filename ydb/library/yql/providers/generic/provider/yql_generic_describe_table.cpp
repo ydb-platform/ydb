@@ -459,13 +459,13 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
                     // Preserve schema for the further usage
                     desc->Schema = result.Response->schema();
                     promise.SetValue();
-                } catch(const std::exception&) {
+                } catch (const std::exception&) {
                     desc->Issues.AddIssue(
                             NYql::TIssue(TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
                     promise.SetValue();
                 }
             });
-        } catch(const std::exception&) {
+        } catch (const std::exception&) {
             desc->Issues.AddIssue(
                     NYql::TIssue(TStringBuilder() << "Call FillCredentials for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
             promise.SetValue();

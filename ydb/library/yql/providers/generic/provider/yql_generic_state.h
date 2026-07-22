@@ -126,7 +126,7 @@ namespace NYql {
         IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
 
-        // key - cluster name, value - TFuture<TCredentialsProviderPtr>
+        // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO
         // (e.g. synchronous call via Token Accessor client) during the construction.
         // TODO: reconsider cache usefulness; TokenAccessor is part of deprecated yqv1, IAM cloud delegated auth (which also uses IO) shares singleton instance internally, "simple" providers are inexpensive

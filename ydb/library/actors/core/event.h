@@ -311,6 +311,7 @@ namespace NActors {
 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
+        void Preserialize();
 
         ui32 GetSize() const {
             if (Buffer) {

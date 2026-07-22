@@ -88,7 +88,7 @@ namespace NActors {
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
 
-        void SetSerializingEvent(const IEventBase *event);
+        void SetSerializingEvent(const IEventBase *event, bool withCachedSizes);
         void DiscardEvent() { Event = nullptr; };
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
@@ -115,6 +115,9 @@ namespace NActors {
         bool WriteString(const TString *s) override;
 
         NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            if (!WithCachedSizes) {
+                return nullptr;
+            }
             if (!CodedOutputStream) {
                 CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this));
             }
@@ -139,6 +142,7 @@ namespace NActors {
         bool AbortFlag;
         bool SerializationSuccess;
         bool Finished = false;
+        bool WithCachedSizes = false;
         std::unique_ptr<NProtoBuf::io::CodedOutputStream> CodedOutputStream;
     };
 

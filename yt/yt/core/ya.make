@@ -481,6 +481,7 @@ IF (NOT OS_WINDOWS)
         phoenix/unittests
         profiling/unittests
         rpc/grpc/unittests
+        rpc/http/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

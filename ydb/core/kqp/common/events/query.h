@@ -65,6 +65,11 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetRowsLimit(TMaybe<ui64> limit) {
+        RowsLimit = limit;
+        return *this;
+    }
+
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
@@ -72,6 +77,7 @@ struct TQueryRequestSettings {
     ::Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
     ::Ydb::ResultSet::Format ResultSetFormat = Ydb::ResultSet::FORMAT_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
+    TMaybe<ui64> RowsLimit;
 };
 
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
@@ -434,6 +440,16 @@ public:
 
     ::Ydb::ResultSet::Format GetResultSetFormat() const {
         return RequestCtx ? QuerySettings.ResultSetFormat : Record.GetRequest().GetResultSetFormat();
+    }
+
+    TMaybe<ui64> GetRowsLimit() const {
+        if (RequestCtx) {
+            return QuerySettings.RowsLimit;
+        }
+        if (Record.GetRequest().HasRowsLimit()) {
+            return Record.GetRequest().GetRowsLimit();
+        }
+        return Nothing();
     }
 
     bool HasArrowFormatSettings() const {

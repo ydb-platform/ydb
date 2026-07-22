@@ -281,6 +281,10 @@ private:
         for (const auto& row : inRsProto.rows()) {
             *resultSet.mutable_rows()->Add() = row;
         }
+
+        if (inRsProto.truncated()) {
+            resultSet.set_truncated(true);
+        }
     }
 
     void CollectArrowBytes(Ydb::ResultSet& resultSet, Ydb::ResultSet& mutableInRsProto, uint64_t index) {
@@ -358,6 +362,10 @@ public:
                     codec->set_level(*settings.ArrowFormatSettings_->CompressionCodec_->Level_);
                 }
             }
+        }
+
+        if (settings.RowsLimit_) {
+            request.set_rows_limit(*settings.RowsLimit_);
         }
 
         if (txControl.HasTx()) {

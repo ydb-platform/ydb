@@ -4,9 +4,11 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/str_stl.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <tuple>
 
@@ -21,6 +23,7 @@ struct TKqpQuerySettings {
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     bool UsePessimisticLocks = false;
+    TMaybe<ui64> RowsLimit;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
@@ -33,7 +36,8 @@ struct TKqpQuerySettings {
             Syntax == other.Syntax &&
             UsePessimisticLocks == other.UsePessimisticLocks &&
             RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
-            RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
+            RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied &&
+            RowsLimit == other.RowsLimit;
     }
 
     bool operator!=(const TKqpQuerySettings& other) {
@@ -48,7 +52,7 @@ struct TKqpQuerySettings {
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(
             DocumentApiRestricted, IsInternalCall, QueryType, Syntax,
-            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
+            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied, RowsLimit);
         return THash<decltype(tuple)>()(tuple);
     }
 
@@ -60,7 +64,8 @@ struct TKqpQuerySettings {
             << "Syntax: " << static_cast<int>(Syntax) << ", "
             << "UsePessimisticLocks: " << UsePessimisticLocks << ", "
             << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit << ", "
-            << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
+            << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied << ", "
+            << "RowsLimit: " << (RowsLimit.Defined() ? ToString(*RowsLimit) : "undefined")
             << "}";
         return result;
     }

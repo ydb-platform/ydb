@@ -117,6 +117,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(ESchemaInclusionMode, SchemaInclusionMode, ESchemaInclusionMode::Unspecified);
     FLUENT_SETTING_DEFAULT(TResultSet::EFormat, Format, TResultSet::EFormat::Unspecified);
     FLUENT_SETTING_OPTIONAL(TArrowFormatSettings, ArrowFormatSettings);
+    FLUENT_SETTING_OPTIONAL(uint64_t, RowsLimit);
     FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 

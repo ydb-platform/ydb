@@ -266,6 +266,10 @@ public:
         return RequestEv->GetSyntax();
     }
 
+    TMaybe<ui64> GetRowsLimit() const {
+        return RequestEv->GetRowsLimit();
+    }
+
     const TString& GetRequestType() const {
         return RequestEv->GetRequestType();
     }

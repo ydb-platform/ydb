@@ -915,7 +915,11 @@ public:
         IOptimizationContext& optCtx) override
     {
         auto queryType = SessionCtx->Query().Type;
-        if (queryType == EKikimrQueryType::Scan || queryType == EKikimrQueryType::Query) {
+        if (queryType == EKikimrQueryType::Scan) {
+            return source;
+        }
+
+        if (queryType == EKikimrQueryType::Query && !fillSettings.RowsLimitPerWrite) {
             return source;
         }
 

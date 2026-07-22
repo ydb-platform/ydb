@@ -155,6 +155,9 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
         Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
         Record.MutableRequest()->SetResultSetFormat(QuerySettings.ResultSetFormat);
+        if (QuerySettings.RowsLimit) {
+            Record.MutableRequest()->SetRowsLimit(*QuerySettings.RowsLimit);
+        }
 
         RequestCtx.reset();
     }

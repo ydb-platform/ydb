@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
@@ -26,7 +28,7 @@ public:
     }
 
     virtual bool OrderByLimitAllowed() const override {
-        return false;
+        return HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown();
     }
 
     virtual bool NeedDuplicateFiltering() const override {

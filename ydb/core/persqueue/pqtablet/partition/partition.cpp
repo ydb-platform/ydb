@@ -3726,6 +3726,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Generation = 0;
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
+                FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
             }
         }
 

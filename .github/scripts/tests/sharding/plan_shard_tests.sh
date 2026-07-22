@@ -32,13 +32,32 @@ fi
 
 echo "Planned scope: $(jq '.total_suites' "$FILTERED_SUMMARY") suites, $(jq '.total_tests' "$FILTERED_SUMMARY") tests, weight $(jq '.total_weight' "$FILTERED_SUMMARY")"
 
-python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
-  "$TEST_LIST_LOG" \
-  "$FILTERED_SUMMARY" \
-  --target-prefix "$TARGET_PREFIX" \
-  --build-type "${BUILD_PRESET:-relwithdebinfo}" \
-  --branch "${HISTORY_BRANCH:-main}" \
-  --days-back "${HISTORY_DAYS_BACK:-14}"
+# Default: keep N_tests * SIZE timeout from extract_suites_from_ya_test_list.py.
+# Opt-in history: WEIGHT_MODE=history.
+WEIGHT_MODE="${WEIGHT_MODE:-timeout_budget}"
+if [ "$WEIGHT_MODE" = "history" ]; then
+  python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
+    "$TEST_LIST_LOG" \
+    "$FILTERED_SUMMARY" \
+    --target-prefix "$TARGET_PREFIX" \
+    --build-type "${BUILD_PRESET:-relwithdebinfo}" \
+    --branch "${HISTORY_BRANCH:-main}" \
+    --days-back "${HISTORY_DAYS_BACK:-14}"
+else
+  FILTERED_SUMMARY="$FILTERED_SUMMARY" python3 - <<'PY'
+import json
+import os
+
+path = os.environ["FILTERED_SUMMARY"]
+data = json.loads(open(path, encoding="utf-8").read())
+data["weighting"] = {
+    "mode": "suite_timeout_budget",
+    "size_weights": data.get("size_weights")
+    or {"small": 60, "medium": 600, "large": 3600},
+}
+open(path, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+PY
+fi
 
 echo "Weighting: $(jq -c '.weighting' "$FILTERED_SUMMARY")"
 

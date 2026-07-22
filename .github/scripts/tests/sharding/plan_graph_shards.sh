@@ -37,6 +37,11 @@ SPLIT_EXTRA_ARGS=()
 if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
   SPLIT_EXTRA_ARGS+=(--no-peak-cap)
 fi
+# timeout_budget (default): N_chunk_run_tests * SIZE timeout.
+# history: suite duration p90 from YDB (opt-in).
+WEIGHT_MODE="${WEIGHT_MODE:-timeout_budget}"
+SPLIT_EXTRA_ARGS+=(--weight-mode "$WEIGHT_MODE")
+
 # Real pool-capacity cap supersedes the static peak-hour heuristic (same as
 # plan_shard_tests.sh): once we know how many runners fit the quota, applying
 # peak-cap on top would double-penalize.

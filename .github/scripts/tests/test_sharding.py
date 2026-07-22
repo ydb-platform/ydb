@@ -26,6 +26,7 @@ from choose_shard_count import (  # noqa: E402
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
+    WEIGHT_MODE_HISTORY,
     assign_result_uids_to_shards,
     extract_node_path,
     load_graph,
@@ -729,6 +730,45 @@ class FilterGraphForShardTest(unittest.TestCase):
             "yql/essentials/udfs/common/compress_base",
         )
 
+    def test_plan_uid_weights_timeout_budget_default(self):
+        nodes = {
+            "test-acc": {
+                "uid": "test-acc",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/foo"},
+                "cmds": [{"cmd_args": ["results_accumulator"]}],
+                "deps": ["test-chunk0", "test-chunk1", "build-dep"],
+            },
+            "test-chunk0": {
+                "uid": "test-chunk0",
+                "node-type": "test",
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "large", "--timeout", "3600"]}],
+            },
+            "test-chunk1": {
+                "uid": "test-chunk1",
+                "node-type": "test",
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "large", "--timeout", "3600"]}],
+            },
+            "build-dep": {"uid": "build-dep", "deps": []},
+            "test-leaf": {
+                "uid": "test-leaf",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/bar"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "small"]}],
+            },
+        }
+        weights, stats = plan_uid_weights(
+            ["test-acc", "test-leaf"],
+            nodes,
+            {},
+        )
+        self.assertEqual(weights["test-acc"], 2 * 3600.0)
+        self.assertEqual(weights["test-leaf"], 60.0)
+        self.assertEqual(stats["mode"], "graph_uid_timeout_budget_lpt")
+        self.assertEqual(stats["timeout_budget_units"], 3)
+        self.assertEqual(stats["size_large_uid_count"], 1)
+        self.assertEqual(stats["size_small_uid_count"], 1)
+
     def test_plan_uid_weights_splits_history_by_matched_suite(self):
         nodes = {
             "test-a": {
@@ -754,6 +794,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             ["test-a", "test-b", "test-large"],
             nodes,
             {"ydb/tests/foo": 100.0},
+            weight_mode=WEIGHT_MODE_HISTORY,
         )
         self.assertEqual(weights["test-a"], 50.0)
         self.assertEqual(weights["test-b"], 50.0)
@@ -785,6 +826,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             ["test-large", "test-small", "support-peer"],
             nodes,
             {"ydb/tests/olap/large": 1000.0},
+            weight_mode=WEIGHT_MODE_HISTORY,
         )
         self.assertEqual(with_large["test-large"], 1000.0)
         self.assertEqual(with_large["test-small"], 60.0)
@@ -796,6 +838,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             ["test-small", "support-peer"],
             nodes,
             {"ydb/tests/olap/large": 1000.0},
+            weight_mode=WEIGHT_MODE_HISTORY,
         )
         self.assertEqual(without_large["test-small"], 1000.0)
         self.assertEqual(without_large["support-peer"], 60.0)

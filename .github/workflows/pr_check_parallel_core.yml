@@ -3,7 +3,7 @@ name: PR-check-parallel pipeline
 #
 # Differences from the pr-check-sharding-pilot branch:
 #   - change-volume classifier picks single vs sharded mode before any build;
-#   - shard count is adaptive: from estimated work (history p50 weights) with
+#   - shard count is adaptive: from estimated work (N * SIZE timeout by default) with
 #     a cap during shared-pool peak hours (see choose_shard_count.py);
 #   - build, ya test -L and shard planning share one job on one runner:
 #     listing runs in the background while the (cached, ~3 min) build runs in
@@ -315,7 +315,7 @@ jobs:
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
           if [ -f shard_plan_out/list_summary.json ]; then
-            jq -r '.weighting | if (.mode == "graph_uid_history_p90_lpt" or .mode == "graph_uid_history_p50_lpt") then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p90 (\(.branch // "main"), \(.days_back // 14)d)" end' \
+            jq -r '.weighting | if .mode == "graph_uid_timeout_budget_lpt" then "Timeout-budget weights: \(.timeout_budget_units // 0) units (N_chunks * SIZE timeout), max shard share \(.max_shard_weight_ratio // 0)" elif (.mode == "graph_uid_history_p90_lpt" or .mode == "graph_uid_history_p50_lpt") then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" elif .mode == "suite_timeout_budget" then "Suite timeout-budget weights: N_tests * SIZE timeout" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p90 (\(.branch // "main"), \(.days_back // 14)d)" end' \
               shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
           fi
           jq -r '"Estimated wall time (slowest shard): ~\(.estimated_critical_path_min // 0) min (\(.estimate_threads // 52) threads, max shard weight \(.estimated_max_shard_weight_sec // 0)s)"' \

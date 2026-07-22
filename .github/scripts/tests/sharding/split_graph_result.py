@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Plan graph-replay sharding by partitioning graph.result UIDs across runners.
 
-Bin-packs individual result UIDs by history p90 weights (longest prefix match
-on test-node paths; p90 goes to the heaviest ya SIZE at that history key).
-Missing history / non-owner sizes / non-test peers fall back to size-based
-weights. Each shard keeps the full graph and runs a subset of
-``graph.result`` via filter_graph_for_shard.
+Bin-packs individual result UIDs for graph-replay shards.
+
+Default weight mode ``timeout_budget``: ``N * timeout(size)`` where N is the
+number of chunk ``run_test`` deps outside ``graph.result`` (else 1), and
+timeout is ya SIZE default (60/600/3600) or ``--timeout`` from the graph.
+
+Opt-in ``history``: longest suite_folder prefix match / size fallback.
+
+Each shard keeps the full graph and runs a subset of ``graph.result`` via
+filter_graph_for_shard.
 
 Used for increment cuts (``increment_graph``) and full PR-check scope
 (``full_graph``).
@@ -34,6 +39,9 @@ from choose_shard_count import (  # noqa: E402
 from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p90  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
     DEFAULT_SIZE_WEIGHTS,
+    DEFAULT_WEIGHT_MODE,
+    WEIGHT_MODE_HISTORY,
+    WEIGHT_MODE_TIMEOUT_BUDGET,
     connected_components,
     extract_node_path,
     graph_nodes_by_uid,
@@ -85,6 +93,7 @@ def build_plan(
     days_back: int | None = None,
     build_type: str | None = None,
     branch: str | None = None,
+    weight_mode: str = DEFAULT_WEIGHT_MODE,
 ) -> dict[str, Any]:
     nodes_by_uid = graph_nodes_by_uid(graph)
     uids = result_uids(graph)
@@ -94,6 +103,7 @@ def build_plan(
         duration_p90,
         size_weights=size_weights,
         size_by_uid=size_by_uid,
+        weight_mode=weight_mode,
     )
     total_weight = sum(per_uid.values())
     buckets, loads = bin_pack_uids(per_uid, shard_count)
@@ -207,6 +217,12 @@ def main() -> int:
         default=None,
         help="Override current UTC hour (for tests)",
     )
+    parser.add_argument(
+        "--weight-mode",
+        default=DEFAULT_WEIGHT_MODE,
+        choices=(WEIGHT_MODE_TIMEOUT_BUDGET, WEIGHT_MODE_HISTORY),
+        help="UID weight source (default: timeout_budget = N_chunks * SIZE timeout)",
+    )
     args = parser.parse_args()
 
     size_weights = {
@@ -245,17 +261,19 @@ def main() -> int:
             size_by_uid = load_test_sizes_from_context(context)
             print(f"Loaded test sizes from context for {len(size_by_uid)} tests", file=sys.stderr)
 
-    unique_paths = collect_unique_paths(graph)
-    try:
-        duration_p90 = get_suite_duration_p90(
-            unique_paths,
-            args.days_back,
-            args.build_type,
-            args.branch,
-        )
-    except Exception as exc:
-        print(f"warning: duration history lookup failed: {exc}", file=sys.stderr)
-        duration_p90 = {}
+    duration_p90: dict[str, float] = {}
+    if args.weight_mode == WEIGHT_MODE_HISTORY:
+        unique_paths = collect_unique_paths(graph)
+        try:
+            duration_p90 = get_suite_duration_p90(
+                unique_paths,
+                args.days_back,
+                args.build_type,
+                args.branch,
+            )
+        except Exception as exc:
+            print(f"warning: duration history lookup failed: {exc}", file=sys.stderr)
+            duration_p90 = {}
 
     preview_nodes = graph_nodes_by_uid(graph)
     preview_uids = result_uids(graph)
@@ -265,6 +283,7 @@ def main() -> int:
         duration_p90,
         size_weights=size_weights,
         size_by_uid=size_by_uid,
+        weight_mode=args.weight_mode,
     )
     total_weight = sum(preview_weights.values())
 
@@ -293,9 +312,10 @@ def main() -> int:
         size_by_uid=size_by_uid,
         plan_mode=args.plan_mode,
         threads=args.threads,
-        days_back=args.days_back,
-        build_type=args.build_type,
-        branch=args.branch,
+        days_back=args.days_back if args.weight_mode == WEIGHT_MODE_HISTORY else None,
+        build_type=args.build_type if args.weight_mode == WEIGHT_MODE_HISTORY else None,
+        branch=args.branch if args.weight_mode == WEIGHT_MODE_HISTORY else None,
+        weight_mode=args.weight_mode,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -305,9 +325,10 @@ def main() -> int:
     print(
         f"Graph replay plan ({args.plan_mode}): {plan['shard_count']} shards, "
         f"{plan['total_graph_nodes']} nodes, {plan['total_components']} components, "
-        f"weight={plan['total_weight']}, "
+        f"weight={plan['total_weight']}, mode={weighting.get('mode')}, "
+        f"timeout_units={weighting.get('timeout_budget_units', 0)}, "
         f"history_uids={weighting.get('history_uid_count', 0)}, "
-        f"size_fallback_uids="
+        f"size_uids="
         f"{int(weighting.get('size_small_uid_count', 0)) + int(weighting.get('size_medium_uid_count', 0)) + int(weighting.get('size_large_uid_count', 0))}, "
         f"est. critical path ~{plan.get('estimated_critical_path_min', 0):.1f} min -> {args.output}",
         file=sys.stderr,

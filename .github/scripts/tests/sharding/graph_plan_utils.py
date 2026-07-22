@@ -38,11 +38,16 @@ _TEST_KIND_LEAVES = frozenset(
 )
 _CONTEXT_SIZE_RE = re.compile(rb"SIZE\x94\x8c.([A-Z]+)\x94")
 
+# Ya SIZE default timeouts (build/plugins/lib/test_const TestSize.DefaultTimeouts).
 DEFAULT_SIZE_WEIGHTS = {
     "small": 60.0,
     "medium": 600.0,
     "large": 3600.0,
 }
+
+WEIGHT_MODE_TIMEOUT_BUDGET = "timeout_budget"
+WEIGHT_MODE_HISTORY = "history"
+DEFAULT_WEIGHT_MODE = WEIGHT_MODE_TIMEOUT_BUDGET
 
 
 def validate_graph(graph: dict[str, Any]) -> None:
@@ -252,37 +257,158 @@ def is_graph_test_node(uid: str, node: dict[str, Any] | None) -> bool:
     return str(uid).startswith("test-")
 
 
+def _cmd_args(node: dict[str, Any]) -> list[str]:
+    args: list[str] = []
+    for cmd in node.get("cmds") or []:
+        if isinstance(cmd, dict):
+            for arg in cmd.get("cmd_args") or []:
+                args.append(str(arg))
+    return args
+
+
+def node_has_cmd_token(node: dict[str, Any], token: str) -> bool:
+    return token in _cmd_args(node)
+
+
+def extract_node_timeout_sec(node: dict[str, Any]) -> float | None:
+    """Read ya ``--timeout`` seconds from graph node cmds when present."""
+    args = _cmd_args(node)
+    for index, arg in enumerate(args):
+        if arg == "--timeout" and index + 1 < len(args):
+            try:
+                value = float(args[index + 1])
+            except ValueError:
+                continue
+            if value > 0:
+                return value
+    return None
+
+
+def count_timeout_budget_units(
+    uid: str,
+    node: dict[str, Any],
+    nodes_by_uid: dict[str, dict[str, Any]],
+    result_set: set[str],
+) -> int:
+    """How many size-timeout budgets this result UID represents.
+
+    Suite accumulators keep chunk ``run_test`` nodes out of ``graph.result``;
+    each such dep is one parallel work unit with the suite SIZE timeout.
+    Leaf result nodes count as 1.
+    """
+    units = 0
+    for dep in node.get("deps") or []:
+        dep_uid = dep if isinstance(dep, str) else dep.get("uid") if isinstance(dep, dict) else None
+        if not dep_uid:
+            continue
+        dep_uid = str(dep_uid)
+        if dep_uid in result_set:
+            continue
+        dep_node = nodes_by_uid.get(dep_uid) or {}
+        if node_has_cmd_token(dep_node, "run_test"):
+            units += 1
+    if units > 0:
+        return units
+    return 1
+
+
+def resolve_node_timeout_sec(
+    uid: str,
+    node: dict[str, Any],
+    *,
+    size_weights: dict[str, float],
+    size_by_uid: dict[str, str] | None = None,
+    nodes_by_uid: dict[str, dict[str, Any]] | None = None,
+    result_set: set[str] | None = None,
+) -> tuple[float, str]:
+    """Timeout seconds for budget weighting: cmd --timeout, else SIZE default."""
+    timeout = extract_node_timeout_sec(node)
+    if timeout is not None:
+        size = resolve_node_test_size(uid, node, size_by_uid=size_by_uid)
+        return timeout, size
+
+    if nodes_by_uid is not None and result_set is not None:
+        for dep in node.get("deps") or []:
+            dep_uid = dep if isinstance(dep, str) else dep.get("uid") if isinstance(dep, dict) else None
+            if not dep_uid or str(dep_uid) in result_set:
+                continue
+            dep_node = nodes_by_uid.get(str(dep_uid)) or {}
+            if not node_has_cmd_token(dep_node, "run_test"):
+                continue
+            timeout = extract_node_timeout_sec(dep_node)
+            if timeout is not None:
+                size = resolve_node_test_size(str(dep_uid), dep_node, size_by_uid=size_by_uid)
+                return timeout, size
+
+    size = resolve_node_test_size(uid, node, size_by_uid=size_by_uid)
+    return float(size_weights.get(size, DEFAULT_SIZE_WEIGHTS["small"])), size
+
+
 def _size_rank(size: str, size_weights: dict[str, float]) -> float:
     return float(size_weights.get(size, size_weights.get("small", 60.0)))
 
 
-def plan_uid_weights(
+def _plan_uid_weights_timeout_budget(
+    uids: list[str],
+    nodes_by_uid: dict[str, dict[str, Any]],
+    *,
+    size_weights: dict[str, float],
+    size_by_uid: dict[str, str] | None = None,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Default: weight = N_work_units * timeout(size)."""
+    result_set = set(uids)
+    per_uid: dict[str, float] = {}
+    source_counts: Counter[str] = Counter()
+    total_units = 0
+    missing_path = 0
+
+    for uid in uids:
+        node = nodes_by_uid.get(uid) or {}
+        if extract_node_path(node) is None and is_graph_test_node(uid, node):
+            missing_path += 1
+        units = count_timeout_budget_units(uid, node, nodes_by_uid, result_set)
+        timeout, size = resolve_node_timeout_sec(
+            uid,
+            node,
+            size_weights=size_weights,
+            size_by_uid=size_by_uid,
+            nodes_by_uid=nodes_by_uid,
+            result_set=result_set,
+        )
+        weight = float(units) * float(timeout)
+        per_uid[uid] = weight
+        total_units += units
+        source_counts[f"timeout_{size}"] += 1
+        source_counts["units"] += units
+
+    stats = {
+        "mode": "graph_uid_timeout_budget_lpt",
+        "history_suite_count": 0,
+        "history_uid_count": 0,
+        "timeout_budget_units": int(total_units),
+        "size_small_uid_count": int(source_counts.get("timeout_small", 0)),
+        "size_medium_uid_count": int(source_counts.get("timeout_medium", 0)),
+        "size_large_uid_count": int(source_counts.get("timeout_large", 0)),
+        "missing_path_uid_count": missing_path,
+        "history_weight": 0.0,
+        "fallback_weight": round(sum(per_uid.values()), 1),
+        "size_weights": {k: float(v) for k, v in sorted(size_weights.items())},
+    }
+    return per_uid, stats
+
+
+def _plan_uid_weights_history(
     uids: list[str],
     nodes_by_uid: dict[str, dict[str, Any]],
     duration_p90: dict[str, float],
     *,
-    size_weights: dict[str, float] | None = None,
+    size_weights: dict[str, float],
     size_by_uid: dict[str, str] | None = None,
 ) -> tuple[dict[str, float], dict[str, Any]]:
-    """Weight result UIDs for LPT packing.
-
-    History: longest suite_folder prefix match on test nodes only. For each
-    matched history key, p90 is given to the heaviest ya SIZE present among
-    those test nodes (large > medium > small) and split across that size only.
-    Smaller co-located sizes and non-test result peers use size fallback so
-    adding SIZE(LARGE) increases total weight instead of re-slicing the same p90.
-
-    Fallback: ya test size (small/medium/large) from graph ``--test-size`` or
-    context SIZE; missing size defaults to small.
-    """
-    weights_cfg = dict(DEFAULT_SIZE_WEIGHTS)
-    if size_weights:
-        weights_cfg.update(size_weights)
-
+    """Opt-in history mode: longest suite_folder prefix match on test nodes."""
     path_by_uid: dict[str, str | None] = {}
     size_by_resolved: dict[str, str] = {}
     match_by_uid: dict[str, tuple[float, str, str | None]] = {}
-    # suite -> size -> test UIDs eligible for that history key
     history_tests: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
 
     for uid in uids:
@@ -302,7 +428,7 @@ def plan_uid_weights(
     owner_size_by_suite: dict[str, str] = {}
     history_uid_counts: Counter[str] = Counter()
     for suite, by_size in history_tests.items():
-        owner = max(by_size.keys(), key=lambda s: _size_rank(s, weights_cfg))
+        owner = max(by_size.keys(), key=lambda s: _size_rank(s, size_weights))
         owner_size_by_suite[suite] = owner
         history_uid_counts[suite] = len(by_size[owner])
 
@@ -332,7 +458,7 @@ def plan_uid_weights(
         weight, fb_source = fallback_weight_for_node(
             uid,
             node,
-            size_weights=weights_cfg,
+            size_weights=size_weights,
             size_by_uid=size_by_uid,
         )
         per_uid[uid] = weight
@@ -349,9 +475,49 @@ def plan_uid_weights(
         "missing_path_uid_count": missing_path,
         "history_weight": round(history_weight, 1),
         "fallback_weight": round(fallback_weight, 1),
-        "size_weights": {k: float(v) for k, v in sorted(weights_cfg.items())},
+        "size_weights": {k: float(v) for k, v in sorted(size_weights.items())},
     }
     return per_uid, stats
+
+
+def plan_uid_weights(
+    uids: list[str],
+    nodes_by_uid: dict[str, dict[str, Any]],
+    duration_p90: dict[str, float],
+    *,
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
+    weight_mode: str = DEFAULT_WEIGHT_MODE,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Weight result UIDs for LPT packing.
+
+    Default ``timeout_budget``: ``N * timeout(size)`` where N is the number of
+    chunk ``run_test`` deps outside ``graph.result`` (else 1). Matches ya SIZE
+    default timeouts (60/600/3600).
+
+    Opt-in ``history``: longest suite_folder prefix match on test nodes; p90
+    goes to the heaviest SIZE at that key. Other sizes / non-test peers use
+    size fallback.
+    """
+    weights_cfg = dict(DEFAULT_SIZE_WEIGHTS)
+    if size_weights:
+        weights_cfg.update(size_weights)
+
+    mode = (weight_mode or DEFAULT_WEIGHT_MODE).strip().lower()
+    if mode == WEIGHT_MODE_HISTORY:
+        return _plan_uid_weights_history(
+            uids,
+            nodes_by_uid,
+            duration_p90,
+            size_weights=weights_cfg,
+            size_by_uid=size_by_uid,
+        )
+    return _plan_uid_weights_timeout_budget(
+        uids,
+        nodes_by_uid,
+        size_weights=weights_cfg,
+        size_by_uid=size_by_uid,
+    )
 
 
 def uid_weights(
@@ -373,6 +539,7 @@ def uid_weights(
         duration_p90,
         size_weights=weights_cfg,
         size_by_uid=size_by_uid,
+        weight_mode=DEFAULT_WEIGHT_MODE,
     )
     return weights
 

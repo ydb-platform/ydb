@@ -27,6 +27,10 @@ public:
 
     void AppendRole(EHostRole assignment);
 
+    // Drops the host's role and shifts all higher roles down by one; the
+    // remove-host renumbering.
+    void RemoveHost(THostIndex host);
+
     [[nodiscard]] THostMask GetPrimary() const;
     [[nodiscard]] THostMask GetHandOff() const;
     [[nodiscard]] THostMask GetActive() const;

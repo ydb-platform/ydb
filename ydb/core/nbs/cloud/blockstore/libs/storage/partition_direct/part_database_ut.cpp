@@ -14,6 +14,8 @@ using TDirectBlockGroupsConnections =
     ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
 using TAddHostInProgress =
     ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+using TRemoveHostInProgress =
+    ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
 using NYdb::NBS::NBlockStore::NStorage::TTestExecutor;
 
@@ -206,6 +208,79 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TPartitionDatabase partitionDb(db);
                 TMaybe<TAddHostInProgress> loaded;
                 UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreReadAndClearRemoveHostInProgress)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
+
+        // Absent right after init.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TRemoveHostInProgress intent;
+                intent.SetDirectBlockGroupId(3);
+                intent.SetRemoveIndex(2);
+                intent.MutableDDiskId()->SetNodeId(102);
+                intent.MutableDDiskId()->SetPDiskId(1);
+                intent.MutableDDiskId()->SetDDiskSlotId(2);
+                intent.MutablePersistentBufferId()->SetNodeId(107);
+                intent.MutablePersistentBufferId()->SetPDiskId(1);
+                intent.MutablePersistentBufferId()->SetDDiskSlotId(7);
+                partitionDb.StoreRemoveHostInProgress(intent);
+            });
+
+        // Read back what was stored.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
+                UNIT_ASSERT(loaded.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(3u, loaded->GetDirectBlockGroupId());
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded->GetRemoveIndex());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    102u,
+                    loaded->GetDDiskId().GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    107u,
+                    loaded->GetPersistentBufferId().GetNodeId());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.ClearRemoveHostInProgress();
+            });
+
+        // Absent again after clear.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
                 UNIT_ASSERT(!loaded.Defined());
             });
     }

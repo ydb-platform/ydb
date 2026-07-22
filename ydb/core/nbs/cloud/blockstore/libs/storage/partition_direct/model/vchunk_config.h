@@ -38,6 +38,10 @@ public:
     // Add new host and assign new role for it.
     void AppendHost();
 
+    // Drops the host and shifts all higher hosts down by one; the remove-host
+    // renumbering (BSC compacts its lists on delete the same way).
+    void RemoveHost(THostIndex host);
+
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
     TString EvacuateHost(THostIndex hostIndex);

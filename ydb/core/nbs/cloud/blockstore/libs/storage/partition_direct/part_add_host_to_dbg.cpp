@@ -22,60 +22,19 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Validates a BSController add-host allocation response and, on success,
-// appends the newly granted DDisk/PBuffer to `result` (a copy of `current`).
-// Returns a retriable error - never aborts - for a failed or malformed
-// response: the add-host intent stays persisted and is replayed on recovery, so
-// a bad response must not crash-loop the tablet.
+// Appends the newly granted DDisk/PBuffer (the last entry of a validated
+// allocation response group) to `result` (a copy of `current`). Returns a
+// retriable error - never aborts - when the grant duplicates an existing
+// connection: the add-host intent stays persisted and is replayed on
+// recovery, so a bad response must not crash-loop the tablet.
 NProto::TError AddConnection(
     const TDirectBlockGroupsConnections& current,
-    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+    const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+        TDirectBlockGroup& group,
     size_t dbgId,
     ui32 expectedCurrent,
     TDirectBlockGroupsConnections* result)
 {
-    const auto& record = msg.Record;
-
-    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController error: " << record.GetErrorReason());
-    }
-
-    if (record.DirectBlockGroupsSize() != 1) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << record.DirectBlockGroupsSize()
-                << " DirectBlockGroups, expected 1");
-    }
-
-    const auto& group = record.GetDirectBlockGroups(0);
-    if (group.GetDirectBlockGroupId() != dbgId) {
-        return MakeError(
-            E_REJECTED,
-            "BSController response is for a different DirectBlockGroup");
-    }
-
-    if (group.GetError()) {
-        return MakeError(
-            E_REJECTED,
-            "BSController reported an error for this DirectBlockGroup");
-    }
-
-    if (static_cast<ui32>(group.DDiskIdSize()) != expectedCurrent + 1 ||
-        static_cast<ui32>(group.PersistentBufferDDiskIdSize()) !=
-            expectedCurrent + 1)
-    {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << group.DDiskIdSize()
-                << " ddisks / " << group.PersistentBufferDDiskIdSize()
-                << " pbuffers, expected " << (expectedCurrent + 1));
-    }
-
     const auto& newDDiskId = group.GetDDiskId(expectedCurrent);
     const auto& newPBufferId =
         group.GetPersistentBufferDDiskId(expectedCurrent);
@@ -186,18 +145,13 @@ void TPartitionActor::CompleteAddHostToDBG(
         dbgId,
         PrintHostIndex(args.NewHostIndex).c_str());
 
-    Y_ABORT_UNLESS(FastPathService);
-
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    Y_ABORT_UNLESS(dbgId < directBlockGroups.size());
-
     // The new connection was persisted at NewHostIndex; read its DDisk/PBuffer
     // back out to hand to the DBG.
     const auto& newConnection =
         args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
             .GetConnections(args.NewHostIndex);
 
-    auto dbgPtr = directBlockGroups[dbgId];
+    auto dbgPtr = GetDirectBlockGroupChecked(dbgId);
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple(
         [dbgPtr,
@@ -240,15 +194,23 @@ void TPartitionActor::HandleAddHostAllocationResult(
     const auto newHostIndex = AddHostInFlight->NewHostIndex;
     NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
+    NProto::TError error;
+    const auto* group = ValidateAllocationResponseEnvelope(
+        *msg,
+        dbgId,
+        expectedCurrent + 1,
+        &error);
+
     TDirectBlockGroupsConnections updated;
-    if (auto error = AddConnection(
+    if (group != nullptr) {
+        error = AddConnection(
             DirectBlockGroupsConnections,
-            *msg,
+            *group,
             dbgId,
             expectedCurrent,
             &updated);
-        HasError(error))
-    {
+    }
+    if (HasError(error)) {
         // Not cancelled: the intent stays persisted, so it is retried on the
         // next recovery until BSController grants the DDisk.
         LOG_WARN(
@@ -329,6 +291,19 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
         return false;
     }
+    if (RemoveHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "A RemoveHost is already in progress");
+        return false;
+    }
+    if (DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
+            .HasLastRemove())
+    {
+        RejectAddHost(
+            ctx,
+            dbgId,
+            "A committed RemoveHost is pending a tablet restart");
+        return false;
+    }
 
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
@@ -378,14 +353,8 @@ void TPartitionActor::RejectAddHost(
         dbgId,
         FormatError(error).c_str());
 
-    // Notify the DBG that asked for the host. dbgId is always a valid request
-    // index (see ValidateAddHostToDBGRequest), so the DBG exists.
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    Y_ABORT_UNLESS(
-        dbgId < directBlockGroups.size(),
-        "RejectAddHost for a non-existent DBG (dbgId=%lu)",
-        dbgId);
-    auto dbgPtr = directBlockGroups[dbgId];
+    // Notify the DBG that asked for the host.
+    auto dbgPtr = GetDirectBlockGroupChecked(dbgId);
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple([dbgPtr, error]()
                             { dbgPtr->OnAddHostResult(error, 0, {}, {}); });
@@ -410,12 +379,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     // re-sent request returns the same DDisk from BSController's persisted
     // allocation, so a retry (e.g. after a restart) is safe.
     const ui32 numDDisks = newHostIndex + 1;
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-    request->Record.SetTabletId(TabletID());
+    auto request = MakeAllocateDDiskBlockGroupRequest();
 
     auto* op = request->Record.AddDirectBlockGroupOperations();
     op->SetDirectBlockGroupId(dbgId);

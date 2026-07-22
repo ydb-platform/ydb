@@ -137,6 +137,18 @@ void TVChunkConfig::AppendHost()
     ++HostCount;
 }
 
+void TVChunkConfig::RemoveHost(THostIndex host)
+{
+    Y_ABORT_UNLESS(PBufferHosts.HostCount() == DDiskHosts.HostCount());
+    Y_ABORT_UNLESS(host < HostCount);
+
+    PBufferHosts.RemoveHost(host);
+    DDiskHosts.RemoveHost(host);
+    EnabledHosts.RemoveHost(host);
+    Watermarks.erase(Watermarks.begin() + host);
+    --HostCount;
+}
+
 TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
 {
     DisableHost(hostIndex);

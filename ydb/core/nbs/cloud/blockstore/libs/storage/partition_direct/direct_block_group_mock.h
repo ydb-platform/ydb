@@ -144,6 +144,9 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
 
+    using TOnRemoveHostResultHandler = std::function<
+        void(const NProto::TError& error, THostIndex removeIndex)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -158,6 +161,7 @@ public:
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
     TOnAddHostResultHandler OnAddHostResultHandler;
+    TOnRemoveHostResultHandler OnRemoveHostResultHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -247,6 +251,10 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    void OnRemoveHostResult(
+        const NProto::TError& error,
+        THostIndex removeIndex) override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 };

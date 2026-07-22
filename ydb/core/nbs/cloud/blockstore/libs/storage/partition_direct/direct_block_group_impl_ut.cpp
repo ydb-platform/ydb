@@ -1360,6 +1360,183 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "H5+{Disabled,0,0};",
             dirtyMapDDiskAfter);
     }
+
+    // QueryRemoveHost() validates locally and routes a remove-host request to
+    // the partition-direct service, tagged with the DBG's index and the host
+    // index. The registered vchunk keeps the semantic checks live: the host
+    // must be disabled there for the request to pass.
+    Y_UNIT_TEST_F(ShouldQueryRemoveHostThroughService, TDBGFixture)
+    {
+        constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, grownHostCount),
+            MakeDDiskIds(100 + grownHostCount, grownHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto config = TVChunkConfig::MakeDefault(
+            100,
+            grownHostCount,
+            DefaultPrimaryCount);
+        config.DisableHost(2);
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            Service.get(),
+            config,
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        auto& service = *Service;
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->Register(vchunk);
+                // Out of range -> rejected locally, nothing is routed.
+                dbg->QueryRemoveHost(17);
+                // Disabled in every registered vchunk -> routed.
+                dbg->QueryRemoveHost(2);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, service.RemoveHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0u,
+            service.RemoveHostRequests[0].DirectBlockGroupId);
+        UNIT_ASSERT_VALUES_EQUAL(2u, service.RemoveHostRequests[0].HostIndex);
+    }
+
+    // A group at the quorum host count cannot lose another host.
+    Y_UNIT_TEST_F(ShouldRejectRemoveHostBelowQuorum, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, QuorumDirectBlockGroupHostCount),
+            MakeDDiskIds(
+                100 + QuorumDirectBlockGroupHostCount,
+                QuorumDirectBlockGroupHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->QueryRemoveHost(0);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, Service->RemoveHostRequests.size());
+    }
+
+    // A host still enabled in a registered vchunk cannot be removed.
+    Y_UNIT_TEST_F(ShouldRejectRemoveHostEnabledInVChunk, TDBGFixture)
+    {
+        constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, grownHostCount),
+            MakeDDiskIds(100 + grownHostCount, grownHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            Service.get(),
+            TVChunkConfig::MakeDefault(
+                100,
+                grownHostCount,
+                DefaultPrimaryCount),
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->Register(vchunk);
+                dbg->QueryRemoveHost(2);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, Service->RemoveHostRequests.size());
+    }
+
+    // A vchunk whose config does not match the connection count blocks the
+    // removal until the catch-up settles.
+    Y_UNIT_TEST_F(ShouldRejectRemoveHostWhenVChunkLags, TDBGFixture)
+    {
+        constexpr ui32 aheadHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, DirectBlockGroupHostCount),
+            MakeDDiskIds(
+                100 + DirectBlockGroupHostCount,
+                DirectBlockGroupHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // The vchunk knows more hosts than the DBG has connections; the
+        // registration catch-up only grows configs, so the mismatch stays.
+        auto config = TVChunkConfig::MakeDefault(
+            100,
+            aheadHostCount,
+            DefaultPrimaryCount);
+        config.DisableHost(2);
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            Service.get(),
+            config,
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->Register(vchunk);
+                dbg->QueryRemoveHost(2);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, Service->RemoveHostRequests.size());
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)

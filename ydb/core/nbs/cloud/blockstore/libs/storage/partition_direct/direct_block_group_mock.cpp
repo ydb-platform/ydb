@@ -194,6 +194,10 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
     };
+    OnRemoveHostResultHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostResultHandler");
+    };
 }
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
@@ -388,6 +392,13 @@ void TDirectBlockGroupMock::OnAddHostResult(
         newHostIndex,
         std::move(ddiskId),
         std::move(pbufferId));
+}
+
+void TDirectBlockGroupMock::OnRemoveHostResult(
+    const NProto::TError& error,
+    THostIndex removeIndex)
+{
+    OnRemoveHostResultHandler(error, removeIndex);
 }
 
 NThreading::TFuture<TDbgSnapshot>

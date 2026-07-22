@@ -25,6 +25,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(UpdateVChunkConfig, __VA_ARGS__)            \
     xxx(StartAddHost, __VA_ARGS__)                  \
     xxx(AddHostToDBG, __VA_ARGS__)                  \
+    xxx(StartRemoveHost, __VA_ARGS__)               \
+    xxx(CommitRemoveHost, __VA_ARGS__)              \
     xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
@@ -37,6 +39,8 @@ struct TTxPartition
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
     using TAddHostInProgress =
         ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+    using TRemoveHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
     //
     // InitSchema
@@ -61,6 +65,7 @@ struct TTxPartition
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVector<TVChunkConfig> VChunkConfigs;
         TMaybe<TAddHostInProgress> AddHostInProgress;
+        TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
 
         explicit TLoadState()
         {}
@@ -71,6 +76,7 @@ struct TTxPartition
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
             AddHostInProgress.Clear();
+            RemoveHostInProgress.Clear();
         }
     };
 
@@ -160,6 +166,41 @@ struct TTxPartition
                   std::move(directBlockGroupsConnections))
             , DirectBlockGroupId(directBlockGroupId)
             , NewHostIndex(newHostIndex)
+        {}
+
+        void Clear()
+        {}
+    };
+
+    //
+    // TStartRemoveHost
+    //
+    struct TStartRemoveHost
+    {
+        const TRemoveHostInProgress Intent;
+
+        explicit TStartRemoveHost(TRemoveHostInProgress intent)
+            : Intent(std::move(intent))
+        {}
+
+        void Clear()
+        {}
+    };
+
+    struct TCommitRemoveHost
+    {
+        const TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+        const size_t DirectBlockGroupId;
+        const THostIndex RemoveIndex;
+
+        TCommitRemoveHost(
+            TDirectBlockGroupsConnections directBlockGroupsConnections,
+            size_t directBlockGroupId,
+            THostIndex removeIndex)
+            : DirectBlockGroupsConnections(
+                  std::move(directBlockGroupsConnections))
+            , DirectBlockGroupId(directBlockGroupId)
+            , RemoveIndex(removeIndex)
         {}
 
         void Clear()

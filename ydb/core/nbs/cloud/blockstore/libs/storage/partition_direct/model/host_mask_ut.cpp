@@ -30,6 +30,32 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
     }
 
+    Y_UNIT_TEST(ShouldRemoveHost)
+    {
+        // Bits above the removed index shift down; lower bits stay.
+        auto mask = THostMask::MakeOne(0).Include(
+            THostMask::MakeOne(2).Include(THostMask::MakeOne(4)));
+
+        mask.RemoveHost(2);
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
+        UNIT_ASSERT(mask.Get(0));
+        UNIT_ASSERT(!mask.Get(2));
+        UNIT_ASSERT(mask.Get(3));
+    }
+
+    Y_UNIT_TEST(ShouldRemoveLastAllowedHost)
+    {
+        // The boundary index: removing host 31 must not wrap bit 0 around.
+        auto mask = THostMask::MakeOne(0).Include(THostMask::MakeOne(31));
+
+        mask.RemoveHost(31);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+        UNIT_ASSERT(mask.Get(0));
+        UNIT_ASSERT(!mask.Get(31));
+    }
+
     Y_UNIT_TEST(ShouldMakeAll)
     {
         UNIT_ASSERT(THostMask::MakeAll(0).Empty());

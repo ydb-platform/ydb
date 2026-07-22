@@ -65,6 +65,36 @@ Y_UNIT_TEST_SUITE(THostRolesTest)
         UNIT_ASSERT(roles.GetRole(1) == EHostRole::HandOff);
         UNIT_ASSERT(roles.GetRole(2) == EHostRole::None);
     }
+
+    Y_UNIT_TEST(ShouldRemoveHost)
+    {
+        THostRoles roles(5);
+        roles.SetRole(1, EHostRole::Primary);
+        roles.SetRole(2, EHostRole::HandOff);
+        roles.SetRole(3, EHostRole::Primary);
+        roles.SetRole(4, EHostRole::HandOff);
+
+        roles.RemoveHost(2);
+
+        // Hosts above the removed index shift down by one.
+        UNIT_ASSERT_VALUES_EQUAL(4u, roles.HostCount());
+        UNIT_ASSERT(roles.GetRole(0) == EHostRole::None);
+        UNIT_ASSERT(roles.GetRole(1) == EHostRole::Primary);
+        UNIT_ASSERT(roles.GetRole(2) == EHostRole::Primary);
+        UNIT_ASSERT(roles.GetRole(3) == EHostRole::HandOff);
+    }
+
+    Y_UNIT_TEST(ShouldRemoveLastHost)
+    {
+        THostRoles roles(3);
+        roles.SetRole(2, EHostRole::Primary);
+
+        roles.RemoveHost(2);
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, roles.HostCount());
+        UNIT_ASSERT(roles.GetRole(0) == EHostRole::None);
+        UNIT_ASSERT(roles.GetRole(1) == EHostRole::None);
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

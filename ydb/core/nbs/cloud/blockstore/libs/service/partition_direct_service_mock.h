@@ -18,6 +18,12 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         size_t NewHostIndex = 0;
     };
 
+    struct TRemoveHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
@@ -25,6 +31,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
     TVector<TAddHostRequest> AddHostRequests;
+    TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
@@ -63,6 +70,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         AddHostRequests.push_back(TAddHostRequest{
             .DirectBlockGroupId = directBlockGroupId,
             .NewHostIndex = newHostIndex});
+    }
+
+    void QueryRemoveHost(size_t directBlockGroupId, size_t hostIndex) override
+    {
+        RemoveHostRequests.push_back(TRemoveHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .HostIndex = hostIndex});
     }
 
     ui64 GenerateLsn() override

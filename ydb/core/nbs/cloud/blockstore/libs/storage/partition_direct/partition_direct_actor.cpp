@@ -229,14 +229,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
     CreateBSControllerPipeClient(ctx);
 
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-
-    // TODO: fill with tablet id
-    request->Record.SetTabletId(TabletID());
+    auto request = MakeAllocateDDiskBlockGroupRequest();
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     const ui64 regionsCount =
@@ -250,6 +243,85 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+}
+
+std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+TPartitionActor::MakeAllocateDDiskBlockGroupRequest() const
+{
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig->GetPersistentBufferDDiskPoolName());
+    request->Record.SetTabletId(TabletID());
+    return request;
+}
+
+// static
+const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+    TDirectBlockGroup*
+    TPartitionActor::ValidateAllocationResponseEnvelope(
+        const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+        size_t dbgId,
+        size_t expectedHostCount,
+        NProto::TError* error)
+{
+    const auto& record = msg.Record;
+
+    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
+        *error = MakeError(
+            E_REJECTED,
+            TStringBuilder()
+                << "BSController error: " << record.GetErrorReason());
+        return nullptr;
+    }
+    if (record.DirectBlockGroupsSize() != 1) {
+        *error = MakeError(
+            E_REJECTED,
+            TStringBuilder()
+                << "BSController returned " << record.DirectBlockGroupsSize()
+                << " DirectBlockGroups, expected 1");
+        return nullptr;
+    }
+
+    const auto& group = record.GetDirectBlockGroups(0);
+    if (group.GetDirectBlockGroupId() != dbgId) {
+        *error = MakeError(
+            E_REJECTED,
+            "BSController response is for a different DirectBlockGroup");
+        return nullptr;
+    }
+    if (group.GetError()) {
+        *error = MakeError(
+            E_REJECTED,
+            "BSController reported an error for this DirectBlockGroup");
+        return nullptr;
+    }
+    if (group.DDiskIdSize() != expectedHostCount ||
+        group.PersistentBufferDDiskIdSize() != expectedHostCount)
+    {
+        *error = MakeError(
+            E_REJECTED,
+            TStringBuilder()
+                << "BSController returned " << group.DDiskIdSize()
+                << " ddisks / " << group.PersistentBufferDDiskIdSize()
+                << " pbuffers, expected " << expectedHostCount);
+        return nullptr;
+    }
+
+    return &group;
+}
+
+IDirectBlockGroupPtr TPartitionActor::GetDirectBlockGroupChecked(
+    size_t dbgId) const
+{
+    Y_ABORT_UNLESS(FastPathService);
+    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
+    Y_ABORT_UNLESS(
+        dbgId < directBlockGroups.size(),
+        "Membership op for a non-existent DBG (dbgId=%lu)",
+        dbgId);
+    return directBlockGroups[dbgId];
 }
 
 void TPartitionActor::Start(
@@ -321,8 +393,10 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    // Re-send the BSC request for an add-host in flight at the last restart
-    // (no live add can be in flight this early). BSController is idempotent.
+    // Re-send the BSC request for a membership op in flight at the last
+    // restart (no live op can be in flight this early). Both re-sends are
+    // safe: the add is declarative, and an already-applied delete answers
+    // NOT_FOUND without changing anything.
     if (AddHostInFlight.has_value()) {
         LOG_INFO(
             ctx,
@@ -335,6 +409,17 @@ void TPartitionActor::HandleFastPathServiceReady(
             ctx,
             AddHostInFlight->DirectBlockGroupId,
             AddHostInFlight->NewHostIndex);
+    }
+
+    if (RemoveHostInFlight.has_value()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight RemoveHost dbgId=%lu removeIndex=%s",
+            LogTitle.GetWithTime().c_str(),
+            RemoveHostInFlight->DirectBlockGroupId,
+            PrintHostIndex(RemoveHostInFlight->RemoveIndex).c_str());
+        SendRemoveHostRequest(ctx);
     }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
@@ -466,8 +551,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    // result of the single in-flight membership op (add xor remove).
+    if (RemoveHostInFlight.has_value()) {
+        HandleRemoveHostAllocationResult(ev, ctx);
+    } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
     } else {
         HandleInitialAllocationResult(ev, ctx);
@@ -627,6 +714,9 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,

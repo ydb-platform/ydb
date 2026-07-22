@@ -219,4 +219,45 @@ void TPartitionDatabase::ClearAddHostInProgress()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadRemoveHostInProgress(
+    TMaybe<TRemoveHostInProgress>& removeHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    auto it = Table<TTable>().Key(1).Select<TTable::RemoveHostInProgress>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    if (it.IsValid() && it.HaveValue<TTable::RemoveHostInProgress>()) {
+        removeHostInProgress = it.GetValue<TTable::RemoveHostInProgress>();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreRemoveHostInProgress(
+    const TRemoveHostInProgress& removeHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).Update(
+        NKikimr::NIceDb::TUpdate<TTable::RemoveHostInProgress>(
+            removeHostInProgress));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::ClearRemoveHostInProgress()
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).UpdateToNull<TTable::RemoveHostInProgress>();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

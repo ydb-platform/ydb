@@ -44,6 +44,12 @@ struct IPartitionDirectService
         size_t directBlockGroupId,
         size_t newHostIndex) = 0;
 
+    // Query the removal of host `hostIndex` from the group. The deletion is
+    // idempotent on the BSController side and can be repeated multiple times.
+    virtual void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex) = 0;
+
     // Generates the next tablet-wide write LSN. Called by a vchunk on its
     // executor thread when it starts processing a write, so generation and
     // dirty-map registration happen on the same thread. Also drives periodic

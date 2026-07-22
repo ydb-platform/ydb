@@ -782,6 +782,21 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             addHostNumDDisks);
     }
 
+    // Restarts the node hosting the tablet (recreating the NBS service with
+    // the given config) and waits for the tablet to boot and replay.
+    static void RestartTabletNode(
+        TEnvironmentSetup & env,
+        std::unique_ptr<TScopedNbsService> & scopedService,
+        const NKikimrConfig::TNbsConfig& nbsConfig)
+    {
+        scopedService.reset();
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(1));
+        scopedService = std::make_unique<TScopedNbsService>(nbsConfig);
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST(ShouldReplayInFlightAddHostAfterRestart)
     {
         TEnvironmentSetup env{{
@@ -844,18 +859,339 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
 
         // Restart: the persisted intent must be replayed.
-        {
-            scopedService.reset();
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::DirectWrite));
-        }
-        WaitForTabletBoot(env);
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
 
         // The replay re-sent the BSController allocation request.
         UNIT_ASSERT_VALUES_EQUAL(2u, addHostRequestCount);
+    }
+
+    // Helpers for the membership tests: count the add-host allocations (the
+    // operations carrying DefineDirectBlockGroup) and the remove-host
+    // deletions (DeleteDDisks), and optionally drop one deletion request or
+    // one allocation result to model a crash mid-flow.
+    struct TMembershipFilterState
+    {
+        ui32 AddRequestCount = 0;
+        ui32 DeleteRequestCount = 0;
+        bool DropNextDeleteRequest = false;
+        bool DropNextAllocationResult = false;
+    };
+
+    static auto MakeMembershipFilter(TMembershipFilterState & state)
+    {
+        return [&state](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() == 1) {
+                    const auto& op =
+                        msg->Record.GetDirectBlockGroupOperations(0);
+                    if (op.HasDefineDirectBlockGroup()) {
+                        ++state.AddRequestCount;
+                    }
+                    if (op.DeleteDDisksSize() > 0) {
+                        ++state.DeleteRequestCount;
+                        if (state.DropNextDeleteRequest) {
+                            state.DropNextDeleteRequest = false;
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (state.DropNextAllocationResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                state.DropNextAllocationResult = false;
+                return false;
+            }
+            return true;
+        };
+    }
+
+    static void SendAddHostToDBG(
+        TEnvironmentSetup & env,
+        ui64 partition,
+        size_t dbgId)
+    {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            // Index 0 = "compute the append position", as the mon page sends.
+            new TEvPartitionDirectPrivate::TEvAddHostToDBG(dbgId, 0),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        env.Runtime->DestroyActor(sender);
+    }
+
+    static void SendRemoveHostFromDBG(
+        TEnvironmentSetup & env,
+        ui64 partition,
+        size_t dbgId,
+        size_t hostIndex)
+    {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvRemoveHostFromDBG(
+                dbgId,
+                hostIndex),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        env.Runtime->DestroyActor(sender);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightRemoveHostAfterRestartWhenNotApplied)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Remove host 2 of the initial five; the deletion is dropped before
+        // BSController sees it, so the intent persists but nothing applies.
+        filterState.DropNextDeleteRequest = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // Restart: the persisted intent re-sends the deletion, and this time
+        // BSController applies it.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, filterState.DeleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightRemoveHostAfterRestartWhenAlreadyApplied)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // BSController applies the deletion, but the RESULT is dropped: the
+        // connections are never persisted and the intent stays.
+        filterState.DropNextAllocationResult = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // Restart: the replay re-sends the deletion; BSController answers
+        // NOT_FOUND (the ids are already deleted) and the removal is
+        // committed from the intent.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, filterState.DeleteRequestCount);
+
+        // The NOT_FOUND answer committed the removal: further membership ops
+        // are rejected until the next tablet start (no new deletion).
+        SendRemoveHostFromDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(2u, filterState.DeleteRequestCount);
+
+        // The commit also cleared the intent: the next boot replays nothing,
+        // clears LastRemove, and removes are accepted again.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        UNIT_ASSERT_VALUES_EQUAL(2u, filterState.DeleteRequestCount);
+
+        SendRemoveHostFromDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(3u, filterState.DeleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSecondRemoveHostWhileInFlight)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // The first remove sticks in flight (its result is dropped).
+        filterState.DropNextAllocationResult = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // A second membership op is rejected while the first is in flight.
+        SendRemoveHostFromDBG(env, partition, 0, 3);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldRejectAddHostWhileRemoveHostInFlight)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // The remove sticks in flight (its result is dropped).
+        filterState.DropNextAllocationResult = true;
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // An add during the in-flight remove is rejected: no allocation is
+        // requested.
+        SendAddHostToDBG(env, partition, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(0u, filterState.AddRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldRejectRemoveHostWhileAddHostInFlight)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // The add sticks in flight (its result is dropped).
+        filterState.DropNextAllocationResult = true;
+        SendAddHostToDBG(env, partition, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.AddRequestCount);
+
+        // A remove during the in-flight add is rejected: no deletion is
+        // requested.
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(0u, filterState.DeleteRequestCount);
+    }
+
+    Y_UNIT_TEST(ShouldRejectMembershipOpsWhilePendingRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TMembershipFilterState filterState;
+        runtime->FilterFunction = MakeMembershipFilter(filterState);
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // A committed remove leaves LastRemove behind until the next tablet
+        // start; further membership ops are rejected in that window.
+        SendRemoveHostFromDBG(env, partition, 0, 2);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        SendRemoveHostFromDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        SendAddHostToDBG(env, partition, 0);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(0u, filterState.AddRequestCount);
+
+        // After a restart the persisted vchunk configs are shifted and the
+        // record is cleared: membership ops are allowed again.
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        // No boot replay: the commit had cleared the intent together with
+        // storing the compacted connections.
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // The persisted compaction is real: the group is down to 4 entries,
+        // so the old last index is now out of range and sends nothing...
+        SendRemoveHostFromDBG(env, partition, 0, 4);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, filterState.DeleteRequestCount);
+
+        // ...while an in-range index is accepted again.
+        SendRemoveHostFromDBG(env, partition, 0, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(2u, filterState.DeleteRequestCount);
     }
 
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
@@ -1175,19 +1511,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
         }
 
-        {
-            scopedService.reset();
-
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::IndirectWrite));
-        }
-
-        WaitForTabletBoot(env);
-        // Wait for tablet to be restored
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::IndirectWrite));
 
         {
             const TActorId& edge = runtime->AllocateEdgeActor(
@@ -1605,15 +1932,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         // Restart and probe DBG 0 again: the persisted connections must carry
         // all three adds. Only the request is asserted - it is sent before
         // (and regardless of) BSController's capacity for one more disk.
-        {
-            scopedService.reset();
-            env.RestartNode(env.Settings.ControllerNodeId);
-            env.Sim(TDuration::Seconds(1));
-            scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::DirectWrite));
-        }
-        WaitForTabletBoot(env);
-        env.Sim(TDuration::Seconds(10));
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
 
         addHost(0, 7);
 

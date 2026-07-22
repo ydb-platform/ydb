@@ -56,6 +56,12 @@ public:
         Y_UNUSED(newHostIndex);
     }
 
+    void QueryRemoveHost(size_t directBlockGroupId, size_t hostIndex) override
+    {
+        Y_UNUSED(directBlockGroupId);
+        Y_UNUSED(hostIndex);
+    }
+
     ui64 GenerateLsn() override
     {
         return ++LsnGenerator;

@@ -204,7 +204,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
-    Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
+    // A remove-host can legally shrink the group below the default host
+    // count; the quorum bound is the real invariant.
+    Y_ASSERT(pbufferIds.size() >= QuorumDirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
         AddDDiskAndPBufferConnection(host, ddisksIds[host], pbufferIds[host]);
@@ -216,7 +218,8 @@ void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     // Catch a vchunk up as it registers: its config can lag the connections
-    // after an add-host that committed just before a restart.
+    // after an add-host that committed just before a restart. (A remove-host
+    // shifts the persisted configs at load, before any vchunk exists.)
     if (auto vChunk = weakVChunk.lock()) {
         vChunk->UpdateHostCount(GetHostCount());
     }
@@ -1327,6 +1330,33 @@ void TDirectBlockGroup::OnAddHostResult(
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
+void TDirectBlockGroup::OnRemoveHostResult(
+    const NProto::TError& error,
+    THostIndex removeIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (HasError(error)) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s RemoveHost request did not go through: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(error).c_str());
+        return;
+    }
+
+    // The removal is persisted; the runtime keeps the pre-remove numbering
+    // (the removed host is disabled, so it is never routed to) and the
+    // shifted layout applies at the next tablet start.
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost committed removeIndex=%s; applies at the next start",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(removeIndex).c_str());
+}
+
 NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
 {
     auto promise = NewPromise<TDbgSnapshot>();
@@ -1385,6 +1415,72 @@ void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
         PrintHostIndex(newHostIndex).c_str());
 
     Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
+}
+
+void TDirectBlockGroup::QueryRemoveHost(THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    if (const auto reason = ValidateRemoveHost(hostIndex); !reason.empty()) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s RemoveHost rejected (hostIndex=%s): %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostIndex(hostIndex).c_str(),
+            reason.c_str());
+        return;
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s QueryRemoveHost %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(hostIndex).c_str());
+
+    Service->QueryRemoveHost(DirectBlockGroupIndex, hostIndex);
+}
+
+TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const size_t hostCount = DDiskConnections.size();
+    if (hostIndex >= hostCount) {
+        return TStringBuilder()
+               << "host index is out of range (have " << hostCount << ")";
+    }
+    if (hostCount - 1 < QuorumDirectBlockGroupHostCount) {
+        return TStringBuilder()
+               << "removal would drop the group below the "
+               << QuorumDirectBlockGroupHostCount << "-host quorum";
+    }
+
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto& cfg = vChunk->GetConfig();
+        if (cfg.GetHostCount() != hostCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex()
+                   << " config lags the connections (" << cfg.GetHostCount()
+                   << " vs " << hostCount << ")";
+        }
+        if (!cfg.GetDisabledHosts().Get(hostIndex)) {
+            return TStringBuilder() << "host is still enabled in vchunk "
+                                    << cfg.GetVChunkIndex();
+        }
+    }
+
+    if (GetHostPBufferUsedSize(hostIndex) != 0) {
+        return "the removed host's pbuffer is not drained";
+    }
+
+    return {};
 }
 
 ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const

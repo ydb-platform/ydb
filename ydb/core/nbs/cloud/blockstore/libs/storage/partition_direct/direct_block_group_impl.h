@@ -145,6 +145,10 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    void OnRemoveHostResult(
+        const NProto::TError& error,
+        THostIndex removeIndex) override;
+
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
@@ -154,6 +158,7 @@ public:
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
     void QueryAddHost(THostIndex newHostIndex) override;
+    void QueryRemoveHost(THostIndex hostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -201,6 +206,12 @@ private:
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    // Returns the rejection reason, or an empty string when the host can be
+    // removed: no vchunk config lags the connections, the host is disabled
+    // in every vchunk, its pbuffer is drained, and the remaining host count
+    // keeps the quorum.
+    [[nodiscard]] TString ValidateRemoveHost(THostIndex hostIndex) const;
 
     [[nodiscard]] bool IsInitialized() const
     {

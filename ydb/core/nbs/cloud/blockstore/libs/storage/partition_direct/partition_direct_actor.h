@@ -68,6 +68,19 @@ private:
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
 
+    struct TRemoveHostInFlight
+    {
+        size_t DirectBlockGroupId = 0;
+        THostIndex RemoveIndex = InvalidHostIndex;
+        NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
+        NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
+        NActors::TActorId BSPipeClient;
+    };
+
+    // At most one remove-host runs at a time; mutually exclusive with
+    // AddHostInFlight.
+    std::optional<TRemoveHostInFlight> RemoveHostInFlight;
+
 public:
     TPartitionActor(
         const NActors::TActorId& tablet,
@@ -111,6 +124,31 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    // Creates an allocation request pre-filled with the pool names and the
+    // tablet id; the caller adds its queries or operations.
+    [[nodiscard]] std::unique_ptr<
+        NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+    MakeAllocateDDiskBlockGroupRequest() const;
+
+    // Validates a membership-op allocation response envelope (OK status, a
+    // single group for `dbgId`, both id lists exactly `expectedHostCount`
+    // long) and returns the group, or nullptr with a retriable `error` set -
+    // never aborts, so a malformed response cannot crash-loop the tablet:
+    // the persisted membership intent is replayed on recovery.
+    static const NKikimrBlobStorage::
+        TEvControllerAllocateDDiskBlockGroupResult::TDirectBlockGroup*
+        ValidateAllocationResponseEnvelope(
+            const NKikimr::TEvBlobStorage::
+                TEvControllerAllocateDDiskBlockGroupResult& msg,
+            size_t dbgId,
+            size_t expectedHostCount,
+            NProto::TError* error);
+
+    // Returns the DBG of a validated membership-op request. The index is
+    // produced by the partition itself, so out-of-range means a bug.
+    [[nodiscard]] IDirectBlockGroupPtr GetDirectBlockGroupChecked(
+        size_t dbgId) const;
+
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -125,6 +163,18 @@ private:
     // Applies a single add-host allocation response: validate, append the new
     // connection, and persist it via TAddHostToDBG.
     void HandleAddHostAllocationResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Sends the remove-host deletion: the removed host's ddisk and pbuffer
+    // ids, in one BSController request.
+    void SendRemoveHostRequest(const NActors::TActorContext& ctx);
+
+    // Applies a remove-host deletion response: validates it and persists the
+    // compacted connections via TCommitRemoveHost. A NOT_FOUND answer means
+    // the deletion already applied (a replay), committed the same way.
+    void HandleRemoveHostAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -176,6 +226,23 @@ private:
         const NActors::TActorContext& ctx,
         size_t dbgId,
         THostIndex newHostIndex);
+
+    void HandleRemoveHostFromDBG(
+        const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Rejects (logs + notifies the DBG) and returns false if the RemoveHost
+    // request cannot run now.
+    bool ValidateRemoveHostFromDBGRequest(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        size_t hostIndex);
+
+    void RejectRemoveHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        size_t hostIndex,
+        const TString& message);
 
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 

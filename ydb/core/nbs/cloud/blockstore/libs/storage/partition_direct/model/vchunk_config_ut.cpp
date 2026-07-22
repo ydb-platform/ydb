@@ -119,6 +119,42 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(0, *cfg.GetWatermark(newIdx));
         UNIT_ASSERT(cfg.GetDDisks().Get(newIdx));
     }
+
+    Y_UNIT_TEST(ShouldRemoveHost)
+    {
+        // 6 hosts, remove host 2: hosts 3..5 shift down to 2..4 keeping
+        // their roles, enabled bits and watermarks.
+        auto cfg = TVChunkConfig::MakeDefault(0, 6, 3);
+        cfg.DisableHost(2);
+        cfg.SetWatermark(4, 42);
+        cfg.DisableHost(5);
+        const auto role3PBuffer = cfg.GetPBufferRole(3);
+        const auto role3DDisk = cfg.GetDDiskRole(3);
+
+        cfg.RemoveHost(2);
+
+        UNIT_ASSERT_VALUES_EQUAL(5u, cfg.GetHostCount());
+        UNIT_ASSERT(cfg.GetPBufferRole(2) == role3PBuffer);
+        UNIT_ASSERT(cfg.GetDDiskRole(2) == role3DDisk);
+        UNIT_ASSERT(!cfg.GetDisabledHosts().Get(2));
+        UNIT_ASSERT(cfg.GetWatermark(3).has_value());
+        UNIT_ASSERT_VALUES_EQUAL(42u, *cfg.GetWatermark(3));
+        UNIT_ASSERT(cfg.GetDisabledHosts().Get(4));
+        // Hosts below the removed index keep their layout.
+        UNIT_ASSERT(cfg.GetPBufferRole(0) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.GetDDiskRole(1) == EHostRole::Primary);
+    }
+
+    Y_UNIT_TEST(ShouldRemoveLastHost)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 6, 3);
+        cfg.DisableHost(5);
+
+        cfg.RemoveHost(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(5u, cfg.GetHostCount());
+        UNIT_ASSERT(cfg.IsValid());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

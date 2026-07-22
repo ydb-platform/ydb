@@ -220,6 +220,14 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
+    // Result of the DBG's RemoveHost request, for logging only: the removal
+    // is applied to the runtime state at the next tablet start (the removed
+    // host is disabled by precondition, so the stale numbering is harmless
+    // until then).
+    virtual void OnRemoveHostResult(
+        const NProto::TError& error,
+        THostIndex removeIndex) = 0;
+
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
     virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
 };

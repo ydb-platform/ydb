@@ -12,7 +12,18 @@ message TDirectBlockGroupConnections {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
     }
+
+    // The last committed host removal of this DBG. Hosts above the removed
+    // index shift down by one (BSC compacts on delete); persisted vchunk
+    // configs still carrying the pre-remove host count are shifted the same
+    // way at the next tablet start, which also clears this record. While it
+    // is set, further membership ops are rejected ("pending restart").
+    message TRemoveRecord {
+        uint32 RemoveIndex = 1;
+    }
+
     repeated TConnection Connections = 1;
+    TRemoveRecord LastRemove = 2;
 }
 
 message TDirectBlockGroupsConnections {
@@ -47,4 +58,17 @@ message TTabletInfo {
 message TAddHostInProgress {
     uint32 DirectBlockGroupId = 1;
     uint32 NewHostIndex = 2;
+}
+
+// An in-flight RemoveHost, persisted so it can be finished on restart. The
+// replay re-sends the deletion of the ids below; an already-applied delete
+// answers NOT_FOUND without changing anything, and the removal is then
+// committed from this intent.
+message TRemoveHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    uint32 RemoveIndex = 2;
+    // The removed host's resources, resolved from the connections when the
+    // removal started.
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferId = 4;
 }

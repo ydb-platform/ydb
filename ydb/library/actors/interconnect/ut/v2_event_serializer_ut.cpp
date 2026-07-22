@@ -64,19 +64,14 @@ void CheckIndexedEvent(IEventHandle& outEv, ui16 channel, size_t dataLen, bool w
     }
 }
 
-std::vector<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
-    std::vector<TContiguousSpan> spans;
+std::deque<TContiguousSpan> Serialize(TEventSerializer& ser, std::vector<TRcBuf>& bufs) {
+    std::deque<TContiguousSpan> spans;
 
     for (;;) {
         if (bufs.empty() || bufs.back().size() < 1024) {
             bufs.push_back(TRcBuf::Uninitialized(65536));
         }
-        TRcBuf& buffer = bufs.back();
-
-        TMutableContiguousSpan bufferSpan = buffer.UnsafeGetContiguousSpanMut();
-        const size_t produced = ser.ProduceOutputStream(&bufferSpan, &spans);
-        UNIT_ASSERT_EQUAL(bufferSpan.data() + bufferSpan.size(), buffer.data() + buffer.size());
-        buffer.TrimFront(bufferSpan.size());
+        const size_t produced = ser.ProduceOutputStream(bufs.back(), &spans);
         if (!produced) {
             break;
         }
@@ -101,17 +96,17 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
             h->Cookie, nullptr, std::move(h->TraceId));
     }
 
-    TEventSerializer ser;
+    TEventSerializer ser(true);
     ser.Push(std::move(h));
 
     std::vector<TRcBuf> bufs;
-    std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+    std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
 
-    TEventDeserializer deser;
+    TEventDeserializer deser(TScopeId{});
     TEventProcessor processor;
     for (TContiguousSpan span : spans) {
         UNIT_ASSERT(processor.Events.empty());
-        deser.Push(TRcBuf::Copy(span), &processor);
+        deser.Push(TRcBuf::Copy(span), &processor, {});
     }
     UNIT_ASSERT(processor.Events.size() == 1);
     auto& outEv = *processor.Events.front();
@@ -164,6 +159,134 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         CheckSerializeThenDeserialize(true, true, 1000);
     }
 
+    // Feed the serialized stream to the deserializer in tiny fragments (1..3 bytes), so chunk headers and
+    // bodies straddle buffer boundaries exactly as they do with real TCP segmentation (which loopback,
+    // delivering big buffers, never triggers). Every event must still round-trip intact and in order.
+    Y_UNIT_TEST(DeserializeFromFragmentedStream) {
+        constexpr size_t numEvents = 300;
+        constexpr ui16 numChannels = 4;
+
+        auto channelOf = [](ui64 i) -> ui16 { return i % numChannels; };
+        auto dataLenOf = [](ui64 i) -> size_t { return (i % 11) * 37 + 1; };
+        auto withPayloadOf = [](ui64 i) -> bool { return i % 2; };
+
+        TEventSerializer ser(false);
+        for (ui64 i = 0; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(channelOf(i), i, dataLenOf(i), withPayloadOf(i)));
+        }
+
+        std::vector<TRcBuf> bufs;
+        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
+
+        TString stream;
+        for (const TContiguousSpan& s : spans) {
+            stream.append(s.data(), s.size());
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        std::vector<std::pair<ui16, ui64>> delivered;
+
+        size_t pos = 0;
+        while (pos < stream.size()) {
+            const size_t frag = Min<size_t>(1 + (pos % 3), stream.size() - pos);
+            deser.Push(TRcBuf::Copy(TContiguousSpan(stream.data() + pos, frag)), &processor, TActorId());
+            pos += frag;
+            while (!processor.Events.empty()) {
+                auto ev = std::move(processor.Events.front());
+                processor.Events.pop_front();
+                const ui64 index = ev->Cookie;
+                CheckIndexedEvent(*ev, channelOf(index), dataLenOf(index), withPayloadOf(index));
+                delivered.push_back({ev->GetChannel(), index});
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(delivered.size(), numEvents);
+        std::array<ui64, numChannels> nextPerChannel{};
+        for (const auto& [channel, index] : delivered) {
+            UNIT_ASSERT_VALUES_EQUAL(channelOf(index), channel);
+            UNIT_ASSERT_VALUES_EQUAL(index, nextPerChannel[channel] * numChannels + channel);
+            ++nextPerChannel[channel];
+        }
+    }
+
+    // A large event on one channel interleaves with many small events on another, so their serialized bytes
+    // end up scattered across many pipelined batches. Acknowledging (committing) the batches one at a time
+    // must never release an event whose bytes still live in a not-yet-committed batch -- otherwise the
+    // aliased payload memory is freed while a later batch still references it. That is a use-after-free that
+    // only manifests once the network actually sends those later bytes (loopback sends inline, so it hides
+    // it). We surface it by reading every not-yet-committed batch's spans after each commit -- under ASAN a
+    // premature release fails here; it also corrupts the round-trip which we verify at the end.
+    Y_UNIT_TEST(CommitDoesNotReleaseEventsWithBytesStillInFlight) {
+        auto channelOf = [](ui64 i) -> ui16 { return i == 0 ? 1 : 2; };
+        auto dataLenOf = [](ui64 i) -> size_t { return i == 0 ? 60000 : 1000; };
+
+        TEventSerializer ser(false);
+        constexpr ui64 numEvents = 41;
+        ser.Push(MakeIndexedEvent(channelOf(0), 0, dataLenOf(0), /*withPayload=*/true));
+        for (ui64 i = 1; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(channelOf(i), i, dataLenOf(i), /*withPayload=*/true));
+        }
+
+        struct TBatch {
+            TRcBuf Scratch;
+            std::deque<TContiguousSpan> Spans;
+            size_t Bytes;
+        };
+        std::vector<TBatch> batches;
+        for (;;) {
+            TRcBuf scratch = TRcBuf::Uninitialized(4096); // small scratch -> many pipelined batches
+            std::deque<TContiguousSpan> spans;
+            size_t total = 0;
+            for (;;) {
+                const size_t produced = ser.ProduceOutputStream(scratch, &spans);
+                total += produced;
+                if (produced == 0 || scratch.size() < sizeof(TEventSerializer::TChunkHeader) + sizeof(ui32)) {
+                    break;
+                }
+            }
+            if (total == 0) {
+                break;
+            }
+            batches.push_back({std::move(scratch), std::move(spans), total});
+        }
+
+        // gather the full stream up front (all spans still reference live memory here) for a round-trip check
+        TString stream;
+        for (const TBatch& b : batches) {
+            for (const TContiguousSpan& s : b.Spans) {
+                stream.append(s.data(), s.size());
+            }
+        }
+
+        // commit the batches one at a time; after each commit, touch every span that has not been committed
+        // yet -- these must all still point to live memory
+        volatile ui64 acc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            ser.CommitProducedBytes(batches[i].Bytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].Spans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+        }
+        Y_UNUSED(acc);
+
+        // the stream captured before any commit must still round-trip to the original events
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(stream.data(), stream.size())), &processor, TActorId());
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        while (!processor.Events.empty()) {
+            auto ev = std::move(processor.Events.front());
+            processor.Events.pop_front();
+            const ui64 index = ev->Cookie;
+            CheckIndexedEvent(*ev, channelOf(index), dataLenOf(index), /*withPayload=*/true);
+        }
+    }
+
     // Push a lot of events into one channel and only a few into another one, then serialize the whole thing into a
     // stream and deserialize it back. Verifies that:
     //   * every event is delivered exactly once, in FIFO order within each channel;
@@ -178,7 +301,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         constexpr size_t floodDataLen = 512;
         constexpr size_t otherDataLen = 8;
 
-        TEventSerializer ser;
+        TEventSerializer ser(true);
         for (ui64 i = 0; i < numFlood; ++i) {
             ser.Push(MakeIndexedEvent(floodChannel, i, floodDataLen, true /*withPayload*/));
         }
@@ -187,10 +310,10 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
 
         std::vector<TRcBuf> bufs;
-        std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+        std::deque<TContiguousSpan> spans = Serialize(ser, bufs);
 
         // feed the produced stream to the deserializer chunk by chunk and record the exact delivery order
-        TEventDeserializer deser;
+        TEventDeserializer deser(TScopeId{});
         TEventProcessor processor;
 
         struct TDelivered {
@@ -200,7 +323,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         std::vector<TDelivered> delivered;
 
         for (TContiguousSpan span : spans) {
-            deser.Push(TRcBuf::Copy(span), &processor);
+            deser.Push(TRcBuf::Copy(span), &processor, {});
             while (!processor.Events.empty()) {
                 auto ev = std::move(processor.Events.front());
                 processor.Events.pop_front();

@@ -54,7 +54,8 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "",
-            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false) {
+            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false,
+            const TVector<TString>& columnTables = {}) {
 
         TTablesWithAttrs tables;
 
@@ -146,6 +147,11 @@ namespace {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             }, userAttrs);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+
+        for (const auto& table : columnTables) {
+            TestCreateColumnTable(runtime, schemeshardId, ++txId, dbName, table);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -5295,5 +5301,93 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             NLs::PathExist,
             NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
         });
+    }
+
+    Y_UNIT_TEST(ShouldWriteBillRecordOnColumnTableServerlessDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", true, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        if (billRecords.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&billRecords](IEventHandle&) -> bool {
+                return !billRecords.empty();
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"cloud_id\":\"CLOUD_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"folder_id\":\"FOLDER_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"resource_id\":\"DATABASE_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"schema\":\"ydb.serverless.requests.v1\"");
+    }
+
+    Y_UNIT_TEST(ShouldNotWriteBillRecordOnColumnTableCommonDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", false, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        UNIT_ASSERT(billRecords.empty());
     }
 }

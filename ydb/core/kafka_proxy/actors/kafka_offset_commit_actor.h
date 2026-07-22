@@ -53,11 +53,13 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void Die(const TActorContext& ctx) override;
 
     STATEFN(StateWork) {
-        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);

@@ -48,7 +48,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 12db9abedf3e0b98a87d6f4ec1377a19
 BELONGS ya.make
@@ -61,9 +61,9 @@ BELONGS ya.make
         expat.h [9:23]
         expat_external.h [9:19]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok.h [9:15]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 16cc365f87360f9e773cd8812039915f
 BELONGS ya.make
@@ -73,8 +73,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
-        lib/xmltok_impl.c [9:20]
+        lib/xmlparse.c [9:53]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 17566be0ee85deadbd5b2fcedc8b66a9
 BELONGS ya.make
@@ -84,7 +84,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1916cbefc2e0a780a3d503ba26f3780a
 BELONGS ya.make
@@ -107,7 +107,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2309e9d42c2779decb776323d1f5dabd
 BELONGS ya.make
@@ -117,8 +117,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
-        lib/xmltok.c [9:28]
+        lib/xmlparse.c [9:53]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 262c58e3a627f5cee77a882379e1364f
 BELONGS ya.make
@@ -139,7 +139,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d8e554003b116aae13ce1d358a8a9b9
+BELONGS ya.make
+    License text:
+           Copyright (c) 2022 Sebastian Pipping <sebastian@pipping.org>
+           Licensed under the MIT license:
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/xcsinc.c [9:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 338b8ad8ee9b8449a90a88a0559aefd9
 BELONGS ya.make
@@ -149,7 +161,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 347b7c5a6d0cfaa5712b5fb2bfd1a69a
 BELONGS ya.make
@@ -180,7 +192,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4010f67351b9e656cc500aa367c0c393
 BELONGS ya.make
@@ -190,9 +202,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4588cbaabde7eebe28cc29740402f156
 BELONGS ya.make
@@ -202,8 +214,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok.c [9:29]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 477adc1652fe6ac004ea66fbbcc0bb19
 BELONGS ya.make
@@ -214,8 +226,8 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/random_getrandom.c [9:13]
-        lib/xmlparse.c [9:50]
-        lib/xmltok.c [9:28]
+        lib/xmlparse.c [9:53]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4ffe0aad4a07d95c6b3c7d06e1dfbead
 BELONGS ya.make
@@ -225,7 +237,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 50da2a76d12ee3df6d928d81ca59a715
 BELONGS ya.make
@@ -245,7 +257,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5619621de1e7b76391ee5fff9c1b1f91
 BELONGS ya.make
@@ -255,7 +267,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 576486d7fb5eeab148dcf39027acec46
 BELONGS ya.make
@@ -265,7 +277,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 581b53ae6f0fb8a0cc30c73b46bc3441
 BELONGS ya.make
@@ -308,7 +320,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat.h [9:23]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5fe78d330bca84f8e39670e48c92ba39
 BELONGS ya.make
@@ -319,7 +331,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/internal.h [28:36]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 60e5da68428d71447ddd4bd7750453bb
 BELONGS ya.make
@@ -329,7 +341,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 610290a5946ae0c99de2de99646ba086
 BELONGS ya.make
@@ -349,7 +361,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6451d5e490271b354ad3b567c7a03423
 BELONGS ya.make
@@ -360,7 +372,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/random_rand_s.c [9:14]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 647bb74c2d45ce0423d4c9a6b28bddac
 BELONGS ya.make
@@ -380,7 +392,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 66d3ecc8836b1f9801bfad98582d2a32
 BELONGS ya.make
@@ -390,7 +402,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7588a9020c401c85f6b542a5629c0c92
 BELONGS ya.make
@@ -410,7 +422,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7c09099ef5f35bf3be4611e6cbb14510
 BELONGS ya.make
@@ -420,7 +432,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7d65e46a306fed19dd12ba56b69d764c
 BELONGS ya.make
@@ -440,9 +452,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok_ns.c [9:16]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 868bf74335c8c4c3a6c576a3120e708c
@@ -484,12 +496,12 @@ BELONGS ya.make
         lib/nametab.h [9:11]
         lib/utf8tab.h [9:13]
         lib/winconfig.h [9:14]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
         lib/xmlrole.h [9:14]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok.h [9:15]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
         lib/xmltok_impl.h [9:12]
         lib/xmltok_ns.c [9:16]
 
@@ -503,7 +515,7 @@ BELONGS ya.make
     Files with this license:
         lib/winconfig.h [9:14]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok_ns.c [9:16]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 962bda2bd5ce73f8fa7de2620a3507f9
@@ -516,6 +528,16 @@ BELONGS ya.make
     Files with this license:
         lib/xmltok.h [9:15]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 9842d67f5d734f4ca2f5f6c1c52393fe
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/xmlparse.c [9:53]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 99dbe0c5cacb0e3d1bc5b15bef337ea4
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -527,10 +549,10 @@ BELONGS ya.make
         lib/internal.h [28:36]
         lib/random_rand_s.c [9:14]
         lib/random_rand_s.h [9:11]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok.c [9:29]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9b348497698951665d1e43c1d376a510
 BELONGS ya.make
@@ -540,7 +562,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9fdb85dcaaf74d518b27233b48fffa52
 BELONGS ya.make
@@ -552,7 +574,7 @@ BELONGS ya.make
     Files with this license:
         expat.h [9:23]
         expat_external.h [9:19]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a0fdd1392c0b9b2558b9ccfe44592143
 BELONGS ya.make
@@ -574,7 +596,7 @@ BELONGS ya.make
     Files with this license:
         expat.h [9:23]
         lib/internal.h [28:36]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a5c66b2d6998a1fbabcc4f2885ad5707
 BELONGS ya.make
@@ -584,7 +606,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a6a07a1f1768704011ca547d57a193f2
 BELONGS ya.make
@@ -594,7 +616,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL aa19fc04b7b0134a0a4b71a6c182c1ae
 BELONGS ya.make
@@ -605,7 +627,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat.h [9:23]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL aafe06df8255f48781ac9d4e96e1ea4e
 BELONGS ya.make
@@ -616,9 +638,9 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat.h [9:23]
-        lib/xmlparse.c [9:50]
-        lib/xmltok.c [9:28]
-        lib/xmltok_impl.c [9:20]
+        lib/xmlparse.c [9:53]
+        lib/xmltok.c [9:29]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL abbaf6167a20f6ba0eee322937821c15
 BELONGS ya.make
@@ -628,7 +650,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ac721fcd634b3e5674a847f5ed2f1c8e
 BELONGS ya.make
@@ -638,7 +660,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL acbc3573ff7fdf431f94f6aea99de1e0
 BELONGS ya.make
@@ -648,7 +670,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ad31071eb61955b9cdd9e0a463d6714f
 BELONGS ya.make
@@ -658,7 +680,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b667d591a50b1e424d66b58f6e0ff4a1
 BELONGS ya.make
@@ -668,7 +690,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b927d5afef47e3ae01d339429012d6a7
 BELONGS ya.make
@@ -719,12 +741,12 @@ BELONGS ya.make
         lib/iasciitab.h [9:13]
         lib/latin1tab.h [9:13]
         lib/utf8tab.h [9:13]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
         lib/xmlrole.h [9:14]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok.h [9:15]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
         lib/xmltok_impl.h [9:12]
         lib/xmltok_ns.c [9:16]
 
@@ -751,7 +773,22 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d363fbc5cd02e7b4ee3c5c0d9fca8733
+BELONGS ya.make
+    License text:
+           Copyright (c) 2026 Nick Begg <nick@stunttruck.net>
+           Licensed under the MIT license:
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/fallthrough.h [9:10]
+        lib/xmlparse.c [9:53]
+        lib/xmltok.c [9:29]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d548c6beaeae204247905b60d5feff91
 BELONGS ya.make
@@ -761,8 +798,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
-        lib/xmltok_impl.c [9:20]
+        lib/xmlparse.c [9:53]
+        lib/xmltok_impl.c [9:21]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d9ac29affff64c14b3c82b78ed157a77
 BELONGS ya.make
@@ -772,9 +809,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
         lib/xmlrole.c [9:20]
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL dd3c5623e58aa85a367a6638299f50f3
 BELONGS ya.make
@@ -784,7 +821,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL dd3e49797101e1ae2e966f0ebdd58da4
 BELONGS ya.make
@@ -817,10 +854,10 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/random_arc4random.h [9:10]
-        lib/random_arc4random_buf.c [9:10]
+        lib/random_arc4random_buf.c [9:11]
         lib/random_arc4random_buf.h [9:10]
         lib/random_dev_urandom.h [9:10]
-        lib/random_getentropy.c [9:10]
+        lib/random_getentropy.c [9:11]
         lib/random_getentropy.h [9:10]
         lib/random_getrandom.h [9:10]
         lib/random_rand_s.h [9:11]
@@ -833,7 +870,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e2f8f506923a26765706e1ad8cc8edc6
 BELONGS ya.make
@@ -843,7 +880,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e3d6c1b6030b59aad9996cc0a9efeda5
 BELONGS ya.make
@@ -853,7 +890,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e526eb605bd716769dd1ed15786af827
 BELONGS ya.make
@@ -874,8 +911,11 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat_external.h [9:19]
+        lib/memory_sanitizer.h [9:10]
         lib/random_arc4random.c [9:11]
+        lib/random_arc4random_buf.c [9:11]
         lib/random_dev_urandom.c [9:11]
+        lib/random_getentropy.c [9:11]
         lib/random_getrandom.c [9:13]
         lib/random_rand_s.c [9:14]
 
@@ -888,7 +928,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/random_getrandom.c [9:13]
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef0dda0153a00710149f327147a79b7f
 BELONGS ya.make
@@ -939,7 +979,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f792720cb266393d3d3fb2199660c4ea
 BELONGS ya.make
@@ -949,8 +989,18 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
+        lib/xmltok.c [9:29]
         lib/xmltok.h [9:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fddb9185e786dd5d20eac5402cf4f745
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fea018c6e4e19bc6bd4ac263c015567a
 BELONGS ya.make
@@ -967,7 +1017,7 @@ BELONGS ya.make
         lib/utf8tab.h [9:13]
         lib/xmlrole.h [9:14]
         lib/xmltok.h [9:15]
-        lib/xmltok_impl.c [9:20]
+        lib/xmltok_impl.c [9:21]
         lib/xmltok_ns.c [9:16]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ff4131ca4bcbb6079f40a140651275ac
@@ -978,7 +1028,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmlparse.c [9:50]
+        lib/xmlparse.c [9:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ffabe442e64111946b696c0384a52a77
 BELONGS ya.make

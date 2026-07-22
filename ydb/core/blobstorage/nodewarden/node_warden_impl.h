@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -98,6 +99,8 @@ namespace NKikimr::NStorage {
         bool Temporary = false;
         ui32 ExpectedSlotCount = 0;
         ui32 SlotSizeInUnits = 0;
+        ui64 ExpectedSlotSize = 0;
+        TString PDiskConfigWarning;
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
@@ -313,8 +316,10 @@ namespace NKikimr::NStorage {
             return LocalPDiskInitOwnerRound;
         }
 
-        TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
-        static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots);
+        TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
+            TString *configWarning = nullptr);
+        static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
+            ui64 unitSizeInBytes, ui32 maxSlots);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
@@ -459,6 +464,8 @@ namespace NKikimr::NStorage {
             // Runtime configuration of VDisk.
             struct TRuntimeData {
                 TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+                TActorId ActorId;
+                TActorId ServiceId;
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;

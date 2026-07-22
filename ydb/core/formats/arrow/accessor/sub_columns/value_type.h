@@ -13,4 +13,7 @@ enum class EValueType : ui8 {
     String = 3,
 };
 
+// The Others store holds and reads every value as BinaryJson, whatever its logical type.
+inline constexpr EValueType OthersExplicitBinaryJson = EValueType::BinaryJson;
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

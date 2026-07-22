@@ -9,7 +9,9 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <util/generic/ylimits.h>
+#include <util/stream/str.h>
 #include <util/string/cast.h>
+#include <util/string/escape.h>
 
 #include <cmath>
 #include <limits>
@@ -19,8 +21,11 @@ namespace NKikimr::NArrow::NAccessor {
 namespace {
 
 NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& json) {
-    auto result = NBinaryJson::SerializeToBinaryJson(NJson::WriteJson(&json, false));
-    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(result));
+    const auto dumpedJson = WriteJsonRoundTripSafe(json);
+    auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
+    if (std::holds_alternative<TString>(result)) {
+        AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
+    }
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }
 
@@ -157,6 +162,15 @@ std::optional<TStringBuf> TJsonValueView::ScalarFromBinaryJson() const {
         case NBinaryJson::EEntryType::Container:
             return std::nullopt;
     }
+}
+
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json) {
+    NJson::TJsonWriterConfig config;
+    // avoid precision loss on double conversion
+    config.FloatToStringMode = PREC_AUTO;
+    TStringStream dumpedJson;
+    NJson::WriteJson(&dumpedJson, &json, config);
+    return dumpedJson.Str();
 }
 
 } // namespace NKikimr::NArrow::NAccessor

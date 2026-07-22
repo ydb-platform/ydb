@@ -176,8 +176,6 @@ namespace NKikimr::NStorage {
         }
         const auto& ss = bsConfig.GetServiceSet();
 
-        const auto& smConfig = config.GetSelfManagementConfig();
-
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
         for (const auto& vdisk : ss.GetVDisks()) {
@@ -207,14 +205,23 @@ namespace NKikimr::NStorage {
                     std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
                         ? std::make_optional(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId))
                         : std::nullopt;
-                    Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
-                        TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                        smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
-                        smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
-                        replacedDisks, forbid, maxSlotSize,
-                        &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
-                        cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId,
-                        smConfig.GetStaticGroupSelfHealAllowedNodes(), cmd.GetFromSelfHeal());
+                    Self->AllocateStaticGroup({
+                        .Config = &config,
+                        .GroupId = vdiskId.GroupID,
+                        .GroupGeneration = vdiskId.GroupGeneration + 1,
+                        .GroupType = TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
+                        .ReplacedDisks = std::move(replacedDisks),
+                        .ForbiddenPDisks = std::move(forbid),
+                        .RequiredSpace = static_cast<i64>(maxSlotSize),
+                        .BaseConfig = &BaseConfig.value(),
+                        .ConvertToDonor = cmd.GetConvertToDonor(),
+                        .IgnoreVSlotQuotaCheck = cmd.GetIgnoreVSlotQuotaCheck(),
+                        .AllowUnusableDisks = cmd.GetAllowUnusableDisks(),
+                        .IsSelfHealReasonDecommit = cmd.GetIsSelfHealReasonDecommit(),
+                        .BridgePileId = bridgePileId,
+                        .BridgeProxyGroupId = bridgeProxyGroupId,
+                        .ApplySelfHealNodeAllowList = cmd.GetFromSelfHeal(),
+                    });
                 } catch (const TExConfigError& ex) {
                     YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
                         {"marker", "NWDC76"},

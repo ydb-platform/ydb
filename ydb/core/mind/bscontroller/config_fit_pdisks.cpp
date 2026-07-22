@@ -105,18 +105,16 @@ namespace NKikimr {
                 }
                 // run ExtractConfig as the very last step
                 const ui32 oldSlotSizeInUnits = pdiskInfo->SlotSizeInUnits;
+                const bool oldHasFixedSlotSize = pdiskInfo->GetEffectiveExpectedSlotSize() != 0;
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
-                if (pdiskInfo->SlotSizeInUnits != oldSlotSizeInUnits) {
-                    ui32 numActiveSlots = 0;
-                    for (const auto& [vslotId, vslot] : pdiskInfo->VSlotsOnPDisk) {
-                        if (vslot->IsBeingDeleted()) {
-                            continue;
-                        }
-                        const TBlobStorageController::TGroupInfo *group = state.Groups.Find(vslot->GroupId);
-                        Y_ABORT_UNLESS(group);
-                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdiskInfo->SlotSizeInUnits);
-                    }
-                    pdiskInfo->NumActiveSlots = numActiveSlots;
+                // NumActiveSlots is a sum of owner weights, so it must be recomputed when the
+                // config change affects the weight inputs: SlotSizeInUnits or the effective
+                // expected slot size being set/unset
+                if (pdiskInfo->SlotSizeInUnits != oldSlotSizeInUnits ||
+                        (pdiskInfo->GetEffectiveExpectedSlotSize() != 0) != oldHasFixedSlotSize) {
+                    pdiskInfo->NumActiveSlots = pdiskInfo->ComputeNumActiveSlots([&](TGroupId groupId) {
+                        return state.Groups.Find(groupId);
+                    });
                 }
             }
         }

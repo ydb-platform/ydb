@@ -2383,5 +2383,459 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Cerr << "=== Successfully cancelled at stage: " << stage.StageName << " ===" << Endl;
         }
     }
+
+    Y_UNIT_TEST(MoveTableFailsWhileValidating) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString movedTablePath = root + "/TableMoved";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Block validation requests to datashards so that the operation is stuck
+        // in the Validating stage (the table lock is already held at this point).
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
+
+        // While SetNotNull is stuck validating shards (table is locked), attempt to move
+        // the table. MoveTable must be rejected immediately at Propose (no TxState is even
+        // created for it), because CheckLocks() sees the path is locked by the SetNotNull
+        // operation and MoveTable's transaction carries no matching LockGuard.
+        ui64 moveTxId = ++txId;
+        TestMoveTable(runtime, moveTxId, tablePath, movedTablePath,
+            {NKikimrScheme::StatusMultipleModifications});
+
+        // The table must still be exactly where it was - move never actually started.
+        TestDescribeResult(DescribePath(runtime, tablePath), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, movedTablePath), {NLs::PathNotExist});
+
+        // Let SetNotNull finish normally.
+        validateBlocker.Stop();
+        validateBlocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        // Now that the lock is released, the very same move must succeed.
+        TestMoveTable(runtime, ++txId, tablePath, movedTablePath);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, tablePath), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, movedTablePath), {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(SetNotNullFailsWhileMoveTableInProgress) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString movedTablePath = root + "/TableMoved";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep MoveTable stuck in ConfigureParts by blocking the flat scheme tx
+        // it sends to the source table's datashards. By the time this event is
+        // observed, MoveTable's local Propose has already committed - the source
+        // path is already marked EPathStateMoving.
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> moveProposeBlocker(runtime);
+
+        ui64 moveTxId = ++txId;
+        AsyncMoveTable(runtime, moveTxId, tablePath, movedTablePath);
+
+        runtime.WaitFor("block move propose to datashards", [&]{ return moveProposeBlocker.size() > 0; });
+
+        // The source path is now "under operation" (moving). SetNotNull's internal
+        // CreateLock sub-operation must be rejected right away with
+        // StatusMultipleModifications (translated to Ydb::StatusIds::OVERLOADED),
+        // so the whole SetColumnConstraint request fails and never gets to lock the
+        // table or validate anything.
+        auto response = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE (while moving): " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::OVERLOADED,
+            response.ShortDebugString());
+
+        // Column must remain nullable - SetNotNull never actually ran.
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        // Let MoveTable finish normally.
+        moveProposeBlocker.Stop();
+        moveProposeBlocker.Unblock();
+        env.TestWaitNotification(runtime, moveTxId);
+
+        TestDescribeResult(DescribePath(runtime, tablePath), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, movedTablePath), {NLs::PathExist});
+
+        // Now that the move is done, SetNotNull on the (now moved) table must succeed.
+        auto secondResponse = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            root,
+            movedTablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            secondResponse.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            secondResponse.ShortDebugString());
+
+        env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, movedTablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(CopyTableNoBackupWhileValidating) {
+        /*
+            The test is based on the following idea.
+
+            There are essentially two different ways CopyTable can be invoked:
+
+            1. As a standalone operation initiated by the user.
+            2. Internally, as part of a Backup meta-operation.
+
+            This test covers the first scenario.        
+
+            For a standalone CopyTable, it is fine to fail the request and tell the user that the table is currently locked
+            by another long-running operation. In that scenario, CopyTable is a single explicit operation that the user can simply retry.
+            This is also the case where CopyTable is expected to check whether the table is locked by other schema operations.
+        */
+
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString copyTablePath = root + "/TableBackup";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
+
+        ui64 copyTx1 = ++txId;
+        TestConsistentCopyTables(runtime, copyTx1, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: false
+            }
+        )", {NKikimrScheme::StatusMultipleModifications});
+        env.TestWaitNotification(runtime, copyTx1);
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathNotExist});
+
+        validateBlocker.Stop();
+        validateBlocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        ui64 copyTx2 = ++txId;
+        TestConsistentCopyTables(runtime, copyTx2, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: false
+            }
+        )");
+        env.TestWaitNotification(runtime, copyTx2);
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
+        TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(CopyTableWithBackupWhileValidating) {
+        /*
+            The test is based on the following idea.
+
+            There are essentially two different ways CopyTable can be invoked:
+
+            1. As a standalone operation initiated by the user.
+            2. Internally, as part of a Backup meta-operation.
+
+            This test covers the second scenario.
+
+            When CopyTable is invoked as part of Backup, it should not fail just because the table is locked by another
+            long-running operation. If ConsistentCopyTable gets blocked this way during a backup, it may lead to a large
+            number of retries. Each retry effectively means trying to copy all tables in the database again, which is a very
+            expensive and long-running operation.
+
+            Therefore, the practical way to avoid such retries is to make the new long-running operation pause and wait
+            until the backup's CopyTable finishes.
+        */
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString copyTablePath = root + "/TableBackup";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
+
+        ui64 copyTx = ++txId;
+        TestConsistentCopyTables(runtime, copyTx, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, copyTx);
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
+
+        validateBlocker.Stop();
+        validateBlocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", false}});
+
+        {
+            const auto describeResult = DescribePath(runtime, tablePath);
+            const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
+            for (const auto& column : columns) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetSetNotNullInProgress(), false);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SetNotNullFailsWhileCopyTableInProgress, IsBackup) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString copyTablePath = root + "/TableCopy";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep CopyTable stuck in ConfigureParts by blocking the flat scheme tx
+        // it sends to the source table's datashards. By the time this event is
+        // observed, CopyTable's local Propose has already committed - the source
+        // path is already marked EPathStateCopying.
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> copyProposeBlocker(runtime);
+
+        ui64 copyTxId = ++txId;
+        if (IsBackup) {
+            AsyncConsistentCopyTables(runtime, copyTxId, root, R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Table"
+                    DstPath: "/MyRoot/TableCopy"
+                    IsBackup: true
+                }
+            )");
+        } else {
+            AsyncConsistentCopyTables(runtime, copyTxId, root, R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Table"
+                    DstPath: "/MyRoot/TableCopy"
+                    IsBackup: false
+                }
+            )");
+        }
+
+        runtime.WaitFor("block copy propose to datashards", [&]{ return copyProposeBlocker.size() > 0; });
+
+        // The source path is now "under operation" (copying). SetNotNull's internal
+        // CreateLock sub-operation must be rejected right away with
+        // StatusMultipleModifications (translated to Ydb::StatusIds::OVERLOADED),
+        // so the whole SetColumnConstraint request fails and never gets to lock the
+        // table or validate anything.
+        auto response = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE (while copying): " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::OVERLOADED,
+            response.ShortDebugString());
+
+        // Column must remain nullable - SetNotNull never actually ran.
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        // Let CopyTable finish normally.
+        copyProposeBlocker.Stop();
+        copyProposeBlocker.Unblock();
+        env.TestWaitNotification(runtime, copyTxId);
+
+        TestDescribeResult(DescribePath(runtime, tablePath), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
+
+        // Now that the copy is done, SetNotNull on the source table must succeed.
+        auto secondResponse = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            secondResponse.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            secondResponse.ShortDebugString());
+
+        env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(SetNotNullWithUsualSchemeOperation) {
+        // As an example of a 'usual' scheme operation, this test uses TRUNCATE TABLE.
+
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> truncateTableBlocker(runtime);
+        const ui64 truncateTxId = ++txId;
+        AsyncTruncateTable(runtime, truncateTxId, root, "Table", TTestTxConfig::SchemeShard);
+        runtime.WaitFor("block truncate propose to datashards", [&]{ return truncateTableBlocker.size() > 0; });
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::OVERLOADED,
+            response.ShortDebugString());
+
+        // Column must remain nullable - SetNotNull never actually ran.
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        truncateTableBlocker.Stop();
+        truncateTableBlocker.Unblock();
+        env.TestWaitNotification(runtime, truncateTxId);
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)
 

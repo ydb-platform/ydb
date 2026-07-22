@@ -181,6 +181,7 @@ namespace NKikimr::NBsController {
                 auto *cmd = record.MutableReassignGroupDisk();
                 VDiskIDFromVDiskID(*VDiskToReplace, cmd->MutableVDiskId());
                 cmd->SetConvertToDonor(DonorMode);
+                cmd->SetAllowUnusableDisks(true);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
                 cmd->SetFromSelfHeal(true);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());

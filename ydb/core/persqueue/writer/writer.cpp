@@ -178,7 +178,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         NKikimrPQ::TWriteId proto;
         auto* deferred = proto.MutableDeferredPublicationApi();
         deferred->SetIntPublicationId(Opts.DeferredPublish->IntPublicationId);
-        deferred->SetExtPublicationId(Opts.DeferredPublish->ExtPublicationId);
+        if (Opts.DeferredPublish->ExtPublicationId) {
+            deferred->SetExtPublicationId(*Opts.DeferredPublish->ExtPublicationId);
+        }
         return TWriteId(std::move(proto));
     }
 
@@ -318,7 +320,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        YDB_LOG_DEBUG("Dump LOGPREFIX, sessionId, txId, writeId",
+        YDB_LOG_DEBUG("",
             {"logPrefix", LOG_PREFIX},
             {"sessionId", Opts.SessionId},
             {"txId", Opts.TxId},

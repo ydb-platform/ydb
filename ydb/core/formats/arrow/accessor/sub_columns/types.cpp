@@ -60,6 +60,7 @@ public:
     std::shared_ptr<arrow::DataType> GetArrowType() const override {
         return arrow::binary();
     }
+
     ui32 GetElementSize(const arrow::Array& array, const i64 index) const override {
         return BinaryView(array, index).size();
     }

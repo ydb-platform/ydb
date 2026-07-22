@@ -11,6 +11,18 @@ using namespace NWorkload;
 using namespace NYdb;
 
 
+TIntrusivePtr<IYdbSetup> MakeYdbWithAdvancedDisabled() {
+    return TYdbSetupSettings()
+        .EnableHasPredicatesInResourcePoolClassifiers(false)
+        .Create();
+}
+
+TIntrusivePtr<IYdbSetup> MakeYdbWithRejectActionDisabled() {
+    return TYdbSetupSettings()
+        .EnableRejectActionInResourcePoolClassifiers(false)
+        .Create();
+}
+
 void StartTestConcurrentQueryLimit(const ui64 activeCountLimit, const ui64 queueSize, const ui64 nodeCount = 1) {
     auto ydb = TYdbSetupSettings()
         .NodeCount(nodeCount)
@@ -2064,5 +2076,155 @@ Y_UNIT_TEST_SUITE(DefaultPoolSettings) {
 }
 
 
+
+Y_UNIT_TEST_SUITE(HasPredicatesClassifierFeatureFlagDisabled) {
+
+    Y_UNIT_TEST(CreateWithHasFullScanIsRejected) {
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_full_scan WITH (
+                RESOURCE_POOL="default",
+                HAS_FULL_SCAN='/Root/.*',
+                RANK=100
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Advanced resource pool classifier properties");
+    }
+
+    Y_UNIT_TEST(CreateWithHasPathIsRejected) {
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_has_path WITH (
+                RESOURCE_POOL="default",
+                HAS_PATH='/Root/mydb/.*',
+                RANK=200
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Advanced resource pool classifier properties");
+    }
+
+    Y_UNIT_TEST(CreateWithHasStreamIsRejected) {
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_has_stream WITH (
+                RESOURCE_POOL="default",
+                HAS_STREAM='true',
+                RANK=300
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Advanced resource pool classifier properties");
+    }
+
+    Y_UNIT_TEST(CreateWithHasAppNameIsRejected) {
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_has_app_name WITH (
+                RESOURCE_POOL="default",
+                HAS_APP_NAME='myapp',
+                RANK=350
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Advanced resource pool classifier properties");
+    }
+
+    Y_UNIT_TEST(AlterWithHasFullScanIsRejected) {
+        // Create a basic classifier first (no advanced props) — should succeed.
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_basic WITH (
+                RESOURCE_POOL="default",
+                RANK=500
+            );
+        )");
+
+        // ALTER to add HAS_FULL_SCAN — should fail.
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            ALTER RESOURCE POOL CLASSIFIER cl_basic SET (
+                HAS_FULL_SCAN='/Root/.*'
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Advanced resource pool classifier properties");
+    }
+
+    Y_UNIT_TEST(CreateWithoutAdvancedPropsSucceeds) {
+        // Plain classifier must still work even when the flag is off.
+        auto ydb = MakeYdbWithAdvancedDisabled();
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_plain WITH (
+                RESOURCE_POOL="default",
+                RANK=600
+            );
+        )");
+        // If we get here without an exception, the creation succeeded.
+    }
+}
+
+Y_UNIT_TEST_SUITE(HasPredicatesFeatureFlagEnabled) {
+
+    Y_UNIT_TEST(CreateWithHasFullScanSucceeds) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_full_scan_ok WITH (
+                RESOURCE_POOL="default",
+                HAS_FULL_SCAN='/Root/.*',
+                RANK=100
+            );
+        )");
+    }
+}
+
+Y_UNIT_TEST_SUITE(RejectActionClassifierFeatureFlagDisabled) {
+
+    Y_UNIT_TEST(CreateWithActionRejectIsRejected) {
+        auto ydb = MakeYdbWithRejectActionDisabled();
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_action_reject WITH (
+                ACTION="reject",
+                RANK=400
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
+            "Resource pool classifier action property is disabled");
+    }
+}
+
+Y_UNIT_TEST_SUITE(RejectActionFeatureFlagEnabled) {
+
+    Y_UNIT_TEST(CreateWithActionRejectSucceeds) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER cl_reject_ok WITH (
+                ACTION="reject",
+                RANK=200
+            );
+        )");
+    }
+}
 
 }  // namespace NKikimr::NKqp

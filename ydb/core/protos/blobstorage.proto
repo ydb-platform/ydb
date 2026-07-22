@@ -1059,12 +1059,20 @@ message TNodeWardenServiceSet {
         optional uint64 TotalResponseBytesPerSecond = 6; // quota for generated responses at network layer
     }
 
+    message TFailureInjectionConfig {
+        optional double FailureProbability = 1; // positive values enable failure injection
+        optional bool IncludeStaticGroups = 2; // also inject failures in request to static groups
+        optional uint64 RandomSeed = 3;
+        optional NKikimrProto.EReplyStatus ErrorReplyStatus = 4 [default = ERROR];
+    }
+
     repeated TPDisk PDisks = 1;
     repeated TVDisk VDisks = 2;
     repeated NKikimrBlobStorage.TGroupInfo Groups = 3;
     repeated uint64 AvailabilityDomains = 4;
     optional TReplBrokerConfig ReplBrokerConfig = 5;
     optional bool EnableProxyMock = 7;
+    optional TFailureInjectionConfig FailureInjectionConfig = 8;
 }
 
 message TNodeWardenCache {

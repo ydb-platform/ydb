@@ -10,6 +10,7 @@
 #include <ydb/public/api/protos/draft/ydb_topic_deferred_publish.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publish_ack_tracker.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/transaction.h>
 
 namespace NYdb::inline Dev::NTopic::NDeferredPublish {
 
@@ -24,6 +25,13 @@ TStatus MakeBadRequestStatus(const std::string& message) {
 template <typename TResult>
 NThreading::TFuture<TResult> MakeBadRequestFuture(const std::string& message) {
     return NThreading::MakeFuture(TResult(MakeBadRequestStatus(message)));
+}
+
+NThreading::TFuture<TStatus> WaitAcksIfNeeded(const TDeferredPublication& publication) {
+    if (publication.AckState) {
+        return publication.AckState->WaitAllAcks();
+    }
+    return NThreading::MakeFuture(MakeCommitTransactionSuccess());
 }
 
 TPublicationSummary FromProto(const PublicationSummary& summary) {
@@ -61,15 +69,19 @@ TPublicationDescription FromProto(const DescribePublicationResult& result) {
 
 } // namespace
 
-TBeginPublicationResult::TBeginPublicationResult(TStatus&& status, uint64_t intPublicationId)
+TBeginPublicationResult::TBeginPublicationResult(TStatus&& status, TDeferredPublication&& publication)
     : TStatus(std::move(status))
-    , IntPublicationId_(intPublicationId)
+    , Publication_(std::move(publication))
 {
 }
 
+const TDeferredPublication& TBeginPublicationResult::GetPublication() const {
+    CheckStatusOk("TBeginPublicationResult::GetPublication");
+    return Publication_;
+}
+
 uint64_t TBeginPublicationResult::GetIntPublicationId() const {
-    CheckStatusOk("TBeginPublicationResult::GetIntPublicationId");
-    return IntPublicationId_;
+    return GetPublication().IntPublicationId;
 }
 
 TListPublicationsResult::TListPublicationsResult(TStatus&& status, std::vector<TPublicationSummary>&& publications)
@@ -122,14 +134,17 @@ public:
         }
 
         auto promise = NThreading::NewPromise<TBeginPublicationResult>();
-        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+        auto extractor = [promise, extPublicationId](google::protobuf::Any* any, TPlainStatus status) mutable {
             BeginPublicationResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
+
+            TDeferredPublication publication(result.int_publication_id(), extPublicationId);
+            publication.AckState = std::make_shared<TDeferredPublicationAckState>();
             promise.SetValue(TBeginPublicationResult(
                 TStatus(std::move(status)),
-                result.int_publication_id()));
+                std::move(publication)));
         };
 
         Connections_->RunDeferred<
@@ -146,20 +161,20 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncPublishResult Publish(uint64_t intPublicationId, const TPublishSettings& settings) {
-        if (intPublicationId == 0) {
+    TAsyncPublishResult Publish(const TDeferredPublication& publication, const TPublishSettings& settings) {
+        if (publication.IntPublicationId == 0) {
             return MakeBadRequestFuture<TPublishResult>("int_publication_id must be greater than zero");
         }
 
         auto request = MakeOperationRequest<PublishRequest>(settings);
-        request.set_int_publication_id(intPublicationId);
+        request.set_int_publication_id(publication.IntPublicationId);
 
         auto promise = NThreading::NewPromise<TPublishResult>();
         auto connections = Connections_;
         auto dbDriverState = DbDriverState_;
         auto rpcSettings = TRpcRequestSettings::Make(settings);
 
-        TDeferredPublishAckTracker::For(DbDriverState_.get()).WaitAllAcks(intPublicationId)
+        WaitAcksIfNeeded(publication)
             .Subscribe([
                 promise,
                 request = std::move(request),
@@ -194,22 +209,22 @@ public:
     }
 
     TAsyncCancelPublicationResult CancelPublication(
-        uint64_t intPublicationId,
+        const TDeferredPublication& publication,
         const TCancelPublicationSettings& settings)
     {
-        if (intPublicationId == 0) {
+        if (publication.IntPublicationId == 0) {
             return MakeBadRequestFuture<TCancelPublicationResult>("int_publication_id must be greater than zero");
         }
 
         auto request = MakeOperationRequest<CancelPublicationRequest>(settings);
-        request.set_int_publication_id(intPublicationId);
+        request.set_int_publication_id(publication.IntPublicationId);
 
         auto promise = NThreading::NewPromise<TCancelPublicationResult>();
         auto connections = Connections_;
         auto dbDriverState = DbDriverState_;
         auto rpcSettings = TRpcRequestSettings::Make(settings);
 
-        TDeferredPublishAckTracker::For(DbDriverState_.get()).WaitAllAcks(intPublicationId)
+        WaitAcksIfNeeded(publication)
             .Subscribe([
                 promise,
                 request = std::move(request),
@@ -333,17 +348,17 @@ TAsyncBeginPublicationResult TTopicDeferredPublishClient::BeginPublication(
 }
 
 TAsyncPublishResult TTopicDeferredPublishClient::Publish(
-    uint64_t intPublicationId,
+    const TDeferredPublication& publication,
     const TPublishSettings& settings)
 {
-    return Impl_->Publish(intPublicationId, settings);
+    return Impl_->Publish(publication, settings);
 }
 
 TAsyncCancelPublicationResult TTopicDeferredPublishClient::CancelPublication(
-    uint64_t intPublicationId,
+    const TDeferredPublication& publication,
     const TCancelPublicationSettings& settings)
 {
-    return Impl_->CancelPublication(intPublicationId, settings);
+    return Impl_->CancelPublication(publication, settings);
 }
 
 TAsyncListPublicationsResult TTopicDeferredPublishClient::ListPublications(

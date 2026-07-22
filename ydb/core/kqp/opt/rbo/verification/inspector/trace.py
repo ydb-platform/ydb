@@ -239,6 +239,11 @@ def prepare(
 def _add_family(probes: Probes, result: RelationFamily) -> None:
     for outcome in result.outcomes:
         probes.add(outcome.enabled)
+        for choice in outcome.choices:
+            probes.add(choice.term)
+        if outcome.relation.ordinals is not None:
+            for ordinal in outcome.relation.ordinals:
+                probes.add(ordinal)
         for row in outcome.relation.rows:
             probes.add(row.present)
             for value in row.values.values():
@@ -290,8 +295,24 @@ def _family_json(
             disabled += 1
             continue
         relation = outcome.relation
+        indices = list(range(len(relation.rows)))
+        if relation.ordinals is not None:
+            present = [
+                index
+                for index in indices
+                if probes.value(relation.rows[index].present, values) is True
+            ]
+            absent = [index for index in indices if index not in present]
+            present.sort(
+                key=lambda index: probes.value(
+                    relation.ordinals[index],
+                    values,
+                )
+            )
+            indices = present + absent
         rows = []
-        for slot, row in enumerate(relation.rows):
+        for slot, row_index in enumerate(indices):
+            row = relation.rows[row_index]
             present = probes.value(row.present, values) is True
             rendered_row: dict[str, Any] = {"slot": slot, "present": present}
             if present:

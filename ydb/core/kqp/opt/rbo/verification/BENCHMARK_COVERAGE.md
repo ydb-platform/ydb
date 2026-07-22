@@ -78,12 +78,12 @@ the evaluated coverage policy. Counterexample, unknown, schema-mismatch, and
 solver-error rows also preserve the two snapshots and, when one was emitted,
 the SMT formula as test artifacts.
 
-The checked-in policy is a monotonic formula-construction floor: TPCH currently
-has no required query and TPC-DS requires q48, q88, and q96. It is enforced only
-for a complete formula-only suite, so focused development and solver experiments
-do not pretend to measure corpus coverage. Required queries must remain
-`FORMULA_EMITTED`; newly supported queries are allowed without editing the
-floor. Policy parsing and evaluation fail closed, and the report records the
+The checked-in policy is a monotonic formula-construction floor: TPCH requires
+q3, and TPC-DS requires q3, q48, q52, q55, q71, q88, q93, and q96. It is enforced
+only for a complete formula-only suite, so focused development and solver
+experiments do not pretend to measure corpus coverage. Required queries must
+remain `FORMULA_EMITTED`; newly supported queries are allowed without editing
+the floor. Policy parsing and evaluation fail closed, and the report records the
 required IDs, all formula-emitting IDs, enforcement mode, and every violation
 before the test fails.
 
@@ -108,23 +108,25 @@ not regress a required formula-only query.
 
 ## Last complete formula-only baseline
 
-This baseline was rerun on 2026-07-21 in formula-only mode; therefore its three
-successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`.
-Later focused Decimal-arithmetic, ordering, and SUM reruns updated the affected
-reasons below. All selected queries remained unsupported or did not finish
-formula construction, so the complete-suite counts and query sets are
-unchanged.
+This baseline was rerun on 2026-07-22 in formula-only mode; therefore all nine
+successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`. Solver-backed
+evidence is listed separately below.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 0 | 19 | 3 | 22 |
-| TPCDS_YQL | 3 (q48, q88, q96) | 67 | 29 | 99 |
+| TPCH_YQL | 1 (q3) | 18 | 3 | 22 |
+| TPCDS_YQL | 8 (q3, q48, q52, q55, q71, q88, q93, q96) | 62 | 29 | 99 |
+
+The supported formula slice is 9/121 queries. This is a useful end-to-end
+pre-physical optimizer sample, but it remains a bounded and feature-limited
+slice rather than a claim about the remaining 112 workload entries or larger
+inputs.
 
 ### TPCH inventory
 
 Optimizer preparation failed for q16, q18, and q20 on unsupported PG
-semantics. The remaining 19 queries failed closed as follows; a query can have
-both an initial and final reason.
+semantics. Eighteen queries failed closed as follows; a query can have both an
+initial and final reason.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
@@ -139,25 +141,17 @@ both an initial and final reason.
 | `KqpOlapApply` | - | q13 |
 | `IfPresent` | - | q19 |
 
-The remaining query passes both C++ export boundaries and fails in the trusted
-verifier:
-
-| Verifier-level unsupported reason | Queries |
-|---|---|
-| Sort permutations exceed the 256-alternative audit bound | q3 |
-
-Exact Date literals and ordering removed the previous Date blockers without
-changing the 0/22 formula count: these deeper scalar and OLAP blockers were
-then exposed. Restricted static `IN` similarly removed the first blocker from
-q12 and q19, and exact Decimal comparison moved q19 to the narrower constant-
-cast gate, without yet changing the formula count.
+Exact Date literals and ordering removed the previous Date blockers and exposed
+the deeper scalar and OLAP reasons above. Restricted static `IN` similarly
+removed the first blocker from q12 and q19, and exact Decimal comparison moved
+q19 to the narrower constant-cast gate.
 
 Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
-sort key, and the widened partial/final aggregate as q3's first blockers. Both
-snapshots now export and the verifier reaches the 256-alternative factorial
-Sort bound. q5 reaches initial `Map` and a final OLAP non-callable; q8 reaches
-`Map` at both boundaries; and q10 reaches initial `Map` and a final OLAP
-non-callable. All four remain unsupported, so TPCH stays at 0/22 formulas.
+sort key, and the widened partial/final aggregate as q3's first blockers.
+Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
+construct a complete formula, raising TPCH to 1/22. q5 reaches initial `Map` and
+a final OLAP non-callable; q8 reaches `Map` at both boundaries; and q10 reaches
+initial `Map` and a final OLAP non-callable. Those queries remain unsupported.
 
 ### TPC-DS inventory
 
@@ -165,9 +159,9 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix and verifier-level table below cover exactly the other 67
-unsupported queries. IDs can appear in both exporter columns or under more than
-one reason because both snapshots are audited independently.
+The exporter matrix below covers exactly the other 62 unsupported queries. IDs
+can appear in both exporter columns or under more than one reason because both
+snapshots are audited independently.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
@@ -191,40 +185,39 @@ one reason because both snapshots are audited independently.
 | Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
 | Type `Interval` | q37, q72, q77, q80, q82 | q72 |
 
-Four queries now pass both C++ export boundaries and fail in the trusted
-verifier. A fifth, q71, reaches the same evaluator but does not reach a verdict
-before the current factorial construction becomes impractical:
-
-| Verifier-level unsupported reason | Queries |
-|---|---|
-| Sort permutations exceed the 256-alternative audit bound | q3, q52, q55, q93 |
-| Sort construction scalability: 48 candidate slots, no verdict | q71 |
-
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
 comparison removed every old Decimal-comparison blocker: q48 now emits a
 formula, while q13, q21, q28, q31, q37, q40, q43, q61, q65, q74, q82, q85,
 and q91 reach the deeper cast, scalar, OLAP, arithmetic, type, or ordering
-reasons shown above. The formula-only count is now 3/99.
+reasons shown above.
 
-Focused arithmetic, ordering, and SUM reruns remove the old `+`, `-`,
-`DecimalMul`, Decimal sort-key, and Decimal aggregate blockers without
-increasing formula coverage. q3, q52, q55, and q93 now stop at the verifier's
-256-alternative Sort bound. q71 expands to 48 aggregate candidate slots; its
-attempt to construct the first 257 permutation outcomes was stopped after
-4m28s at about 531 MiB, before a verdict or report. q11 and q61 stop at
-`DecimalDiv`; q64 at String Sort; q65 at the initial Decimal constant-cast gate
-and final String Sort; q75 at the initial constant-cast gate and final `Double`;
-and q80 at initial `Interval` and a final OLAP non-callable. q91's final Decimal
-Sort now exports, while its initial String comparison remains unsupported.
-TPC-DS therefore remains at 3/99 formulas (q48, q88, and q96).
+Exact arithmetic, ordering, and SUM remove the old `+`, `-`, `DecimalMul`,
+Decimal sort-key, and Decimal aggregate blockers. Occurrence-aware non-Merge
+StageGraph gathers compact mutually exclusive routing copies, and large
+Sort/Merge choices use bounded symbolic ordinals instead of factorial outcome
+expansion. That moves
+q3, q52, q55, q71, and q93 through formula construction and raises TPC-DS to
+8/99. q11 and q61 still stop at `DecimalDiv`; q64 at String Sort; q65 at the
+initial Decimal constant-cast gate and final String Sort; q75 at the initial
+constant-cast gate and final `Double`; and q80 at initial `Interval` and a final
+OLAP non-callable. q91's final Decimal Sort exports, while its initial String
+comparison remains unsupported.
 
 ## Focused formula and solver results
 
-- TPC-DS q48 now reaches the verifier after exact Decimal literal, domain,
-  comparison-alignment, and integer constant-cast support. A focused
-  formula-only run emitted its obligation at `row_bound=2` and `task_bound=2`
-  in 365116 ms. No Z3 executable was present, so this is not a solver run or a
+- Focused solver runs returned `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3,
+  q52, q55, q93, and q96, each at two rows per referenced table and two tasks.
+  These are six bounded proofs for the modeled pre-physical semantics, not
+  unbounded SQL-equivalence claims.
+
+- TPC-DS q48 reaches the verifier after exact Decimal literal, domain,
+  comparison-alignment, and integer constant-cast support. Its recorded result
+  is formula-only: no solver verdict or bounded proof is claimed.
+
+- TPC-DS q71 now constructs a 118,276,852-byte SMT formula. Formula construction
+  took 80,359 ms in the complete run. A focused solver attempt reached the
+  external solver-process deadline without producing a verdict, so q71 is not a
   bounded proof.
 
 - TPC-DS q96 is `VERIFIED_BOUNDED` with a 60000 ms solver budget, two rows per
@@ -242,12 +235,9 @@ TPC-DS therefore remains at 3/99 formulas (q48, q88, and q96).
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
 
-- Exact Decimal SUM moves TPCH q3 and TPC-DS q3, q52, q55, and q93 to the
-  common factorial Sort bound. Their focused prepare/verification times in
-  milliseconds were q3 TPCH 126/2164, q3 TPC-DS 110/2855, q52 95/2874, q55
-  89/3800, and q93 123/6580. TPC-DS q71 did not produce a report under the
-  current construction. These are deeper coverage observations, not new
-  formulas or bounded proofs.
+No focused run has confirmed an optimizer correctness bug. The q88 candidate
+above was a verifier-modeling false positive; replay remains the confirmation
+boundary for any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

@@ -6,14 +6,22 @@ try:
 except ImportError:
     yatest_common = None
 
-from ydb.core.kqp.opt.rbo.verification.inspector.trace import Probes, _family_json, prepare
+from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
+    Probes,
+    _add_family,
+    _family_json,
+    prepare,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    OrdinalChoice,
     Outcome,
     Relation,
     RelationFamily,
+    Row,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Value
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem
 
 
@@ -307,6 +315,66 @@ class ObserverTest(unittest.TestCase):
         self.assertEqual(
             [outcome["index"] for outcome in rendered["outcomes"]],
             [0, 1],
+        )
+
+    def test_symbolic_ordinals_are_probed_and_rendered_in_model_order(self):
+        first_ordinal = smt.symbol("first_ordinal", smt.INT)
+        second_ordinal = smt.symbol("second_ordinal", smt.INT)
+        relation = Relation(
+            (Column("x", "Int64", False),),
+            (
+                Row(
+                    smt.TRUE,
+                    {"x": Value("Int64", smt.FALSE, smt.int_value(10))},
+                ),
+                Row(
+                    smt.TRUE,
+                    {"x": Value("Int64", smt.FALSE, smt.int_value(20))},
+                ),
+            ),
+            sequence=True,
+            ordinals=(first_ordinal, second_ordinal),
+        )
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                relation,
+                choices=(
+                    OrdinalChoice(first_ordinal, 2),
+                    OrdinalChoice(second_ordinal, 2),
+                ),
+            ),
+            Outcome(
+                smt.TRUE,
+                relation,
+                decisions=(("alternative", 1),),
+                choices=(
+                    OrdinalChoice(first_ordinal, 2),
+                    OrdinalChoice(second_ordinal, 2),
+                ),
+            ),
+        ))
+        probes = Probes(smt.Script())
+        _add_family(probes, family)
+
+        self.assertIn(first_ordinal, probes.requested)
+        self.assertIn(second_ordinal, probes.requested)
+        rendered = _family_json(
+            family,
+            probes,
+            {"first_ordinal": 1, "second_ordinal": 0},
+            {},
+        )
+        self.assertEqual(
+            [outcome["index"] for outcome in rendered["outcomes"]],
+            [0, 1],
+        )
+        self.assertEqual(
+            [
+                row["values"][0]["value"]
+                for row in rendered["outcomes"][0]["rows"]
+            ],
+            [20, 10],
         )
 
 

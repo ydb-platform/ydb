@@ -1,21 +1,26 @@
 import copy
 import unittest
 from itertools import permutations, product
+from unittest.mock import patch
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, relation, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
     SnapshotError,
+    SortOrder,
     parse_snapshot,
     stage_task_counts,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator as RelationEvaluator,
+    Outcome,
     Relation,
-    RelationError,
+    RelationFamily,
     Row,
+    compare_families,
     family_equal,
+    merge_family,
     single,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
@@ -349,7 +354,70 @@ def _ground(term, constants):
         return _ground(term.arguments[0], constants) % _ground(
             term.arguments[1], constants
         )
+    if term.operation in {"forall", "exists"}:
+        variables = term.arguments[:-1]
+        body = term.arguments[-1]
+        domains = tuple(_quantifier_domain(variable, body) for variable in variables)
+        values = (
+            _ground(body, constants | dict(zip((v.atom for v in variables), assignment)))
+            for assignment in product(*domains)
+        )
+        return all(values) if term.operation == "forall" else any(values)
     raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
+
+
+def _quantifier_domain(variable, body):
+    if variable.sort == smt.BOOL:
+        return (False, True)
+    bounds = []
+
+    def visit(term):
+        if (
+            term.operation == "<"
+            and term.arguments[0] == variable
+            and term.arguments[1].operation == "int"
+        ):
+            bounds.append(term.arguments[1].atom)
+        for argument in term.arguments:
+            visit(argument)
+
+    visit(body)
+    positive = [bound for bound in bounds if type(bound) is int and bound > 0]
+    if not positive:
+        raise AssertionError(f"cannot infer finite domain for {variable.atom}")
+    return range(max(positive))
+
+
+def _free_symbols(term, bound=frozenset()):
+    if term.operation == "symbol":
+        return set() if term.atom in bound else {term}
+    if term.operation in {"forall", "exists"}:
+        variables = term.arguments[:-1]
+        nested = bound | frozenset(variable.atom for variable in variables)
+        return _free_symbols(term.arguments[-1], nested)
+    result = set()
+    for argument in term.arguments:
+        result.update(_free_symbols(argument, bound))
+    return result
+
+
+def _satisfiable(term, constants):
+    free = sorted(
+        (
+            symbol
+            for symbol in _free_symbols(term)
+            if symbol.atom not in constants
+        ),
+        key=lambda symbol: symbol.atom,
+    )
+    domains = tuple(_quantifier_domain(symbol, term) for symbol in free)
+    return any(
+        _ground(
+            term,
+            constants | dict(zip((symbol.atom for symbol in free), assignment)),
+        )
+        for assignment in product(*domains)
+    )
 
 
 def _witness_constants(witness, rows):
@@ -387,15 +455,29 @@ def _sequences(family, constants):
     assert family.sequence
     result = set()
     for outcome in family.outcomes:
-        if not _ground(outcome.enabled, constants):
-            continue
-        names = tuple(column.name for column in outcome.relation.columns)
-        rows = tuple(
-            tuple(_cell(row.values[name], constants) for name in names)
-            for row in outcome.relation.rows
-            if _ground(row.present, constants)
-        )
-        result.add(rows)
+        domains = tuple(range(choice.bound) for choice in outcome.choices)
+        for assignment in product(*domains):
+            grounded = constants | {
+                choice.term.atom: value
+                for choice, value in zip(outcome.choices, assignment)
+            }
+            if not _ground(outcome.enabled, grounded):
+                continue
+            relation = outcome.relation
+            indices = [
+                index
+                for index, row in enumerate(relation.rows)
+                if _ground(row.present, grounded)
+            ]
+            if relation.ordinals is not None:
+                indices.sort(
+                    key=lambda index: _ground(relation.ordinals[index], grounded)
+                )
+            names = tuple(column.name for column in relation.columns)
+            result.add(tuple(
+                tuple(_cell(relation.rows[index].values[name], grounded) for name in names)
+                for index in indices
+            ))
     return result
 
 
@@ -507,7 +589,7 @@ def _logical_family(parsed, row_bound):
 
 def _counterexample_formula_holds(problem, rows):
     constants = _witness_constants(problem.witness, rows)
-    return all(_ground(assertion, constants) for assertion in problem.script.assertions)
+    return _satisfiable(smt.and_(*problem.script.assertions), constants)
 
 
 class DateDomainTest(unittest.TestCase):
@@ -729,6 +811,30 @@ class SortConcreteDifferentialTest(unittest.TestCase):
                         _reference_sequences(rows, order),
                     )
 
+    def test_symbolic_sort_and_top_sort_match_tiny_reference(self):
+        with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
+            for ascending, nulls_first, top_limit in product(
+                (False, True),
+                (False, True),
+                (None, 1),
+            ):
+                order = [order_item("a.k1", ascending, nulls_first)]
+                parsed = logical_sort(order, top_limit)
+                database, family = _logical_family(parsed, 2)
+                slot_states = tuple(
+                    (ABSENT,) + tuple((key, 0, slot) for key in (None, -1, 1))
+                    for slot in range(2)
+                )
+                for rows in product(*slot_states):
+                    expected = _reference_sequences(rows, order)
+                    if top_limit is not None:
+                        expected = {sequence[:top_limit] for sequence in expected}
+                    self.assertEqual(
+                        _sequences(family, _database_constants(database, rows)),
+                        expected,
+                        (ascending, nulls_first, top_limit, rows),
+                    )
+
     def test_multikey_matches_exhaustive_tiny_reference(self):
         order = [
             order_item("a.k1", True, False),
@@ -866,12 +972,14 @@ class OrderedLimitTest(unittest.TestCase):
         order = [order_item("a.k1", False, True)]
         top = logical_sort(order, top_limit=2)
         explicit = logical_ordered_limit(order, count=2)
-        top_database, top_family = _logical_family(top, 3)
-        explicit_script = smt.Script()
+        script = smt.Script()
+        top_database = Database(top, 3, script)
+        scalar = ScalarEncoder(script)
+        top_family = RelationEvaluator(top, top_database, scalar).root()
         explicit_family = RelationEvaluator(
             explicit,
             top_database,
-            ScalarEncoder(explicit_script),
+            scalar,
         ).root()
         slot_states = tuple(
             (ABSENT,) + tuple((key, 0, slot) for key in (None, 0, 1))
@@ -946,25 +1054,23 @@ class OrderedLimitTest(unittest.TestCase):
         scalar = ScalarEncoder(smt.Script())
         for values in ((), (1,)):
             with self.subTest(values=values):
-                self.assertTrue(
-                    _ground(
-                        family_equal(
-                            relation(values, True),
-                            relation(tuple(reversed(values)), False),
-                            scalar,
-                        ),
-                        {},
-                    )
-                )
-        self.assertFalse(
-            _ground(
-                family_equal(
-                    relation((1, 2), True),
-                    relation((2, 1), False),
+                comparison = compare_families(
+                    relation(values, True),
+                    relation(tuple(reversed(values)), False),
                     scalar,
-                ),
-                {},
-            )
+                )
+                self.assertTrue(
+                    _sequences(comparison.left, {})
+                    == _sequences(comparison.right, {})
+                )
+        comparison = compare_families(
+            relation((1, 2), True),
+            relation((2, 1), False),
+            scalar,
+        )
+        self.assertNotEqual(
+            _sequences(comparison.left, {}),
+            _sequences(comparison.right, {}),
         )
 
 
@@ -1036,6 +1142,42 @@ class SortMutationTest(unittest.TestCase):
                 ):
                     self.assertFalse(_counterexample_formula_holds(problem, rows))
 
+    def test_refining_a_tie_with_an_extra_key_changes_the_sequence_language(self):
+        coarse = logical_sort([order_item("a.k1")])
+        refined = logical_sort([
+            order_item("a.k1"),
+            order_item("a.k2"),
+        ])
+        rows = ((0, 1, 10), (0, 0, 11))
+        problem = build_logical_kernel_problem_for_tests(coarse, refined, 2)
+        self.assertTrue(_counterexample_formula_holds(problem, rows))
+
+    def test_symbolic_family_equality_proves_self_and_finds_direction_mutation(self):
+        ascending = [order_item("a.k1", True, False)]
+        descending = [order_item("a.k1", False, False)]
+        rows = ((0, 0, 0), (1, 0, 1))
+        with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
+            same = build_logical_kernel_problem_for_tests(
+                logical_sort(ascending),
+                logical_sort(ascending),
+                2,
+            )
+            changed = build_logical_kernel_problem_for_tests(
+                logical_sort(ascending),
+                logical_sort(descending),
+                2,
+            )
+        self.assertFalse(_counterexample_formula_holds(same, rows))
+        self.assertTrue(_counterexample_formula_holds(changed, rows))
+
+    def test_shared_renderer_keeps_large_symbolic_sort_formula_bounded(self):
+        parsed = logical_sort([order_item("a.k1")])
+        formula = build_logical_kernel_problem_for_tests(parsed, parsed, 24).formula()
+
+        self.assertLess(len(formula), 2_000_000)
+        self.assertIn("(let ", formula)
+        self.assertIn("(exists ", formula)
+
     def test_project_preserves_sequence_for_both_current_rbo_order_flags(self):
         order = [order_item("a.k1", True, False)]
         initial = logical_sort(order)
@@ -1090,18 +1232,90 @@ class SortMutationTest(unittest.TestCase):
             )
         )
 
-    def test_sort_permutation_cap_fails_closed_at_six_slots(self):
+    def test_sort_uses_one_quadratic_outcome_at_forty_eight_slots(self):
         parsed = logical_sort([order_item("a.k1")])
+        for row_bound in (6, 48):
+            with self.subTest(row_bound=row_bound):
+                script = smt.Script()
+                database = Database(parsed, row_bound, script)
+                family = RelationEvaluator(
+                    parsed,
+                    database,
+                    ScalarEncoder(script),
+                ).root()
+                self.assertEqual(len(family.outcomes), 1)
+                self.assertEqual(len(family.outcomes[0].choices), row_bound)
+                self.assertEqual(
+                    len(family.outcomes[0].relation.ordinals),
+                    row_bound,
+                )
 
-        script = smt.Script()
-        database = Database(parsed, 5, script)
-        family = RelationEvaluator(parsed, database, ScalarEncoder(script)).root()
-        self.assertEqual(len(family.outcomes), 120)
 
-        script = smt.Script()
-        database = Database(parsed, 6, script)
-        with self.assertRaisesRegex(RelationError, "256 alternative audit bound"):
-            RelationEvaluator(parsed, database, ScalarEncoder(script)).root()
+class MergeEncodingTest(unittest.TestCase):
+    COLUMNS = (
+        Column("k", "Int64", False),
+        Column("payload", "Int64", False),
+    )
+    ORDER = (SortOrder("k", True, False),)
+
+    @staticmethod
+    def _row(payload):
+        return Row(
+            smt.TRUE,
+            {
+                "k": Value("Int64", smt.FALSE, smt.ZERO),
+                "payload": Value("Int64", smt.FALSE, smt.int_value(payload)),
+            },
+        )
+
+    def test_enumerated_merge_observes_reversed_concrete_input_ordinals(self):
+        source = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation(
+                    self.COLUMNS,
+                    (self._row(10), self._row(20)),
+                    sequence=True,
+                    order=self.ORDER,
+                    ordinals=(smt.ONE, smt.ZERO),
+                ),
+            ),
+        ))
+
+        merged = merge_family(source, self.ORDER, ((0, 1),), smt.Script(), "merge")
+
+        self.assertEqual(
+            _sequences(merged, {}),
+            {((0, 20), (0, 10))},
+        )
+
+    def test_symbolic_merge_preserves_each_producer_tie_order(self):
+        source = single(
+            Relation(
+                self.COLUMNS,
+                (self._row(10), self._row(20), self._row(30)),
+                sequence=True,
+                order=self.ORDER,
+            )
+        )
+        with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
+            merged = merge_family(
+                source,
+                self.ORDER,
+                ((0, 1), (2,)),
+                smt.Script(),
+                "merge",
+            )
+
+        self.assertEqual(len(merged.outcomes[0].choices), 3)
+        self.assertEqual(
+            _sequences(merged, {}),
+            {
+                ((0, 10), (0, 20), (0, 30)),
+                ((0, 10), (0, 30), (0, 20)),
+                ((0, 30), (0, 10), (0, 20)),
+            },
+        )
 
 
 class StageTopSortMergeTest(unittest.TestCase):
@@ -1126,13 +1340,12 @@ class StageTopSortMergeTest(unittest.TestCase):
             choice_scope="before",
         ).root()
         staged_family = StageEvaluator(staged, database, scalar, router).root()
-        equality = family_equal(logical_family, staged_family, scalar)
-        return database, router, equality
+        return database, router, logical_family, staged_family
 
     def test_two_task_local_top_sort_merge_and_final_limit_are_equivalent(self):
         staged = staged_top_sort_merge(self.ORDER)
         self.assertEqual(stage_task_counts(staged), {"source": 2, "root": 1})
-        database, router, equality = self._families(staged)
+        database, router, logical_family, staged_family = self._families(staged)
         slot_states = tuple(
             (ABSENT,) + tuple((key, 0, slot) for key in (None, 0, 1))
             for slot in range(2)
@@ -1143,11 +1356,14 @@ class StageTopSortMergeTest(unittest.TestCase):
         ):
             with self.subTest(rows=rows, tasks=tasks):
                 constants = _database_constants(database, rows, router, tasks)
-                self.assertTrue(_ground(equality, constants))
+                self.assertEqual(
+                    _sequences(logical_family, constants),
+                    _sequences(staged_family, constants),
+                )
 
     def test_date_local_sort_and_merge_preserve_bounds_nulls_and_direction(self):
         staged = staged_top_sort_merge(self.ORDER, key1_type=DATE)
-        database, router, equality = self._families(staged, DATE)
+        database, router, logical_family, staged_family = self._families(staged, DATE)
         rows_and_tasks = (
             (((None, 0, 0), (0, 0, 1)), (False, True)),
             (((0, 0, 0), (MAX_DATE - 1, 0, 1)), (False, False)),
@@ -1156,7 +1372,10 @@ class StageTopSortMergeTest(unittest.TestCase):
         for rows, tasks in rows_and_tasks:
             with self.subTest(rows=rows, tasks=tasks):
                 constants = _database_constants(database, rows, router, tasks)
-                self.assertTrue(_ground(equality, constants))
+                self.assertEqual(
+                    _sequences(logical_family, constants),
+                    _sequences(staged_family, constants),
+                )
 
         descending = [order_item("a.k1", False, False)]
         mutated = staged_top_sort_merge(
@@ -1165,14 +1384,17 @@ class StageTopSortMergeTest(unittest.TestCase):
             merge_order=descending,
             key1_type=DATE,
         )
-        database, router, equality = self._families(mutated, DATE)
+        database, router, logical_family, staged_family = self._families(mutated, DATE)
         constants = _database_constants(
             database,
             ((0, 0, 0), (MAX_DATE - 1, 0, 1)),
             router,
             (False, False),
         )
-        self.assertFalse(_ground(equality, constants))
+        self.assertNotEqual(
+            _sequences(logical_family, constants),
+            _sequences(staged_family, constants),
+        )
 
     def test_decimal_local_sort_and_merge_preserve_total_special_order(self):
         decimal_type = "Decimal(2,0)"
@@ -1220,14 +1442,20 @@ class StageTopSortMergeTest(unittest.TestCase):
             merge_order=descending,
             key1_type=decimal_type,
         )
-        database, router, equality = self._families(mutated, decimal_type)
+        database, router, logical_family, staged_family = self._families(
+            mutated,
+            decimal_type,
+        )
         constants = _database_constants(
             database,
             ((decimal.INF, 0, 0), (decimal.NAN, 0, 1)),
             router,
             (False, False),
         )
-        self.assertFalse(_ground(equality, constants))
+        self.assertNotEqual(
+            _sequences(logical_family, constants),
+            _sequences(staged_family, constants),
+        )
 
     def test_parallel_union_preserves_one_ordered_stream_per_target_for_merge(self):
         logical = logical_sort(self.ORDER)
@@ -1294,9 +1522,12 @@ class StageTopSortMergeTest(unittest.TestCase):
         )
         for name, staged, rows, tasks in mutations:
             with self.subTest(name=name):
-                database, router, equality = self._families(staged)
+                database, router, logical_family, staged_family = self._families(staged)
                 constants = _database_constants(database, rows, router, tasks)
-                self.assertFalse(_ground(equality, constants))
+                self.assertNotEqual(
+                    _sequences(logical_family, constants),
+                    _sequences(staged_family, constants),
+                )
 
     def test_merge_order_must_match_every_local_sort(self):
         descending = [order_item("a.k1", False, False)]

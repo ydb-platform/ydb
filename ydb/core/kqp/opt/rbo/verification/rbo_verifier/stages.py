@@ -7,6 +7,7 @@ from typing import Callable, TypeAlias
 
 from . import smt
 from .ir import (
+    Column,
     Scan,
     Snapshot,
     Stage,
@@ -19,6 +20,8 @@ from .relation import (
     Database,
     Evaluator as RelationEvaluator,
     NodeObserver,
+    Occurrence,
+    PartitionFact,
     Relation,
     RelationFamily,
     Row,
@@ -32,6 +35,7 @@ from .scalar import Encoder as ScalarEncoder, Value
 
 
 TASKS = 2
+MAX_EXPLICIT_TASK_COPY_ROWS = 8
 
 
 class StageError(ValueError):
@@ -125,7 +129,12 @@ class Evaluator:
             lambda relation: Relation(
                 tuple(columns[name] for name in output),
                 tuple(
-                    Row(row.present, {name: row.values[name] for name in output})
+                    Row(
+                        row.present,
+                        {name: row.values[name] for name in output},
+                        row.occurrence,
+                        row.partition_facts,
+                    )
                     for row in relation.rows
                 ),
                 sequence=relation.sequence,
@@ -135,6 +144,7 @@ class Evaluator:
                     and all(item.column in output for item in relation.order)
                     else None
                 ),
+                ordinals=relation.ordinals,
             ),
         )
 
@@ -211,12 +221,21 @@ class Evaluator:
             for slot, row in enumerate(relation.rows):
                 task = self.router.source_task(scan.table, slot)
                 belongs = smt.not_(task) if task_index == 0 else task
-                rows.append(Row(smt.and_(row.present, belongs), row.values))
+                rows.append(
+                    Row(
+                        smt.and_(row.present, belongs),
+                        row.values,
+                        row.occurrence,
+                        row.partition_facts
+                        | frozenset((PartitionFact(task, task_index == 1),)),
+                    )
+                )
             return Relation(
                 relation.columns,
                 tuple(rows),
                 sequence=relation.sequence,
                 order=relation.order,
+                ordinals=relation.ordinals,
             )
 
         scan_partitions = tuple(
@@ -281,12 +300,21 @@ class Evaluator:
                 for row in relation.rows:
                     task = self.router.hash_task(edge, row)
                     belongs = smt.not_(task) if task_index == 0 else task
-                    rows.append(Row(smt.and_(row.present, belongs), row.values))
+                    rows.append(
+                        Row(
+                            smt.and_(row.present, belongs),
+                            row.values,
+                            row.occurrence,
+                            row.partition_facts
+                            | frozenset((PartitionFact(task, task_index == 1),)),
+                        )
+                    )
                 return Relation(
                     relation.columns,
                     tuple(rows),
                     sequence=relation.sequence,
                     order=relation.order,
+                    ordinals=relation.ordinals,
                 )
 
             return Partitions(
@@ -330,6 +358,11 @@ class Evaluator:
                 return Relation(
                     columns,
                     tuple(row for relation in relations for row in relation.rows),
+                    ordinals=tuple(
+                        ordinal
+                        for relation in relations
+                        for ordinal in _sequence_ordinals(relation)
+                    ),
                 )
 
             groups = []
@@ -344,6 +377,7 @@ class Evaluator:
                     gathered,
                     edge.order,
                     tuple(groups),
+                    self.scalar.script,
                     f"merge:{edge.id}",
                 ),
             ))
@@ -361,15 +395,141 @@ def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
     columns = families[0].columns
     if any(family.columns != columns for family in families[1:]):
         raise StageError("connection input schemas differ")
-    return combine_families(
-        families,
-        lambda relations: Relation(
+
+    def gather(relations: tuple[Relation, ...]) -> Relation:
+        if len(relations) == 1:
+            relation = relations[0]
+            return Relation(
+                columns,
+                relation.rows,
+                sequence=relation.sequence,
+                order=relation.order,
+                ordinals=relation.ordinals,
+            )
+        rows = tuple(row for relation in relations for row in relation.rows)
+        return Relation(
             columns,
-            tuple(row for relation in relations for row in relation.rows),
-            sequence=len(relations) == 1 and relations[0].sequence,
-            order=relations[0].order if len(relations) == 1 else None,
-        ),
+            _compact_exclusive_rows(
+                rows,
+                columns,
+                merge_conditional_values=(
+                    len(rows) > MAX_EXPLICIT_TASK_COPY_ROWS
+                ),
+            ),
+        )
+
+    return combine_families(families, gather)
+
+
+def _compact_exclusive_rows(
+    rows: tuple[Row, ...],
+    columns: tuple[Column, ...],
+    *,
+    merge_conditional_values: bool = True,
+) -> tuple[Row, ...]:
+    """Coalesce task copies only when routing proves pairwise exclusivity.
+
+    Broadcast copies have no contradictory partition fact and therefore retain
+    their SQL bag multiplicity.  Source and hash partitions carry opposite facts,
+    so gathering them can recover one logical occurrence without duplicating a
+    guarded slot for every task.  Equal values always compact.  Small differing
+    task-local states may remain explicit because their simpler aggregate terms
+    are substantially easier for the quantifier-free solver; both shapes denote
+    the same exact bag.
+    """
+
+    groups: list[list[Row]] = []
+    by_occurrence: dict[Occurrence, list[list[Row]]] = {}
+    for row in rows:
+        if row.occurrence is None:
+            groups.append([row])
+            continue
+        candidates = by_occurrence.setdefault(row.occurrence, [])
+        for group in candidates:
+            if all(_partition_exclusive(row, other) for other in group) and (
+                merge_conditional_values
+                or all(_same_values(row, other, columns) for other in group)
+            ):
+                group.append(row)
+                break
+        else:
+            group = [row]
+            candidates.append(group)
+            groups.append(group)
+
+    return tuple(_merge_exclusive_rows(group, columns) for group in groups)
+
+
+def _partition_exclusive(left: Row, right: Row) -> bool:
+    return any(
+        left_fact.term == right_fact.term
+        and left_fact.value != right_fact.value
+        for left_fact in left.partition_facts
+        for right_fact in right.partition_facts
     )
+
+
+def _same_values(
+    left: Row,
+    right: Row,
+    columns: tuple[Column, ...],
+) -> bool:
+    return all(
+        left.values[column.name].type == right.values[column.name].type
+        and left.values[column.name].is_null == right.values[column.name].is_null
+        and left.values[column.name].value == right.values[column.name].value
+        for column in columns
+    )
+
+
+def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
+    if len(rows) == 1:
+        return rows[0]
+    occurrence = rows[0].occurrence
+    if occurrence is None or any(row.occurrence != occurrence for row in rows):
+        raise StageError("exclusive row compaction mixed logical occurrences")
+    if any(
+        not _partition_exclusive(left, right)
+        for index, left in enumerate(rows)
+        for right in rows[index + 1 :]
+    ):
+        raise StageError("exclusive row compaction received overlapping task copies")
+
+    values = {}
+    for column in columns:
+        alternatives = [row.values[column.name] for row in rows]
+        if any(value.type != alternatives[0].type for value in alternatives[1:]):
+            raise StageError("exclusive row compaction received different value types")
+        bounds = [value.decimal_finite_abs_bound for value in alternatives]
+        bound = (
+            None
+            if any(item is None for item in bounds)
+            else max(item for item in bounds if item is not None)
+        )
+        is_null = alternatives[-1].is_null
+        value = alternatives[-1].value
+        for row, alternative in reversed(list(zip(rows[:-1], alternatives[:-1]))):
+            is_null = smt.ite(row.present, alternative.is_null, is_null)
+            value = smt.ite(row.present, alternative.value, value)
+        values[column.name] = Value(alternatives[0].type, is_null, value, bound)
+
+    common_facts = set(rows[0].partition_facts)
+    for row in rows[1:]:
+        common_facts.intersection_update(row.partition_facts)
+    return Row(
+        smt.or_(*(row.present for row in rows)),
+        values,
+        occurrence,
+        frozenset(common_facts),
+    )
+
+
+def _sequence_ordinals(relation: Relation) -> tuple[smt.Term, ...]:
+    if not relation.sequence:
+        raise StageError("merge producer is not a sequence")
+    if relation.ordinals is not None:
+        return relation.ordinals
+    return tuple(smt.int_value(index) for index in range(len(relation.rows)))
 
 
 def _require_merge_order(relation: Relation, edge: StageEdge) -> None:

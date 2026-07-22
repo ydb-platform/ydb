@@ -229,6 +229,8 @@ def _terms(families):
             yield outcome.enabled
             for row in outcome.relation.rows:
                 yield row.present
+                for fact in row.partition_facts:
+                    yield fact.term
                 for column in outcome.relation.columns:
                     value = row.values[column.name]
                     yield value.is_null
@@ -307,7 +309,14 @@ def _bag(family, symbols, functions):
     outcome = enabled[0]
     rows = Counter()
     for row in outcome.relation.rows:
-        if not _ground_term(row.present, symbols, functions):
+        present = _ground_term(row.present, symbols, functions)
+        if present:
+            for fact in row.partition_facts:
+                if _ground_term(fact.term, symbols, functions) != fact.value:
+                    raise AssertionError(
+                        "present symbolic row contradicts its partition fact"
+                    )
+        if not present:
             continue
         visible = []
         for column in outcome.relation.columns:

@@ -38,9 +38,185 @@ class Term:
         if self.operation == "int":
             assert isinstance(self.atom, int)
             return str(self.atom) if self.atom >= 0 else f"(- {-self.atom})"
+        if self.operation in {"forall", "exists"}:
+            variables = self.arguments[:-1]
+            body = self.arguments[-1]
+            bindings = " ".join(
+                f"({variable.render()} {variable.sort})" for variable in variables
+            )
+            return f"({self.operation} ({bindings}) {body.render()})"
         if not self.arguments:
             return self.operation
         return f"({self.operation} {' '.join(argument.render() for argument in self.arguments)})"
+
+    def render_shared(self) -> str:
+        """Render this DAG once per quantifier scope with exact SMT ``let``s."""
+
+        context = _RenderContext(())
+        context.reserve(self)
+        return _render_scope(self, context)
+
+
+class _RenderContext:
+    """Allocate hygienic aliases across all scopes in one rendered script."""
+
+    def __init__(self, reserved: Iterable[str]) -> None:
+        self.reserved = set(reserved)
+        self.next_alias = 0
+
+    def reserve(self, root: Term) -> None:
+        pending = [root]
+        seen: set[int] = set()
+        while pending:
+            term = pending.pop()
+            identity = id(term)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            self.reserved.add(term.operation)
+            if term.operation == "symbol":
+                assert isinstance(term.atom, str)
+                self.reserved.add(term.atom)
+            pending.extend(term.arguments)
+
+    def fresh_alias(self) -> str:
+        while True:
+            name = f"rbo_let_{self.next_alias}"
+            self.next_alias += 1
+            if name not in self.reserved:
+                self.reserved.add(name)
+                return name
+
+
+def _render_scope(root: Term, context: _RenderContext) -> str:
+    """Linearize shared term identities without lifting bound expressions.
+
+    Quantifier bodies start fresh scopes because their symbol names deliberately
+    shadow global witness constants.  Within one scope, repeated compound terms
+    become let aliases.  Dependency levels use nested, parallel-binding lets, so
+    every alias is defined outside the aliases that refer to it.
+    """
+
+    terms: dict[int, Term] = {}
+    references: dict[int, int] = {}
+    discovery: list[int] = []
+
+    def collect(term: Term) -> None:
+        identity = id(term)
+        references[identity] = references.get(identity, 0) + 1
+        if identity in terms:
+            return
+        terms[identity] = term
+        discovery.append(identity)
+        if term.operation in {"forall", "exists"}:
+            return
+        for argument in term.arguments:
+            collect(argument)
+
+    collect(root)
+    candidates = {
+        identity
+        for identity in discovery
+        if references[identity] > 1 and terms[identity].arguments
+    }
+    if not candidates:
+        return _render_unshared(root, context)
+
+    levels: dict[int, int] = {}
+    maximum_below: dict[int, int] = {}
+
+    def assign_level(term: Term) -> int:
+        identity = id(term)
+        cached = maximum_below.get(identity)
+        if cached is not None:
+            return cached
+        child_level = 0
+        if term.operation not in {"forall", "exists"}:
+            child_level = max(
+                (assign_level(argument) for argument in term.arguments),
+                default=0,
+            )
+        if identity in candidates:
+            levels[identity] = child_level + 1
+            child_level += 1
+        maximum_below[identity] = child_level
+        return child_level
+
+    assign_level(root)
+    positions = {identity: index for index, identity in enumerate(discovery)}
+    aliases = {
+        identity: context.fresh_alias()
+        for identity in sorted(
+            (item for item in discovery if item in candidates),
+            key=lambda item: (levels[item], positions[item]),
+        )
+    }
+
+    def render(term: Term, defining: int | None = None) -> str:
+        identity = id(term)
+        alias = aliases.get(identity)
+        if alias is not None and identity != defining:
+            return alias
+        if term.operation == "symbol":
+            assert isinstance(term.atom, str)
+            return term.atom
+        if term.operation == "bool":
+            return "true" if term.atom else "false"
+        if term.operation == "int":
+            assert isinstance(term.atom, int)
+            return str(term.atom) if term.atom >= 0 else f"(- {-term.atom})"
+        if term.operation in {"forall", "exists"}:
+            variables = term.arguments[:-1]
+            body = term.arguments[-1]
+            bindings = " ".join(
+                f"({variable.render()} {variable.sort})" for variable in variables
+            )
+            return f"({term.operation} ({bindings}) {_render_scope(body, context)})"
+        if not term.arguments:
+            return term.operation
+        return (
+            f"({term.operation} "
+            f"{' '.join(render(argument) for argument in term.arguments)})"
+        )
+
+    body = render(root)
+    by_level: dict[int, list[int]] = {}
+    for identity in discovery:
+        if identity in candidates:
+            by_level.setdefault(levels[identity], []).append(identity)
+    for level in sorted(by_level, reverse=True):
+        bindings = " ".join(
+            f"({aliases[identity]} {render(terms[identity], identity)})"
+            for identity in by_level[level]
+        )
+        body = f"(let ({bindings}) {body})"
+    return body
+
+
+def _render_unshared(term: Term, context: _RenderContext) -> str:
+    """Render recursively while giving nested quantifiers their own DAG scope."""
+
+    if term.operation == "symbol":
+        assert isinstance(term.atom, str)
+        return term.atom
+    if term.operation == "bool":
+        return "true" if term.atom else "false"
+    if term.operation == "int":
+        assert isinstance(term.atom, int)
+        return str(term.atom) if term.atom >= 0 else f"(- {-term.atom})"
+    if term.operation in {"forall", "exists"}:
+        variables = term.arguments[:-1]
+        body = term.arguments[-1]
+        bindings = " ".join(
+            f"({variable.render()} {variable.sort})" for variable in variables
+        )
+        return f"({term.operation} ({bindings}) {_render_scope(body, context)})"
+    if not term.arguments:
+        return term.operation
+    return (
+        f"({term.operation} "
+        f"{' '.join(_render_unshared(argument, context) for argument in term.arguments)})"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +358,47 @@ def ite(condition: Term, when_true: Term, when_false: Term) -> Term:
     return Term(when_true.sort, "ite", (condition, when_true, when_false))
 
 
+def forall(variables: Sequence[Term], body: Term) -> Term:
+    return _quantifier("forall", variables, body)
+
+
+def exists(variables: Sequence[Term], body: Term) -> Term:
+    return _quantifier("exists", variables, body)
+
+
+def _quantifier(operation: str, variables: Sequence[Term], body: Term) -> Term:
+    """Bind hygienic named constants, including declared witness constants.
+
+    SMT-LIB permits a quantifier to shadow a global constant.  The verifier
+    uses that deliberately: one plan's choices remain global in the witness
+    direction and the same names are universally bound in the response
+    direction.  Restricting binders to typed, unique symbol terms keeps that
+    shadowing explicit and prevents compound expressions from becoming
+    malformed declarations.
+    """
+
+    _require(body, BOOL)
+    checked: list[Term] = []
+    names: set[str] = set()
+    for variable in variables:
+        if (
+            not isinstance(variable, Term)
+            or variable.operation != "symbol"
+            or variable.arguments
+            or not isinstance(variable.atom, str)
+        ):
+            raise SmtError("quantifier variables must be named constants")
+        name = _check_symbol(variable.atom)
+        _check_sort(variable.sort)
+        if name in names:
+            raise SmtError(f"duplicate quantifier variable {name!r}")
+        names.add(name)
+        checked.append(variable)
+    if not checked:
+        return body
+    return Term(BOOL, operation, tuple(checked) + (body,))
+
+
 def add(*terms: Term) -> Term:
     for term in terms:
         _require(term, INT)
@@ -310,12 +527,20 @@ class Script:
 
     def render(self, values: Iterable[Term] = ()) -> str:
         requested = tuple(values)
+        context = _RenderContext(
+            declaration.name for declaration in self._declarations
+        )
+        for assertion in self._assertions:
+            context.reserve(assertion)
         lines = ["; Generated by the YDB new-RBO bounded equivalence verifier."]
         if self.timeout_ms is not None:
             lines.append(f"(set-option :timeout {self.timeout_ms})")
         lines.extend(["(set-option :produce-models true)", "(set-logic ALL)"])
         lines.extend(declaration.render() for declaration in self._declarations)
-        lines.extend(f"(assert {assertion.render()})" for assertion in self._assertions)
+        lines.extend(
+            f"(assert {_render_scope(assertion, context)})"
+            for assertion in self._assertions
+        )
         lines.append("(check-sat)")
         if requested:
             for term in requested:

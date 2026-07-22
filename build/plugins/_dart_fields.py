@@ -725,7 +725,17 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('adfox', 'ads', 'alice/agents/booking', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = (
+        'adfox',
+        'ads',
+        'alice/agents/booking',
+        'bigrt',
+        'grut',
+        'quality/user_sessions',
+        'yabs',
+        'maps',
+        'yt',
+    )
     # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.

@@ -19,6 +19,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -121,7 +123,8 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start stream lookup actor");
+        YDB_LOG_DEBUG("Stream lookup actor started",
+            {"logPrefix", this->LogPrefix});
 
         Counters->StreamLookupActorsCount->Inc();
         ResolveTableShards();
@@ -530,8 +533,11 @@ private:
 
         finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
 
-        CA_LOG_D("Returned " << replyResultStats.ResultBytesCount << " bytes, " << replyResultStats.ResultRowsCount
-            << " rows, finished: " << finished);
+        YDB_LOG_DEBUG("Returned lookup results",
+            {"logPrefix", this->LogPrefix},
+            {"resultBytesCount", replyResultStats.ResultBytesCount},
+            {"resultRowsCount", replyResultStats.ResultRowsCount},
+            {"finished", finished});
 
         return replyResultStats.ResultBytesCount;
     }
@@ -578,7 +584,9 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix},
+            {"table", StreamLookupWorker->GetTablePath()});
         if (!ResolveShardsInProgress) {
             return;
         }
@@ -622,34 +630,36 @@ private:
 
         auto readIt = Reads.find(record.GetReadId());
         if (readIt == Reads.end() || readIt->second.State != EReadState::Running) {
-            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
+            YDB_LOG_DEBUG("Dropped read: already completed or blocked",
+                {"logPrefix", this->LogPrefix},
+                {"readId", record.GetReadId()});
             return;
         }
 
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
 
-        CA_LOG_D("Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
-            << ", Table = " << StreamLookupWorker->GetTablePath()
-            << ", ReadId=" << record.GetReadId() << " (current OperationId=" << OperationId << ")"
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+        TStringBuilder brokenTxLocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            brokenTxLocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult from table shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", read.ShardId},
+            {"tablePath", StreamLookupWorker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"operationId", OperationId},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"locks", txLocks},
+            {"brokenTxLocks", brokenTxLocks});
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);
@@ -699,8 +709,10 @@ private:
             case Ydb::StatusIds::NOT_FOUND:
             {
                 StreamLookupWorker->ResetRowsProcessing(read.Id);
-                CA_LOG_D("NOT_FOUND was received from tablet: " << read.ShardId << ". "
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("Received NOT_FOUND status",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", read.ShardId},
+                    {"issues", getIssues().ToOneLineString()});
                 Reads.eraseRead(read);
                 return ResolveTableShards();
             }
@@ -713,8 +725,10 @@ private:
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                CA_LOG_D("OVERLOADED was received from tablet: " << read.ShardId << "."
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("Received OVERLOADED status",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", read.ShardId},
+                    {"issues", getIssues().ToOneLineString()});
                 read.SetBlocked();
                 return RetryTableRead(read, /*allowInstantRetry = */false, throttleDelay);
             }
@@ -724,8 +738,10 @@ private:
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 }
-                CA_LOG_D("INTERNAL_ERROR was received from tablet: " << read.ShardId << "."
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("Received INTERNAL_ERROR status",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablet", read.ShardId},
+                    {"issues", getIssues().ToOneLineString()});
                 read.SetBlocked();
                 return RetryTableRead(read);
             }
@@ -768,7 +784,9 @@ private:
 
             Reads.SetPipeCreated(read.ShardId);
 
-            CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
+            YDB_LOG_DEBUG("TEvReadAck sent",
+                {"logPrefix", this->LogPrefix},
+                {"shard", read.ShardId});
 
             if (auto delay = ShardTimeout()) {
                 TlsActivationContext->Schedule(
@@ -789,7 +807,9 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Received TEvDeliveryProblem",
+            {"logPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
 
         const auto& tabletId = ev->Get()->TabletId;
 
@@ -820,12 +840,16 @@ private:
     }
 
     void Handle(TEvPrivate::TEvSchemeCacheRequestTimeout::TPtr&) {
-        CA_LOG_D("TEvSchemeCacheRequestTimeout was received, shards for table " << StreamLookupWorker->GetTablePath()
-            << " was resolved: " << !!Partitioning);
+        YDB_LOG_DEBUG("Scheme cache request timed out while resolving table shards",
+            {"logPrefix", this->LogPrefix},
+            {"tablePath", StreamLookupWorker->GetTablePath()},
+            {"resolved", !!Partitioning});
 
         if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
-            CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
+            YDB_LOG_DEBUG("Retry attempt to resolve shards",
+                {"logPrefix", this->LogPrefix},
+                {"table", StreamLookupWorker->GetTablePath()});
             ResolveShardsInProgress = false;
             ResolveTableShards();
         }
@@ -834,7 +858,9 @@ private:
     void Handle(TEvPrivate::TEvRetryRead::TPtr& ev) {
         auto readIt = Reads.find(ev->Get()->ReadId);
         if (readIt == Reads.end()) {
-            CA_LOG_D("received retry request for already finished/non-existing read, read_id: " << ev->Get()->ReadId);
+            YDB_LOG_DEBUG("Received retry request for already finished/non-existing read",
+                {"logPrefix", this->LogPrefix},
+                {"readId", ev->Get()->ReadId});
             return;
         }
 
@@ -857,7 +883,9 @@ private:
     void Handle(TEvPrivate::TEvRetryLock::TPtr& ev) {
         auto lockIt = Reads.findLock(ev->Get()->LockId);
         if (lockIt == Reads.endLocks()) {
-            CA_LOG_D("received retry request for already finished/non-existing lock, lock_id: " << ev->Get()->LockId);
+            YDB_LOG_DEBUG("Received retry request for already finished/non-existing lock",
+                {"logPrefix", this->LogPrefix},
+                {"lockId", ev->Get()->LockId});
             return;
         }
 
@@ -965,7 +993,9 @@ private:
     }
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
-        CA_LOG_D("Send lock request to shard: " << shardId);
+        YDB_LOG_DEBUG("Send lock request",
+            {"logPrefix", this->LogPrefix},
+            {"shard", shardId});
         Counters->SentLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
@@ -1000,8 +1030,10 @@ private:
     void Handle(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        CA_LOG_D("Received lock result, requestId: " << record.GetRequestId()
-            << ", status: " << record.GetStatus());
+        YDB_LOG_DEBUG("Received lock result",
+            {"logPrefix", this->LogPrefix},
+            {"requestId", record.GetRequestId()},
+            {"status", record.GetStatus()});
 
         ui64 requestId = record.GetRequestId();
 
@@ -1020,14 +1052,18 @@ private:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS:
                 break;
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN: {
-                CA_LOG_D("STATUS_LOCKS_BROKEN from shard: " << record.GetTabletId());
+                YDB_LOG_DEBUG("Lock request returned STATUS_LOCKS_BROKEN",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
                 return RuntimeError(
                     TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. Locks Invalidated.",
                     NYql::NDqProto::StatusIds::ABORTED,
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
-                CA_LOG_D("STATUS_OVERLOADED from shard: " << record.GetTabletId());
+                YDB_LOG_DEBUG("Lock request returned STATUS_OVERLOADED",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
                 auto lockIt = Reads.findLock(record.GetRequestId());
                 if (lockIt != Reads.endLocks()) {
                     return RetryLock(lockIt->second, false);
@@ -1036,7 +1072,9 @@ private:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
-                CA_LOG_D("STATUS_DEADLOCK from shard: " << record.GetTabletId());
+                YDB_LOG_DEBUG("Lock request returned STATUS_DEADLOCK",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
                 return RuntimeError(
                     TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Deadlock detected",
                     NYql::NDqProto::StatusIds::ABORTED,
@@ -1128,8 +1166,11 @@ private:
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
-        CA_LOG_D("Start reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << record.GetReadId()
-            << ", shardId: " << shardId);
+        YDB_LOG_DEBUG("Started table read",
+            {"logPrefix", this->LogPrefix},
+            {"table", StreamLookupWorker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"shardId", shardId});
 
         TReadState read(record.GetReadId(), shardId);
 
@@ -1172,12 +1213,15 @@ private:
             Counters->StreamLookupIteratorTotalQuotaBytesExceeded->Inc();
         }
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", tablePath: " << StreamLookupWorker->GetTablePath()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Sent EvRead to shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"readId", record.GetReadId()},
+            {"tablePath", StreamLookupWorker->GetTablePath()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 
@@ -1214,8 +1258,11 @@ private:
     }
 
     void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
-        CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
-            << ", shardId: " << failedRead.ShardId);
+        YDB_LOG_DEBUG("Retrying table read",
+            {"logPrefix", this->LogPrefix},
+            {"table", StreamLookupWorker->GetTablePath()},
+            {"readId", failedRead.Id},
+            {"shardId", failedRead.ShardId});
 
         TDuration delay;
         if (!throttleDelay) {
@@ -1243,7 +1290,10 @@ private:
             Reads.eraseRead(failedRead);
             ScheduleNextReads();
         } else {
-            CA_LOG_D("Schedule retry attempt for readId: " << failedRead.Id << " after " << delay);
+            YDB_LOG_DEBUG("Scheduled read retry",
+                {"logPrefix", this->LogPrefix},
+                {"readId", failedRead.Id},
+                {"delay", delay});
             TlsActivationContext->Schedule(
                 delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryRead(failedRead.Id, failedRead.LastSeqNo, /*instantStart = */ true))
             );
@@ -1251,7 +1301,10 @@ private:
     }
 
     void RetryLock(TLockState& failedLock, bool allowInstantRetry = true) {
-        CA_LOG_D("Retry locking for shard: " << failedLock.ShardId << ", lockId: " << failedLock.Id);
+        YDB_LOG_DEBUG("Retry locking",
+            {"logPrefix", this->LogPrefix},
+            {"shard", failedLock.ShardId},
+            {"lockId", failedLock.Id});
 
         if (CheckTotalRetriesExceeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' lock retry limit exceeded",
@@ -1273,7 +1326,10 @@ private:
             Reads.eraseLock(failedLock);
             DrainPendingLocks();
         } else {
-            CA_LOG_D("Schedule retry for lockId: " << failedLock.Id << " after " << delay);
+            YDB_LOG_DEBUG("Scheduled lock retry",
+                {"logPrefix", this->LogPrefix},
+                {"lockId", failedLock.Id},
+                {"delay", delay});
             TlsActivationContext->Schedule(
                 delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryLock(failedLock.Id, /*instantStart = */ true))
             );
@@ -1290,7 +1346,9 @@ private:
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
-        CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());
+        YDB_LOG_DEBUG("Resolve shards",
+            {"logPrefix", this->LogPrefix},
+            {"table", StreamLookupWorker->GetTablePath()});
         ResolveShardsInProgress = true;
 
         Partitioning.reset();

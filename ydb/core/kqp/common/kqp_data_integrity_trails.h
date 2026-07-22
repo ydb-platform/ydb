@@ -92,7 +92,8 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         return ss.Str();
     };
 
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(request));
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Session actor query request integrity trail",
+        {"integrityTrail", log(request)});
 }
 
 inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type, const std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse>& response, const TActorContext& ctx) {
@@ -119,7 +120,8 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         return ss.Str();
     };
 
-    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Session actor query response integrity trail",
+        {"integrityTrail", log(traceId, response)});
 }
 
 // DataExecuter
@@ -145,7 +147,8 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txLocksDebugStr, traceId, txId, shardId));
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Data executer request integrity trail",
+        {"integrityTrail", log(txType, txLocksDebugStr, traceId, txId, shardId)});
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
@@ -181,7 +184,8 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Data executer write result integrity trail",
+        {"integrityTrail", log(state, traceId, ev)});
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
@@ -214,7 +218,8 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Data executer propose transaction result integrity trail",
+        {"integrityTrail", log(state, traceId, ev)});
 }
 
 template <typename TActorResultInfo>
@@ -242,7 +247,8 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(type, traceId, txId, info));
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Executer actor result integrity trail",
+        {"integrityTrail", log(type, traceId, txId, info)});
 }
 
 // WriteActor,BufferActor
@@ -261,7 +267,8 @@ inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> sh
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txId, shardId, component));
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Write or buffer actor integrity trail",
+        {"integrityTrail", log(txType, txId, shardId, component)});
 }
 
 }

@@ -18,6 +18,10 @@ class TestCheckYaConfigureIntegrity(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertIn("BadDep", hits[0])
 
+    def test_provides_conflict_is_fatal(self):
+        log = "depends on two modules which PROVIDES same feature 'test_framework':\n"
+        self.assertTrue(find_hits(log))
+
     def test_noise_is_ignored(self):
         log = (
             "Warn: Path is not buildable target: /tmp/docker-compose.yml\n"

@@ -14,7 +14,8 @@ from pathlib import Path
 
 # Extend this list carefully: only errors that mean the graph must not land in main.
 FATAL_CONFIGURE_PATTERNS = (
-    re.compile(r"Error\[-WBadDep\]"),
+    re.compile(r"(?:Error|Warning)\[-WBadDep\]"),
+    re.compile(r"PROVIDES same feature"),
 )
 
 

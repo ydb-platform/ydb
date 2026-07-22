@@ -1610,6 +1610,40 @@ bool IsExactDataAnnotation(
         !dynamic_cast<const TDataExprParamsType*>(data);
 }
 
+constexpr TStringBuf DateTimeTmResource = "DateTime2.TM";
+
+struct TReviewedDateTimeType {
+    NUdf::EDataSlot Slot = NUdf::EDataSlot::Date;
+    bool Nullable = false;
+    bool Resource = false;
+};
+
+bool IsExactResourceAnnotation(
+    const TTypeAnnotationNode* annotation,
+    bool nullable)
+{
+    if (!annotation) {
+        return false;
+    }
+    if (nullable) {
+        if (annotation->GetKind() != ETypeAnnotationKind::Optional) {
+            return false;
+        }
+        annotation = annotation->Cast<TOptionalExprType>()->GetItemType();
+    }
+    return annotation->GetKind() == ETypeAnnotationKind::Resource &&
+        annotation->Cast<TResourceExprType>()->GetTag() == DateTimeTmResource;
+}
+
+bool IsExactReviewedDateTimeAnnotation(
+    const TTypeAnnotationNode* annotation,
+    TReviewedDateTimeType type)
+{
+    return type.Resource
+        ? IsExactResourceAnnotation(annotation, type.Nullable)
+        : IsExactDataAnnotation(annotation, type.Slot, type.Nullable);
+}
+
 const TTypeAnnotationNode& DescribedType(
     const TExprNode& node,
     TStringBuf label)
@@ -1623,34 +1657,47 @@ const TTypeAnnotationNode& DescribedType(
     return *annotation->Cast<TTypeExprType>()->GetType();
 }
 
+void CheckReviewedDateTimeTypeDescriptor(
+    const TExprNode& node,
+    TReviewedDateTimeType type,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!IsExactReviewedDateTimeAnnotation(&DescribedType(node, label), type)) {
+        Unsupported(TStringBuilder() << label << " annotation disagrees");
+    }
+
+    const TExprNode* leaf = &node;
+    if (type.Nullable) {
+        if (!node.IsCallable("OptionalType") || node.ChildrenSize() != 1) {
+            Unsupported(TStringBuilder() << label << " is not exact OptionalType");
+        }
+        leaf = node.Child(0);
+        type.Nullable = false;
+        CheckScalarSafetyMetadata(*leaf);
+        if (!IsExactReviewedDateTimeAnnotation(&DescribedType(*leaf, label), type)) {
+            Unsupported(TStringBuilder() << label << " item annotation disagrees");
+        }
+    }
+
+    const TStringBuf name = type.Resource
+        ? DateTimeTmResource
+        : NUdf::GetDataTypeInfo(type.Slot).Name;
+    const TStringBuf callable = type.Resource ? "ResourceType" : "DataType";
+    if (!leaf->IsCallable(callable) || leaf->ChildrenSize() != 1 ||
+        !leaf->Child(0)->IsAtom(name))
+    {
+        Unsupported(TStringBuilder() << label << " does not describe " << name);
+    }
+}
+
 void CheckDataDescriptor(
     const TExprNode& node,
     NUdf::EDataSlot slot,
     bool nullable,
     TStringBuf label)
 {
-    CheckScalarSafetyMetadata(node);
-    if (!IsExactDataAnnotation(&DescribedType(node, label), slot, nullable)) {
-        Unsupported(TStringBuilder() << label << " annotation disagrees with its descriptor");
-    }
-
-    const TExprNode* data = &node;
-    if (nullable) {
-        if (!node.IsCallable("OptionalType") || node.ChildrenSize() != 1) {
-            Unsupported(TStringBuilder() << label << " is not exact OptionalType");
-        }
-        data = node.Child(0);
-        CheckScalarSafetyMetadata(*data);
-        if (!IsExactDataAnnotation(&DescribedType(*data, label), slot, false)) {
-            Unsupported(TStringBuilder() << label << " item annotation disagrees");
-        }
-    }
-    const TStringBuf name = NUdf::GetDataTypeInfo(slot).Name;
-    if (!data->IsCallable("DataType") || data->ChildrenSize() != 1 ||
-        !data->Child(0)->IsAtom(name))
-    {
-        Unsupported(TStringBuilder() << label << " does not describe " << name);
-    }
+    CheckReviewedDateTimeTypeDescriptor(node, {slot, nullable, false}, label);
 }
 
 void CheckVoidNode(const TExprNode& node, bool typeDescriptor, TStringBuf label) {
@@ -1666,61 +1713,200 @@ void CheckVoidNode(const TExprNode& node, bool typeDescriptor, TStringBuf label)
     }
 }
 
-const TCallableExprType& IntervalFromDaysType(
+enum class EReviewedDateTimeUdf : ui8 {
+    IntervalFromDays, Split, ShiftYears, ShiftMonths, MakeDate, Count,
+};
+
+struct TReviewedDateTimeArgument {
+    TReviewedDateTimeType Type;
+    ui64 Flags = 0;
+};
+
+struct TReviewedDateTimeUdfSpec {
+    TStringBuf Name;
+    TReviewedDateTimeType Result;
+    TReviewedDateTimeArgument Arguments[2];
+    size_t ArgumentCount;
+    TReviewedDateTimeType UserArguments[2];
+    size_t UserArgumentCount;
+    bool Blocks;
+};
+
+constexpr ui64 DateTimeAutoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+constexpr TReviewedDateTimeType DateType{NUdf::EDataSlot::Date};
+constexpr TReviewedDateTimeType Int32Type{NUdf::EDataSlot::Int32};
+constexpr TReviewedDateTimeType OptionalIntervalType{
+    NUdf::EDataSlot::Interval, true};
+constexpr TReviewedDateTimeType TmType{NUdf::EDataSlot::Date, false, true};
+constexpr TReviewedDateTimeType OptionalTmType{
+    NUdf::EDataSlot::Date, true, true};
+
+const TReviewedDateTimeUdfSpec ReviewedDateTimeUdfs[] = {
+    {"DateTime2.IntervalFromDays", OptionalIntervalType,
+        {{Int32Type, DateTimeAutoMap}, {}},
+        1, {}, 0, true},
+    {"DateTime2.Split", TmType, {{DateType, DateTimeAutoMap}, {}},
+        1, {DateType}, 1, true},
+    {"DateTime2.ShiftYears", OptionalTmType,
+        {{TmType, DateTimeAutoMap}, {Int32Type, 0}},
+        2, {DateType, Int32Type}, 2, false},
+    {"DateTime2.ShiftMonths", OptionalTmType,
+        {{TmType, DateTimeAutoMap}, {Int32Type, 0}},
+        2, {DateType, Int32Type}, 2, false},
+    {"DateTime2.MakeDate", DateType,
+        {{TmType, DateTimeAutoMap}, {}},
+        1, {}, 0, true},
+};
+
+static_assert(sizeof(ReviewedDateTimeUdfs) / sizeof(ReviewedDateTimeUdfs[0]) ==
+    static_cast<size_t>(EReviewedDateTimeUdf::Count));
+
+const TReviewedDateTimeUdfSpec& ReviewedDateTimeUdf(EReviewedDateTimeUdf kind) {
+    return ReviewedDateTimeUdfs[static_cast<size_t>(kind)];
+}
+
+void CheckTupleDescriptor(
+    const TExprNode& node,
+    size_t size,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(node);
+    const auto& annotation = DescribedType(node, label);
+    if (!node.IsCallable("TupleType") || node.ChildrenSize() != size ||
+        annotation.GetKind() != ETypeAnnotationKind::Tuple)
+    {
+        Unsupported(TStringBuilder() << label << " is not an exact TupleType");
+    }
+    const auto& tuple = *annotation.Cast<TTupleExprType>();
+    if (tuple.GetSize() != size) {
+        Unsupported(TStringBuilder() << label << " annotation has the wrong arity");
+    }
+    for (size_t index = 0; index < size; ++index) {
+        if (!IsSameAnnotation(
+                *tuple.GetItems()[index],
+                DescribedType(*node.Child(index), label)))
+        {
+            Unsupported(TStringBuilder() << label
+                << " child annotation disagrees at " << index);
+        }
+    }
+}
+
+void CheckEmptyStructDescriptor(const TExprNode& node, TStringBuf label) {
+    CheckScalarSafetyMetadata(node);
+    const auto& annotation = DescribedType(node, label);
+    if (!node.IsCallable("StructType") || node.ChildrenSize() != 0 ||
+        annotation.GetKind() != ETypeAnnotationKind::Struct ||
+        annotation.Cast<TStructExprType>()->GetSize() != 0)
+    {
+        Unsupported(TStringBuilder() << label << " is not an empty StructType");
+    }
+}
+
+
+const TCallableExprType& CheckReviewedDateTimeCallable(
     const TTypeAnnotationNode* annotation,
+    const TReviewedDateTimeUdfSpec& spec,
     TStringBuf label)
 {
     if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Callable) {
         Unsupported(TStringBuilder() << label << " is not Callable");
     }
     const auto& callable = *annotation->Cast<TCallableExprType>();
-    const auto& args = callable.GetArguments();
-    if (!IsExactDataAnnotation(
-            callable.GetReturnType(), NUdf::EDataSlot::Interval, true) ||
+    const auto& arguments = callable.GetArguments();
+    if (!IsExactReviewedDateTimeAnnotation(callable.GetReturnType(), spec.Result) ||
         callable.GetOptionalArgumentsCount() != 0 ||
-        !callable.GetPayload().empty() || args.size() != 1 ||
-        !IsExactDataAnnotation(args[0].Type, NUdf::EDataSlot::Int32, false) ||
-        !args[0].Name.empty() ||
-        args[0].Flags != NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+        !callable.GetPayload().empty() ||
+        arguments.size() != spec.ArgumentCount)
     {
         Unsupported(TStringBuilder() << label
-            << " is not (Int32{AutoMap}) -> Optional<Interval>");
+            << " is not the reviewed DateTime2 signature");
+    }
+    for (size_t index = 0; index < spec.ArgumentCount; ++index) {
+        if (!IsExactReviewedDateTimeAnnotation(
+                arguments[index].Type, spec.Arguments[index].Type) ||
+            !arguments[index].Name.empty() ||
+            arguments[index].Flags != spec.Arguments[index].Flags)
+        {
+            Unsupported(TStringBuilder() << label
+                << " argument " << index << " is not reviewed");
+        }
     }
     return callable;
 }
 
-void CheckCachedIntervalFromDaysType(
+void CheckReviewedDateTimeUserType(
     const TExprNode& node,
-    const TCallableExprType& udfType)
+    const TReviewedDateTimeUdfSpec& spec)
+{
+    if (spec.UserArgumentCount == 0) {
+        CheckVoidNode(node, true, "DateTime2 Udf user type");
+        return;
+    }
+
+    CheckTupleDescriptor(node, 3, "DateTime2 Udf user type");
+    const auto& arguments = *node.Child(0);
+    CheckTupleDescriptor(
+        arguments, spec.UserArgumentCount, "DateTime2 Udf arguments");
+    for (size_t index = 0; index < spec.UserArgumentCount; ++index) {
+        CheckReviewedDateTimeTypeDescriptor(
+            *arguments.Child(index),
+            spec.UserArguments[index],
+            "DateTime2 Udf user argument");
+    }
+    CheckEmptyStructDescriptor(*node.Child(1), "DateTime2 Udf options");
+    CheckTupleDescriptor(*node.Child(2), 0, "DateTime2 Udf type parameters");
+}
+
+void CheckReviewedDateTimeCachedType(
+    const TExprNode& node,
+    const TCallableExprType& udfType,
+    const TReviewedDateTimeUdfSpec& spec)
 {
     CheckScalarSafetyMetadata(node);
-    if (!node.IsCallable("CallableType") || node.ChildrenSize() != 3 ||
-        !IsSameAnnotation(
-            IntervalFromDaysType(
-                &DescribedType(node, "cached IntervalFromDays type"),
-                "cached IntervalFromDays type"),
-            udfType))
+    if (!node.IsCallable("CallableType") ||
+        node.ChildrenSize() != spec.ArgumentCount + 2)
     {
-        Unsupported("IntervalFromDays cached CallableType disagrees with Udf");
+        Unsupported("Cached DateTime2 CallableType has the wrong shape");
+    }
+    const auto& cachedType = CheckReviewedDateTimeCallable(
+        &DescribedType(node, "cached DateTime2 type"),
+        spec,
+        "cached DateTime2 type");
+    if (!IsSameAnnotation(cachedType, udfType)) {
+        Unsupported("Cached DateTime2 CallableType disagrees with Udf");
     }
 
     const auto& main = *node.Child(0);
     const auto& result = *node.Child(1);
-    const auto& argument = *node.Child(2);
     CheckScalarSafetyMetadata(main);
     CheckScalarSafetyMetadata(result);
-    CheckScalarSafetyMetadata(argument);
     if (!main.IsList() || main.ChildrenSize() != 0 ||
-        !result.IsList() || result.ChildrenSize() != 1 ||
-        !argument.IsList() || argument.ChildrenSize() != 3 ||
-        !argument.Child(1)->IsAtom("") || !argument.Child(2)->IsAtom("1"))
+        !result.IsList() || result.ChildrenSize() != 1)
     {
-        Unsupported("IntervalFromDays cached CallableType is not canonical");
+        Unsupported("Cached DateTime2 CallableType has a noncanonical header");
     }
-    CheckDataDescriptor(
-        *result.Child(0), NUdf::EDataSlot::Interval, true, "Udf return type");
-    CheckDataDescriptor(
-        *argument.Child(0), NUdf::EDataSlot::Int32, false, "Udf argument type");
+    CheckReviewedDateTimeTypeDescriptor(
+        *result.Child(0), spec.Result, "DateTime2 Udf return type");
+
+    for (size_t index = 0; index < spec.ArgumentCount; ++index) {
+        const auto& argument = *node.Child(index + 2);
+        const auto flags = spec.Arguments[index].Flags;
+        CheckScalarSafetyMetadata(argument);
+        const bool exactFlags = flags == DateTimeAutoMap
+            ? argument.IsList() && argument.ChildrenSize() == 3 &&
+                argument.Child(1)->IsAtom("") &&
+                argument.Child(2)->IsAtom("1")
+            : flags == 0 && argument.IsList() &&
+                argument.ChildrenSize() == 1;
+        if (!exactFlags) {
+            Unsupported("Cached DateTime2 argument flags are not canonical");
+        }
+        CheckReviewedDateTimeTypeDescriptor(
+            *argument.Child(0),
+            spec.Arguments[index].Type,
+            "DateTime2 Udf argument type");
+    }
 }
 
 bool IsExactSetting(const TExprNode& node, TStringBuf name) {
@@ -1729,30 +1915,79 @@ bool IsExactSetting(const TExprNode& node, TStringBuf name) {
         node.Child(0)->IsAtom(name);
 }
 
-const TCallableExprType& CheckIntervalFromDaysUdf(const TExprNode& node) {
+const TCallableExprType& CheckReviewedDateTimeUdf(
+    const TExprNode& node,
+    const TReviewedDateTimeUdfSpec& spec)
+{
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("Udf") || node.ChildrenSize() != 8 ||
-        !node.Child(0)->IsAtom("DateTime2.IntervalFromDays") ||
+        !node.Child(0)->IsAtom(spec.Name) ||
         !node.Child(3)->IsAtom("") || !node.Child(6)->IsAtom(""))
     {
-        Unsupported("IntervalFromDays requires its normalized eight-child Udf");
+        Unsupported(TStringBuilder() << spec.Name
+            << " requires its normalized eight-child Udf");
     }
-    const auto& callable = IntervalFromDaysType(
-        node.GetTypeAnn(), "IntervalFromDays Udf");
-    CheckVoidNode(*node.Child(1), false, "Udf run config");
-    CheckVoidNode(*node.Child(2), true, "Udf user type");
-    CheckCachedIntervalFromDaysType(*node.Child(4), callable);
-    CheckVoidNode(*node.Child(5), true, "Udf run-config type");
+    const auto& callable = CheckReviewedDateTimeCallable(
+        node.GetTypeAnn(), spec, TStringBuilder() << spec.Name << " Udf");
+    CheckVoidNode(*node.Child(1), false, "DateTime2 Udf run config");
+    CheckReviewedDateTimeUserType(*node.Child(2), spec);
+    CheckReviewedDateTimeCachedType(*node.Child(4), callable, spec);
+    CheckVoidNode(*node.Child(5), true, "DateTime2 Udf run-config type");
 
     const auto& settings = *node.Child(7);
     CheckScalarSafetyMetadata(settings);
-    if (!settings.IsList() || settings.ChildrenSize() != 2 ||
-        !IsExactSetting(*settings.Child(0), "blocks") ||
-        !IsExactSetting(*settings.Child(1), "strict"))
+    const size_t settingCount = spec.Blocks ? 2 : 1;
+    if (!settings.IsList() || settings.ChildrenSize() != settingCount) {
+        Unsupported(TStringBuilder() << spec.Name
+            << " settings are not canonical");
+    }
+    if ((spec.Blocks && !IsExactSetting(*settings.Child(0), "blocks")) ||
+        !IsExactSetting(*settings.Child(spec.Blocks ? 1 : 0), "strict"))
     {
-        Unsupported("IntervalFromDays settings are not exactly blocks, strict");
+        Unsupported(TStringBuilder() << spec.Name
+            << " settings are not canonical");
     }
     return callable;
+}
+
+void CheckReviewedDateTimeApply(
+    const TExprNode& node,
+    const TReviewedDateTimeUdfSpec& spec,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Apply") ||
+        node.ChildrenSize() != spec.ArgumentCount + 1 ||
+        !IsExactReviewedDateTimeAnnotation(node.GetTypeAnn(), spec.Result))
+    {
+        Unsupported(TStringBuilder() << label << " has the wrong Apply shape");
+    }
+    const auto& callable = CheckReviewedDateTimeUdf(*node.Child(0), spec);
+    if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType())) {
+        Unsupported(TStringBuilder() << label << " result disagrees with its Udf");
+    }
+    for (size_t index = 0; index < spec.ArgumentCount; ++index) {
+        const auto annotation = node.Child(index + 1)->GetTypeAnn();
+        if (!annotation ||
+            !IsSameAnnotation(*annotation, *callable.GetArguments()[index].Type))
+        {
+            Unsupported(TStringBuilder() << label
+                << " argument " << index << " disagrees with its Udf");
+        }
+    }
+}
+
+i32 ParseExactInt32Literal(const TExprNode& node, TStringBuf label) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Int32") || node.ChildrenSize() != 1 ||
+        !node.Child(0)->IsAtom() ||
+        !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Int32, false))
+    {
+        Unsupported(TStringBuilder() << label
+            << " is not an exact Int32 literal");
+    }
+    LiteralExpr(node);
+    return ParseInteger<i32>(node.Child(0)->Content(), label);
 }
 
 std::optional<ui16> ParseDateSafeCast(const TExprNode& node) {
@@ -1792,30 +2027,12 @@ std::optional<ui16> ParseDateSafeCast(const TExprNode& node) {
 }
 
 i32 ParseIntervalFromDays(const TExprNode& node) {
-    CheckScalarSafetyMetadata(node);
-    if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
-        !IsExactDataAnnotation(
-            node.GetTypeAnn(), NUdf::EDataSlot::Interval, true))
-    {
-        Unsupported("Date fold requires Apply with Optional<Interval> result");
-    }
-    const auto& callable = CheckIntervalFromDaysUdf(*node.Child(0));
-    if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType())) {
-        Unsupported("IntervalFromDays Apply result disagrees with its Udf");
-    }
-
+    CheckReviewedDateTimeApply(
+        node,
+        ReviewedDateTimeUdf(EReviewedDateTimeUdf::IntervalFromDays),
+        "IntervalFromDays Apply");
     const auto& days = *node.Child(1);
-    CheckScalarSafetyMetadata(days);
-    if (!days.IsCallable("Int32") || days.ChildrenSize() != 1 ||
-        !days.Child(0)->IsAtom() ||
-        !IsExactDataAnnotation(days.GetTypeAnn(), NUdf::EDataSlot::Int32, false) ||
-        !IsSameAnnotation(*days.GetTypeAnn(), *callable.GetArguments()[0].Type))
-    {
-        Unsupported("IntervalFromDays argument is not a direct Int32 literal");
-    }
-    LiteralExpr(days);
-    const i32 value = ParseInteger<i32>(
-        days.Child(0)->Content(), "IntervalFromDays Int32");
+    const i32 value = ParseExactInt32Literal(days, "IntervalFromDays Int32");
     constexpr i32 MaxDays = static_cast<i32>(NUdf::MAX_DATE - 1);
     if (value < -MaxDays || value > MaxDays) {
         Unsupported(TStringBuilder() << "IntervalFromDays argument is outside ["
@@ -1922,6 +2139,152 @@ bool IsDateArithmetic(const TExprNode& node) {
     return node.IsCallable({"+", "-"}) && node.GetTypeAnn() &&
         IsDataOrOptionalOfData(node.GetTypeAnn(), nullable, data) && data &&
         data->GetSlot() == NUdf::EDataSlot::Date;
+}
+
+enum class EConstantDateShift {
+    Years,
+    Months,
+};
+
+EConstantDateShift ConstantDateShiftKind(const TExprNode& udf) {
+    if (udf.ChildrenSize() > 0) {
+        if (udf.Child(0)->IsAtom(
+                ReviewedDateTimeUdf(EReviewedDateTimeUdf::ShiftYears).Name))
+        {
+            return EConstantDateShift::Years;
+        }
+        if (udf.Child(0)->IsAtom(
+                ReviewedDateTimeUdf(EReviewedDateTimeUdf::ShiftMonths).Name))
+        {
+            return EConstantDateShift::Months;
+        }
+    }
+    Unsupported("Constant DateTime2 fold requires ShiftYears or ShiftMonths");
+}
+
+const TReviewedDateTimeUdfSpec& ConstantDateShiftUdf(
+    EConstantDateShift kind)
+{
+    return ReviewedDateTimeUdf(
+        kind == EConstantDateShift::Years
+            ? EReviewedDateTimeUdf::ShiftYears
+            : EReviewedDateTimeUdf::ShiftMonths);
+}
+
+ui16 ParseSplitDate(const TExprNode& node) {
+    CheckReviewedDateTimeApply(
+        node,
+        ReviewedDateTimeUdf(EReviewedDateTimeUdf::Split),
+        "DateTime2.Split Apply");
+    return ParseDirectDateLiteral(*node.Child(1));
+}
+
+// Keep this small calendar model separate from the normalized IR-shape gate.
+// DateTime2.TM stores Year in an unsigned 12-bit field.
+constexpr i64 MaxDateTimeTmYear = (1U << 12) - 1;
+
+std::optional<ui16> ShiftConstantDate(
+    ui16 date,
+    i32 amount,
+    EConstantDateShift kind)
+{
+    ui32 year = 0;
+    ui32 month = 0;
+    ui32 day = 0;
+    if (!NMiniKQL::SplitDate(date, year, month, day)) {
+        Unsupported("DateTime2.Split rejected a validated Date literal");
+    }
+
+    i64 shiftedYear = year;
+    if (kind == EConstantDateShift::Years) {
+        shiftedYear += static_cast<i64>(amount);
+    } else {
+        i64 shiftedMonth = static_cast<i64>(amount) + month;
+        shiftedYear += (shiftedMonth - 1) / 12;
+        if (shiftedYear < 0 || shiftedYear > MaxDateTimeTmYear) {
+            Unsupported("DateTime2.ShiftMonths would wrap the TM year field");
+        }
+        shiftedMonth = 1 + (shiftedMonth - 1) % 12;
+        if (shiftedMonth <= 0) {
+            if (shiftedYear == 0) {
+                Unsupported("DateTime2.ShiftMonths would wrap the TM year field");
+            }
+            --shiftedYear;
+            shiftedMonth += 12;
+        }
+        month = static_cast<ui32>(shiftedMonth);
+    }
+
+    // Fail closed instead of modeling modulo-4096 assignment for extreme shifts.
+    if (shiftedYear < 0 || shiftedYear > MaxDateTimeTmYear) {
+        Unsupported("DateTime2 shift would wrap the TM year field");
+    }
+    year = static_cast<ui32>(shiftedYear);
+    day = std::min(
+        day,
+        NMiniKQL::GetMonthLength(month, NMiniKQL::IsLeapYear(year)));
+
+    ui16 result = 0;
+    return NMiniKQL::MakeDate(year, month, day, result)
+        ? std::optional<ui16>(result)
+        : std::nullopt;
+}
+
+NJson::TJsonValue ConstantShiftedDateExpr(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Map") || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported("Constant DateTime2 fold requires Optional<Date> Map");
+    }
+
+    const auto& shift = *node.Child(0);
+    CheckScalarSafetyMetadata(shift);
+    if (!shift.IsCallable("Apply") || shift.ChildrenSize() != 3 ||
+        !IsExactResourceAnnotation(shift.GetTypeAnn(), true))
+    {
+        Unsupported("Constant DateTime2 fold requires a two-argument shift Apply");
+    }
+    const auto& udf = *shift.Child(0);
+    const auto kind = ConstantDateShiftKind(udf);
+    CheckReviewedDateTimeApply(
+        shift, ConstantDateShiftUdf(kind), "DateTime2 shift Apply");
+    const ui16 date = ParseSplitDate(*shift.Child(1));
+
+    const auto& amount = *shift.Child(2);
+    const i32 value = ParseExactInt32Literal(amount, "DateTime2 shift Int32");
+
+    const auto& lambda = *node.Child(1);
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument() ||
+        lambda.Child(0)->Child(0)->ChildrenSize() != 0)
+    {
+        Unsupported("Constant DateTime2 Map requires a unary lambda");
+    }
+    const auto& argument = *lambda.Child(0)->Child(0);
+    CheckScalarSafetyMetadata(lambda);
+    CheckScalarSafetyMetadata(*lambda.Child(0));
+    CheckScalarSafetyMetadata(argument);
+    if (!IsExactResourceAnnotation(argument.GetTypeAnn(), false)) {
+        Unsupported("Constant DateTime2 Map lambda argument is not TM");
+    }
+
+    const auto& body = *lambda.Child(1);
+    CheckReviewedDateTimeApply(
+        body,
+        ReviewedDateTimeUdf(EReviewedDateTimeUdf::MakeDate),
+        "DateTime2.MakeDate Apply");
+    if (body.Child(1) != &argument) {
+        Unsupported("Constant DateTime2 Map lambda is not MakeDate identity use");
+    }
+    return ConstantDateValue(ShiftConstantDate(date, value, kind));
+}
+
+bool IsConstantShiftedDate(const TExprNode& node) {
+    return node.IsCallable("Map") &&
+        IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, true);
 }
 
 class TRestrictedConcatAuditor;
@@ -2501,6 +2864,10 @@ NJson::TJsonValue ExportExprNode(
 
     if (IsDateArithmetic(node)) {
         return ConstantDateIntervalExpr(node);
+    }
+
+    if (IsConstantShiftedDate(node)) {
+        return ConstantShiftedDateExpr(node);
     }
 
     if (node.IsCallable("Decimal")) {

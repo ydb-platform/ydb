@@ -101,8 +101,8 @@ The checked-in policy has three monotonic contracts. The verifier-entry floor
 requires TPCH q1 and TPC-DS q5, q65, and q80 to keep passing both snapshot
 exporters and invoke the verifier; their current verifier-side `UNSUPPORTED`
 results do not count as formulas, while any later formula or proof still
-satisfies this depth floor. The formula-construction floor requires TPCH q3 and
-q19 plus TPC-DS q3,
+satisfies this depth floor. The formula-construction floor requires TPCH q3,
+q5, q6, q10, q14, and q19 plus TPC-DS q3,
 q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
 q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
@@ -148,35 +148,36 @@ StageGraph remains a separate diagnostic step.
 ## Current measured formula coverage
 
 The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the 23-query floor below and recorded an
+formula-only mode. It emitted the 27-query floor below and recorded an
 outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
 measured suites meet the updated checked-in floors: TPCH q1 and TPC-DS q5, q65,
 and q80 reach verifier entry.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 2 (q3, q19) | 17 | 3 | 22 |
+| TPCH_YQL | 6 (q3, q5, q6, q10, q14, q19) | 13 | 3 | 22 |
 | TPCDS_YQL | 21 (q3, q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, q99) | 49 | 29 | 99 |
 
-The supported formula slice is 23/121 queries (19.0%). This is a useful end-to-end
+The supported formula slice is 27/121 queries (22.3%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 98 workload entries or larger
+slice rather than a claim about the remaining 94 workload entries or larger
 inputs.
 
 ### TPCH inventory
 
 Optimizer preparation failed for q16, q18, and q20 on unsupported PG
-semantics. Seventeen queries failed closed as follows; a query can have both an
-initial and final reason.
+semantics. Twelve queries fail closed at a snapshot boundary as follows; a
+query can have both an initial and final reason. TPCH q1 is the thirteenth
+unsupported query and reaches the verifier before stopping at aggregate `avg`.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | Catalog required for subplans | q2, q4, q11, q15, q17, q21, q22 | q2, q4, q11, q15, q17, q21, q22 |
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
-| Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
+| Callable `Map` | q7, q8 | q7, q8 |
+| Scalar node with unordered children | q12 | q12 |
 | OLAP `string_contains` | - | q9 |
-| OLAP unary operation `just` | - | q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
@@ -189,12 +190,15 @@ bounded equivalence.
 Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
 sort key, and the widened partial/final aggregate as q3's first blockers.
 Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
-construct a complete formula for q3. Together with q19, that raises TPCH to
-2/22. Exact direct numeric Date/Interval folding moves q1 through both snapshot
+construct a complete formula for q3. Exact direct numeric Date/Interval folding
+moves q1 through both snapshot
 exporters to verifier-side aggregate `avg` after 109 ms of preparation and 214
-ms of verifier work. q5 reaches initial `Map` and final OLAP `just`; q8 reaches
-`Map` at both boundaries; and q10 reaches initial `Map` and final OLAP `just`.
-Those queries remain unsupported.
+ms of verifier work. Exact constant DateTime2 calendar-shift folding then moves
+q5, q6, q10, and q14 through formula construction, raising TPCH to 6/22. The
+complete run recorded preparation/verifier times of 170/113,378, 55/222,
+108/7,886, and 53/267 ms, respectively. q12 clears the calendar shift and now
+fails on unordered scalar children at both boundaries; q7 and q8 remain on
+generic `Map`.
 
 ### TPC-DS inventory
 
@@ -293,10 +297,30 @@ result outside `[0, 49673)` becomes typed Date NULL. The corresponding OLAP
 folds the complete shape to existing Date literal/NULL nodes, so no Interval IR
 or Python evaluator support is added. This moved q37, q40, and q82 through
 formula construction and raised TPC-DS to 21/99. Before restricted Concat was
-added, q5, q80, and q84 then stopped at `Concat`; q21 reaches `Double`; q72
+added, TPC-DS q5, q80, and q84 then stopped at `Concat`; q21 reaches `Double`; q72
 remains outside the Date gate because its dynamic expression does not have the
 exact Optional-Date cast shape; and q77 reaches the verifier's Decimal-SUM
 headroom gate.
+
+The constant DateTime2 calendar-shift normalization is a separate closed gate.
+It accepts only the optimizer-generated optional-Date
+`Map(Shift(Split(Date), Int32), MakeDate)` tree for `ShiftYears` and
+`ShiftMonths`. The exact Date, Int32, `DateTime2.TM` resource, callable and
+cached descriptors, UDF user types, Void fields, settings, AutoMap flags, and
+unary lambda binding must all agree with the reviewed normalized shape. It uses
+MiniKQL's Date split/make tables, including February-29 and month-end clamping,
+and reproduces the runtime's signed month quotient/remainder sequence. A shift
+that would wrap TM's unsigned 12-bit year field fails closed; a valid calendar
+result outside the Date domain becomes typed NULL. No general `Map` or
+DateTime2 execution is admitted.
+
+Synthetic exact-result, leap-day, month-end, Date-boundary, structural-mutation,
+and year-wrap cases plus a real-host pushed-filter proof cover the gate. The
+full TPCH dashboard emits formulas for q5, q6, q10, and q14 at 170/113,378,
+55/222, 108/7,886, and 53/267 ms of preparation/verifier work, respectively.
+q12 passes this fold but remains unsupported on unordered scalar children at
+both snapshot boundaries. This raises TPCH formula coverage to 6/22 and total
+workload formula coverage to 27/121 (22.3%).
 
 ## Curated proof floor and focused results
 
@@ -392,7 +416,28 @@ headroom gate.
   fractional-day tests plus a real-host pushed-filter obligation cover the
   gate. TPCH q1 now passes both snapshot exporters and reaches verifier-side
   aggregate `avg` after 109 ms of preparation and 214 ms of verifier work. It
-  emits no formula, so the formula slice and proof floor are unchanged.
+  emitted no formula, so the formula slice and proof floor were unchanged at
+  that milestone.
+
+- Constant DateTime2 calendar-shift normalization accepts only the exact
+  optional-Date `Map` over `ShiftYears` or `ShiftMonths`, whose input is the
+  reviewed `Split(Date)` UDF shape and whose unary lambda is exactly
+  `MakeDate(bound_tm)`. All descriptors, annotations, user types, settings,
+  flags, and binder identity are checked. MiniKQL calendar tables reproduce
+  leap-day and month-end clamping; potential 12-bit TM-year wrap fails closed,
+  while a shifted value outside the Date domain becomes typed NULL. Synthetic
+  result/boundary/mutation tests and a real-host pushed-filter obligation cover
+  the gate. TPCH q5, q6, q10, and q14 now emit formulas, raising the formula
+  slice to 27/121 (22.3%). q12 remains unsupported on unordered children.
+  Focused solver experiments do not promote any proof: q5 reports
+  `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier work and the
+  65-second external-process watchdog, and q10 returns `UNKNOWN` after
+  142/74,871 ms. q6 and q14 return symbolic counterexamples after 54/788 and
+  87/1,046 ms. Inspection indicates verifier false positives: q6's equivalent
+  final Decimal predicates are opaque where the initial predicates are
+  structured, while q14 fingerprints equivalent zero constants differently.
+  Neither is replay-confirmed or evidence of an optimizer bug. The checked-in
+  proof floor is unchanged.
 
 - Restricted stored-String `Concat` is admitted only as a Map-body root whose
   binary tree contains canonical String literals and one or two catalog-backed
@@ -412,12 +457,12 @@ headroom gate.
   provenance failures, all ten join kinds, and the two-Olap-occurrence
   rejection; a one-Olap-occurrence real-host initial/final obligation is
   `VERIFIED_BOUNDED`.
-  The complete dashboard records q5 as verifier-side `UNSUPPORTED` on Decimal
+  The complete dashboard records TPC-DS q5 as verifier-side `UNSUPPORTED` on Decimal
   SUM headroom after 1,800 ms of preparation and 822 ms of verifier work, and
   q80 on its 82,944-pair grouped aggregate after 1,946 ms and 11,975 ms. q84's
   two Olap String occurrences exceed the allocation-totality bound and remain
-  unsupported. The policy pins q5/q80 at verifier entry; the formula slice
-  remains 23/121 and the proof floor remains ten.
+  unsupported. The policy pins TPC-DS q5/q80 at verifier entry; at that milestone the
+  formula slice remained 23/121 and the proof floor remained ten.
 
 - Decimal aggregate `max` is exact only when its input and output have the same
   canonical Decimal type and phase-aware nullability. It ignores NULL and uses
@@ -427,7 +472,7 @@ headroom gate.
   task, wrong-shuffle, and fail-closed type tests cover the contract. Focused
   q74 passes MAX and then rejects 65,536 join-matching pairs above the 16,384
   construction cap after 463 ms of preparation and 375 ms of verifier work.
-  It emits no formula, so the 23/121 formula slice and ten-query proof floor are
+  It emitted no formula, so the then-current formula slice and proof floor were
   unchanged.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
@@ -472,8 +517,8 @@ headroom gate.
   ms in verifier construction before both exports failed closed on unsupported
   scalar callable `Unwrap`. A separate real-host `COUNT(*) > 1` fixture captures
   the same type pair at both snapshots and returns `VERIFIED_BOUNDED`. q8
-  remains unsupported and changes neither the 23/121 formula slice nor the
-  ten-query proof floor.
+  remains unsupported and changed neither the then-current formula slice nor
+  the proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial nullable `Int64` membership test and the final
   lowering through `SafeCast(Int64 -> Int32)` disagreed only because the cast

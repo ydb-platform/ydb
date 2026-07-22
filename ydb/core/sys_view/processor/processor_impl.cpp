@@ -6,6 +6,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 
 namespace NKikimr {
 namespace NSysView {
@@ -38,7 +40,8 @@ void TSysViewProcessor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TAct
 }
 
 void TSysViewProcessor::OnActivateExecutor(const TActorContext& ctx) {
-    SVLOG_I("[" << TabletID() << "] OnActivateExecutor");
+    YDB_LOG_INFO("TSysViewProcessor::OnActivateExecutor",
+        {"tabletId", TabletID()});
 
     // TODO: tablet counters
     Execute(CreateTxInitSchema(), ctx);
@@ -49,7 +52,8 @@ void TSysViewProcessor::DefaultSignalTabletActive(const TActorContext& ctx) {
 }
 
 void TSysViewProcessor::Handle(TEvPrivate::TEvSendRequests::TPtr&) {
-    SVLOG_D("[" << TabletID() << "] Handle TEvPrivate::TEvSendRequests");
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvSendRequests: sending interval metrics requests",
+        {"tabletId", TabletID()});
     SendRequests();
 }
 
@@ -98,11 +102,12 @@ void TSysViewProcessor::PersistQueryTopResults(NIceDb::TNiceDb& db,
         }
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistQueryTopResults: "
-        << "table id# " << TSchema::TableId
-        << ", interval end# " << intervalEnd
-        << ", query count# " << top.size()
-        << ", persisted# " << rank);
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistQueryTopResults: persisting query top results",
+        {"tabletId", TabletID()},
+        {"tableId", TSchema::TableId},
+        {"intervalEnd", intervalEnd},
+        {"topSize", top.size()},
+        {"persistedCount", rank});
 }
 
 void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
@@ -131,9 +136,10 @@ void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
             NIceDb::TUpdate<Schema::MetricsOneMinute::Data>(serialized));
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistQueryResults: "
-        << "interval end# " << IntervalEnd
-        << ", query count# " << sorted.size());
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistQueryResults: persisting query results",
+        {"tabletId", TabletID()},
+        {"intervalEnd", IntervalEnd},
+        {"queryCount", sorted.size()});
 
     // TODO: metrics one hour?
 
@@ -176,10 +182,11 @@ void TSysViewProcessor::PersistPartitionTopResults(NIceDb::TNiceDb& db,
             NIceDb::TUpdate<typename TSchema::Data>(data));
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistPartitionTopResults: "
-        << "table id# " << TSchema::TableId
-        << ", partition interval end# " << intervalEnd
-        << ", partition count# " << top.size());
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistPartitionTopResults: persisting partition top results",
+        {"tabletId", TabletID()},
+        {"tableId", TSchema::TableId},
+        {"intervalEnd", intervalEnd},
+        {"partitionCount", top.size()});
 }
 
 void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
@@ -330,7 +337,9 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR, PartitionTopByTliHour);
     }
 
-    SVLOG_D("[" << TabletID() << "] Reset: interval end# " << IntervalEnd);
+    YDB_LOG_DEBUG("TSysViewProcessor::Reset: resetting interval state",
+        {"tabletId", TabletID()},
+        {"intervalEnd", IntervalEnd});
 
     const auto minuteHistorySize = TotalInterval * ONE_MINUTE_BUCKET_COUNT;
     const auto hourHistorySize = ONE_HOUR_BUCKET_SIZE * ONE_HOUR_BUCKET_COUNT;
@@ -376,14 +385,15 @@ void TSysViewProcessor::SendRequests() {
         fillHashes(req.ByCpuTime, *record.MutableTopByCpuTime());
         fillHashes(req.ByRequestUnits, *record.MutableTopByRequestUnits());
 
-        SVLOG_D("[" << TabletID() << "] Send TEvGetIntervalMetricsRequest: "
-            << "node id# " << req.NodeId
-            << ", hashes# " << req.Hashes.size()
-            << ", texts# " << req.TextsToGet.size()
-            << ", by duration# " << req.ByDuration.size()
-            << ", by read bytes# " << req.ByReadBytes.size()
-            << ", by cpu time# " << req.ByCpuTime.size()
-            << ", by request units# " << req.ByRequestUnits.size());
+        YDB_LOG_DEBUG("TSysViewProcessor::SendRequests: sending TEvGetIntervalMetricsRequest",
+            {"tabletId", TabletID()},
+            {"nodeId", req.NodeId},
+            {"metricsHashCount", req.Hashes.size()},
+            {"queryTextCount", req.TextsToGet.size()},
+            {"topByDurationCount", req.ByDuration.size()},
+            {"topByReadBytesCount", req.ByReadBytes.size()},
+            {"topByCpuTimeCount", req.ByCpuTime.size()},
+            {"topByRequestUnitsCount", req.ByRequestUnits.size()});
 
         Send(MakeSysViewServiceID(req.NodeId),
             std::move(request),
@@ -401,13 +411,17 @@ void TSysViewProcessor::IgnoreFailure(TNodeId nodeId) {
 
 void TSysViewProcessor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto nodeId = (TNodeId)ev.Get()->Cookie;
-    SVLOG_W("[" << TabletID() << "] TEvUndelivered: node id# " << nodeId);
+    YDB_LOG_WARN("Handle TEvents::TEvUndelivered: interval metrics request undelivered",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId});
     IgnoreFailure(nodeId);
 }
 
 void TSysViewProcessor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     auto nodeId = ev->Get()->NodeId;
-    SVLOG_W("[" << TabletID() << "] TEvNodeDisconnected: node id# " << nodeId);
+    YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected: node disconnected during metrics request",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId});
     IgnoreFailure(nodeId);
 }
 
@@ -527,7 +541,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopPartitionsByTliOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected partition stats type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -540,7 +556,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &MetricsOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected query metrics type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -571,7 +589,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopByRequestUnitsOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected query stats type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -634,11 +654,12 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
         next.PrintToString(response->Record.GetNext(), &nextStr);
     }
 
-    SVLOG_D("[" << TabletID() << "] Reply batch: "
-        << "range# " << rangeStr
-        << ", rows# " << count
-        << ", bytes# " << size
-        << ", next# " << nextStr);
+    YDB_LOG_DEBUG("TSysViewProcessor::Reply: sending response batch",
+        {"tabletId", TabletID()},
+        {"range", rangeStr},
+        {"rowCount", count},
+        {"byteSize", size},
+        {"next", nextStr});
 
     Send(ev->Sender, std::move(response));
 }

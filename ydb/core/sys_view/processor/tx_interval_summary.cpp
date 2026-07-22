@@ -1,5 +1,7 @@
 #include "processor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -146,14 +148,16 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
             Record.GetTopByCpuTime().ValuesSize() != Record.GetTopByCpuTime().HashesSize() ||
             Record.GetTopByRequestUnits().ValuesSize() != Record.GetTopByRequestUnits().HashesSize())
         {
-            SVLOG_W("[" << Self->TabletID() << "] TTxIntervalSummary::Execute, malformed summary: "
-                << "node id# " << nodeId);
+            YDB_LOG_WARN("TTxIntervalSummary::Execute: malformed summary from node",
+                {"tabletId", Self->TabletID()},
+                {"nodeId", nodeId});
             return true;
         }
 
         if (Self->SummaryNodes.find(nodeId) != Self->SummaryNodes.end()) {
-            SVLOG_W("[" << Self->TabletID() << "] TTxIntervalSummary::Execute, duplicate summary: "
-                << "node id# " << nodeId);
+            YDB_LOG_WARN("TTxIntervalSummary::Execute: duplicate summary from node",
+                {"tabletId", Self->TabletID()},
+                {"nodeId", nodeId});
             return true;
         }
         Self->SummaryNodes.insert(nodeId);
@@ -161,9 +165,10 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
         const auto& metrics = Record.GetMetrics();
         auto count = metrics.HashesSize();
 
-        SVLOG_D("[" << Self->TabletID() << "] TTxIntervalSummary::Execute: "
-            << "node id# " << nodeId
-            << ", query count# " << count);
+        YDB_LOG_DEBUG("TTxIntervalSummary::Execute: processing interval summary from node",
+            {"tabletId", Self->TabletID()},
+            {"nodeId", nodeId},
+            {"queryCount", count});
 
         NIceDb::TNiceDb db(txc.DB);
         for (size_t i = 0; i < count; ++i) {
@@ -191,7 +196,8 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxIntervalSummary::Complete");
+        YDB_LOG_DEBUG("TTxIntervalSummary::Complete",
+            {"tabletId", Self->TabletID()});
     }
 };
 
@@ -200,24 +206,28 @@ void TSysViewProcessor::Handle(TEvSysView::TEvIntervalQuerySummary::TPtr& ev) {
     auto nodeId = record.GetNodeId();
 
     if (CurrentStage != COLLECT) {
-        SVLOG_W("[" << TabletID() << "] TEvIntervalQuerySummary, wrong stage: "
-            << "node id# " << nodeId);
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: wrong stage",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"currentStage", static_cast<ui64>(CurrentStage)});
         return;
     }
 
     if (record.GetIntervalEndUs() != IntervalEnd.MicroSeconds()) {
-        SVLOG_W("[" << TabletID() << "] TEvIntervalQuerySummary, time mismath: "
-            << "node id# " << nodeId
-            << ", interval end# " << IntervalEnd
-            << ", event interval end# " << TInstant::MicroSeconds(record.GetIntervalEndUs()));
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: interval end mismatch",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"expectedIntervalEnd", IntervalEnd},
+            {"recordIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
         return;
     }
 
     if (record.GetDatabase() != Database) {
-        SVLOG_W("[" << TabletID() << "] TEvIntervalQuerySummary, db mismatch: "
-            << "node id# " << nodeId
-            << ", database# " << Database
-            << ", event database# " << record.GetDatabase());
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: database mismatch",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"expectedDatabase", Database},
+            {"recordDatabase", record.GetDatabase()});
         return;
     }
 

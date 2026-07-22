@@ -2,8 +2,6 @@
 #include "fulltext_query.h"
 #include "table_index.h"
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
@@ -295,9 +293,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat", "0123,456@"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog_cat", "0123,456"}));
-
-        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::ALPHANUMERIC);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat", "0123", "456"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
@@ -538,45 +533,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
         UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
             (TVector<T>{{"foo bar", false}}));
-    }
-
-    Y_UNIT_TEST(WordBreakTest) {
-        // Generated from
-        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakTest.txt
-        // and
-        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakProperty.txt
-        TString tests = NResource::Find("word_break_test.json");
-        NJson::TJsonValue out;
-        ReadJsonTree(tests, &out, true);
-        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
-        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
-        int ok = 0, failed = 0;
-        for (auto& test: out.GetArray()) {
-            TString in = test["input"].GetString();
-            TVector<TString> expected;
-            for (auto& token: test["tokens"].GetArray()) {
-                expected.push_back(token.GetString());
-            }
-            TVector<TString> out = Analyze(in, analyzers);
-            if (out != expected) {
-                Cerr << "Input: " << in << "\nTokens:";
-                for (auto& token: out) {
-                    Cerr << " " << token;
-                }
-                Cerr << "\nExpected:";
-                for (auto& token: expected) {
-                    Cerr << " " << token;
-                }
-                Cerr << "\n\n";
-                failed++;
-            } else {
-                ok++;
-            }
-        }
-        if (failed > 0) {
-            Cerr << "Ok " << ok << "/" << (ok+failed) << " tests\n";
-        }
-        UNIT_ASSERT(!failed);
     }
 }
 

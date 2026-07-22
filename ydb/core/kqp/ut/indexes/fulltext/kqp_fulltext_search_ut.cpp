@@ -2053,7 +2053,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
 }
 
 Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
-    auto kikimr = Kikimr();
+        auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
     NYdb::NQuery::TExecuteQuerySettings querySettings;

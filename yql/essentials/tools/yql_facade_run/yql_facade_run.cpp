@@ -603,14 +603,24 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     FuncRegistry_ = funcRegistry;
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-        /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(RunOptions_.SqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities,
+            /*isAmbiguityDebugging=*/false,
+            /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
+    };
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -621,6 +631,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
+
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
     if (RunOptions_.TestLexers ||
@@ -655,6 +666,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                 settings.ClusterMapping = clusters;
                 settings.SyntaxVersion = 1;
                 settings.AlwaysAllowExports = true;
+                settings.MaxParseTreeDepth = NSQLTranslation::SQL_MAX_PARSE_TREE_DEPTH;
 
                 auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
                 if (!ast.IsOk()) {
@@ -899,9 +911,13 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
             NSQLTranslationV1::TParsers parsers = {
                 .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
                 .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-                    /*isAmbiguityError=*/true),
+                    /*isAmbiguityError=*/true,
+                    /*isAmbiguityDebugging=*/false,
+                    /*maxParseTreeDepth=*/settings.MaxParseTreeDepth),
             };
 
             NSQLTranslation::TTranslators translators(

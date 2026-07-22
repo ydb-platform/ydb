@@ -15,6 +15,11 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
+#include <library/cpp/logger/backend.h>
+
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 #include "tls/tls.h"
 
 using namespace NActors;
@@ -57,6 +62,24 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+
+        if (common->Settings.EnableInterconnectSessionV2) {
+            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
+            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
+            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
+            ui32 uringShards = 4;
+            if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
+                uringShards = FromString<ui32>(s);
+            }
+            common->UringEngineV2 = CreateUringEngine(uringShards,
+                common->MonCounters->GetSubgroup("subsystem", "uring"),
+                common->Settings.EnableSQPOLLv2);
+            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
+                if (engine) {
+                    engine->SetActorSystem(actorSystem);
+                }
+            });
+        }
 
         #if !defined(_msan_enabled_)
         common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
@@ -152,9 +175,9 @@ public:
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
-        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) is created lazily on
-        // the first v2 session and stopped via the actor system's DeferPreStop hook -- no explicit
-        // wiring here or in production initializers is required.
+        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and
+        // published in Common; the interconnect proxy binds it to the actor system on start and it is
+        // stopped via the actor system's DeferPreStop hook.
     }
 
     ~TNode() {

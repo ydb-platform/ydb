@@ -122,6 +122,8 @@ namespace NActors {
 
         std::shared_ptr<IRcBufAllocator> RcBufAllocator;
 
+        std::vector<std::function<void(TActorSystem*)>> OnActorSystemCreated;
+
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
         }

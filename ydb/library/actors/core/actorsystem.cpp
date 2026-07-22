@@ -121,6 +121,9 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        for (auto& callback : SystemSetup->OnActorSystemCreated) {
+            callback(this);
+        }
     }
 
     TActorSystem::~TActorSystem() {

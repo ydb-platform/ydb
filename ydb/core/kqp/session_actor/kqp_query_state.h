@@ -26,11 +26,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
 
-namespace NWorkload {
+namespace NWorkloadManager {
 class IQueryClassifier;
-} // namespace NWorkload
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -149,7 +151,7 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkload::IQueryClassifier> QueryClassifier;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
@@ -712,5 +714,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

@@ -20,12 +20,12 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/compile_service
     ydb/core/kqp/counters
-    ydb/core/kqp/gateway/behaviour/resource_pool_classifier
+    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
     ydb/core/kqp/gateway/behaviour/streaming_query
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/kqp/run_script_actor
-    ydb/core/kqp/workload_service
+    ydb/services/workload_manager
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos

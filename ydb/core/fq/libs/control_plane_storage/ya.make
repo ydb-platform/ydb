@@ -22,7 +22,6 @@ PEERDIR(
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/external_sources
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/common
     ydb/core/fq/libs/config
     ydb/core/fq/libs/config/protos

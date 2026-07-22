@@ -123,8 +123,8 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
     }
 
     const auto read = CastOperator<TOpRead>(maybeRead);
-    // Currently supported only for cs.
-    return !read->GetRanges() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage;
+    const auto tableType = read->GetTableStorageType();
+    return !read->GetRanges() && (tableType == NYql::EStorageType::ColumnStorage || tableType == NYql::EStorageType::RowStorage);
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {
@@ -217,6 +217,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     // Check for table.
     const auto tableDesc = kqpCtx.Tables->EnsureTableExists(kqpCtx.Cluster, tablePath, read->Pos, ctx);
     if (!tableDesc) {
+        return input;
+    }
+
+    const auto tableKind = tableDesc->Metadata->Kind;
+    if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Datashard) {
         return input;
     }
 

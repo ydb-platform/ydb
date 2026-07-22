@@ -71,7 +71,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -194,9 +196,9 @@ private:
         THostIndex hostIndex,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
-    void ReEstablishDDiskConnection(
-        THostIndex hostIndex,
-        TDuration reconnectDelay);
+    void ReEstablishConnection(
+        EConnectionType connectionType,
+        THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
@@ -269,6 +271,7 @@ private:
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
     TLogTitle LogTitle;
+    ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;

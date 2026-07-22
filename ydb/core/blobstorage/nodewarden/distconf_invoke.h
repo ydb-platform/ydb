@@ -81,6 +81,7 @@ namespace NKikimr::NStorage {
 
         THashMultiMap<ui32, TVDiskID> NodeToVDisk;
         THashMap<TActorId, TVDiskID> ActorToVDisk;
+        THashMap<ui32, TVector<std::pair<TActorId, TVDiskID>>> VStatusQueriesAwaitingConnection;
         std::optional<NKikimrBlobStorage::TBaseConfig> BaseConfig;
         THashSet<TVDiskID> PendingVDiskIds;
         TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
@@ -88,6 +89,8 @@ namespace NKikimr::NStorage {
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);
+        void SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId = {});
+        void SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId);
         void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void OnVStatusError(TVDiskID vdiskId);

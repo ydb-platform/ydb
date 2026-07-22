@@ -43,6 +43,10 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex;
             TInstant Timestamp;
             std::unordered_set<ui64> ReadInflight;
+            // Sender-supplied per-MinSectorSize-block payload checksums, in order, covering
+            // [OffsetInBytes, OffsetInBytes + Size). Empty when the record was written without
+            // checksums (legacy / internal writes) - opt-in, mirrors the wire-level semantics.
+            std::vector<ui64> PayloadChecksums;
         };
 
         std::map<ui64, TRecord> Records;

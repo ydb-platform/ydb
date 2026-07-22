@@ -113,15 +113,15 @@ def render_expression(expression: ir.Expr) -> str:
             f"right={render_expression(expression.args[1])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
-    if kind == "cast_decimal":
+    if kind in {"cast_decimal", "cast_integral"}:
         if len(expression.args) != 1:
-            raise InspectionError("cast_decimal expression does not have exactly one argument")
+            raise InspectionError(f"{kind} expression does not have exactly one argument")
         scalar_type = str(_required(expression.result_type, "type"))
         nullable = _required(expression.nullable, "nullable")
         if not isinstance(nullable, bool):
             raise InspectionError("expression field 'nullable' is not Boolean")
         return (
-            f"cast_decimal(arg={render_expression(expression.args[0])}, "
+            f"{kind}(arg={render_expression(expression.args[0])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
     if kind == "if":

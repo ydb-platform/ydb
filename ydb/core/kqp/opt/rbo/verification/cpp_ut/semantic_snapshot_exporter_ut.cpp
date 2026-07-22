@@ -555,6 +555,12 @@ TExprNode::TPtr DataTypeDescriptor(
     TStringBuf typeName,
     const TTypeAnnotationNode* type);
 
+TExprNode::TPtr OptionalDataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf typeName,
+    const TTypeAnnotationNode* itemType,
+    const TTypeAnnotationNode* optionalType);
+
 TExprNode::TPtr DecimalDataTypeDescriptor(
     TExportTestContext& ctx,
     TStringBuf precision,
@@ -679,17 +685,30 @@ TExprNode::TPtr DataTypeDescriptor(
     return result;
 }
 
+TExprNode::TPtr OptionalDataTypeDescriptor(
+    TExportTestContext& ctx,
+    TStringBuf typeName,
+    const TTypeAnnotationNode* itemType,
+    const TTypeAnnotationNode* optionalType)
+{
+    return TypedCallable(
+        ctx,
+        "OptionalType",
+        {DataTypeDescriptor(ctx, typeName, itemType)},
+        ctx.ExprCtx.MakeType<TTypeExprType>(optionalType));
+}
+
 TExprNode::TPtr TypedNothing(
     TExportTestContext& ctx,
     TStringBuf typeName,
     const TTypeAnnotationNode* itemType,
     const TTypeAnnotationNode* optionalType)
 {
-    auto descriptor = TypedCallable(
+    auto descriptor = OptionalDataTypeDescriptor(
         ctx,
-        "OptionalType",
-        {DataTypeDescriptor(ctx, typeName, itemType)},
-        ctx.ExprCtx.MakeType<TTypeExprType>(optionalType));
+        typeName,
+        itemType,
+        optionalType);
     return TypedCallable(ctx, "Nothing", {std::move(descriptor)}, optionalType);
 }
 
@@ -2080,6 +2099,196 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "binding depth exceeds");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsOnlyReviewedPartialIntegralSafeCastsExactly) {
+        struct TCase {
+            NUdf::EDataSlot Source;
+            NUdf::EDataSlot Target;
+            bool SourceNullable;
+        };
+        const TVector<TCase> cases = {
+            {NUdf::EDataSlot::Int64, NUdf::EDataSlot::Int32, true},
+            {NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64, true},
+            {NUdf::EDataSlot::Uint64, NUdf::EDataSlot::Int64, true},
+            {NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint8, false},
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(
+                ctx,
+                test.Source,
+                test.SourceNullable);
+            const auto* targetType = ScalarType(ctx, test.Target);
+            const auto* optionalTarget = ScalarType(ctx, test.Target, true);
+            const TString targetName(NUdf::GetDataTypeInfo(test.Target).Name);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        OptionalDataTypeDescriptor(
+                            ctx,
+                            targetName,
+                            targetType,
+                            optionalTarget),
+                    },
+                    optionalTarget),
+                test.SourceNullable);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "cast_integral");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["arg"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["arg"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                targetName);
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+
+        const auto assertOpaque = [](
+            TStringBuf callable,
+            NUdf::EDataSlot sourceSlot,
+            NUdf::EDataSlot targetSlot)
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, sourceSlot, true);
+            const auto* targetType = ScalarType(ctx, targetSlot);
+            const auto* optionalTarget = ScalarType(ctx, targetSlot, true);
+            const TString targetName(NUdf::GetDataTypeInfo(targetSlot).Name);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        OptionalDataTypeDescriptor(
+                            ctx,
+                            targetName,
+                            targetType,
+                            optionalTarget),
+                    },
+                    optionalTarget),
+                true);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+        };
+        assertOpaque("SafeCast", NUdf::EDataSlot::Int32, NUdf::EDataSlot::Int64);
+        assertOpaque("Convert", NUdf::EDataSlot::Int64, NUdf::EDataSlot::Int32);
+        assertOpaque("SafeCast", NUdf::EDataSlot::Bool, NUdf::EDataSlot::Int32);
+        assertOpaque("SafeCast", NUdf::EDataSlot::Date, NUdf::EDataSlot::Int32);
+
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        DataTypeDescriptor(ctx, "Int32", targetType),
+                    },
+                    targetType),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must have an optional integer result");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalTarget = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        DataTypeDescriptor(ctx, "Int32", targetType),
+                    },
+                    optionalTarget),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "target does not match its optional result");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalTarget = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            const auto* wrongAnnotation = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            auto descriptor = TypedCallable(
+                ctx,
+                "OptionalType",
+                {DataTypeDescriptor(ctx, "Int32", targetType)},
+                ctx.ExprCtx.MakeType<TTypeExprType>(wrongAnnotation));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        std::move(descriptor),
+                    },
+                    optionalTarget),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "annotation disagrees with its descriptor");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* optionalTarget = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+            const auto* wrongItemAnnotation = ScalarType(ctx, NUdf::EDataSlot::Int64);
+            auto descriptor = TypedCallable(
+                ctx,
+                "OptionalType",
+                {DataTypeDescriptor(ctx, "Int32", wrongItemAnnotation)},
+                ctx.ExprCtx.MakeType<TTypeExprType>(optionalTarget));
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        std::move(descriptor),
+                    },
+                    optionalTarget),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "item annotation disagrees with its descriptor");
         }
     }
 

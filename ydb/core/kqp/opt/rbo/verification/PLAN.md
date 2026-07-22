@@ -211,6 +211,18 @@ remain explicit casts. `Convert`, `StrictCast`, nullable source/target/result
 shapes, zero-integral-digit targets, and non-integer Decimal sources fail closed
 outside the existing complete-literal normalization.
 
+An explicit `cast_integral` node models only partial integer `SafeCast` pairs.
+The source may be nullable or non-null and must have one exact signed or
+unsigned 8/16/32/64-bit identity. YQL cast analysis must classify conversion to
+the optional integer target as `MayFail`; the target descriptor, its outer and
+item annotations, and the result type must agree exactly. The value is NULL
+when the source is NULL or outside the target's exact integer domain, and is
+otherwise the unchanged mathematical integer. NULL results use a canonical
+zero payload. The complete expression also passes the closed-world opaque
+safety audit. Complete integer conversions remain opaque; `Convert`,
+`StrictCast`, non-integer pairs, and non-optional partial results do not enter
+this exact node.
+
 The persisted fingerprint is collision-free canonical text rather than a
 machine hash. It length-prefixes node kind, callable and atom bytes, normalized
 atom flags, exact formatted types, child counts, and ordered children. Direct
@@ -357,14 +369,15 @@ Implementation sequence:
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
 9. M4: exact non-null integral `SafeCast` to Decimal;
-10. M4: exact canonical Decimal `+`, `-`, `DecimalMul`, and `DecimalDiv`;
-11. M4: exact Decimal Sort, TopSort, and Merge ordering;
-12. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
-13. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
+10. M4: exact partial integral `SafeCast` to an optional integer;
+11. M4: exact canonical Decimal `+`, `-`, `DecimalMul`, and `DecimalDiv`;
+12. M4: exact Decimal Sort, TopSort, and Merge ordering;
+13. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
+14. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
     Sort, Merge, and latent sequences;
-14. M4: quantifier-scoped shared-term SMT rendering;
-15. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
-16. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+15. M4: quantifier-scoped shared-term SMT rendering;
+16. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
+17. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -623,7 +636,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   constant `Uint32` bounds. Direct, exact integer-literal conversion to
   `Uint32` is allowed only in those bound positions; type, range, arity, and
   dynamic-bound mutations fail closed. A real-host obligation covers the
-  normalized converted-literal form.
+  normalized converted-literal form. This moves TPC-DS q15, q19, q62, q79, and
+  q99 through formula construction; q8 now exposes its deeper mixed-width
+  `Uint64 > Int32` comparison blocker at both snapshot boundaries.
+- Partial integer `SafeCast` is exported as `cast_integral` only for exact
+  signed/unsigned 8/16/32/64-bit source and optional target identities whose
+  YQL cast classification is `MayFail`. Descriptor and nested annotation
+  agreement, the closed-world safety audit, all source/target width pairs,
+  signed/unsigned boundaries, source NULL propagation, and canonical NULL
+  payloads have fail-closed or exact tests. Complete conversions and other cast
+  families remain outside this exact node.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -666,6 +688,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and aggregate obligations cover this boundary. TPC-DS q90 exercises two
   `Uint64` count expressions cast to `Decimal(15,4)` and is
   `VERIFIED_BOUNDED` at the standard two-row/two-task bound.
+- TPC-DS q79 initially returned a symbolic counterexample with
+  `d_year = 1998`. The initial plan compared its nullable `Int64` directly with
+  `Int32` membership constants; the final plan used an opaque
+  `SafeCast(Int64 -> Int32)` before the membership test, so the model could
+  incorrectly choose NULL for the in-range value. Exact `cast_integral`
+  semantics remove that witness. A focused direct-membership versus
+  `Exists`/cast/`IfPresent` lowering is `VERIFIED_BOUNDED`; the full q79 solver
+  run is `UNKNOWN` at 60000 ms. This was a verifier-modeling false positive,
+  not a confirmed optimizer bug.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -692,11 +723,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete post-OLAP-presence formula-only dashboard emits TPCH q3
-  and q19 (2/22) and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q76, q88,
-  q90, q93, and q96 (13/99), for 15/121 workload queries (12.4%). Formula
-  emission confirms end-to-end model coverage at two rows per referenced table
-  and two tasks; it is not a proof by itself.
+  2026-07-22 complete current-code formula-only dashboard emits TPCH q3 and q19
+  (2/22) and TPC-DS q3, q15, q19, q42, q48, q50, q52, q55, q61, q62, q71, q76,
+  q79, q88, q90, q93, q96, and q99 (18/99), for 20/121 workload queries
+  (16.5%). Formula emission confirms end-to-end model coverage at two rows per
+  referenced table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
@@ -718,19 +749,20 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   recorded 227 ms of q90 preparation and 7,299 ms of verification. These are
   ten curated proofs (8.3% of the workload). q50 emits a formula but its solver
   experiment ended `SOLVER_ERROR` after the external process exceeded its
-  65.0-second deadline; it is not part of the proof floor. q61's 1,572,871-byte
-  formula, q76, and q88 return `UNKNOWN` at the 60-second solver budget. q61
-  recorded 955 ms of preparation and 63,897 ms of verification. Focused q76
-  formula construction recorded 391 ms of preparation and 14,169 ms of
-  verification; its solver experiment recorded 419 ms and 88,305 ms before
-  `UNKNOWN`. q71's 118,276,852-byte formula recorded 83,339 ms in the
-  verifier/formula-emission phase of the complete run before a focused solver
+  65.0-second deadline; it is not part of the proof floor. q15, q61, q62, q76,
+  q79, and q88 return `UNKNOWN` at the 60-second solver budget. q61's
+  1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
+  verification. Focused q76 formula construction recorded 391 ms of
+  preparation and 14,169 ms of verification; its solver experiment recorded 419
+  ms and 88,305 ms before `UNKNOWN`. q71's 118,276,852-byte formula recorded
+  83,339 ms in the verifier/formula-emission phase of the complete run before a
+  focused solver
   attempt reached the external process deadline. q76 is formula-covered but is
   not one of the ten proofs. No optimizer correctness bug is confirmed by these
   runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
-  commands, complete formula-only baseline, proof-floor evidence, q88
-  investigation, and explicit unsupported/optimizer-failure inventory.
+  commands, complete formula-only baseline, proof-floor evidence, q79/q88
+  investigations, and explicit unsupported/optimizer-failure inventory.
 
 ### M5: confirmation and localization — implemented for replayable single-result witnesses
 

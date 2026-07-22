@@ -98,11 +98,11 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has two monotonic contracts. The formula-construction
-floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52, q55, q61,
-q71, q76, q88, q90, q93, and q96; it is enforced only for a complete formula-only
-suite. The proof floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52,
-q55, q90, q93, and q96; dedicated hermetic tests require each one to remain
-`VERIFIED_BOUNDED`.
+floor requires TPCH q3 and q19 plus TPC-DS q3, q15, q19, q42, q48, q50, q52,
+q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99; it is enforced only
+for a complete formula-only suite. The proof floor requires TPCH q3 and q19 plus
+TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96; dedicated hermetic tests
+require each one to remain `VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
 are allowed without editing either floor. Policy parsing and evaluation fail
@@ -143,19 +143,19 @@ StageGraph remains a separate diagnostic step.
 
 ## Current measured formula coverage
 
-The complete post-OLAP-presence full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the fifteen-query floor below and recorded a
+The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
+formula-only mode. It emitted the twenty-query floor below and recorded a
 current outcome for every workload entry. `FORMULA_EMITTED` is not a solver
 proof. Both complete suite reports satisfied the checked-in coverage policy.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 2 (q3, q19) | 17 | 3 | 22 |
-| TPCDS_YQL | 13 (q3, q42, q48, q50, q52, q55, q61, q71, q76, q88, q90, q93, q96) | 57 | 29 | 99 |
+| TPCDS_YQL | 18 (q3, q15, q19, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, q99) | 52 | 29 | 99 |
 
-The supported formula slice is 15/121 queries (12.4%). This is a useful end-to-end
+The supported formula slice is 20/121 queries (16.5%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 106 workload entries or larger
+slice rather than a claim about the remaining 101 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -196,7 +196,7 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 47 of the 57
+The exporter matrix below covers the boundary failures among 42 of the 52
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
 The ten queries that pass export and fail closed inside the verifier are listed
@@ -214,7 +214,7 @@ after the matrix.
 | OLAP unary operation `just` | - | q5, q21, q37, q40, q77, q80, q82 |
 | Callable `/` | q73, q78 | q73, q78 |
 | Callable `Concat` | q84 | q84 |
-| Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q79, q99 |
+| `>` operand types differ (`Uint64`, `Int32`) | q8 | q8 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
 | Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q34, q75, q85 |
 | Type `Interval` | q5, q37, q72, q77, q80, q82 | q72 |
@@ -249,13 +249,19 @@ former String blocker now exposes a deeper reason: q4, q11, q25, q29, q46, q64,
 and q91 reach the construction bounds enumerated above, while q65 retains its
 initial constant String-literal `SafeCast` to Decimal. Exact
 `If`, `Exists`, and scoped unary `IfPresent` move q34 to `Double` at both
-boundaries, q73 to `/` at both boundaries, q79 to `Substring` at both
-boundaries, and q68 through both exports to the Merge construction cap. q31
+boundaries, q73 to `/` at both boundaries, q79 to the formerly opaque
+`Substring` at both boundaries, and q68 through both exports to the Merge
+construction cap. q31
 still reaches its construction cap and q74 reaches aggregate `max`. q5 now
 reaches initial `Interval` and final OLAP `just`; q75 reaches `Double` in both
 snapshots; and q80 reaches initial `Interval` and final OLAP `just`. Exact OLAP
 unary presence lowering then moves q76 through formula construction and raises
-the measured TPC-DS slice to 13/99.
+the measured TPC-DS slice to 13/99. Restricted `Substring` then moves q15, q19,
+q62, q79, and q99 through formula construction and raises that slice to 18/99.
+q8 passes the `Substring` audit and now fails closed on a deeper `Uint64 > Int32`
+comparison mismatch at both snapshot boundaries. Exact partial integral
+`SafeCast` removes q79's subsequent false-positive witness without changing
+the formula-construction count.
 
 ## Curated proof floor and focused results
 
@@ -272,6 +278,13 @@ the measured TPC-DS slice to 13/99.
   solver run spent 116 ms preparing and 851 ms in verification before returning
   `VERIFIED_BOUNDED`; the checked-in floor now retains that two-row/two-task
   obligation.
+
+- Restricted `Substring` moves TPC-DS q15, q19, q62, q79, and q99 through
+  formula construction. In the complete dashboard they spent respectively
+  3,530, 266,730, 21,696, 24,552, and 23,703 ms in verifier/formula emission.
+  Focused q15 and q62 solver experiments return `UNKNOWN` at the 60000 ms
+  budget; q79 is classified separately below. None of these five is added to
+  the proof floor.
 
 - TPC-DS q42 newly reaches formula construction through exact String ordering.
   The focused formula-only run spent 1,935 ms in verifier/formula construction.
@@ -333,6 +346,19 @@ the measured TPC-DS slice to 13/99.
   schema/query, exact Date and typed Decimal columns, `COUNT(*)`, four scans,
   three joins, split aggregation, TopSort/Merge/Limit, and
   Map/Broadcast/UnionAll StageGraph routing.
+- TPC-DS q79 initially returned a symbolic counterexample with
+  `d_year = 1998`. The initial nullable `Int64` membership test and the final
+  lowering through `SafeCast(Int64 -> Int32)` disagreed only because the cast
+  was an independent opaque function that could incorrectly return NULL for
+  that in-range value. The closed-world `cast_integral` node admits only
+  signed/unsigned 8/16/32/64-bit `SafeCast` pairs classified by YQL as
+  `MayFail`, requires an exactly matching optional target descriptor and nested
+  annotations, propagates source NULL, preserves in-range values, and returns
+  NULL outside the target domain. Regeneration removes the witness. A focused
+  direct-membership versus `Exists`/cast/`IfPresent` lowering is
+  `VERIFIED_BOUNDED`; the full q79 query returns `UNKNOWN` at the 60000 ms
+  solver budget. This was a verifier-modeling false positive, not a confirmed
+  optimizer bug.
 - TPC-DS q88 initially returned `COUNTEREXAMPLE`, but inspection showed a
   verifier false positive: source expressions `0 + 2`, `1 + 2`, and `3 + 2`
   were independent opaque functions while the optimized snapshot contained the
@@ -345,8 +371,8 @@ the measured TPC-DS slice to 13/99.
 
 No proof-floor or focused run has confirmed an optimizer correctness bug. The
 new q19 result is a bounded proof, while q68 is a construction-bound coverage
-gap rather than a candidate divergence. The q88 candidate above was a
-verifier-modeling false positive; replay remains the confirmation boundary for
+gap rather than a candidate divergence. The q79 and q88 candidates above were
+verifier-modeling false positives; replay remains the confirmation boundary for
 any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect

@@ -314,7 +314,9 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
             pushArray("args");
             continue;
         }
-        if (kind == "not" || kind == "exists" || kind == "cast_decimal") {
+        if (kind == "not" || kind == "exists" || kind == "cast_decimal" ||
+            kind == "cast_integral")
+        {
             push(expression["arg"]);
             continue;
         }
@@ -956,6 +958,85 @@ TString CheckIntegralDecimalSafeCastCallable(const TExprNode& node) {
     if (sourceNullable || !IsIntegerType(sourceType)) {
         Unsupported(
             "Integral Decimal SafeCast source must be a non-nullable exact integer");
+    }
+
+    return resultType;
+}
+
+bool IsPartialIntegralSafeCast(const TExprNode& node) {
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2) {
+        return false;
+    }
+
+    const TString sourceType = ScalarTypeName(*node.Child(0));
+    const TString resultType = ScalarTypeName(node);
+    if (!IsIntegerType(sourceType) || !IsIntegerType(resultType)) {
+        return false;
+    }
+
+    const auto sourceSlot = NUdf::FindDataSlot(sourceType);
+    const auto resultSlot = NUdf::FindDataSlot(resultType);
+    const auto options = NUdf::GetCastResult(*sourceSlot, *resultSlot);
+    return options && *options == NUdf::ECastOptions::MayFail;
+}
+
+TString CheckPartialIntegralSafeCastCallable(const TExprNode& node) {
+    if (!node.IsCallable("SafeCast")) {
+        Unsupported("Partial integral cast must use SafeCast");
+    }
+    CheckScalarArity(node, 2, 2);
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    if (!resultNullable || !IsIntegerType(resultType)) {
+        Unsupported(
+            "Partial integral SafeCast must have an optional integer result");
+    }
+
+    const auto targetAnnotation = node.Child(1)->GetTypeAnn();
+    if (!targetAnnotation || targetAnnotation->GetKind() != ETypeAnnotationKind::Type) {
+        Unsupported("Partial integral SafeCast target annotation is not Type");
+    }
+
+    bool targetNullable = false;
+    const TString targetType = DataTypeDescriptorName(
+        *node.Child(1),
+        &targetNullable);
+    if (!targetNullable || targetType != resultType) {
+        Unsupported(
+            "Partial integral SafeCast target does not match its optional result");
+    }
+    const auto& itemDescriptor = *node.Child(1)->Child(0);
+    const auto itemAnnotation = itemDescriptor.GetTypeAnn();
+    bool itemAnnotationNullable = false;
+    if (!itemAnnotation ||
+        itemAnnotation->GetKind() != ETypeAnnotationKind::Type ||
+        TypeName(
+            itemAnnotation->Cast<TTypeExprType>()->GetType(),
+            &itemAnnotationNullable) != targetType ||
+        itemAnnotationNullable)
+    {
+        Unsupported(
+            "Partial integral SafeCast item annotation disagrees with its descriptor");
+    }
+    bool annotationNullable = false;
+    if (TypeName(
+            targetAnnotation->Cast<TTypeExprType>()->GetType(),
+            &annotationNullable) != targetType ||
+        annotationNullable != targetNullable)
+    {
+        Unsupported(
+            "Partial integral SafeCast target annotation disagrees with its descriptor");
+    }
+    const TString sourceType = ScalarTypeName(*node.Child(0));
+    if (!IsIntegerType(sourceType)) {
+        Unsupported("Partial integral SafeCast source must be an exact integer");
+    }
+    const auto sourceSlot = NUdf::FindDataSlot(sourceType);
+    const auto targetSlot = NUdf::FindDataSlot(targetType);
+    const auto options = NUdf::GetCastResult(*sourceSlot, *targetSlot);
+    if (!options || *options != NUdf::ECastOptions::MayFail) {
+        Unsupported("Integral SafeCast is not a reviewed partial conversion");
     }
 
     return resultType;
@@ -1965,6 +2046,31 @@ NJson::TJsonValue ExportExprNode(
         result["lookup"] = BoundExpr(static_cast<size_t>(
             bound - boundArguments.begin()));
         result["items"] = std::move(items);
+        return result;
+    }
+
+    if (IsPartialIntegralSafeCast(node)) {
+        const TString resultType = CheckPartialIntegralSafeCastCallable(node);
+
+        // Keep the same closed-world totality and metadata audit as opaque
+        // expressions while assigning this checked conversion an exact value.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+
+        auto result = JsonMap();
+        result["kind"] = "cast_integral";
+        result["arg"] = ExportExprNode(
+            *node.Child(0),
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["type"] = resultType;
+        result["nullable"] = true;
         return result;
     }
 

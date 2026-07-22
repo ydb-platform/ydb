@@ -120,6 +120,15 @@ class ExpressionRendererTest(unittest.TestCase):
             ),
             (
                 ir.Expr(
+                    kind="cast_integral",
+                    args=(_column(),),
+                    result_type="Int32",
+                    nullable=True,
+                ),
+                'cast_integral(arg=column("x"), type="Int32", nullable=true)',
+            ),
+            (
+                ir.Expr(
                     kind="if",
                     args=(
                         _column("condition"),
@@ -174,6 +183,8 @@ class ExpressionRendererTest(unittest.TestCase):
             render_expression(ir.Expr(kind="in", args=(_column(),)))
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):
             render_expression(ir.Expr(kind="cast_decimal", args=()))
+        with self.assertRaisesRegex(InspectionError, "exactly one argument"):
+            render_expression(ir.Expr(kind="cast_integral", args=()))
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):
             render_expression(ir.Expr(kind="exists", args=()))
         with self.assertRaisesRegex(InspectionError, "non-negative integer"):

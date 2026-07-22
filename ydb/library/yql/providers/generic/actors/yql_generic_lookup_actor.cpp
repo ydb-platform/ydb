@@ -244,14 +244,18 @@ namespace NYql::NDq {
                     selfId = SelfId(),
                     state = std::move(ev->Get()->State)
             ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
-                auto result = ExtractFromConstFuture(asyncResult);
-                if (result.Status.Ok()) {
-                    auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
-                    ev->State = std::move(state);
-                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                } else {
-                    SendRetryOrError(actorSystem, selfId, result.Status, state);
+                try {
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
+                    auto result = ExtractFromConstFuture(asyncResult);
+                    if (result.Status.Ok()) {
+                        auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
+                        ev->State = std::move(state);
+                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+                    } else {
+                        SendRetryOrError(actorSystem, selfId, result.Status, state);
+                    }
+                } catch (std::exception& ex) {
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAUTHENTICATED, ex.what()), std::move(state));
                 }
             });
         }

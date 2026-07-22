@@ -119,6 +119,15 @@ NYdb::NIssue::TIssues ValidateDeferredPublicationMessage(const TWriteMessage& me
     if (message.GetTxPtr()) {
         issues.AddIssue("deferred_publish is incompatible with transaction");
     }
+    if (message.DeferredPublication_->IntPublicationId == 0) {
+        issues.AddIssue("int_publication_id must be greater than zero");
+    }
+    if (message.DeferredPublication_->ExtPublicationId
+        && message.DeferredPublication_->ExtPublicationId->size()
+            > TDeferredPublication::MaxExtPublicationIdLength)
+    {
+        issues.AddIssue("ext_publication_id is too long");
+    }
     return issues;
 }
 

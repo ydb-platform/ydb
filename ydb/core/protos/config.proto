@@ -1768,6 +1768,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 100000,
             DefaultValue: 2000 }];
+        optional uint64 CalculateSstRatioDuringDefrag = 52 [(ControlOptions) = {
+            Description: "Compute SST storage ratio on defrag side",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {

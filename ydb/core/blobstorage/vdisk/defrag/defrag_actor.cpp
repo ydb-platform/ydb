@@ -179,11 +179,17 @@ namespace NKikimr {
             }
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-                TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
+                const TInstant now = TAppData::TimeProvider->Now();
+                const TDuration calcPeriod = DCtx->VCfg->HullCompStorageRatioCalcPeriod;
+                const TInstant lastRatioPublish = TInstant::FromValue(DCtx->LastRatioPublishUs.load());
+                const bool produceRatios = DCtx->VCfg->CalculateSstRatioDuringDefrag
+                    && lastRatioPublish + calcPeriod <= now;
+                TDefragCalcStatWithRatio calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx, produceRatios);
                 std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     YDB_LOG_ERROR_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"),
                         {"marker", "BSVDD05"});
+                    // partial scan -> do not publish incomplete ratios; the selector keeps its own path
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
@@ -225,6 +231,11 @@ namespace NKikimr {
                         {"chunksToDefrag", res ? res->ChunksToDefrag.ToString() : "nothing"},
                         {"spaceCouldBeFreedViaCompaction", spaceCouldBeFreedViaCompaction},
                         {"garbageThresholdToRunCompaction", garbageThresholdToRunCompaction});
+
+                    if (produceRatios) {
+                        calcStat.ApplyStorageRatios(now);
+                        DCtx->LastRatioPublishUs.store(now.GetValue());
+                    }
                 }
                 if (!res) {
                     res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());

@@ -37,17 +37,19 @@ class TestWatermarksInYdb(StreamingTestBase):
         local_topics: bool,
         shared_reading: bool,
         tasks: int = 2,
+        partitions_count: int | None = None,
         settings: dict[str, str] = {},
         input_parsing: bool = False,
         cascade_hopping: bool = False,
     ) -> str:
         query_name = entity_name(scenario)
+        partitions_count = partitions_count or tasks
         input_name, output_name, _ = self.get_io_names(
-            kikimr, query_name, local_topics, entity_name, partitions_count=tasks, shared=shared_reading
+            kikimr, query_name, local_topics, entity_name, partitions_count=partitions_count, shared=shared_reading
         )
 
         settings_str = f"WITH ({', '.join(f'{k} = {v}' for k, v in settings.items())})" if settings else ""
-        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if tasks > 1 else ''
+        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if partitions_count > 1 else ''
         input = (
             f'''
             $input = (
@@ -160,10 +162,12 @@ class TestWatermarksInYdb(StreamingTestBase):
 
     def _wait_for_idle(self, shared_reading: bool, tasks: int) -> None:
         if shared_reading and tasks > 1:
-            time.sleep(2 * self.idle_timeout_seconds)  # leave a bit more time to fire up idle timeout
+            # Allow idle timeout to fire in shared reading.
+            time.sleep(2 * self.idle_timeout_seconds)
 
     def _wait_for_shared_reading_start(self, shared_reading: bool) -> None:
         if shared_reading:
+            # Allow shared-reading workers to start consuming partitions.
             time.sleep(self.idle_timeout_seconds + 1)
 
     def _read_topic(self, ydb_client: YdbClient, messages_count: int) -> list[str]:
@@ -260,24 +264,29 @@ class TestWatermarksInYdb(StreamingTestBase):
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_gt_timeout_{shared_reading}{local_topics}"
-        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks=1, partitions_count=2,
+        )
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(10, "fast-10")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
 
-            time.sleep(self.idle_timeout_seconds + 1)
+            # Keep the first partition active while the second approaches idle timeout.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
 
-            expected = ["fast-0", "slow-0"]
-            self._read_topic_check_rows(ydb_client, expected)
+            # Let the second partition exceed idle timeout without idling the first.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
-            self._write_topic(ydb_client, [self._event(10, "slow-10")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(20, "fast-20")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
+            # Ensure the second-partition event is processed before advancing the first watermark.
+            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
 
-            expected = ["fast-10", "slow-10"]
+            expected = ["fst-0", "snd-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -294,23 +303,23 @@ class TestWatermarksInYdb(StreamingTestBase):
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_lt_timeout_{shared_reading}{local_topics}"
-        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks=1, partitions_count=2,
+        )
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(10, "fast-10")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
 
+            # Keep the second partition below idle timeout.
             time.sleep(self.idle_timeout_seconds - 1)
-            self._write_topic(ydb_client, [self._event(10, "slow-10")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(20, "fast-20")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "snd-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
-            expected = ["fast-0", "slow-0"]
-            self._read_topic_check_rows(ydb_client, expected)
-
-            expected = ["fast-10", "slow-10"]
+            expected = ["fst-0", "snd-0", "fst-10", "snd-10"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -331,16 +340,20 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "first-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "second-0")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
 
+            # Let both partitions become idle and trigger state cleanup.
             time.sleep(self.idle_timeout_seconds + 1)
-            self._write_topic(ydb_client, [self._event(10, "first-10")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(10, "second-10")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(20, "first-20")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(20, "second-20")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(10, "snd-10")], partition_id=1)
 
-            expected = ["first-0", "second-0", "first-10", "second-10"]
+            # Persist cleanup before sending the next events.
+            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
+
+            expected = ["fst-0", "snd-0", "fst-10", "snd-10"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -357,23 +370,36 @@ class TestWatermarksInYdb(StreamingTestBase):
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"empty_partition_{shared_reading}{local_topics}"
-        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks=1, partitions_count=2,
+        )
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(10, "active-10")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "fst-0")], partition_id=0)
 
-            time.sleep(self.idle_timeout_seconds + 1)
+            # Keep the first partition active while the empty second one becomes idle.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
 
-            expected = ["active-0"]
-            self._read_topic_check_rows(ydb_client, expected)
+            # Let the second partition exceed idle timeout without idling the first.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
-            self._write_topic(ydb_client, [self._event(10, "new-10")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(20, "active-20")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(20, "new-20")], partition_id=1)
+            # Ensure the second-partition event is processed before advancing the first watermark.
+            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
 
-            expected = ["active-10", "new-10"]
+            # Keep the first partition active until the second becomes idle again.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(35, "fst-35")], partition_id=0)
+
+            # Advance the first watermark after the second partition is idle.
+            time.sleep(self.idle_timeout_seconds / 2 + 1)
+            self._write_topic(ydb_client, [self._event(40, "fst-40")], partition_id=0)
+
+            expected = ["fst-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -449,8 +475,8 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("policy,expected", [
-        ("DROP", ['["60"]']),
-        ("ADJUST", ['["40"]', '["60"]']),
+        ("DROP", ["55", "60"]),
+        ("ADJUST", ["40", "55", "60"]),
     ])
     def test_late_events_policy(
         self: Self,
@@ -480,12 +506,12 @@ class TestWatermarksInYdb(StreamingTestBase):
                 [
                     self._event(50, "50"),
                     self._event(60, "60", filter=True),
+                    self._event(55, "55"),
                 ],
             )
             self._wait_for_idle(shared_reading, tasks)
 
-            expected1 = ['["50"]']
-            self._read_topic_check(ydb_client, expected1)
+            self._read_topic_check_rows(ydb_client, ["50"])
 
             self._write_topic(
                 ydb_client,
@@ -497,6 +523,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             )
             self._wait_for_idle(shared_reading, tasks)
 
-            self._read_topic_check(ydb_client, expected)
+            self._read_topic_check_rows(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)

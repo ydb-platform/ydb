@@ -166,7 +166,7 @@ namespace NYql::NDq {
     public:
 
         void Bootstrap() {
-            auto dsi = LookupSource.data_source_instance();
+            const auto& dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
                                             << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                                             << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -238,11 +238,17 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            // Attention: reuses same token as ListSplits (assumes it was called without extended delay)
             *readRequest.add_splits() = std::move(split);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
+            CredentialsProvider->AsyncCredentials().Apply([
+                    connector = Connector,
+                    readRequest = std::move(readRequest),
+                    requestTimeout = RequestTimeout
+            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+                *readRequest.mutable_data_source_instance()->mutable_credentials() = ExtractFromConstFuture(future);
+                return connector->ReadSplits(readRequest, requestTimeout);
+            }).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     state = std::move(ev->Get()->State)
@@ -385,16 +391,12 @@ namespace NYql::NDq {
             auto startCycleCount = GetCycleCountFast();
             auto state = std::move(ev->Get()->State);
             NConnector::NApi::TListSplitsRequest splitRequest;
-            auto& select = *splitRequest.add_selects();
-            auto error = FillSelect(select, state);
 
+            auto error = FillSelect(*splitRequest.add_selects(), state, std::move(ev->Get()->Credentials));
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
             }
-            auto& dsi = *LookupSource.mutable_data_source_instance();
-            *dsi.mutable_credentials() = std::move(ev->Get()->Credentials);
-            *select.mutable_data_source_instance() = dsi;
 
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
@@ -601,9 +603,10 @@ namespace NYql::NDq {
             }
         }
 
-        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state) {
+        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state, TGenericCredentials&& credentials) {
             auto dsi = LookupSource.data_source_instance();
-            *select.mutable_data_source_instance() = dsi;
+            *dsi.mutable_credentials() = std::move(credentials);
+            *select.mutable_data_source_instance() = std::move(dsi);
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
@@ -647,7 +650,7 @@ namespace NYql::NDq {
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        Generic::TLookupSource LookupSource;
+        const Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType

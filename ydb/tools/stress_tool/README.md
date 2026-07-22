@@ -84,10 +84,42 @@ Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 These describe network load generated through the actors library interconnect
 subsystem (`ydb/library/actors/interconnect/load.h`), reusing the same
 `TInterconnectLoad` load actor used by the `InterconnectLoad` load type of the
-regular YDB load actor service. Since the stress tool runs a single node, the
-load actor and its counterpart (the load responder) both live in the same
-process; traffic is routed through loopback using `NodeHops`, so no real
-network connection is required to generate and measure interconnect traffic.
+regular YDB load actor service.
+
+By default (no `--server`/`--client` options), the stress tool runs a single
+node; the load actor and its counterpart (the load responder) both live in the
+same process, and traffic is routed through loopback using `NodeHops`, so no
+real network connection is required to generate and measure interconnect
+traffic.
+
+To measure interconnect performance over a **real network** between two
+hosts, run two copies of `ydb_stress_tool`:
+
+- On the **second** (remote) host, start a responder-only instance. Its
+  `--server NODE_ID` must match the NodeId that the client will assign this
+  server via `--endpoint` (see below) -- for a single server this is `1`:
+  ```
+  ydb_stress_tool --cfg cfg.txt --server 1 --client 2 --ic-port 19001
+  ```
+  This registers the interconnect load responder for node 1 and listens on
+  port 19001 for an incoming connection from the client (node 2). No device
+  `--path` is required.
+
+- On the **first** host, run the actual `InterconnectTestList` from the config
+  as a client that connects out to the responder:
+  ```
+  ydb_stress_tool --cfg cfg.txt --client 2 --endpoint remote-host:19001
+  ```
+  The client's own NodeId is `2` (from `--client`, must differ from all
+  server NodeIds); the server passed via `--endpoint` is assigned NodeId `1`
+  (the i-th `--endpoint` gets NodeId `i + 1`, matching the `--server NODE_ID`
+  used on the remote host). The config's `InterconnectLoad.NodeHops` must
+  reference this NodeId (e.g. `NodeHops: [1]`) so that load messages are
+  routed to the remote responder over the network instead of looping back
+  locally.
+
+  Optional: `--use-uring` selects the io_uring transport instead of epoll for
+  the interconnect connection itself (Linux 5.19+).
 
 Each `InterconnectTestList` entry contains one or more `InterconnectLoad`
 sources, run sequentially. Detailed periodic throughput/RTT statistics are

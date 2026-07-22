@@ -2,7 +2,6 @@
 
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
-#include <util/system/yassert.h>
 
 namespace NYdb::inline Dev {
 
@@ -30,9 +29,6 @@ TSimpleCoreFacility::~TSimpleCoreFacility() {
 
 void TSimpleCoreFacility::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     std::lock_guard lock(Mutex_);
-    Y_ABORT_UNLESS(!PeriodicStarted_);
-    PeriodicStarted_ = true;
-
     auto periodicCb = std::make_shared<TPeriodicCb>(std::move(cb));
     EnqueueTaskNoLock(
         TClock::now(),
@@ -46,15 +42,11 @@ void TSimpleCoreFacility::PostToResponseQueue(TPostTaskCb&& f) {
     if (!f) {
         return;
     }
-    {
-        std::lock_guard lock(Mutex_);
-        if (!Stop_) {
-            EnqueueTaskNoLock(TClock::now(), std::move(f));
-            Cv_.notify_one();
-            return;
-        }
+    std::lock_guard lock(Mutex_);
+    if (!Stop_) {
+        EnqueueTaskNoLock(TClock::now(), std::move(f));
+        Cv_.notify_one();
     }
-    f();
 }
 
 void TSimpleCoreFacility::EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task) {

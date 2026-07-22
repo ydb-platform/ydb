@@ -166,6 +166,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
+        hFunc(TEvPrivate::TEvRetrySlay, Handle);
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
@@ -698,43 +699,49 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const NPDisk::TEvSlayResult &msg = *ev->Get();
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
     const auto it = SlayInFlight.find(vslotId);
-    Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
     YDB_LOG_INFO_COMP(BS_NODE, "Handle(NPDisk::TEvSlayResult)",
         {"marker", "NW28"},
         {"msg", msg},
-        {"expectedRound", it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt});
-    if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
+        {"expectedRound", it != SlayInFlight.end() ? std::make_optional(it->second.Round) : std::nullopt});
+    if (it == SlayInFlight.end() || it->second.Round != msg.SlayOwnerRound) {
         return; // outdated response
     }
     switch (msg.Status) {
         case NKikimrProto::NOTREADY: {
-            const ui64 round = NextLocalPDiskInitOwnerRound();
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
-                msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, round, msg.PDiskId, msg.VSlotId)));
-            it->second = round;
+            // Keep the short NOTREADY retry separate from the slower insurance retry scheduled by
+            // IssueSlay. Both carry the current round, so whichever retry issues a new request first
+            // makes the other timer stale.
+            Schedule(TDuration::Seconds(1),
+                new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, it->second.Round,
+                    TEvPrivate::TEvRetrySlay::EReason::NOTREADY));
             break;
         }
 
         case NKikimrProto::OK:
-        case NKikimrProto::ALREADY:
+        case NKikimrProto::ALREADY: {
+            const TSlayInFlight slay = it->second;
             SlayInFlight.erase(it);
-            if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt == LocalVDisks.end()) {
-                SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
-            } else {
-                SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            SendVDiskReport(vslotId, slay.VDiskId,
+                slay.Action == ESlayAction::DESTROY
+                    ? NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED
+                    : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk); // restart actor after successful wiping
+                StartLocalVDiskActor(vdisk); // start the current VDisk after the previous slot contents are gone
             }
             break;
+        }
 
         case NKikimrProto::CORRUPTED: // this branch doesn't really work
-        case NKikimrProto::ERROR:
+        case NKikimrProto::ERROR: {
+            const TVDiskID vdiskId = it->second.VDiskId;
             SlayInFlight.erase(it);
             YDB_LOG_ERROR_COMP(BS_NODE, "Handle(NPDisk::TEvSlayResult) error",
                 {"marker", "NW29"},
                 {"msg", msg});
-            SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
+            SendVDiskReport(vslotId, vdiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;
+        }
 
         case NKikimrProto::RACE:
             Y_ABORT("Unexpected# %s", msg.ToString().data());
@@ -764,6 +771,32 @@ void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
             {"marker", "NW109"},
             {"status", msg.Status},
             {"errorReason", msg.ErrorReason});
+    }
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvRetrySlay::TPtr& ev) {
+    const auto *msg = ev->Get();
+    const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VDiskSlotId);
+    if (const auto it = SlayInFlight.find(vslotId);
+            it != SlayInFlight.end() && it->second.Round == msg->Round) {
+        switch (msg->Reason) {
+            case TEvPrivate::TEvRetrySlay::EReason::NOTREADY:
+                YDB_LOG_INFO_COMP(BS_NODE, "Retrying PDisk slay after NOTREADY",
+                    {"marker", "NW111"},
+                    {"VDiskId", it->second.VDiskId},
+                    {"VSlotId", vslotId},
+                    {"round", msg->Round});
+                break;
+
+            case TEvPrivate::TEvRetrySlay::EReason::UNCONFIRMED:
+                YDB_LOG_WARN_COMP(BS_NODE, "Retrying unconfirmed PDisk slay",
+                    {"marker", "NW111"},
+                    {"VDiskId", it->second.VDiskId},
+                    {"VSlotId", vslotId},
+                    {"round", msg->Round});
+                break;
+        }
+        IssueSlay(vslotId, it->second);
     }
 }
 
@@ -1421,23 +1454,29 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
         if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
             InferPDiskSlotCountSettings.CopyFrom(inferSettings);
             for (auto& [key, localPDisk] : LocalPDisks) {
-                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(localPDisk.Record);
-                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
+                    localPDisk.Record, &localPDisk.PDiskConfigWarning);
+                ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
                 ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+                ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
 
                 if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
-                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
+                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits ||
+                        newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
                     YDB_LOG_DEBUG_COMP(BS_NODE, "SendChangeExpectedSlotCount from config notification",
                         {"marker", "NW112"},
                         {"PDiskId", key.PDiskId},
                         {"expectedSlotCount", newExpectedSlotCount},
-                        {"slotSizeInUnits", newSlotSizeInUnits});
+                        {"slotSizeInUnits", newSlotSizeInUnits},
+                        {"expectedSlotSize", newExpectedSlotSize});
 
                     const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
-                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
+                        newExpectedSlotCount, newSlotSizeInUnits, newExpectedSlotSize));
 
                     localPDisk.ExpectedSlotCount = newExpectedSlotCount;
                     localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+                    localPDisk.ExpectedSlotSize = newExpectedSlotSize;
                 }
             }
         }

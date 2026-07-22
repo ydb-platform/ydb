@@ -84,6 +84,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -593,6 +594,14 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
     if (config.HasEnableUringSQPOLL()) {
         result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
+    }
+
+    if (config.HasEnableInterconnectSessionV2()) {
+        result.EnableInterconnectSessionV2 = config.GetEnableInterconnectSessionV2();
+    }
+
+    if (config.HasChecksumInterconnectSessionV2()) {
+        result.ChecksumInterconnectSessionV2 = config.GetChecksumInterconnectSessionV2();
     }
 
     return result;
@@ -2418,6 +2427,17 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
         MakeQuoterServiceID(),
         TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, appData->SystemPoolId))
     );
+}
+
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeServiceId(NodeId),
+        TActorSetupCmd(workloadManager, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 TKqpServiceInitializer::TKqpServiceInitializer(

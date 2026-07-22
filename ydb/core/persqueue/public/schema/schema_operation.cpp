@@ -177,10 +177,9 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG("Dump NPQLOGPREFIX, replyErrorAndDie, errorMessage",
+        YDB_LOG_DEBUG(errorMessage,
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"replyErrorAndDie", errorCode},
-            {"errorMessage", errorMessage});
+            {"replyErrorAndDie", errorCode});
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }

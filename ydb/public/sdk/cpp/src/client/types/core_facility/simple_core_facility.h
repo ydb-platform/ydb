@@ -51,7 +51,6 @@ private:
     std::condition_variable Cv_;
     std::priority_queue<TScheduledTask, std::vector<TScheduledTask>, TScheduledTaskLess> Queue_;
     bool Stop_ = false;
-    bool PeriodicStarted_ = false;
     std::uint64_t NextSeqNo_ = 0;
 
     std::thread WorkerThread_;

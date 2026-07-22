@@ -7,7 +7,8 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
@@ -60,7 +61,7 @@ public:
             hFunc(TEvAddDatabase, Handle);
             hFunc(TEvRemoveDatabase, Handle);
             hFunc(TEvAddPool, Handle);
-            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
+            hFunc(NWorkloadManager::TEvUpdatePoolInfo, Handle);
             hFunc(TEvRemovePool, Handle);
             hFunc(TEvAddQuery, Handle);
             hFunc(TEvRemoveQuery, Handle);
@@ -134,7 +135,7 @@ public:
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
-            Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+            Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             if (resourceWeight > Epsilon) {
                 UpdatePoolsGuarantee();
             }
@@ -145,7 +146,7 @@ public:
         Y_ABORT("Unsupported yet");
     }
 
-    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
         auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
@@ -183,7 +184,7 @@ public:
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
                 poolIt->second.IsFirstRemoval = true;
-                Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+                Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             } else {
                 // The second removal - the pool was really removed.
                 PoolSubscribtions.erase(poolIt);

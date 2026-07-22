@@ -222,6 +222,20 @@ remain explicit casts. `Convert`, `StrictCast`, nullable source/target/result
 shapes, zero-integral-digit targets, and non-integer Decimal sources fail closed
 outside the existing complete-literal normalization.
 
+A separate fixed conversion normalizes only
+`SafeCast(String|Utf8 literal, OptionalType(Decimal(p,s))) ->
+Optional<Decimal(p,s)>`. The source must be a direct non-null literal containing
+non-empty 7-bit ASCII. Result, descriptor, outer annotation, and nested non-null
+Decimal item annotation must agree exactly, and YQL must classify the
+source-to-item cast as `MayFail | MayLoseData`. The exporter calls
+`NDecimal::FromStringEx`: `IsError` becomes typed NULL; successful finite values
+retain round-half-to-even parsing and must be normal at precision `p`; NaN and
+signed infinity remain tagged specials; overflow saturates to signed infinity;
+and underflow may round to zero. A successful nonnormal result fails closed.
+The fold emits the existing Decimal literal or typed-NULL shape, so it requires
+no Python IR or evaluator extension. Dynamic, nullable, empty, non-ASCII,
+misannotated, `Convert`, and `StrictCast` forms remain unsupported.
+
 An explicit `cast_integral` node models only partial integer `SafeCast` pairs.
 The source may be nullable or non-null and must have one exact signed or
 unsigned 8/16/32/64-bit identity. YQL cast analysis must classify conversion to
@@ -389,7 +403,8 @@ Implementation sequence:
 15. M4: quantifier-scoped shared-term SMT rendering;
 16. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
 17. M4: exact all-pairs ordinary integral `DataCompare`;
-18. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+18. M4: exact direct String/Utf8-literal `SafeCast` to optional Decimal;
+19. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -562,6 +577,13 @@ prefix/NUL gaps, Unicode normalization distinctions, valid-UTF-8 replay
 representatives, sealing, budget rejection, and quantified-choice fail-closed
 behavior. C++ runtime oracles lock the shared unsigned-byte comparator and
 type-independent String/Utf8 hash contract.
+Direct String/Utf8-literal Decimal-cast tests use `FromStringEx` as the runtime
+oracle for both source identities, exponent syntax, both signs of
+round-half-to-even boundaries, NaN/infinities, overflow saturation, underflow,
+parser errors, and successful nonnormal rejection. Structural mutations cover
+the complete annotation, descriptor, source, ASCII, and cast-classification
+gate. The actual pushed-OLAP dialect has direct exporter coverage, while
+real-host TPC-DS q65 confirms that both snapshot boundaries now pass export.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -638,8 +660,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   resource caps, deferred sealing, and quantified-choice fail-closed behavior.
   A focused run moves TPC-DS q42 and q50 through formula construction and proves
   q42. The remaining former String blockers now reach deeper construction caps
-  (q4, q11, q25, q29, q46, q64, q68, and q91) or constant String-literal
-  `SafeCast` to Decimal (q65).
+  (q4, q11, q25, q29, q46, q64, q68, and q91).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -669,6 +690,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   signed/unsigned boundaries, source NULL propagation, and canonical NULL
   payloads have fail-closed or exact tests. Complete conversions and other cast
   families remain outside this exact node.
+- A direct non-null String/Utf8 literal `SafeCast` to an exactly matching
+  optional canonical Decimal is evaluated with `FromStringEx` and folded to an
+  existing tagged Decimal literal or typed NULL. The gate is restricted to
+  non-empty 7-bit ASCII and the exact `MayFail | MayLoseData` classification;
+  finite half-even parsing, specials, saturation, underflow, and nonnormal
+  rejection are locked by runtime-oracle and fail-closed tests. No Python IR
+  change is needed. Focused TPC-DS q21 and q40 now reach initial `Interval` and
+  final OLAP `just`; q65 exports both snapshots and reaches unsupported
+  aggregate `avg` after 231 ms of preparation and 255 ms of verifier work. This
+  milestone changes neither the 20/121 formula slice nor the ten-query proof
+  floor.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;

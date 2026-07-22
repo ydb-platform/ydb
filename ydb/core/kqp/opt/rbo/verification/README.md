@@ -11,9 +11,9 @@ hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
-partial integral `SafeCast`, exact Decimal semantics for comparison, integral
-casts, arithmetic, ordering, and `SUM`, plus the benchmark-dashboard parts of
-M4.
+partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
+optional Decimal, exact Decimal semantics for comparison, integral casts,
+arithmetic, ordering, and `SUM`, plus the benchmark-dashboard parts of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -230,6 +230,29 @@ integer literals retain the normalized-literal representation, while
 value-specific incomplete literals use `cast_decimal`. `Convert`, `StrictCast`,
 nullable source/target/result shapes, zero-integral-digit targets, and
 non-integer Decimal cast sources remain outside this explicit gate.
+
+A second constant normalization covers only a direct non-null `String` or
+`Utf8` literal passed to `SafeCast` with an `Optional<Decimal(p,s)>` result and
+target. The result, outer target annotation, nested non-null Decimal item
+annotation, and descriptor must agree exactly, and YQL cast analysis must
+classify the source-to-item conversion as `MayFail | MayLoseData`. The literal
+must be non-empty 7-bit ASCII; dynamic, nullable, malformed, or differently
+annotated sources fail closed.
+
+The exporter evaluates that fixed conversion with the runtime's
+`NDecimal::FromStringEx`. A parser error becomes an existing typed `null` node.
+Successful finite values use the parser's round-half-to-even behavior and must
+be normal for the requested precision; a successful nonnormal value is rejected
+rather than normalized. NaN and signed infinities remain tagged Decimal
+literals, numeric overflow saturates to signed infinity, and underflow can round
+to zero. Successful casts become existing Decimal literal nodes, so this
+milestone changes neither the snapshot IR nor the Python decoder/evaluator.
+
+Focused real-workload capture confirms the next closed boundaries. TPC-DS q21
+and q40 now reach initial scalar type `Interval` and final OLAP unary operation
+`just`. q65 exports both snapshots, then the verifier rejects unmodeled
+aggregate `avg` after 231 ms of preparation and 255 ms of verifier work. The
+formula slice therefore remains 20/121 and the proof floor remains ten.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,

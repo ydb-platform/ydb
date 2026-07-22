@@ -18,6 +18,7 @@ SRCS(
     inline_simple_in_exists_subplan.cpp
     inline_generic_in_exists_subplan.cpp
     kqp_cbo_trees.cpp
+    kqp_rbo_range_extraction.cpp
     peephole_predicate.cpp
     map/prune_dead_outputs.cpp
     map/push_map_elements_into_map.cpp
@@ -40,6 +41,7 @@ SRCS(
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
     rewrite_right_join.cpp
+    select_index.cpp
     traces/kqp_cbo_trace.cpp
 )
 

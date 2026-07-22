@@ -550,6 +550,9 @@ message TInterconnectConfig {
     optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
     optional bool EnableInterconnectSessionV2 = 64 [default = false];
     optional bool ChecksumInterconnectSessionV2 = 65 [default = false];
+    optional bool EnableSQPOLLv2 = 66 [default = true];
+    optional bool EnablePreserializeInV2 = 67 [default = false];
+    optional uint32 UringEngineThreadsV2 = 68 [default = 4];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

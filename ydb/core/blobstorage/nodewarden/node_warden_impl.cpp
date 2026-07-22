@@ -146,6 +146,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
+        hFunc(TEvPrivate::TEvRetrySlay, Handle);
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
@@ -613,39 +614,45 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const NPDisk::TEvSlayResult &msg = *ev->Get();
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
     const auto it = SlayInFlight.find(vslotId);
-    Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
     STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()),
-        (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt));
-    if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
+        (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second.Round) : std::nullopt));
+    if (it == SlayInFlight.end() || it->second.Round != msg.SlayOwnerRound) {
         return; // outdated response
     }
     switch (msg.Status) {
         case NKikimrProto::NOTREADY: {
-            const ui64 round = NextLocalPDiskInitOwnerRound();
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
-                msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, round, msg.PDiskId, msg.VSlotId)));
-            it->second = round;
+            // Keep the short NOTREADY retry separate from the slower insurance retry scheduled by
+            // IssueSlay. Both carry the current round, so whichever retry issues a new request first
+            // makes the other timer stale.
+            Schedule(TDuration::Seconds(1),
+                new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, it->second.Round,
+                    TEvPrivate::TEvRetrySlay::EReason::NOTREADY));
             break;
         }
 
         case NKikimrProto::OK:
-        case NKikimrProto::ALREADY:
+        case NKikimrProto::ALREADY: {
+            const TSlayInFlight slay = it->second;
             SlayInFlight.erase(it);
-            if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt == LocalVDisks.end()) {
-                SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
-            } else {
-                SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            SendVDiskReport(vslotId, slay.VDiskId,
+                slay.Action == ESlayAction::DESTROY
+                    ? NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED
+                    : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk); // restart actor after successful wiping
+                StartLocalVDiskActor(vdisk); // start the current VDisk after the previous slot contents are gone
             }
             break;
+        }
 
         case NKikimrProto::CORRUPTED: // this branch doesn't really work
-        case NKikimrProto::ERROR:
+        case NKikimrProto::ERROR: {
+            const TVDiskID vdiskId = it->second.VDiskId;
             SlayInFlight.erase(it);
             STLOG(PRI_ERROR, BS_NODE, NW29, "Handle(NPDisk::TEvSlayResult) error", (Msg, msg.ToString()));
-            SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
+            SendVDiskReport(vslotId, vdiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;
+        }
 
         case NKikimrProto::RACE:
             Y_ABORT("Unexpected# %s", msg.ToString().data());
@@ -661,6 +668,26 @@ void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
     ProcessShredStatus(ev->Cookie, ev->Get()->ShredGeneration, ev->Get()->Status == NKikimrProto::OK ? std::nullopt :
         std::make_optional(TStringBuilder() << "failed to shred PDisk Status# " << NKikimrProto::EReplyStatus_Name(
         ev->Get()->Status)));
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvRetrySlay::TPtr& ev) {
+    const auto *msg = ev->Get();
+    const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VDiskSlotId);
+    if (const auto it = SlayInFlight.find(vslotId);
+            it != SlayInFlight.end() && it->second.Round == msg->Round) {
+        switch (msg->Reason) {
+            case TEvPrivate::TEvRetrySlay::EReason::NOTREADY:
+                STLOG(PRI_INFO, BS_NODE, NW111, "Retrying PDisk slay after NOTREADY",
+                    (VDiskId, it->second.VDiskId), (VSlotId, vslotId), (Round, msg->Round));
+                break;
+
+            case TEvPrivate::TEvRetrySlay::EReason::UNCONFIRMED:
+                STLOG(PRI_WARN, BS_NODE, NW111, "Retrying unconfirmed PDisk slay",
+                    (VDiskId, it->second.VDiskId), (VSlotId, vslotId), (Round, msg->Round));
+                break;
+        }
+        IssueSlay(vslotId, it->second);
+    }
 }
 
 void TNodeWarden::Handle(NPDisk::TEvShredPDisk::TPtr ev) {

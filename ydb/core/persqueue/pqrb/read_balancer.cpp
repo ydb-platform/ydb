@@ -428,9 +428,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     else
         PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
 
-    if (AllPartitionPipesReady()) {
-        ProcessPartitionsLocationQueue(ctx);
-    }
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)

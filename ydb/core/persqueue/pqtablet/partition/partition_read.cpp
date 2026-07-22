@@ -250,11 +250,16 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
     if (InitDone && !record.GetSessionId().empty()) {
         auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
-        if (!userInfo.NoConsumer && userInfo.Session != record.GetSessionId()) {
-            auto response = MakeHasDataInfoResponse(0, cookie);
-            response->Record.SetSessionInvalidated(true);
-            ctx.Send(sender, response.Release());
-            return;
+        if (!userInfo.NoConsumer) {
+            // Prefer pending session: CommitTransaction clears it before persist applies to UsersInfoStorage.
+            const TUserInfoBase* pending = GetPendingUserIfExists(record.GetClientId());
+            const TString& session = pending ? pending->Session : userInfo.Session;
+            if (session != record.GetSessionId()) {
+                auto response = MakeHasDataInfoResponse(0, cookie);
+                response->Record.SetSessionInvalidated(true);
+                ctx.Send(sender, response.Release());
+                return;
+            }
         }
     }
 

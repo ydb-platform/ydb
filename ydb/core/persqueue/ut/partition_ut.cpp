@@ -2442,6 +2442,57 @@ Y_UNIT_TEST_F(KillReadSessionFailsPendingHasData, TPartitionFixture)
     }
 }
 
+// Commit without session clears pending.Session before UsersInfoStorage is updated.
+// HasData with the old SessionId must be rejected via the pending-session check.
+Y_UNIT_TEST_F(HasDataRejectedByPendingSessionAfterCommitWithoutSession, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+    const ui64 hasDataCookie = 99;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+    CreateSession(client, session);
+
+    // Commit without session id → pending.Session cleared, FailStale, then persist.
+    {
+        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+            /*cookie=*/7, client, /*offset=*/2, /*session=*/"",
+            /*partitionSessionId=*/0, /*gen=*/0, /*step=*/0, TActorId{});
+        event->Strict = true;
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    {
+        auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(5));
+        UNIT_ASSERT(kv);
+        // Hold the write response: UsersInfoStorage still has the old session.
+    }
+
+    {
+        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        event->Record.SetPartition(partition.InternalPartitionId);
+        event->Record.SetOffset(end);
+        event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
+        event->Record.SetCookie(hasDataCookie);
+        event->Record.SetClientId(client);
+        event->Record.SetSessionId(session);
+        ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    }
+
+    {
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+        UNIT_ASSERT(response->Record.GetSessionInvalidated());
+    }
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie=7, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const TPartitionId partition{3};

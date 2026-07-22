@@ -85,7 +85,9 @@ namespace NKikimr::NBsController {
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
                         prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
                         prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
-                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
+                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax ||
+                        prev.ExpectedSlotSize != cur.ExpectedSlotSize ||
+                        prev.MaxSlots != cur.MaxSlots) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -875,9 +877,7 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(pdisk);
             const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
             Y_ABORT_UNLESS(group);
-            pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(
-                group->GroupSizeInUnits,
-                pdisk->SlotSizeInUnits);
+            pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -910,7 +910,7 @@ namespace NKikimr::NBsController {
                     if (!vslot->IsBeingDeleted()) {
                         const TGroupInfo *group = Groups.Find(vslot->GroupId);
                         Y_ABORT_UNLESS(group);
-                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk.SlotSizeInUnits);
+                        numActiveSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
                     }
                 }
                 Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
@@ -1127,7 +1127,8 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(pdisk.BoxId);
             pb->SetNumStaticSlots(pdisk.StaticSlotUsage);
             pb->SetDriveStatus(pdisk.Status);
-            pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
+            pb->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+            pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
             pb->SetDriveStatusChangeTimestamp(pdisk.StatusTimestamp.GetValue());
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);

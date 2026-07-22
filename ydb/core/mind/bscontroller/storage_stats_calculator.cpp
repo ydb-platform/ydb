@@ -144,6 +144,7 @@ public:
                                 .NumSlots = pdisk.GetNumActiveSlots(),
                                 .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                                 .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
+                                .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,
@@ -178,7 +179,7 @@ public:
                                         pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                                     }
                                     vm.SetAllocatedSize(0);
-                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
+                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount(), pdisk.GetExpectedSlotSize()});
                                 }
                             }
                         }

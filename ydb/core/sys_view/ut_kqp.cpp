@@ -3058,6 +3058,7 @@ R"(CREATE TABLE `test_show_create` (
                     BoxId,
                     DecommitStatus,
                     ExpectedSlotCount,
+                    ExpectedSlotSize,
                     Guid,
                     InferPDiskSlotCountFromUnitSize,
                     Kind,
@@ -3089,12 +3090,13 @@ R"(CREATE TABLE `test_show_create` (
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(123u); // Guid
         check.Uint64(0); // InferPDiskSlotCountFromUnitSize
         check.Uint64(0u); // Kind

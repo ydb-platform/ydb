@@ -61,9 +61,11 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
+        if (disk.ExpectedSlotSize) {
+            slotSize = disk.ExpectedSlotSize;
+        } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
             slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
-        } else if (pdiskMetrics.GetTotalSize()) {
+        } else if (pdiskMetrics.GetTotalSize() && disk.ExpectedSlotCount) {
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
@@ -338,6 +340,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     ui32 slotSizeInUnits = 0;
     pDiskInfo->ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
     info->SetExpectedSlotCount(slotCount);
+    info->SetExpectedSlotSize(pDiskInfo->GetEffectiveExpectedSlotSize());
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
@@ -405,7 +408,12 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
 
     std::vector<TGroupDiskInfo> disks;
     for (const auto& vslot : groupInfo->VDisksInGroup) {
-        disks.push_back({&vslot->PDisk->Metrics, &vslot->Metrics, vslot->PDisk->ExpectedSlotCount});
+        disks.push_back({
+            &vslot->PDisk->Metrics,
+            &vslot->Metrics,
+            vslot->PDisk->GetEffectiveExpectedSlotCount(),
+            vslot->PDisk->GetEffectiveExpectedSlotSize(),
+        });
     }
     CalculateGroupUsageStats(info, disks, TBlobStorageGroupType(groupInfo->ErasureSpecies));
 
@@ -571,6 +579,7 @@ void TBlobStorageController::UpdateSystemViews() {
                 pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
 
                 pb->SetExpectedSlotCount(slotCount);
+                pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
                 pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
@@ -606,13 +615,14 @@ void TBlobStorageController::UpdateSystemViews() {
                 for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
                     const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
                     const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
-                    TGroupDiskInfo disk{nullptr, nullptr, 0};
+                    TGroupDiskInfo disk{nullptr, nullptr, 0, 0};
                     if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end()) {
                         disk.VDiskMetrics = it->second.VDiskMetrics ? &*it->second.VDiskMetrics : &zero;
                     }
                     if (const auto it = PDisks.find(vslotId.ComprisingPDiskId()); it != PDisks.end()) {
                         disk.PDiskMetrics = &it->second->Metrics;
-                        disk.ExpectedSlotCount = it->second->ExpectedSlotCount;
+                        disk.ExpectedSlotCount = it->second->GetEffectiveExpectedSlotCount();
+                        disk.ExpectedSlotSize = it->second->GetEffectiveExpectedSlotSize();
                     }
                     if (disk.VDiskMetrics && disk.PDiskMetrics) {
                         disks.push_back(std::move(disk));

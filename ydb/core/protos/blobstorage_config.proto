@@ -743,6 +743,7 @@ message TBaseConfig {
         TMaintenanceStatus.E MaintenanceStatus = 20;
         uint64 InferPDiskSlotCountFromUnitSize = 21;
         uint32 InferPDiskSlotCountMax = 22;
+        uint64 ExpectedSlotSize = 24;
     }
     message TVSlot {
         message TDonorDisk {

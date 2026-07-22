@@ -101,7 +101,15 @@ namespace NKikimr {
                     }
                 }
                 // run ExtractConfig as the very last step
+                const bool oldHasFixedSlotSize = pdiskInfo->GetEffectiveExpectedSlotSize() != 0;
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
+                // NumActiveSlots is a sum of owner weights, so it must be recomputed when the
+                // config change affects the weight inputs: the effective expected slot size being set/unset
+                if ((pdiskInfo->GetEffectiveExpectedSlotSize() != 0) != oldHasFixedSlotSize) {
+                    pdiskInfo->NumActiveSlots = pdiskInfo->ComputeNumActiveSlots([&](TGroupId groupId) {
+                        return state.Groups.Find(groupId);
+                    });
+                }
             }
         }
 

@@ -707,6 +707,7 @@ namespace NKikimr {
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
                     .SlotSizeInUnits = slotSizeInUnits,
+                    .SlotSizeInBytes = info.GetEffectiveExpectedSlotSize(),
                     .Groups = std::move(groups),
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,

@@ -57,6 +57,12 @@ public:
     }
 };
 
+void TBlobStorageController::RecomputePDiskNumActiveSlots(TPDiskInfo *pdisk) {
+    pdisk->NumActiveSlots = pdisk->ComputeNumActiveSlots([this](TGroupId groupId) {
+        return FindGroup(groupId);
+    });
+}
+
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev) {
     TabletCounters->Cumulative()[NBlobStorageController::COUNTER_UPDATE_DISK_METRICS_COUNT].Increment(1);
     TRequestCounter counter(TabletCounters, NBlobStorageController::COUNTER_UPDATE_DISK_METRICS_USEC);
@@ -100,12 +106,21 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     for (const auto& m : record.GetPDisksMetrics()) {
         const TPDiskId pdiskId(ev->Sender.NodeId(), m.GetPDiskId());
         if (auto *pdisk = FindPDisk(pdiskId)) {
+            // NumActiveSlots is maintained incrementally with owner weights that depend on
+            // whether the effective expected slot size is set; when a metrics update flips it
+            // (e.g. the PDisk started reporting ExpectedSlotSize inferred from global settings),
+            // the counter must be recomputed with the new weights
+            const bool hadFixedSlotSize = pdisk->GetEffectiveExpectedSlotSize() != 0;
+
             if (pdisk->UpdatePDiskMetrics(m, now)) {
                 for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
                     if (slot->Group) {
                         groupsToCheck.insert(slot->Group->ID);
                     }
                 }
+            }
+            if ((pdisk->GetEffectiveExpectedSlotSize() != 0) != hadFixedSlotSize) {
+                RecomputePDiskNumActiveSlots(pdisk);
             }
             pdisk->UpdateOperational(true);
             SysViewChangedPDisks.insert(pdiskId);

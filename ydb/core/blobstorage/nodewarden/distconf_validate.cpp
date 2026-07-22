@@ -1,5 +1,7 @@
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
+
 namespace NKikimr::NStorage {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -192,6 +194,13 @@ namespace NKikimr::NStorage {
             }
 
             const ui32 pdiskId = pdisk.GetPDiskID();
+            if (pdisk.HasPDiskConfig()) {
+                const TString context = TStringBuilder() << "pdisk NodeID# " << nodeId << " PDiskID# " << pdiskId;
+                if (auto error = ::NKikimr::ValidatePDiskConfig(pdisk.GetPDiskConfig(), context)) {
+                    return error;
+                }
+            }
+
             if (const auto [_, inserted] = pdisksById.emplace(std::make_tuple(nodeId, pdiskId), pdisk.GetPDiskGuid()); !inserted) {
                 return "duplicate NodeID:PDiskID for pdisk";
             }

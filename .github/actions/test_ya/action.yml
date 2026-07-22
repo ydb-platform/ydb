@@ -319,6 +319,9 @@ runs:
             exit $RC
           fi
 
+          # graph_compare may still return 0 under some ya versions while logging BadDep.
+          python3 .github/scripts/tests/check_ya_configure_integrity.py "$GRAPH_COMPARE_OUTPUT"
+
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET="ydb"
         else
@@ -331,9 +334,22 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             YA_MAKE_COMMAND+=" --retest"
           fi
+          # Keep -k for noisy configure warnings, but fail on integrity errors (BadDep etc.).
+          # See https://github.com/ydb-platform/ydb/issues/47524
+          GRAPH_SAVE_LOG="$PUBLIC_DIR/ya_graph_save_log.txt"
+          set +e
           $YA_MAKE_COMMAND -k --cache-tests \
             --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-            $YA_MAKE_TARGET
+            $YA_MAKE_TARGET |& tee "$GRAPH_SAVE_LOG"
+          GRAPH_SAVE_RC=${PIPESTATUS[0]}
+          set -e
+          python3 .github/scripts/tests/check_ya_configure_integrity.py "$GRAPH_SAVE_LOG"
+          if [ "$GRAPH_SAVE_RC" -ne 0 ]; then
+            echo "ya make (graph save) returned $GRAPH_SAVE_RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            exit "$GRAPH_SAVE_RC"
+          fi
         fi
 
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"

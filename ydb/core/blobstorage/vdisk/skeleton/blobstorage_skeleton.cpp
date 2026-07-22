@@ -557,10 +557,12 @@ namespace NKikimr {
         }
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
-                TLogoBlobID id, ui64 bufSize, bool ignoreBlock, bool issueKeepFlag,
+                TLogoBlobID id, const TRope& buffer, const std::optional<ui64>& checksum,
+                bool ignoreBlock, bool issueKeepFlag,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier)
         {
+            const ui64 bufSize = buffer.GetSize();
             ui64 blobPartSize = 0;
             try {
                 blobPartSize = GInfo->Type.PartSize(id);
@@ -610,6 +612,20 @@ namespace NKikimr {
                     {"id", id},
                     {"marker", "BSVS43"});
                 return {NKikimrProto::ERROR, "empty TabletID"};
+            }
+
+            if (checksum) {
+                const ui64 calculatedChecksum = TDiskBlob::CalculateChecksum(buffer);
+                if (*checksum != calculatedChecksum) {
+                    YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"evPrefix", evPrefix},
+                        {"id", id},
+                        {"expectedChecksum", *checksum},
+                        {"calculatedChecksum", calculatedChecksum},
+                        {"marker", "BSVS45"});
+                    return {NKikimrProto::ERROR, "buffer checksum mismatch"};
+                }
             }
 
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, issueKeepFlag, extraBlockChecks, writtenBeyondBarrier);
@@ -693,8 +709,8 @@ namespace NKikimr {
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
-                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer.GetSize(), ignoreBlock,
-                        info.IssueKeepFlag, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
+                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer, info.Checksum,
+                        ignoreBlock, info.IssueKeepFlag, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::OK) {
@@ -827,7 +843,6 @@ namespace NKikimr {
                 std::nullopt, record.MutableExtraBlockChecks(),
                 WriteSourceFromProto(record.GetWriteSourceOp()),
                 std::move(ev->TraceId), record.GetIssueKeepFlag(), record.GetIgnoreBlock());
-            const ui64 bufSize = info.Buffer.GetSize();
 
             try {
                 info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
@@ -857,7 +872,7 @@ namespace NKikimr {
                 return;
             }
 
-            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.IssueKeepFlag,
+            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, info.Buffer, info.Checksum, ignoreBlock, info.IssueKeepFlag,
                 info.ExtraBlockChecks, ev->Get()->RewriteBlob ? nullptr : &info.WrittenBeyondBarrier);
             if (info.HullStatus.Status != NKikimrProto::OK) {
                 ReplyError(info.HullStatus, ev, ctx, now);

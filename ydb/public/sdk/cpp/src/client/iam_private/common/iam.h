@@ -25,27 +25,15 @@ private:
 
     class TCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
     public:
-        // TDriver path: a shared facility (TGRpcConnectionsImpl) supports multiple periodic tasks,
-        // so we can hand the same weak_ptr to the nested auth provider here.
-        TCredentialsProvider(const TIamServiceParams& params, std::weak_ptr<ICoreFacility> responseFacility)
+        TCredentialsProvider(const TIamServiceParams& params,
+                             std::weak_ptr<ICoreFacility> responseFacility,
+                             TCredentialsProviderPtr authProvider = {})
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 MakeRequestFiller(params),
                 MakeRpc(),
                 responseFacility,
-                params.SystemServiceAccountCredentials->CreateProvider(responseFacility))
-        {}
-
-        // Standalone (no-arg) path: the caller has already built a self-owning auth provider
-        // backed by its OWN facility. We must not share `outerFacility` with the auth provider
-        // because TSimpleCoreFacility allows only one periodic task.
-        TCredentialsProvider(const TIamServiceParams& params,
-                             std::weak_ptr<ICoreFacility> outerFacility,
-                             TCredentialsProviderPtr authProvider)
-            : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
-                MakeRequestFiller(params),
-                MakeRpc(),
-                std::move(outerFacility),
-                std::move(authProvider))
+                authProvider ? std::move(authProvider) :
+                    params.SystemServiceAccountCredentials->CreateProvider(responseFacility))
         {}
     };
 
@@ -54,12 +42,12 @@ public:
         : Params_(params)
     {}
 
-    // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
-    // The nested auth provider gets its own facility (via a recursive no-arg CreateProvider() that
-    // owns its private facility). Sharing a TSimpleCoreFacility between two gRPC
-    // IAM providers would abort: each one registers a periodic task and the facility allows only one.
     TCredentialsProviderPtr CreateProvider() const override final {
-        auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
+        auto authFacility = CreateSimpleCoreFacility();
+        auto authProvider = std::make_shared<TOwningFacilityCredentialsProvider>(
+            authFacility,
+            Params_.SystemServiceAccountCredentials->CreateProvider(authFacility),
+            true);
         auto outerFacility = CreateSimpleCoreFacility();
         auto serviceProvider = std::make_shared<TCredentialsProvider>(
             Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));

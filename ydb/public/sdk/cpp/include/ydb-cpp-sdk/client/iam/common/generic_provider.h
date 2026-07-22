@@ -18,10 +18,11 @@
 #include <string>
 #include <condition_variable>
 #include <mutex>
-#include <thread>
 #include <utility>
 
 namespace NYdb::inline Dev {
+
+using NCredentials::NDetail::TOwningFacilityCredentialsProvider;
 
 constexpr std::chrono::milliseconds BACKOFF_START{50};
 constexpr std::chrono::milliseconds BACKOFF_MAX{10000};
@@ -423,39 +424,6 @@ public:
 
 private:
     std::shared_ptr<TImpl> Impl_;
-};
-
-// Adapter that keeps a self-owned ICoreFacility alive for the lifetime of an inner credentials
-// provider. Used by deprecated no-arg ICredentialsProviderFactory::CreateProvider() paths where
-// the caller hasn't supplied a facility.
-class TOwningFacilityCredentialsProvider : public ICredentialsProvider {
-public:
-    TOwningFacilityCredentialsProvider(std::shared_ptr<ICoreFacility> facility,
-                                       TCredentialsProviderPtr inner)
-        : Facility_(std::move(facility))
-        , Inner_(std::move(inner))
-    {}
-
-    std::string GetAuthInfo() const override {
-        return Inner_->GetAuthInfo();
-    }
-
-    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
-        return Inner_->GetAuthInfoAsync();
-    }
-
-    bool IsValid() const override {
-        return Inner_->IsValid();
-    }
-
-    ~TOwningFacilityCredentialsProvider() {
-        Inner_.reset();
-        std::thread([facility = std::move(Facility_)] {}).detach();
-    }
-
-private:
-    std::shared_ptr<ICoreFacility> Facility_;
-    TCredentialsProviderPtr Inner_;
 };
 
 template<typename TRequest, typename TResponse, typename TService>

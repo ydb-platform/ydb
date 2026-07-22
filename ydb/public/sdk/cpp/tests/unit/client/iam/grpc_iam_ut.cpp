@@ -67,8 +67,6 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
         CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
 
     auto provider = factory->CreateProvider();
-    auto authInfo = provider->GetAuthInfoAsync();
-    ASSERT_FALSE(authInfo.IsReady());
 
     ASSERT_TRUE(iamService.WaitUntilRpcEntered(std::chrono::seconds(5)))
         << "server should have accepted the IAM Create call";
@@ -85,7 +83,7 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
     server.Stop();
 }
 
-TEST(GrpcIamCredentialsProviderFactory, AsyncCallbackCanReleaseNoArgProvider) {
+TEST(GrpcIamCredentialsProviderFactory, ReadyCallbackCanReleaseNoArgProvider) {
     TIamTokenServiceStub iamStub;
     iamStub.SetResponseToken("unit-test-iam-token");
     TIamGrpcServer server(&iamStub);
@@ -95,7 +93,9 @@ TEST(GrpcIamCredentialsProviderFactory, AsyncCallbackCanReleaseNoArgProvider) {
         CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(
             MakeOAuthParams(server.Endpoint()))->CreateProvider();
     auto released = std::make_shared<std::promise<void>>();
-    provider->GetAuthInfoAsync().Subscribe(
+    auto authInfo = provider->GetAuthInfoAsync();
+    ASSERT_TRUE(authInfo.IsReady());
+    authInfo.Subscribe(
         [provider = std::move(provider), released](const auto&) mutable {
             provider.reset();
             released->set_value();
@@ -112,6 +112,7 @@ public:
     std::string GetAuthInfo() const override {
         std::unique_lock lock(Mutex_);
         if (++CallCount_ > 1) {
+            BlockedCv_.notify_all();
             BlockedCv_.wait(lock, [this] { return Released_; });
         }
         return "slow-auth-token";
@@ -130,16 +131,8 @@ public:
     }
 
     bool WaitUntilBlocked(std::chrono::milliseconds timeout) const {
-        const auto deadline = std::chrono::steady_clock::now() + timeout;
-        while (std::chrono::steady_clock::now() < deadline) {
-            std::lock_guard lock(Mutex_);
-            if (CallCount_ > 1 && !Released_) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-        std::lock_guard lock(Mutex_);
-        return CallCount_ > 1 && !Released_;
+        std::unique_lock lock(Mutex_);
+        return BlockedCv_.wait_for(lock, timeout, [this] { return CallCount_ > 1; });
     }
 
 private:

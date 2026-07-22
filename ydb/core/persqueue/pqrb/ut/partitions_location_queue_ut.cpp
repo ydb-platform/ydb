@@ -1,7 +1,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
 
 namespace NKikimr::NPQ {
 namespace {
@@ -18,21 +18,19 @@ THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
 void WaitBalancerReady(TTestContext& tc, ui32 retries = 20) {
     for (ui32 i = 0; i < retries; ++i) {
         auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
-        UNIT_ASSERT(response);
+        ASSERT_TRUE(response);
         if (response->Record.GetStatus()) {
             return;
         }
         tc.Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(100));
         tc.Runtime->DispatchEvents();
     }
-    UNIT_ASSERT_C(false, "Could not get positive response from balancer");
+    FAIL() << "Could not get positive response from balancer";
 }
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TPartitionsLocationQueue) {
-
-Y_UNIT_TEST(AnswerAfterPipesBecomeReady) {
+TEST(TPartitionsLocationQueue, AnswerAfterPipesBecomeReady) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -51,7 +49,7 @@ Y_UNIT_TEST(AnswerAfterPipesBecomeReady) {
     PQTabletPrepare({}, {}, tc);
     PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc);
 
-    UNIT_ASSERT(!delayedConnects.empty());
+    ASSERT_FALSE(delayedConnects.empty());
 
     tc.Runtime->SendToPipe(
         tc.BalancerTabletId,
@@ -65,7 +63,7 @@ Y_UNIT_TEST(AnswerAfterPipesBecomeReady) {
     auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::MilliSeconds(200)
     );
-    UNIT_ASSERT_C(!earlyResponse, "Location response must not arrive before pipes are ready");
+    ASSERT_FALSE(earlyResponse) << "Location response must not arrive before pipes are ready";
 
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
     for (auto& ev : delayedConnects) {
@@ -75,14 +73,14 @@ Y_UNIT_TEST(AnswerAfterPipesBecomeReady) {
     auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
     );
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->Record.GetStatus());
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetLocations(0).GetPartitionId(), 0u);
-    UNIT_ASSERT_GT(response->Record.GetLocations(0).GetNodeId(), 0u);
+    ASSERT_TRUE(response);
+    ASSERT_TRUE(response->Record.GetStatus());
+    ASSERT_EQ(response->Record.LocationsSize(), 1u);
+    ASSERT_EQ(response->Record.GetLocations(0).GetPartitionId(), 0u);
+    ASSERT_GT(response->Record.GetLocations(0).GetNodeId(), 0u);
 }
 
-Y_UNIT_TEST(ExpireQueuedRequest) {
+TEST(TPartitionsLocationQueue, ExpireQueuedRequest) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -102,7 +100,7 @@ Y_UNIT_TEST(ExpireQueuedRequest) {
     auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::MilliSeconds(200)
     );
-    UNIT_ASSERT_C(!earlyResponse, "Location response must wait in queue before timeout");
+    ASSERT_FALSE(earlyResponse) << "Location response must wait in queue before timeout";
 
     tc.Runtime->ResetScheduledCount();
     tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(1));
@@ -110,11 +108,11 @@ Y_UNIT_TEST(ExpireQueuedRequest) {
     auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
     );
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(!response->Record.GetStatus());
+    ASSERT_TRUE(response);
+    ASSERT_FALSE(response->Record.GetStatus());
 }
 
-Y_UNIT_TEST(HappyPathAfterPipesReady) {
+TEST(TPartitionsLocationQueue, HappyPathAfterPipesReady) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -125,26 +123,26 @@ Y_UNIT_TEST(HappyPathAfterPipesReady) {
     WaitBalancerReady(tc);
 
     auto response = SendLocationRequest(tc, new TEvPersQueue::TEvGetPartitionsLocation());
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->Record.GetStatus());
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
+    ASSERT_TRUE(response);
+    ASSERT_TRUE(response->Record.GetStatus());
+    ASSERT_EQ(response->Record.LocationsSize(), 1u);
 
     auto* specific = new TEvPersQueue::TEvGetPartitionsLocation();
     specific->Record.AddPartitions(0);
     response = SendLocationRequest(tc, specific);
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->Record.GetStatus());
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetLocations(0).GetPartitionId(), 0u);
+    ASSERT_TRUE(response);
+    ASSERT_TRUE(response->Record.GetStatus());
+    ASSERT_EQ(response->Record.LocationsSize(), 1u);
+    ASSERT_EQ(response->Record.GetLocations(0).GetPartitionId(), 0u);
 
     auto* unknown = new TEvPersQueue::TEvGetPartitionsLocation();
     unknown->Record.AddPartitions(50);
     response = SendLocationRequest(tc, unknown);
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(!response->Record.GetStatus());
+    ASSERT_TRUE(response);
+    ASSERT_FALSE(response->Record.GetStatus());
 }
 
-Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
+TEST(TPartitionsLocationQueue, SinglePartitionNotBlockedByAllPartitions) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -170,7 +168,7 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
         tc
     );
 
-    UNIT_ASSERT(!delayedConnects.empty());
+    ASSERT_FALSE(delayedConnects.empty());
 
     // Head of queue: all partitions (blocked on dead tablet).
     tc.Runtime->SendToPipe(
@@ -195,7 +193,7 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     auto earlyResponse = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::MilliSeconds(200)
     );
-    UNIT_ASSERT_C(!earlyResponse, "Neither request can be answered before partition-0 pipe is ready");
+    ASSERT_FALSE(earlyResponse) << "Neither request can be answered before partition-0 pipe is ready";
 
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
     for (auto& ev : delayedConnects) {
@@ -206,15 +204,15 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
     );
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->Record.GetStatus());
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.LocationsSize(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetLocations(0).GetPartitionId(), 0u);
+    ASSERT_TRUE(response);
+    ASSERT_TRUE(response->Record.GetStatus());
+    ASSERT_EQ(response->Record.LocationsSize(), 1u);
+    ASSERT_EQ(response->Record.GetLocations(0).GetPartitionId(), 0u);
 
     auto stillWaiting = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::MilliSeconds(200)
     );
-    UNIT_ASSERT_C(!stillWaiting, "All-partitions request must stay queued while dead tablet is down");
+    ASSERT_FALSE(stillWaiting) << "All-partitions request must stay queued while dead tablet is down";
 
     tc.Runtime->ResetScheduledCount();
     tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(5) + TDuration::MilliSeconds(1));
@@ -222,10 +220,8 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     auto expired = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(
         TDuration::Seconds(10)
     );
-    UNIT_ASSERT(expired);
-    UNIT_ASSERT(!expired->Record.GetStatus());
+    ASSERT_TRUE(expired);
+    ASSERT_FALSE(expired->Record.GetStatus());
 }
-
-} // Y_UNIT_TEST_SUITE(TPartitionsLocationQueue)
 
 } // namespace NKikimr::NPQ

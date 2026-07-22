@@ -12,6 +12,8 @@
 
 #include <util/generic/size_literals.h>
 
+#include <concepts>
+
 namespace NYdb::inline Dev::NTopic {
 
 //! Result of close operation.

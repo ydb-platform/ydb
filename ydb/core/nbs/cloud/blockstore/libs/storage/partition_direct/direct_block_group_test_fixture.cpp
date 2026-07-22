@@ -1,7 +1,8 @@
 #include "direct_block_group_test_fixture.h"
 
+#include "partition_direct_service_mock.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
 
@@ -197,7 +198,7 @@ NThreading::TFuture<void> TDBGFixture::RunAndGetInitialReady(
     }
     Service = service;
 
-    return dbg->Run(service.get());
+    return dbg->Run(TraceService.get(), service.get());
 }
 
 void TDBGFixture::WaitReady(

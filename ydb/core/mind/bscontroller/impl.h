@@ -2265,6 +2265,7 @@ public:
         UpdatePDisksCounters();
         IssueInitialGroupContent();
         InitializeSelfHealState();
+        PushStaticGroupsToSelfHeal();
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());

@@ -542,7 +542,7 @@ def _parse_expr(
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
 
-    if kind == "cast_decimal":
+    if kind in {"cast_decimal", "cast_integral"}:
         _keys(obj, {"kind", "arg", "type", "nullable"}, path)
         return Expr(
             kind=kind,
@@ -1158,6 +1158,24 @@ def _infer_expr(
         if expr.nullable:
             _fail(path, "exact integral Decimal cast must be non-nullable")
         return ValueType(expr.result_type, False)
+
+    if expr.kind == "cast_integral":
+        assert expr.result_type is not None and expr.nullable is not None
+        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        if family(argument.name) != "int":
+            _fail(path, "integral SafeCast source must be an integer")
+        if family(expr.result_type) != "int":
+            _fail(path, "integral SafeCast result must be an integer")
+        if not expr.nullable:
+            _fail(path, "integral SafeCast result must be nullable")
+        source_bounds = integer_bounds(argument.name)
+        result_bounds = integer_bounds(expr.result_type)
+        assert source_bounds is not None and result_bounds is not None
+        source_lower, source_upper = source_bounds
+        result_lower, result_upper = result_bounds
+        if result_lower <= source_lower and source_upper <= result_upper:
+            _fail(path, "integral SafeCast must be a partial conversion")
+        return ValueType(expr.result_type, True)
 
     if expr.kind == "if":
         assert expr.result_type is not None and expr.nullable is not None

@@ -706,6 +706,78 @@ def filtered_snapshot(predicate):
     )
 
 
+def mixed_width_membership_snapshot(lowered):
+    lookup = {"kind": "column", "column": "t.year"}
+    items = [
+        {"kind": "literal", "type": "Int32", "value": value}
+        for value in (0, 1, 1998)
+    ]
+    direct = {"kind": "in", "lookup": lookup, "items": items}
+    predicate = direct
+    if lowered:
+        predicate = {
+            "kind": "if",
+            "condition": {"kind": "exists", "arg": lookup},
+            "then": {
+                "kind": "if_present",
+                "optional": {
+                    "kind": "cast_integral",
+                    "arg": lookup,
+                    "type": "Int32",
+                    "nullable": True,
+                },
+                "present": {
+                    "kind": "in",
+                    "lookup": {"kind": "bound", "depth": 0},
+                    "items": items,
+                },
+                "missing": {"kind": "literal", "type": "Bool", "value": False},
+                "type": "Bool",
+                "nullable": False,
+            },
+            "else": {"kind": "literal", "type": "Bool", "value": False},
+            "type": "Bool",
+            "nullable": False,
+        }
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "T",
+                        "columns": [
+                            {"name": "year", "type": "Int64", "nullable": True}
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": [
+                    {
+                        "id": "scan",
+                        "op": "scan",
+                        "table": "T",
+                        "columns": [{"source": "year", "output": "t.year"}],
+                        "pushed_limit": None,
+                    },
+                    {
+                        "id": "filter",
+                        "op": "filter",
+                        "input": "scan",
+                        "predicate": predicate,
+                    },
+                ],
+                "root": "filter",
+                "output": ["t.year"],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
 def date_filtered_snapshot(kind, day):
     return parse_snapshot(
         {
@@ -1705,6 +1777,14 @@ class RestrictedModelSmokeTest(unittest.TestCase):
             )
         )
 
+    def test_mixed_width_membership_lowering_has_no_spurious_model(self):
+        problem = build_logical_kernel_problem_for_tests(
+            mixed_width_membership_snapshot(False),
+            mixed_width_membership_snapshot(True),
+            1,
+        )
+        self.assertFalse(_restricted_domain_has_model(problem.script))
+
     def test_identical_passive_date_and_decimal_columns_have_no_model(self):
         snapshot = parse_snapshot(_snapshot_with_stage_graph(
             {
@@ -2328,6 +2408,20 @@ class VerificationTest(unittest.TestCase):
         snapshot = right_join({"kind": "and", "args": [KEY_EQUALITY, RESIDUAL]})
         result = solve(
             build_logical_kernel_problem_for_tests(snapshot, snapshot, 1, 10_000),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_mixed_width_membership_lowering_is_bounded_equivalent(self):
+        result = solve(
+            build_logical_kernel_problem_for_tests(
+                mixed_width_membership_snapshot(False),
+                mixed_width_membership_snapshot(True),
+                1,
+                10_000,
+            ),
             SOLVER,
             1,
             10_000,

@@ -1186,7 +1186,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({3, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 42, 48, 50, 52, 55, 61, 71, 76, 88, 90, 93, 96}));
+            std::set<ui32>({3, 15, 19, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 88, 90, 93, 96, 99}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 42, 48, 52, 55, 90, 93, 96}));
@@ -1303,18 +1303,23 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TMap<ui32, TString> statuses = {
             {1, "FORMULA_EMITTED"},
             {3, "FORMULA_EMITTED"},
+            {15, "FORMULA_EMITTED"},
+            {19, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
             {55, "FORMULA_EMITTED"},
             {61, "FORMULA_EMITTED"},
+            {62, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
+            {79, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
             {90, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
             {96, "FORMULA_EMITTED"},
+            {99, "FORMULA_EMITTED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
@@ -1327,7 +1332,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.Violations.empty());
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 42, 48, 50, 52, 55, 61, 71, 76, 88, 90, 93, 96}));
+            std::set<ui32>({1, 3, 15, 19, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 88, 90, 93, 96, 99}));
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
@@ -1338,17 +1343,22 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         const TMap<ui32, TString> statuses = {
             {3, "FORMULA_EMITTED"},
+            {15, "FORMULA_EMITTED"},
+            {19, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
             {55, "FORMULA_EMITTED"},
             {61, "FORMULA_EMITTED"},
+            {62, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
+            {79, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
             {90, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
+            {99, "FORMULA_EMITTED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
             policy,

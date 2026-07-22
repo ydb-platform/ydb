@@ -11,7 +11,10 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     load_snapshot,
     parse_snapshot,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import INTEGER_TYPES
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
+    INTEGER_TYPES,
+    integer_bounds,
+)
 
 
 def minimal_snapshot():
@@ -143,6 +146,38 @@ def decimal_div_snapshot(
     }
     value["plan"]["output"] = ["a.amount"]
     return value
+
+
+def integral_safe_cast_snapshot(
+    source_type="Int64",
+    target_type="Int32",
+    *,
+    source_nullable=True,
+    result_nullable=True,
+):
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"][0].update(
+        type=source_type,
+        nullable=source_nullable,
+    )
+    value["plan"]["nodes"][1]["predicate"] = {
+        "kind": "exists",
+        "arg": {
+            "kind": "cast_integral",
+            "arg": {"kind": "column", "column": "a.k"},
+            "type": target_type,
+            "nullable": result_nullable,
+        },
+    }
+    return value
+
+
+def integral_conversion_may_fail(source_type, target_type):
+    source_lower, source_upper = integer_bounds(source_type)
+    target_lower, target_upper = integer_bounds(target_type)
+    return not (
+        target_lower <= source_lower and source_upper <= target_upper
+    )
 
 
 def if_present_snapshot():
@@ -532,6 +567,74 @@ class SnapshotTest(unittest.TestCase):
         nullable["schema"]["tables"][0]["columns"][0]["nullable"] = True
         with self.assertRaisesRegex(SnapshotError, "nullability must equal the OR"):
             parse_snapshot(nullable)
+
+    def test_nullable_integral_safe_cast_accepts_exactly_partial_integer_pairs(self):
+        for source_type in sorted(INTEGER_TYPES):
+            for target_type in sorted(INTEGER_TYPES):
+                for source_nullable in (False, True):
+                    with self.subTest(
+                        source_type=source_type,
+                        target_type=target_type,
+                        source_nullable=source_nullable,
+                    ):
+                        value = integral_safe_cast_snapshot(
+                            source_type,
+                            target_type,
+                            source_nullable=source_nullable,
+                        )
+                        if not integral_conversion_may_fail(source_type, target_type):
+                            with self.assertRaisesRegex(
+                                SnapshotError,
+                                "must be a partial conversion",
+                            ):
+                                parse_snapshot(value)
+                            continue
+
+                        snapshot = parse_snapshot(value)
+                        expression = snapshot.plan.nodes[1].predicate.args[0]
+                        self.assertEqual(
+                            (
+                                expression.kind,
+                                expression.result_type,
+                                expression.nullable,
+                                expression.args[0].column,
+                            ),
+                            ("cast_integral", target_type, True, "a.k"),
+                        )
+
+    def test_nullable_integral_safe_cast_schema_and_types_fail_closed(self):
+        valid = integral_safe_cast_snapshot()
+
+        for field in ("arg", "type", "nullable"):
+            malformed = copy.deepcopy(valid)
+            del malformed["plan"]["nodes"][1]["predicate"]["arg"][field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(SnapshotError, f"missing fields: {field}"):
+                    parse_snapshot(malformed)
+
+        extra = copy.deepcopy(valid)
+        extra["plan"]["nodes"][1]["predicate"]["arg"]["source_type"] = "Int64"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: source_type"):
+            parse_snapshot(extra)
+
+        non_boolean = copy.deepcopy(valid)
+        non_boolean["plan"]["nodes"][1]["predicate"]["arg"]["nullable"] = 1
+        with self.assertRaisesRegex(SnapshotError, "expected a Boolean"):
+            parse_snapshot(non_boolean)
+
+        non_nullable = integral_safe_cast_snapshot(result_nullable=False)
+        with self.assertRaisesRegex(SnapshotError, "result must be nullable"):
+            parse_snapshot(non_nullable)
+
+        for source_type in ("Bool", "Date", "String", "Decimal(5,2)"):
+            with self.subTest(source_type=source_type):
+                with self.assertRaisesRegex(SnapshotError, "source must be an integer"):
+                    parse_snapshot(integral_safe_cast_snapshot(source_type=source_type))
+
+        for target_type in ("Bool", "Date", "String", "Decimal(5,2)"):
+            with self.subTest(target_type=target_type):
+                with self.assertRaisesRegex(SnapshotError, "result must be an integer"):
+                    parse_snapshot(integral_safe_cast_snapshot(target_type=target_type))
 
     def test_if_present_has_exact_scoped_unary_handler_semantics(self):
         snapshot = parse_snapshot(if_present_snapshot())

@@ -40,6 +40,23 @@ def _arithmetic(kind, scalar_type, left, right, nullable=False):
     )
 
 
+def _integral_cast(source, target_type):
+    return Expr(
+        kind="cast_integral",
+        args=(source,),
+        result_type=target_type,
+        nullable=True,
+    )
+
+
+def _integral_conversion_may_fail(source_type, target_type):
+    source_lower, source_upper = integer_bounds(source_type)
+    target_lower, target_upper = integer_bounds(target_type)
+    return not (
+        target_lower <= source_lower and source_upper <= target_upper
+    )
+
+
 def _if_present(optional, present, missing, scalar_type, nullable=False):
     return Expr(
         kind="if_present",
@@ -123,6 +140,119 @@ class IntegerArithmeticTest(unittest.TestCase):
         )
         self.assertEqual(actual.is_null, smt.TRUE)
         self.assertEqual(_ground(actual.value), 21)
+
+
+class IntegralSafeCastTest(unittest.TestCase):
+    def test_symbolic_nullness_and_canonical_payload_are_exact(self):
+        script = smt.Script()
+        source_is_null = script.fresh_constant("source_is_null", smt.BOOL)
+        source_value = script.fresh_constant("source_value", smt.INT)
+        actual = Encoder(script).evaluate(
+            _integral_cast(Expr(kind="column", column="source"), "Int32"),
+            {"source": Value("Int64", source_is_null, source_value)},
+        )
+        expected_is_null = smt.or_(
+            source_is_null,
+            smt.not_(integer_domain(source_value, "Int32")),
+        )
+        self.assertEqual(
+            actual,
+            Value(
+                "Int32",
+                expected_is_null,
+                smt.ite(expected_is_null, smt.ZERO, source_value),
+            ),
+        )
+
+    def test_every_partial_integer_pair_preserves_present_in_range_values_and_nulls(self):
+        for source_type in sorted(INTEGER_TYPES):
+            for target_type in sorted(INTEGER_TYPES):
+                if not _integral_conversion_may_fail(source_type, target_type):
+                    continue
+                expression = _integral_cast(
+                    Expr(kind="column", column="source"),
+                    target_type,
+                )
+                for source_is_null, expected_value in ((False, 17), (True, 0)):
+                    with self.subTest(
+                        source_type=source_type,
+                        target_type=target_type,
+                        source_is_null=source_is_null,
+                    ):
+                        actual = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "source": Value(
+                                    source_type,
+                                    smt.bool_value(source_is_null),
+                                    smt.int_value(17),
+                                )
+                            },
+                        )
+                        self.assertEqual(actual.type, target_type)
+                        self.assertEqual(_ground(actual.is_null), source_is_null)
+                        self.assertEqual(_ground(actual.value), expected_value)
+
+    def test_every_target_boundary_has_exact_success_or_canonical_null(self):
+        cases = []
+        for target_type in ("Int8", "Int16", "Int32"):
+            lower, upper = integer_bounds(target_type)
+            cases.extend(
+                ("Int64", target_type, value, expected_is_null)
+                for value, expected_is_null in (
+                    (lower - 1, True),
+                    (lower, False),
+                    (upper - 1, False),
+                    (upper, True),
+                )
+            )
+        cases.extend(
+            (
+                ("Int64", "Int64", -(1 << 63), False),
+                ("Uint64", "Int64", (1 << 63) - 1, False),
+                ("Uint64", "Int64", 1 << 63, True),
+            )
+        )
+        for target_type in ("Uint8", "Uint16", "Uint32"):
+            _, upper = integer_bounds(target_type)
+            cases.extend(
+                ("Int64", target_type, value, expected_is_null)
+                for value, expected_is_null in (
+                    (-1, True),
+                    (0, False),
+                    (upper - 1, False),
+                    (upper, True),
+                )
+            )
+        cases.extend(
+            (
+                ("Int64", "Uint64", -1, True),
+                ("Int64", "Uint64", 0, False),
+                ("Int64", "Uint64", (1 << 63) - 1, False),
+            )
+        )
+
+        for source_type, target_type, source_value, expected_is_null in cases:
+            with self.subTest(
+                source_type=source_type,
+                target_type=target_type,
+                source_value=source_value,
+            ):
+                actual = Encoder(smt.Script()).evaluate(
+                    _integral_cast(Expr(kind="column", column="source"), target_type),
+                    {
+                        "source": Value(
+                            source_type,
+                            smt.FALSE,
+                            smt.int_value(source_value),
+                        )
+                    },
+                )
+                self.assertEqual(_ground(actual.is_null), expected_is_null)
+                self.assertEqual(
+                    _ground(actual.value),
+                    0 if expected_is_null else source_value,
+                )
 
 
 class DecimalDivisionDispatchTest(unittest.TestCase):

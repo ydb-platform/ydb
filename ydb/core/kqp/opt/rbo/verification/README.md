@@ -10,7 +10,7 @@ The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact String/Utf8
-comparison and ordering, exact Decimal
+comparison and ordering, exact partial integral `SafeCast`, exact Decimal
 comparison/integral-cast/arithmetic/ordering/SUM, and benchmark-dashboard parts
 of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
@@ -23,17 +23,19 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The 2026-07-22 complete post-OLAP-presence formula-only dashboard establishes
-formula construction for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52,
-q55, q61, q71, q76, q88, q90, q93, and q96: 15/121 workload queries (12.4%). The
-checked-in solver proof floor returns `VERIFIED_BOUNDED` for TPCH q3 and q19
-plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96: ten obligations (8.3%
+The 2026-07-22 complete current-code formula-only dashboard establishes formula
+construction for TPCH q3 and q19 plus TPC-DS q3, q15, q19, q42, q48, q50, q52,
+q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99: 20/121 workload
+queries (16.5%). The checked-in solver proof floor returns
+`VERIFIED_BOUNDED` for TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55,
+q90, q93, and q96: ten obligations (8.3%
 of the workload). Focused q19 took 116 ms to prepare and 851 ms to prove.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
-65.0-second external process deadline; q71 did likewise, and q61, q76, and q88
-are `UNKNOWN` at the 60-second solver budget. q76 is formula-covered, not part
-of the proof floor. None is evidence of an optimizer correctness bug.
+65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
+q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. q76 is
+formula-covered, not part of the proof floor. None is evidence of an optimizer
+correctness bug.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -189,6 +191,29 @@ literal converted to `Uint32`; that conversion exception is confined to those
 two direct bound positions. The canonical fingerprint retains both bounds and
 the String column is the only external function argument. Other arities,
 `Utf8`, nullable or dynamic bounds, and out-of-range conversions fail closed.
+
+An explicit `cast_integral` node models only partial integer `SafeCast`: the
+source is any exact signed or unsigned 8/16/32/64-bit integer expression, and
+YQL cast analysis must classify the conversion to the optional integer target
+as `MayFail`. The target descriptor, its outer and item annotations, and the
+optional result must agree exactly. Evaluation propagates a source NULL,
+preserves an in-range integer value, and returns NULL for a value outside the
+target's exact integer domain; the verifier gives every NULL result the
+canonical zero payload. The entire callable still passes the closed-world
+opaque-expression safety audit before entering this exact gate. Complete
+integer conversions remain opaque, while `Convert`, `StrictCast`, non-integer
+pairs, and non-optional partial results are outside this exact node.
+
+TPC-DS q79 exposed the need for this node. Its first symbolic candidate used
+`d_year = 1998`: the initial plan tested the nullable `Int64` directly against
+the `Int32` membership constants, while the final lowering first performed an
+opaque `SafeCast(Int64 -> Int32)`. Treating that cast as an independent function
+allowed it to return NULL for 1998, which the runtime cannot do. Regenerating
+the obligation with the exact partial-cast semantics removes that witness. A
+focused direct-membership versus `Exists`/cast/`IfPresent` lowering returns
+`VERIFIED_BOUNDED`; the full q79 solver run returns `UNKNOWN` at the 60-second
+budget. The candidate was therefore a verifier-modeling false positive, not a
+confirmed optimizer bug.
 
 A complete cast of a non-null integer constant to a non-null Decimal is handled
 before opaque fallback: the exporter evaluates the YDB cast and emits the

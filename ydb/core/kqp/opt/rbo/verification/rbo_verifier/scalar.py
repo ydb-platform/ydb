@@ -181,6 +181,18 @@ class Encoder:
                 ),
             )
 
+        if expression.kind == "cast_integral":
+            assert expression.result_type is not None and expression.nullable is True
+            argument = self._evaluate(expression.args[0], row, bindings)
+            assert family(argument.type) == "int"
+            in_range = integer_domain(argument.value, expression.result_type)
+            is_null = smt.or_(argument.is_null, smt.not_(in_range))
+            return Value(
+                expression.result_type,
+                is_null,
+                smt.ite(is_null, _default(expression.result_type), argument.value),
+            )
+
         if expression.kind == "if":
             assert expression.result_type is not None
             condition = self._evaluate(expression.args[0], row, bindings)

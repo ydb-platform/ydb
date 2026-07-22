@@ -15,120 +15,156 @@ using namespace yandex::cloud::iam::v1;
 
 namespace NYdb::inline Dev {
 
-class TIAMCredentialsProvider : public ICredentialsProvider {
+class TIAMCredentialsProvider : public ICredentialsProvider, public std::enable_shared_from_this<TIAMCredentialsProvider> {
 public:
-    TIAMCredentialsProvider(const TIamHost& params)
+    TIAMCredentialsProvider(const TIamHost& params, std::weak_ptr<ICoreFacility> facility)
         : HttpClient_(TSimpleHttpClient(TString(params.Host), params.Port))
         , Request_("/computeMetadata/v1/instance/service-accounts/default/token")
         , NextTicketUpdate_(TInstant::Zero())
         , RefreshPeriod_(params.RefreshPeriod)
-    {
-        GetTicket();
+        , Facility_(std::move(facility))
+        , AuthInfo_(NThreading::NewPromise<std::string>())
+    {}
+
+    void Start() {
+        auto facility = Facility_.lock();
+        if (!facility) {
+            Fail("IAM-token provider response facility is not available");
+            return;
+        }
+        try {
+            facility->AddPeriodicTask([weak = weak_from_this()](NYdb::NIssue::TIssues&&, EStatus status) {
+                if (auto self = weak.lock()) {
+                    return self->OnPeriodicTick(status);
+                }
+                return false;
+            }, PERIODIC_TICK);
+        } catch (...) {
+            Fail(CurrentExceptionMessage());
+        }
     }
 
     std::string GetAuthInfo() const override {
-        std::string ticket;
-        TInstant nextTicketUpdate;
-        auto now = TInstant::Now();
-        std::optional<TString> lastErrorMessage;
-        {
-            std::lock_guard lock(Lock_);
-            if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
-                Ticket_.clear();
-            }
-            ticket = Ticket_;
-            nextTicketUpdate = NextTicketUpdate_;
-            lastErrorMessage = LastErrorMessage_;
-        }
-        if (now >= nextTicketUpdate) {
-            GetTicket();
-            {
-                std::lock_guard lock(Lock_);
-                if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
-                    Ticket_.clear();
-                }
-                ticket = Ticket_;
-                lastErrorMessage = LastErrorMessage_;
-            }
-        }
-        if (ticket.empty() && lastErrorMessage.has_value()) {
-            throw yexception() << *lastErrorMessage;
-        }
-        return ticket;
+        return GetAuthInfoAsync().GetValueSync();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        std::lock_guard lock(Lock_);
+        return AuthInfo_.GetFuture();
     }
 
     bool IsValid() const override {
         return true;
     }
 
+    ~TIAMCredentialsProvider() { Fail("IAM-token provider stopped"); }
+
 private:
     TSimpleHttpClient HttpClient_;
     std::string Request_;
     mutable std::mutex Lock_;
-    mutable std::string Ticket_;
     mutable TInstant NextTicketUpdate_;
-    mutable TInstant ExpiresAt_ = TInstant::Zero();
-    mutable std::optional<TString> LastErrorMessage_;
     TDuration RefreshPeriod_;
+    std::weak_ptr<ICoreFacility> Facility_;
+    mutable NThreading::TPromise<std::string> AuthInfo_;
+    mutable bool Stopped_ = false;
 
-    void GetTicket() const {
+    void Fail(std::string error) const {
+        NThreading::TPromise<std::string> promise;
+        {
+            std::lock_guard lock(Lock_);
+            Stopped_ = true;
+            promise = AuthInfo_;
+        }
+        promise.TrySetException(std::make_exception_ptr(yexception() << error));
+    }
+
+    bool OnPeriodicTick(EStatus status) const {
+        if (status != EStatus::SUCCESS) {
+            Fail("IAM-token provider periodic task failed");
+            return false;
+        }
+
+        NThreading::TPromise<std::string> promise;
+        {
+            std::lock_guard lock(Lock_);
+            if (Stopped_) {
+                return false;
+            }
+            if (TInstant::Now() < NextTicketUpdate_) {
+                return true;
+            }
+            if (AuthInfo_.GetFuture().IsReady()) {
+                AuthInfo_ = NThreading::NewPromise<std::string>();
+            }
+            promise = AuthInfo_;
+        }
+
         try {
-            TStringStream out;
-            TSimpleHttpClient::THeaders headers;
-            headers["Metadata-Flavor"] = "Google";
-            HttpClient_.DoGet(Request_, &out, headers);
-            NJson::TJsonValue resp;
-            NJson::ReadJsonTree(&out, &resp, true);
-
-            auto respMap = resp.GetMap();
-
-            std::string ticket;
-            if (auto it = respMap.find("access_token"); it == respMap.end())
-                ythrow yexception() << "Result doesn't contain access_token";
-            else if (ticket = it->second.GetStringSafe(); ticket.empty())
-                ythrow yexception() << "Got empty ticket";
-
-            const auto now = TInstant::Now();
-            TInstant nextUpdate;
-            TDuration expiresIn;
-            TInstant expiresAt = TInstant::Max();
-            if (auto it = respMap.find("expires_in"); it != respMap.end()) {
-                auto seconds = it->second.GetUInteger();
-                if (seconds > 0) {
-                    expiresIn = TDuration::Seconds(seconds);
-                    expiresAt = now + expiresIn;
-                }
-            } else if (auto it = respMap.find("expiry"); it != respMap.end()) {
-                try {
-                    TInstant expiry;
-                    if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > now) {
-                        expiresIn = expiry - now;
-                        expiresAt = expiry;
-                    }
-                } catch (...) {
-                    expiresAt = now;
-                }
-            }
-            if (expiresIn > TDuration::Zero()) {
-                const auto halfLife = expiresIn / 2;
-                const auto interval = std::max(std::min(halfLife, RefreshPeriod_), TDuration::MilliSeconds(100));
-                nextUpdate = now + interval;
-            } else {
-                nextUpdate = now + std::min(RefreshPeriod_, TDuration::Minutes(30));
-            }
-
+            auto [ticket, nextUpdate] = GetTicket();
             {
                 std::lock_guard lock(Lock_);
-                Ticket_ = std::move(ticket);
                 NextTicketUpdate_ = nextUpdate;
-                ExpiresAt_ = expiresAt;
-                LastErrorMessage_.reset();
             }
+            promise.TrySetValue(std::move(ticket));
         } catch (...) {
+            const auto error = std::current_exception();
+            if (!IsRetryable(error)) {
+                Fail(CurrentExceptionMessage());
+                return false;
+            }
             std::lock_guard lock(Lock_);
             NextTicketUpdate_ = TInstant::Now() + std::min(RefreshPeriod_, TDuration::Seconds(10));
-            LastErrorMessage_ = CurrentExceptionMessage();
         }
+        return true;
+    }
+
+    static bool IsRetryable(const std::exception_ptr& error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (const THttpRequestException& e) {
+            const int code = e.GetStatusCode();
+            return code == 0 || code == HTTP_REQUEST_TIME_OUT || code == HTTP_AUTHENTICATION_TIMEOUT ||
+                code == HTTP_TOO_MANY_REQUESTS || (code >= 500 && code < 600);
+        } catch (const TSystemError&) {
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    std::pair<std::string, TInstant> GetTicket() const {
+        TStringStream out;
+        TSimpleHttpClient::THeaders headers;
+        headers["Metadata-Flavor"] = "Google";
+        HttpClient_.DoGet(Request_, &out, headers);
+        NJson::TJsonValue resp;
+        NJson::ReadJsonTree(&out, &resp, true);
+
+        auto respMap = resp.GetMap();
+        std::string ticket;
+        if (auto it = respMap.find("access_token"); it == respMap.end())
+            ythrow yexception() << "Result doesn't contain access_token";
+        else if (ticket = it->second.GetStringSafe(); ticket.empty())
+            ythrow yexception() << "Got empty ticket";
+
+        const auto now = TInstant::Now();
+        TDuration expiresIn;
+        if (auto it = respMap.find("expires_in"); it != respMap.end()) {
+            const auto seconds = it->second.GetUInteger();
+            if (seconds > 0) {
+                expiresIn = TDuration::Seconds(seconds);
+            }
+        } else if (auto it = respMap.find("expiry"); it != respMap.end()) {
+            TInstant expiry;
+            if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > now) {
+                expiresIn = expiry - now;
+            }
+        }
+        const auto interval = expiresIn > TDuration::Zero()
+            ? std::max(std::min(expiresIn / 2, RefreshPeriod_), TDuration::MilliSeconds(100))
+            : std::min(RefreshPeriod_, TDuration::Minutes(30));
+        return {std::move(ticket), now + interval};
     }
 };
 
@@ -137,15 +173,16 @@ public:
     TIamCredentialsProviderFactory(const TIamHost& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
-        return std::make_shared<TIAMCredentialsProvider>(Params_);
+        auto facility = CreateSimpleCoreFacility();
+        auto provider = CreateProvider(facility);
+        return std::make_shared<TOwningFacilityCredentialsProvider>(
+            std::move(facility), std::move(provider));
     }
 
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
-        return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
-    }
-
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const final {
-        return CreateProviderInBackground(Params_, std::move(facility));
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const final {
+        auto provider = std::make_shared<TIAMCredentialsProvider>(Params_, std::move(facility));
+        provider->Start();
+        return provider;
     }
 
     std::string GetClientIdentity() const final {
@@ -155,30 +192,6 @@ public:
     }
 
 private:
-    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
-        TIamHost params,
-        std::weak_ptr<ICoreFacility> facility)
-    {
-        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
-        auto createProvider = [params = std::move(params), promise]() mutable {
-            try {
-                promise.TrySetValue(std::make_shared<TIAMCredentialsProvider>(params));
-            } catch (...) {
-                promise.TrySetException(std::current_exception());
-            }
-        };
-        try {
-            if (auto core = facility.lock()) {
-                core->PostToResponseQueue(std::move(createProvider));
-            } else {
-                createProvider();
-            }
-        } catch (...) {
-            promise.TrySetException(std::current_exception());
-        }
-        return promise.GetFuture();
-    }
-
     TIamHost Params_;
 };
 

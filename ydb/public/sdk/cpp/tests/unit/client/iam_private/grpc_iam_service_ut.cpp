@@ -94,22 +94,24 @@ TTestOAuthFactory MakeOAuthFactory() {
 
 } // namespace
 
-TEST(IamCredentialsProvider, AsyncCreationFailsWithExpiredFacility) {
-    auto future = MakeOAuthFactory().CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
+TEST(IamCredentialsProvider, AuthInfoFailsWithExpiredFacility) {
+    auto provider = MakeOAuthFactory().CreateProvider(std::weak_ptr<ICoreFacility>{});
+    auto future = provider->GetAuthInfoAsync();
 
     ASSERT_TRUE(future.IsReady());
     EXPECT_THROW(future.GetValue(), std::exception);
 }
 
-TEST(IamCredentialsProvider, AsyncCreationFailsWhenPeriodicTaskIsRejected) {
+TEST(IamCredentialsProvider, AuthInfoFailsWhenPeriodicTaskIsRejected) {
     auto facility = std::make_shared<TFailingCoreFacility>();
-    auto future = MakeOAuthFactory().CreateProviderAsync(std::weak_ptr<ICoreFacility>(facility));
+    auto provider = MakeOAuthFactory().CreateProvider(std::weak_ptr<ICoreFacility>(facility));
+    auto future = provider->GetAuthInfoAsync();
 
     ASSERT_TRUE(future.IsReady());
     EXPECT_THROW(future.GetValue(), std::exception);
 }
 
-TEST(IamCredentialsProvider, AsyncCreationRetriesTransientIamFailure) {
+TEST(IamCredentialsProvider, AuthInfoRetriesTransientIamFailure) {
     TFlakyIamServiceStub stub;
     TIamGrpcServer server(&stub);
     ASSERT_TRUE(server.Start());
@@ -120,11 +122,11 @@ TEST(IamCredentialsProvider, AsyncCreationRetriesTransientIamFailure) {
     params.OAuthToken = "token";
     params.RequestTimeout = TDuration::Seconds(2);
 
-    auto future = TTestOAuthFactory(params).CreateProviderAsync();
+    auto provider = TTestOAuthFactory(params).CreateProvider();
+    auto future = provider->GetAuthInfoAsync();
     ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
-    auto provider = future.GetValue();
 
-    EXPECT_EQ(provider->GetAuthInfo(), "oauth-token");
+    EXPECT_EQ(future.GetValue(), "oauth-token");
     EXPECT_GE(stub.Attempts(), 2u);
 
     server.Stop();

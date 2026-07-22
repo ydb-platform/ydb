@@ -1,6 +1,6 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` создаёт [потоковый запрос](../../../concepts/streaming-query.md).
+`CREATE STREAMING QUERY` создаёт [потоковый запрос](../../../concepts/streaming-query/streaming-query.md).
 
 ## Синтаксис
 
@@ -23,7 +23,7 @@ END DO
 * `IF NOT EXISTS` — не выводить ошибку, если потоковый запрос с таким именем уже существует, в этом случае существующий запрос останется неизменённым.
 * `query_name` — имя потокового запроса, который нужно создать.
 * `WITH (<key> = <value>)` — список настроек нового потокового запроса, опционально.
-* `AS DO BEGIN ... END DO` — полный текст нового потокового запроса, включая все необходимые SQL-выражения. Ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming-query.md#limitations), примеры текста [см. ниже](#examples).
+* `AS DO BEGIN ... END DO` — полный текст нового потокового запроса, включая все необходимые SQL-выражения. Ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), примеры текста [см. ниже](#examples).
 
 Настройки `OR REPLACE` и `IF NOT EXISTS` нельзя использовать одновременно.
 
@@ -36,15 +36,9 @@ END DO
 
 ## Использование читателя {#consumer-usage}
 
-[Читатель (consumer)](../../../concepts/datamodel/topic.md#consumer) — это именованная подписка на [топик](../../../concepts/datamodel/topic.md), которая хранит текущую позицию чтения.
+{% include [consumer-usage](../../../_includes/consumer-usage.md) %}
 
-Читатель создаётся через [CLI](../../../reference/ydb-cli/topic-consumer-add.md) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Имя читателя указывается в тексте запроса с помощью прагмы:
-
-```sql
-PRAGMA pq.Consumer="my_consumer";
-```
-
-Если читатель не указан, чтение из топика выполняется без читателя. Позиция чтения в обоих случаях сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md). Указание читателя позволяет отслеживать позицию чтения и лаг со стороны топика, например, через [CLI](../../../reference/ydb-cli/topic-read.md).
+Независимо от наличия читателя позиция чтения потокового запроса сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md).
 
 ## Примеры {#examples}
 
@@ -56,7 +50,12 @@ PRAGMA pq.Consumer="my_consumer";
 
 {% note info %}
 
-Запись в топики выполняется через [external data source](../../../concepts/datamodel/external_data_source.md). В примере `ydb_source` — это заранее созданный external data source, а `output_topic` и `input_topic` — топики, доступные через него.
+Потоковые запросы могут работать с [локальными и внешними топиками](../../../concepts/query_execution/topics.md#local-external-topics).
+
+В примере:
+
+- `ext_source` — это заранее созданный [`external data source`](../../../concepts/datamodel/external_data_source.md);
+- `input_topic` и `output_topic` — локальные или внешние [топики](../../../concepts/datamodel/topic.md).
 
 {% endnote %}
 
@@ -64,16 +63,14 @@ PRAGMA pq.Consumer="my_consumer";
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- ydb_source — external data source для работы с топиками
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- или внешний топик ext_source.output_topic
     SELECT
         -- Формирование JSON из отдельных полей
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        -- Чтение из топика
-        ydb_source.input_topic
+        ext_source.input_topic -- или локальный топик input_topic
     WITH (
         FORMAT = json_each_row,  -- Формат входных данных
         SCHEMA = (               -- Схема входных данных
@@ -91,7 +88,7 @@ END DO
 
 {% note warning %}
 
-Запись в таблицы в потоковых запросах поддерживается **только в режиме UPSERT**. Операция `INSERT INTO` не поддерживается, так как при повторной обработке событий (гарантия [at-least-once](../../../concepts/streaming-query.md#guarantees)) она привела бы к дублированию строк. При `UPSERT`, если строка с таким первичным ключом уже существует, она будет обновлена, иначе будет вставлена новая строка, a `INSERT INTO` завершится с ошибкой.
+Запись в таблицы в потоковых запросах поддерживается **только в режиме UPSERT**. Операция `INSERT INTO` не поддерживается, так как при повторной обработке событий (гарантия [at-least-once](../../../concepts/streaming-query/streaming-query.md#guarantees)) она привела бы к дублированию строк. При `UPSERT`, если строка с таким первичным ключом уже существует, она будет обновлена, иначе будет вставлена новая строка, a `INSERT INTO` завершится с ошибкой.
 
 {% endnote %}
 
@@ -105,8 +102,7 @@ DO BEGIN
         Id,
         Name
     FROM
-        -- ydb_source — external data source для работы с топиками
-        ydb_source.input_topic
+        input_topic -- или внешний топик ext_source.input_topic
     WITH (
         FORMAT = json_each_row,  -- Формат входных данных
         SCHEMA = (               -- Схема входных данных
@@ -129,14 +125,13 @@ CREATE STREAMING QUERY my_streaming_query WITH (
 ) AS
 DO BEGIN
 
-    -- ydb_source — external data source для работы с топиками
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- или внешний топик ext_source.output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        ydb_source.input_topic
+        ext_source.input_topic -- или локальный топик input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -153,6 +148,6 @@ END DO
 ## См. также
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
-* [{#T}](../../../concepts/streaming-query.md)
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

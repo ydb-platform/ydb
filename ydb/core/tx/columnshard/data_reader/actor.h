@@ -76,6 +76,7 @@ private:
     std::optional<TMonotonic> LastAck;
     bool AbortedFlag = false;
     bool CheckActivity();
+    void AbortScanIfKnown();
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);

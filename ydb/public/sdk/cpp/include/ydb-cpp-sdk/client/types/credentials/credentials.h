@@ -5,6 +5,7 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <exception>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -33,6 +34,12 @@ class ICoreFacility;
 namespace NCredentials::NDetail {
 
 using TCredentialsProviderCreator = std::function<TCredentialsProviderPtr()>;
+
+// Process-wide weak cache for no-argument factory paths whose providers own their facilities.
+// Facility-bound providers must not use it: their callbacks belong to the supplied facility.
+TCredentialsProviderPtr GetOrCreateCachedProvider(
+    const std::string& identity,
+    TCredentialsProviderCreator createProvider);
 
 class TOwningFacilityCredentialsProvider final : public ICredentialsProvider {
 public:

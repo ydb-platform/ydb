@@ -16,6 +16,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <util/generic/yexception.h>
 
@@ -102,6 +103,51 @@ TEST(GrpcIamCredentialsProviderFactory, ReadyCallbackCanReleaseNoArgProvider) {
         });
 
     ASSERT_EQ(released->get_future().wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    server.Stop();
+}
+
+TEST(GrpcIamCredentialsProviderFactory, NoArgProvidersAreCachedAcrossFactoryInstances) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    using TOAuthFactory = TIamOAuthCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+    const auto oauthParams = MakeOAuthParams(server.Endpoint());
+
+    std::vector<std::future<TCredentialsProviderPtr>> oauthProviders;
+    for (size_t i = 0; i < 8; ++i) {
+        auto factory = std::make_shared<TOAuthFactory>(oauthParams);
+        oauthProviders.emplace_back(std::async(std::launch::async, [factory] {
+            return factory->CreateProvider();
+        }));
+    }
+
+    auto firstOAuthProvider = oauthProviders.front().get();
+    for (size_t i = 1; i < oauthProviders.size(); ++i) {
+        EXPECT_EQ(firstOAuthProvider, oauthProviders[i].get());
+    }
+    EXPECT_EQ(firstOAuthProvider->GetAuthInfoAsync().GetValueSync(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 1);
+
+    using TJwtFactory = TIamJwtCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+    const auto jwtParams = MakeJwtParams(server.Endpoint());
+    auto firstJwtProvider = std::make_shared<TJwtFactory>(jwtParams)->CreateProvider();
+    auto secondJwtProvider = std::make_shared<TJwtFactory>(jwtParams)->CreateProvider();
+
+    EXPECT_EQ(firstJwtProvider, secondJwtProvider);
+    EXPECT_EQ(firstJwtProvider->GetAuthInfoAsync().GetValueSync(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 2);
+
+    auto differentOAuthParams = oauthParams;
+    differentOAuthParams.OAuthToken = "different-oauth-token";
+    auto differentOAuthProvider = std::make_shared<TOAuthFactory>(differentOAuthParams)->CreateProvider();
+    EXPECT_NE(firstOAuthProvider, differentOAuthProvider);
+    EXPECT_EQ(differentOAuthProvider->GetAuthInfoAsync().GetValueSync(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 3);
+
     server.Stop();
 }
 

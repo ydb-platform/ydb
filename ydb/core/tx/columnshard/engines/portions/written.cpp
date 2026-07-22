@@ -68,6 +68,12 @@ bool TWrittenPortionInfo::DoIsVisible(const TSnapshot& snapshot, const bool chec
     }
 }
 
+bool TWrittenPortionInfo::MayGetForScanAt(const TSnapshot& snapshot) const {
+    // aborted portion, in fact, never existed, so there is no point to take it for scan
+    bool aborted = HasRemoveSnapshot() && CommitSnapshot.has_value() && GetRemoveSnapshotVerified() <= CommitSnapshot.value();
+    return !aborted && !IsRemovedFor(snapshot);
+}
+
 void TWrittenPortionInfo::CommitToDatabase(IDbWrapper& wrapper) {
     AFL_VERIFY(CommitSnapshot);
     wrapper.CommitPortion(*this, *CommitSnapshot);

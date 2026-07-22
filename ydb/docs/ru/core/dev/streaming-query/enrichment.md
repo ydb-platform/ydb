@@ -2,7 +2,7 @@
 
 Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты. В качестве справочника можно использовать данные из [локальной таблицы](#enrichment-local-table) или из [объектного хранилища S3](#enrichment-s3).
 
-В [потоковых запросах](../../concepts/streaming-query.md) справочник подключают с помощью конструкции `JOIN`. Поток должен быть слева, справочник — справа.
+В [потоковых запросах](../../concepts/streaming-query/streaming-query.md) справочник подключают с помощью конструкции `JOIN`. Поток должен быть слева, справочник — справа.
 
 {% note warning %}
 
@@ -10,28 +10,12 @@
 
 {% endnote %}
 
-## Подготовка источника данных для работы с топиками
+Возможно обогащение данных из [локальных и внешних топиков](../../concepts/query_execution/topics.md#local-external-topics).
 
-Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+В примерах ниже:
 
-```yql
--- Секрет с токеном для подключения к YDB
-CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
-
--- Источник данных YDB для чтения/записи топиков
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "<ydb_endpoint>",
-    DATABASE_NAME = "<db_name>",
-    AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_PATH = "secrets/ydb_token"
-);
-```
-
-Где:
-
-- `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135`.
-- `<db_name>` — путь к базе данных {{ ydb-short-name }}, например `/Root/database`.
+- `ext_source` — заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md) для топиков в другой базе {{ ydb-short-name }};
+- `input_topic` и `output_topic` — топики в текущей или внешней базе {{ ydb-short-name }}
 
 ## Потоковые запросы для обогащения данных
 
@@ -49,7 +33,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 В данном примере справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
-Создайте [потоковый запрос](../../concepts/streaming-query.md), выполняющий обогащение:
+Создайте [потоковый запрос](../../concepts/streaming-query/streaming-query.md), выполняющий обогащение:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -59,7 +43,7 @@ DO BEGIN
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- или локальный топик input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -82,7 +66,7 @@ ON
 
 -- Запись в выходной топик (JSON)
 INSERT INTO
-    ydb_source.output_topic
+    output_topic -- или внешний топик ext_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -110,7 +94,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 - `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>/` для Yandex Cloud.
 
-Создайте [потоковый запрос](../../concepts/streaming-query.md), выполняющий обогащение:
+Создайте [потоковый запрос](../../concepts/streaming-query/streaming-query.md), выполняющий обогащение:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS
@@ -120,7 +104,7 @@ DO BEGIN
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    input_topic -- или внешний топик ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -156,7 +140,7 @@ ON
 
 -- Запись результата в выходной топик в формате JSON
 INSERT INTO
-    ydb_source.output_topic
+    ext_source.output_topic -- или локальный топик output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM

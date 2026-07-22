@@ -46,6 +46,7 @@ SRCS(
     ut_script.cpp
     ut_minmax_index.cpp
     ut_predicate_ranges_builder.cpp
+    ut_index_info_schema_diff.cpp
     helper.cpp
 )
 

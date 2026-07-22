@@ -95,6 +95,12 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
     }
     TabletPipes.clear();
+    PipesRequested.clear();
+    ReadyPartitionTablets = 0;
+    while (!PartitionsLocationQueue.empty()) {
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        PartitionsLocationQueue.pop_front();
+    }
     if (PartitionsScaleManager) {
         PartitionsScaleManager->Die(ctx);
     }
@@ -158,6 +164,8 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -170,7 +178,13 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             }
             break;
         }
+        case PARTITIONS_LOCATION_WAKEUP_TAG: {
+            PartitionsLocationWakeupScheduled = false;
+            ProcessPartitionsLocationQueue(ctx);
+            break;
+        }
         default: {
+            ProcessPartitionsLocationQueue(ctx);
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
             CleanupReceiveAttemptPartitions(ctx);
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
@@ -402,16 +416,41 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
+<<<<<<< HEAD
         PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
     }
     else
         PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
+=======
+        if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+            it->second.Ready = true;
+            ++ReadyPartitionTablets;
+        }
+
+        YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"nodeId", ev->Get()->ServerId.NodeId()},
+            {"generation", ev->Get()->Generation});
+    } else {
+        YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId});
+    }
+
+    ProcessPartitionsLocationQueue(ctx);
+>>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
 {
     auto it = TabletPipes.find(tabletId);
     if (it != TabletPipes.end()) {
+        if (it->second.Ready) {
+            PQ_ENSURE(ReadyPartitionTablets > 0);
+            --ReadyPartitionTablets;
+            it->second.Ready = false;
+        }
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
         PipesRequested.erase(tabletId);
@@ -597,6 +636,7 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     }
 }
 
+<<<<<<< HEAD
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
     auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
     evResponse->Record.SetStatus(false);
@@ -661,6 +701,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
 }
 
 
+=======
+>>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
 
 
 //
@@ -1096,6 +1138,7 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         HFunc(TEvPQ::TEvMLPConsumerStatus, Handle);

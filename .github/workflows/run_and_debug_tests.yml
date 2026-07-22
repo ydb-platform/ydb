@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: 'ydb/apps/ydbd'
+      build_threads:
+        description: 'ya make -j/--threads (empty = nproc)'
+        required: false
+        type: string
+        default: ''
       link_threads:
         description: 'ya make --link-threads value'
         required: false
@@ -28,7 +33,7 @@ on:
 
 jobs:
   clean_build_benchmark:
-    name: Clean build (${{ inputs.build_preset }}, link-threads=${{ inputs.link_threads }})
+    name: Clean build (${{ inputs.build_preset }}, -j=${{ inputs.build_threads || 'nproc' }}, link=${{ inputs.link_threads }})
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     timeout-minutes: 600
     steps:
@@ -46,6 +51,39 @@ jobs:
             ccache -z || true
           fi
 
+      - name: Capture host info
+        id: host
+        shell: bash
+        run: |
+          set -x
+          NPROC="$(nproc)"
+          LOADAVG="$(cut -d' ' -f1-3 /proc/loadavg)"
+          MEM_TOTAL_KB="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+          MEM_AVAIL_KB="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
+          MEM_TOTAL_GB="$(python3 -c "print(round(int('${MEM_TOTAL_KB}')/1024/1024, 1))")"
+          MEM_AVAIL_GB="$(python3 -c "print(round(int('${MEM_AVAIL_KB}')/1024/1024, 1))")"
+          CPU_MODEL="$(awk -F: '/model name/ {gsub(/^[ \t]+/, "", $2); print $2; exit}' /proc/cpuinfo)"
+
+          {
+            echo "nproc=$NPROC"
+            echo "loadavg_before=$LOADAVG"
+            echo "mem_total_gb=$MEM_TOTAL_GB"
+            echo "mem_avail_gb=$MEM_AVAIL_GB"
+            echo "cpu_model=$CPU_MODEL"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "nproc=$NPROC"
+            echo "loadavg_before=$LOADAVG"
+            echo "mem_total_gb=$MEM_TOTAL_GB"
+            echo "mem_avail_gb=$MEM_AVAIL_GB"
+            echo "cpu_model=$CPU_MODEL"
+            echo "uname=$(uname -a)"
+            lscpu || true
+          } > host_info.txt
+
+          echo "Host: nproc=$NPROC loadavg=$LOADAVG mem=${MEM_AVAIL_GB}/${MEM_TOTAL_GB} GiB cpu='$CPU_MODEL'"
+
       - name: Run clean build (no caches)
         id: build
         shell: bash
@@ -54,9 +92,16 @@ jobs:
           BUILD_PRESET="${{ inputs.build_preset }}"
           BUILD_TARGET="${{ inputs.build_target }}"
           LINK_THREADS="${{ inputs.link_threads }}"
+          BUILD_THREADS_INPUT="${{ inputs.build_threads }}"
+          if [ -n "$BUILD_THREADS_INPUT" ]; then
+            BUILD_THREADS="$BUILD_THREADS_INPUT"
+          else
+            BUILD_THREADS="${{ steps.host.outputs.nproc }}"
+          fi
 
           params=(
             --stat
+            --threads "$BUILD_THREADS"
             --link-threads "$LINK_THREADS"
             --no-bazel-remote-store
             -DCONSISTENT_DEBUG
@@ -103,6 +148,42 @@ jobs:
           END_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           DURATION=$((END_SEC - START_SEC))
           REAL_SECONDS=$(grep '^REAL_SECONDS=' time_result.txt | cut -d= -f2 || echo "n/a")
+          LOADAVG_AFTER="$(cut -d' ' -f1-3 /proc/loadavg)"
+
+          BINARY_PATH=""
+          BINARY_BASENAME="$(basename "$BUILD_TARGET")"
+          for candidate in \
+            "${BUILD_TARGET}/${BINARY_BASENAME}" \
+            "${BUILD_TARGET}" \
+            "$(find "${BUILD_TARGET}" -maxdepth 1 -type f -executable -name "${BINARY_BASENAME}" 2>/dev/null | head -1)"; do
+            if [ -n "$candidate" ] && [ -f "$candidate" ] && [ -x "$candidate" ]; then
+              BINARY_PATH="$candidate"
+              break
+            fi
+          done
+          if [ -z "$BINARY_PATH" ]; then
+            BINARY_PATH="$(find . -path "*/${BUILD_TARGET}/${BINARY_BASENAME}" -type f -executable 2>/dev/null | head -1 || true)"
+          fi
+
+          BINARY_SIZE_BYTES="n/a"
+          BINARY_SIZE_HUMAN="n/a"
+          BINARY_SIZE_MIB="n/a"
+          if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
+            BINARY_SIZE_BYTES="$(stat -c%s "$BINARY_PATH")"
+            BINARY_SIZE_HUMAN="$(ls -lh "$BINARY_PATH" | awk '{print $5}')"
+            BINARY_SIZE_MIB="$(python3 -c "print(round(int('${BINARY_SIZE_BYTES}')/1024/1024, 2))")"
+            ls -lh "$BINARY_PATH" > binary_info.txt
+            {
+              echo "path=$BINARY_PATH"
+              echo "size_bytes=$BINARY_SIZE_BYTES"
+              echo "size_human=$BINARY_SIZE_HUMAN"
+              echo "size_mib=$BINARY_SIZE_MIB"
+              file "$BINARY_PATH" || true
+            } >> binary_info.txt
+          else
+            echo "binary not found for target=${BUILD_TARGET}" > binary_info.txt
+            BINARY_PATH="not found"
+          fi
 
           {
             echo "duration_sec=$DURATION"
@@ -110,7 +191,24 @@ jobs:
             echo "start_ts=$START_TS"
             echo "end_ts=$END_TS"
             echo "build_rc=$RC"
+            echo "build_threads=$BUILD_THREADS"
+            echo "loadavg_after=$LOADAVG_AFTER"
+            echo "binary_path=$BINARY_PATH"
+            echo "binary_size_bytes=$BINARY_SIZE_BYTES"
+            echo "binary_size_human=$BINARY_SIZE_HUMAN"
+            echo "binary_size_mib=$BINARY_SIZE_MIB"
           } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "build_threads=$BUILD_THREADS"
+            echo "loadavg_after=$LOADAVG_AFTER"
+            echo "duration_sec=$DURATION"
+            echo "real_seconds=$REAL_SECONDS"
+            echo "binary_path=$BINARY_PATH"
+            echo "binary_size_bytes=$BINARY_SIZE_BYTES"
+            echo "binary_size_human=$BINARY_SIZE_HUMAN"
+            echo "binary_size_mib=$BINARY_SIZE_MIB"
+          } >> host_info.txt
 
           tail -40 ya_make_clean_build.log > ya_stat_tail.txt || true
           exit "$RC"
@@ -130,9 +228,17 @@ jobs:
             echo "| Branch | \`${{ github.ref_name }}\` |"
             echo "| Commit | [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |"
             echo "| Runner | \`${{ runner.name }}\` |"
+            echo "| CPU model | ${{ steps.host.outputs.cpu_model }} |"
+            echo "| \`nproc\` | **${{ steps.host.outputs.nproc }}** |"
+            echo "| Memory | ${{ steps.host.outputs.mem_avail_gb }} / ${{ steps.host.outputs.mem_total_gb }} GiB available/total |"
+            echo "| loadavg before | \`${{ steps.host.outputs.loadavg_before }}\` |"
+            echo "| loadavg after | \`${{ steps.build.outputs.loadavg_after }}\` |"
             echo "| Build preset | \`${{ inputs.build_preset }}\` |"
             echo "| Build target | \`${{ inputs.build_target }}\` |"
+            echo "| Build threads (\`-j\`) | **${{ steps.build.outputs.build_threads }}** |"
             echo "| Link threads | \`${{ inputs.link_threads }}\` |"
+            echo "| Binary | \`${{ steps.build.outputs.binary_path }}\` |"
+            echo "| Binary size | **${{ steps.build.outputs.binary_size_human }}** (${{ steps.build.outputs.binary_size_mib }} MiB / ${{ steps.build.outputs.binary_size_bytes }} bytes) |"
             echo "| Started (UTC) | ${{ steps.build.outputs.start_ts }} |"
             echo "| Finished (UTC) | ${{ steps.build.outputs.end_ts }} |"
             echo "| Wall time | **${{ steps.build.outputs.duration_sec }} sec** ($DURATION_HUMAN) |"
@@ -143,6 +249,7 @@ jobs:
             echo "- Removed \`~/.ya\` and repo \`.ya\` before build"
             echo "- Cleared ccache if present"
             echo "- Passed \`--no-bazel-remote-store\` (overrides \`build/internal/ya.conf\`)"
+            echo "- Kept \`-DDEBUGINFO_LINES_ONLY\`"
             echo "- No \`--cache-tests\`"
             echo ""
             echo "### ya make stat (tail)"
@@ -155,9 +262,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: clean-build-benchmark-logs
+          name: clean-build-benchmark-logs-j${{ steps.build.outputs.build_threads || 'unknown' }}
           path: |
             ya_make_clean_build.log
             ya_stat_tail.txt
             time_result.txt
+            host_info.txt
+            binary_info.txt
           retention-days: 7

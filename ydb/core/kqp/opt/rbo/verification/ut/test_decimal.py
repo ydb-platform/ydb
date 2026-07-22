@@ -613,6 +613,28 @@ class DecimalKernelTest(unittest.TestCase):
                         f"actual={_ground(actual)}, expected={expected}"
                     )
 
+    def test_aggregate_max_uses_guarded_raw_code_order(self):
+        values = (-decimal.INF, -1, 0, 1, decimal.INF, decimal.NAN)
+        for left, right in product(values, repeat=2):
+            actual = decimal.aggregate_max(
+                (
+                    (smt.TRUE, smt.int_value(left)),
+                    (smt.TRUE, smt.int_value(right)),
+                )
+            )
+            with self.subTest(left=left, right=right):
+                self.assertEqual(_ground(actual), max(left, right))
+
+        guarded = decimal.aggregate_max(
+            (
+                (smt.TRUE, smt.int_value(1)),
+                (smt.FALSE, smt.int_value(decimal.NAN)),
+                (smt.TRUE, smt.int_value(decimal.INF)),
+            )
+        )
+        self.assertEqual(_ground(guarded), decimal.INF)
+        self.assertEqual(_ground(decimal.aggregate_max(())), -decimal.INF)
+
     def test_all_arithmetic_matches_exhaustive_fraction_reference(self):
         types = tuple(
             decimal.Type(precision, scale)

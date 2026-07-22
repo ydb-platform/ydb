@@ -520,7 +520,7 @@ class Evaluator:
         if any(trait.unwrap for trait in node.aggregates):
             raise RelationError("unwrapped aggregate semantics are not modeled")
         unsupported = sorted(
-            {trait.function for trait in node.aggregates} - {"count", "sum"}
+            {trait.function for trait in node.aggregates} - {"count", "max", "sum"}
         )
         if unsupported:
             raise RelationError(
@@ -603,6 +603,23 @@ class Evaluator:
                 trait.output_type,
                 smt.FALSE,
                 smt.add(*(smt.ite(guard, smt.ONE, smt.ZERO) for guard in non_null)),
+            )
+        if trait.function == "max":
+            guarded_values = tuple(
+                (guard, row.values[trait.input])
+                for guard, row in zip(non_null, source.rows)
+                if guard != smt.FALSE
+            )
+            return Value(
+                trait.output_type,
+                smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
+                decimal.aggregate_max(
+                    tuple((guard, value.value) for guard, value in guarded_values)
+                ),
+                decimal_finite_abs_bound=max(
+                    (_decimal_finite_abs_bound(value) for _, value in guarded_values),
+                    default=0,
+                ),
             )
         if trait.function == "sum":
             if decimal.is_type(trait.output_type):

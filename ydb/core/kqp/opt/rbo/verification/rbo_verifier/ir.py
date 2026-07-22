@@ -1815,6 +1815,26 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             trait_path,
                             "sum output nullability does not match its input, phase, and keys",
                         )
+                elif trait.function == "max":
+                    if not decimal.is_type(input_column.type):
+                        _fail(
+                            trait_path,
+                            f"max does not support {input_column.type!r}; only Decimal is modeled",
+                        )
+                    if trait.output_type != input_column.type:
+                        _fail(
+                            trait_path,
+                            "max output type must exactly match its Decimal input "
+                            f"{input_column.type!r}, got {trait.output_type!r}",
+                        )
+                    expected_nullable = input_column.nullable
+                    if not node.keys and node.phase != "intermediate":
+                        expected_nullable = True
+                    if trait.output_nullable != expected_nullable:
+                        _fail(
+                            trait_path,
+                            "max output nullability does not match its input, phase, and keys",
+                        )
 
                 result[trait.output] = Column(
                     trait.output,

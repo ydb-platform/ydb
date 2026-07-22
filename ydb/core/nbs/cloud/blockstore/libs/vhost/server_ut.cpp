@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/sglist_test.h>
@@ -19,6 +20,7 @@
 #include <util/generic/scope.h>
 #include <util/generic/set.h>
 #include <util/system/event.h>
+#include <util/system/mutex.h>
 #include <util/system/tempfile.h>
 #include <util/system/thread.h>
 #include <util/thread/factory.h>
@@ -57,7 +59,7 @@ private:
 
     IServerPtr VhostServer;
     IVHostStatsPtr VHostStats;
-    std::shared_ptr<TTestPartitionDirectService> TestService;
+    std::shared_ptr<TTraceServiceMock> TraceService;
     std::shared_ptr<TTestStorage> TestStorage;
     std::shared_ptr<ITestVhostDevice> VhostDevice;
     std::shared_ptr<TTestVhostQueueFactory> VhostQueueFactory;
@@ -119,7 +121,7 @@ private:
     void InitVhostDeviceEnvironment()
     {
         VHostStats = std::make_shared<TTestVHostStats>();
-        TestService = std::make_shared<TTestPartitionDirectService>();
+        TraceService = std::make_shared<TTraceServiceMock>();
         TestStorage = std::make_shared<TTestStorage>();
         TestStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -245,7 +247,7 @@ private:
 
             auto future = VhostServer->StartEndpoint(
                 SocketPath.GetPath(),
-                TestService,
+                TraceService,
                 TestStorage,
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -309,7 +311,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -361,7 +363,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 sockets[i],
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -460,7 +462,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto future = vhostServer->StartEndpoint(
             socketPath,
-            std::make_shared<TTestPartitionDirectService>(),
+            std::make_shared<TTraceServiceMock>(),
             std::make_shared<TTestStorage>(),
             options);
 
@@ -508,7 +510,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -548,7 +550,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -593,7 +595,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -614,7 +616,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<void>();
 
-        auto testService = std::make_shared<TTestPartitionDirectService>();
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -863,7 +865,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
             ++requestCounter;
         };
 
-        auto testService = std::make_shared<TTestPartitionDirectService>();
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -995,7 +997,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<TWriteBlocksLocalResponse>();
 
-        auto testService = std::make_shared<TTestPartitionDirectService>();
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -1109,7 +1111,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
         TMutex threadIdsLock;
         TSet<TThread::TId> observedThreadIds;
 
-        auto testService = std::make_shared<TTestPartitionDirectService>();
+        auto testService = std::make_shared<TTraceServiceMock>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,

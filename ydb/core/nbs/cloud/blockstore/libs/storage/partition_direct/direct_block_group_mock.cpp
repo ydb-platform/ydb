@@ -226,8 +226,10 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
 }
 
 NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    ITraceService* traceService,
     IPartitionDirectService* service)
 {
+    Y_UNUSED(traceService);
     Y_UNUSED(service);
     // The mock is considered ready immediately - tests that do not exercise
     // session locking should not block on the initial-ready gate.

@@ -36,6 +36,7 @@ class TVChunk
 public:
     TVChunk(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
@@ -153,6 +154,7 @@ private:
     [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    ITraceService* const TraceService = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};

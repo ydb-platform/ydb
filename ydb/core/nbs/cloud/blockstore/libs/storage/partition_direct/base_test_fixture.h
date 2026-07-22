@@ -1,11 +1,13 @@
 #pragma once
 
 #include "direct_block_group_mock.h"
+#include "partition_direct_service_mock.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -54,6 +56,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters{
         new ::NMonitoring::TDynamicCounters()};
+    std::shared_ptr<TTraceServiceMock> TraceService =
+        std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};

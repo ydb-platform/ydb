@@ -2,21 +2,15 @@
 
 #include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
-
-#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
-namespace NYdb::NBS::NBlockStore {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NStorage::NPartitionDirect {
-class TVChunkConfig;
-}   // namespace NStorage::NPartitionDirect
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -25,8 +19,6 @@ struct IPartitionDirectService
     virtual ~IPartitionDirectService() = default;
 
     [[nodiscard]] virtual TVolumeConfigPtr GetVolumeConfig() const = 0;
-
-    [[nodiscard]] virtual NWilson::TSpan CreteRootSpan(TStringBuf name) = 0;
 
     virtual void ScheduleAfterDelay(
         TExecutorPtr executor,
@@ -57,4 +49,4 @@ struct IPartitionDirectService
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

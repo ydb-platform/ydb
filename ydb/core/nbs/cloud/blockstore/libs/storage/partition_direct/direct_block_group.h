@@ -128,7 +128,9 @@ public:
     // Starts the DBG and returns a future that resolves when the locked-session
     // quorum is reached for the first time. Intended only to gate the
     // synchronous start.
-    virtual NThreading::TFuture<void> Run(IPartitionDirectService* service) = 0;
+    virtual NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,

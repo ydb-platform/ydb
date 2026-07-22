@@ -7,8 +7,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
@@ -157,7 +157,7 @@ private:
     TAppContext& AppCtx;
     // Single device handler shared by all vhost queues of this endpoint.
     const IDeviceHandlerPtr DeviceHandler;
-    const IPartitionDirectServicePtr PartitionDirectService;
+    const ITraceServicePtr TraceService;
     const TString SocketPath;
     const TStorageOptions Options;
     const ui32 SocketAccessMode;
@@ -176,14 +176,14 @@ public:
     TEndpoint(
         TAppContext& appCtx,
         IDeviceHandlerPtr deviceHandler,
-        IPartitionDirectServicePtr partitionDirectService,
+        ITraceServicePtr traceService,
         TString socketPath,
         const TStorageOptions& options,
         ui32 socketAccessMode,
         TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
-        , PartitionDirectService(std::move(partitionDirectService))
+        , TraceService(std::move(traceService))
         , SocketPath(std::move(socketPath))
         , Options(options)
         , SocketAccessMode(socketAccessMode)
@@ -360,7 +360,7 @@ private:
             CreateRequestId(),
             std::move(vhostRequest),
             Options,
-            PartitionDirectService->CreteRootSpan(ToStringBuf(requestType)));
+            TraceService->CreteRootSpan(ToStringBuf(requestType)));
 
         AppCtx.VHostStats->RequestStarted(
             AppCtx.Log,
@@ -535,7 +535,7 @@ public:
 
     TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
-        IPartitionDirectServicePtr partitionDirectService,
+        ITraceServicePtr traceService,
         IStoragePtr storage,
         const TStorageOptions& options) override;
 
@@ -622,7 +622,7 @@ void TServer::Stop()
 
 TFuture<NProto::TError> TServer::StartEndpoint(
     TString socketPath,
-    IPartitionDirectServicePtr partitionDirectService,
+    ITraceServicePtr traceService,
     IStoragePtr storage,
     const TStorageOptions& options)
 {
@@ -666,7 +666,7 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
-        std::move(partitionDirectService),
+        std::move(traceService),
         socketPath,
         options,
         Config.SocketAccessMode,

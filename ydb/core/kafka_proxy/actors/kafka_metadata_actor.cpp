@@ -286,7 +286,12 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 {"topicName", topic.Name},
                 {"code", locationResponse->Status},
                 {"issues", locationResponse->Issues.ToOneLineString()});
-            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
+            // Transient location failures (pipe retries exhausted / locations backoff) → retriable timeout.
+            const EKafkaErrors kafkaError =
+                (status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::INTERNAL_ERROR)
+                    ? EKafkaErrors::REQUEST_TIMED_OUT
+                    : ConvertErrorCode(status);
+            AddTopicError(topic, kafkaError);
         }
     }
     if (InflyCreateTopics == 0) {
@@ -303,7 +308,8 @@ void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TA
     InflyCreateTopics--;
     PendingResponses--;
     EKafkaErrors errorCode = ev->Get()->ErrorCode;
-    if (errorCode == EKafkaErrors::NONE_ERROR) {
+    if (errorCode == EKafkaErrors::NONE_ERROR || errorCode == EKafkaErrors::TOPIC_ALREADY_EXISTS) {
+        // Topic is available (created by us or raced with another create) — describe location.
         TActorId child = SendTopicRequest(topicName);
         TopicIndexes[child].push_back(topicIndex);
     } else {

@@ -481,6 +481,7 @@ struct TPDiskConfig : public TThrRefBase {
 };
 
 struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 SlotSize = 0;
     ui64 UnitSize = 0;
     ui32 MaxSlots = 0;
     bool PreferInferredSettingsOverExplicit = false;
@@ -488,12 +489,14 @@ struct TInferPDiskSlotCountSettingsForDriveType {
     TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
         switch (type) {
             case NPDisk::DEVICE_TYPE_ROT:
+                SlotSize = settings.GetRot().GetSlotSize();
                 UnitSize = settings.GetRot().GetUnitSize();
                 MaxSlots = settings.GetRot().GetMaxSlots();
                 PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
                 break;
             case NPDisk::DEVICE_TYPE_SSD:
             case NPDisk::DEVICE_TYPE_NVME:
+                SlotSize = settings.GetSsd().GetSlotSize();
                 UnitSize = settings.GetSsd().GetUnitSize();
                 MaxSlots = settings.GetSsd().GetMaxSlots();
                 PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
@@ -504,7 +507,7 @@ struct TInferPDiskSlotCountSettingsForDriveType {
     }
 
     explicit operator bool() const {
-        return UnitSize && MaxSlots;
+        return (SlotSize || UnitSize) && MaxSlots;
     }
 };
 

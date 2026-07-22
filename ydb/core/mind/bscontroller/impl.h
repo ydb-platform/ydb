@@ -361,6 +361,9 @@ public:
         TBoxId BoxId;
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
+        ui64 ExpectedSlotSize = 0;
+        bool HasExpectedSlotSize = false;
+        ui32 MaxSlots = 0;
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
@@ -474,6 +477,11 @@ public:
 
         void ExtractConfig(ui32 defaultMaxSlots) {
             ExpectedSlotCount = defaultMaxSlots;
+            HasExpectedSlotCount = false;
+            ExpectedSlotSize = 0;
+            HasExpectedSlotSize = false;
+            MaxSlots = 0;
+            SlotSizeInUnits = 0;
 
             NKikimrBlobStorage::TPDiskConfig pdiskConfig;
             if (pdiskConfig.ParseFromString(PDiskConfig)) {
@@ -483,6 +491,16 @@ public:
                 }
                 if (pdiskConfig.HasSlotSizeInUnits()) {
                     SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+                }
+                if (pdiskConfig.HasExpectedSlotSize() && pdiskConfig.GetExpectedSlotSize()) {
+                    ExpectedSlotSize = pdiskConfig.GetExpectedSlotSize();
+                    HasExpectedSlotSize = true;
+                }
+                if (pdiskConfig.HasMaxSlots()) {
+                    MaxSlots = pdiskConfig.GetMaxSlots();
+                }
+                if (HasExpectedSlotSize && !HasExpectedSlotCount) {
+                    ExpectedSlotCount = 0;
                 }
             }
         }
@@ -587,6 +605,42 @@ public:
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
+        }
+
+        ui32 GetEffectiveExpectedSlotCount() const {
+            ui32 slotCount = 0;
+            ui32 slotSizeInUnits = 0;
+            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+            return slotCount;
+        }
+
+        ui64 GetEffectiveExpectedSlotSize() const {
+            return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
+        }
+
+        ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
+            // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
+            // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
+            // (conservative). Switching to the effective value would change legacy accounting
+            // and requires extending the NumActiveSlots recompute triggers to units changes
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
+        }
+
+        // sum of owner weights over the live vslots with the current weight inputs; must be
+        // used to refresh NumActiveSlots whenever the weight inputs change (see GetOwnerWeight).
+        // The group resolver is a parameter because the authoritative group set differs by
+        // caller: committed controller state vs an in-flight TConfigState overlay
+        template<typename TGroupResolver>
+        ui32 ComputeNumActiveSlots(TGroupResolver&& findGroup) const {
+            ui32 numActiveSlots = 0;
+            for (const auto& [vslotId, vslot] : VSlotsOnPDisk) {
+                if (!vslot->IsBeingDeleted()) {
+                    const auto *group = findGroup(vslot->GroupId);
+                    Y_ABORT_UNLESS(group);
+                    numActiveSlots += GetOwnerWeight(group->GroupSizeInUnits);
+                }
+            }
+            return numActiveSlots;
         }
 
         TString PathOrSerial() const {
@@ -1801,6 +1855,8 @@ private:
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 
+    void RecomputePDiskNumActiveSlots(TPDiskInfo *pdisk);
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 
@@ -2307,6 +2363,7 @@ public:
             pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
             // Check if we should infer PDisk slot count based on global settings
             bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount &&
+                !pdisk->HasExpectedSlotSize &&
                 StorageConfig && StorageConfig->HasBlobStorageConfig() &&
                 StorageConfig->GetBlobStorageConfig().HasInferPDiskSlotCountSettings() &&
                 (pdisk->Kind.Type() == NPDisk::DEVICE_TYPE_ROT ?
@@ -2319,6 +2376,9 @@ public:
             numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
 
             if (!effectiveSlotCount) {
+                continue;
+            }
+            if (pdisk->GetEffectiveExpectedSlotSize()) {
                 continue;
             }
 
@@ -2551,6 +2611,7 @@ public:
         std::optional<Schema::PDisk::DiskScope::Type> DiskScope; // null when not set in host config
         ui32 ExpectedSlotCount = 0; // explicit
         ui32 SlotSizeInUnits = 0; // explicit
+        ui64 ExpectedSlotSize = 0; // explicit
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -2574,6 +2635,7 @@ public:
                 if (pdisk.HasDiskScope()) {
                     DiskScope = pdisk.GetDiskScope();
                 }
+                ExpectedSlotSize = cfg.GetExpectedSlotSize();
             }
 
             const TPDiskId pdiskId(NodeId, PDiskId);
@@ -2592,6 +2654,19 @@ public:
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
+        }
+
+        ui32 GetEffectiveExpectedSlotCount() const {
+            ui32 slotCount = 0;
+            ui32 slotSizeInUnits = 0;
+            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+            return slotCount;
+        }
+
+        ui64 GetEffectiveExpectedSlotSize() const {
+            return PDiskMetrics && PDiskMetrics->HasExpectedSlotSize()
+                ? PDiskMetrics->GetExpectedSlotSize()
+                : ExpectedSlotSize;
         }
     };
 

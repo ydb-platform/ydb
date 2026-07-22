@@ -386,7 +386,8 @@ Before treating optimizer findings as credible:
    placement, key order, or TopSort limit, and corrupting split Limit phases.
 3. Preserve and replay every solver witness.
 4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage dashboard;
-   report unsupported features separately from failures.
+   report unsupported features separately from failures, and keep a hermetic
+   solver-backed regression floor for every curated workload proof.
 
 Independent exhaustive concrete references now cover EmptySource,
 scan/project/filter, logical UnionAll, root projection, and every admitted join
@@ -546,13 +547,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q48, q52, q55, q71, q88, q93, and q96 (8/99). Formula emission confirms
   end-to-end model coverage at two rows per referenced table and two tasks; it
   is not a proof by itself.
-- Focused solver runs produce `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
-  q55, q93, and q96. TPC-DS q48 remains formula-only, q88 remains `UNKNOWN` at
-  60 seconds, and q71's 118,276,852-byte formula took 80,359 ms to construct in
-  the complete run before a focused solver attempt reached the external process
-  deadline. No optimizer correctness bug is confirmed by these runs.
+- A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3 and
+  TPC-DS q3, q52, q55, q93, and q96 with a fixed 60-second per-query budget.
+  TPC-DS q48 remains formula-only, q88 remains `UNKNOWN` at 60 seconds, and
+  q71's 118,276,852-byte formula took 80,359 ms to construct in the complete run
+  before a focused solver attempt reached the external process deadline. No
+  optimizer correctness bug is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
-  commands, complete formula-only baseline, focused solver evidence, q88
+  commands, complete formula-only baseline, proof-floor evidence, q88
   investigation, and explicit unsupported/optimizer-failure inventory.
 
 ### M5: confirmation and localization — in progress
@@ -565,9 +567,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula-construction coverage has a checked-in regression floor. A
-  corpus-level solver-backed proof floor and replay-confirmed counterexample
-  policy remain.
+- Formula construction and the six curated workload proofs have separate
+  checked-in regression floors. Automatic replay-confirmation policy for future
+  counterexamples remains.
 
 ## Non-goals
 

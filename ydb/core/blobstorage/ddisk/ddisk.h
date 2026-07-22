@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "ddisk_config.h"
+#include "ddisk_checksums.h"
 
 #include <ydb/core/base/events.h>
 
@@ -18,16 +19,7 @@ namespace NKikimr::NDDisk {
     constexpr size_t MinSectorSize = 4096;
     constexpr size_t DataAlignment = MinSectorSize;
 
-    // Computes an XXH3-64 checksum over exactly numBytes bytes starting at it. The iterator is passed by
-    // value, so the caller's own iterator is not advanced. This is a raw data checksum with no identity
-    // or salt mixed in (unlike TDDiskActor::CalculateChecksum, which additionally mixes in
-    // PersistentBufferUniqueId for on-disk PB sector integrity - a value senders cannot know, so it
-    // cannot be used for a sender-computed, wire-level checksum like this one).
-    ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes);
-
-    // Splits payload into MinSectorSize (4 KiB) blocks and computes a checksum for each block, in order.
-    // payload.size() must be a non-zero multiple of MinSectorSize.
-    std::vector<ui64> CalculatePayloadChecksums(const TRope& payload);
+    static_assert(MinSectorSize == IntegrityUnitSize);
 
     struct TEv {
         enum {

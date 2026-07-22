@@ -3,6 +3,8 @@ LIBRARY()
     SRCS(
         ddisk.cpp
         ddisk.h
+        ddisk_checksums.cpp
+        ddisk_checksums.h
         ddisk_actor.cpp
         ddisk_actor.h
         ddisk_actor_boot.cpp

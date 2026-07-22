@@ -23,6 +23,8 @@
 
 #include <library/cpp/retry/retry_policy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
+
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -30,7 +32,7 @@ namespace NKikimr::NPQ {
 #endif
 
 
-#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
+#define LOG_PREFIX  TStringBuilder() << "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
 #define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
@@ -316,18 +318,11 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-<<<<<<< HEAD
-        DEBUG("SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId <<
-              " WriteId: " << WriteId);
-=======
         YDB_LOG_DEBUG("",
             {"logPrefix", LOG_PREFIX},
             {"sessionId", Opts.SessionId},
             {"txId", Opts.TxId},
             {"writeId", WriteId});
->>>>>>> e560084e95c ([YDB_LOG] Migrate ydb/core/persqueue/prqb (#45807))
-
         GetOwnership();
     }
 

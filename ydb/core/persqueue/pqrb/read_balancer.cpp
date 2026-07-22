@@ -920,7 +920,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, 
 }
 
 void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
-    const TInstant now = TInstant::Now();
+    const TInstant now = TAppData::TimeProvider->Now();
     for (const auto& [_, pipeLocation] : TabletPipes) {
         THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
         NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
@@ -983,7 +983,7 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
     }
 
     TReceiveAttemptPartitionsWriteBatch batch;
-    const auto now = TInstant::Now();
+    const auto now = TAppData::TimeProvider->Now();
 
     while (!PendingMLPGetPartitionRequests.empty()) {
         auto ev = std::move(PendingMLPGetPartitionRequests.front());
@@ -1053,7 +1053,7 @@ void TPersQueueReadBalancer::CleanupReceiveAttemptPartitions(const TActorContext
         return;
     }
 
-    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TInstant::Now());
+    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TAppData::TimeProvider->Now());
     if (deletes.empty()) {
         return;
     }

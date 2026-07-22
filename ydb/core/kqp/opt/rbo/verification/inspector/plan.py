@@ -92,7 +92,7 @@ def render_expression(expression: ir.Expr) -> str:
         if kind == "eq":
             fields += f", null_safe={_boolean(expression.null_safe)}"
         return f"{kind}({fields})"
-    if kind in {"add", "sub", "mul"}:
+    if kind in {"add", "sub", "mul", "div"}:
         if len(expression.args) != 2:
             raise InspectionError(f"{kind} expression does not have exactly two arguments")
         scalar_type = str(_required(expression.result_type, "type"))
@@ -102,6 +102,17 @@ def render_expression(expression: ir.Expr) -> str:
         return (
             f"{kind}(left={render_expression(expression.args[0])}, "
             f"right={render_expression(expression.args[1])}, "
+            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
+        )
+    if kind == "cast_decimal":
+        if len(expression.args) != 1:
+            raise InspectionError("cast_decimal expression does not have exactly one argument")
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"cast_decimal(arg={render_expression(expression.args[0])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
     if kind == "opaque":

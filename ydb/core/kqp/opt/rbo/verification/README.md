@@ -9,8 +9,8 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, exact
-Decimal comparison/arithmetic/ordering/SUM, and benchmark-dashboard parts of
-M4.
+Decimal comparison/integral-cast/arithmetic/ordering/SUM, and
+benchmark-dashboard parts of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -22,11 +22,13 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
-q48, q52, q55, q61, q71, q88, q93, and q96: 10/121 workload queries. The checked-in
-solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q48,
-q52, q55, q93, and q96. TPC-DS q71 reached the external solver process
-deadline, and q61 and q88 are `UNKNOWN` at the 60-second solver budget; no
-new-RBO optimizer correctness bug has been confirmed. Separately, the isolated manual
+q48, q52, q55, q61, q71, q88, q90, q93, and q96: 11/121 workload queries
+(9.1%). The checked-in solver proof floor requires `VERIFIED_BOUNDED` for TPCH
+q3 and TPC-DS q3, q48, q52, q55, q90, q93, and q96: eight obligations (6.6%
+of the workload). TPC-DS
+q71 reached the external solver process deadline, and q61 and q88 are `UNKNOWN`
+at the 60-second solver budget; no new-RBO optimizer correctness bug has been
+confirmed. Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
 shared aggregation/runtime defect, not a new-RBO-only counterexample. These
@@ -127,8 +129,16 @@ dependent generators, free variables, and unsafe AST metadata.
 
 A complete cast of a non-null integer constant to a non-null Decimal is handled
 before opaque fallback: the exporter evaluates the YDB cast and emits the
-resulting tagged Decimal literal. General casts, nullable cast shapes, and
-non-integer Decimal cast sources remain unsupported.
+resulting tagged Decimal literal. A separate explicit `cast_decimal` node models
+`SafeCast` of any non-null exact signed or unsigned 8/16/32/64-bit integer
+expression to a non-null canonical `Decimal(p,s)`. The target descriptor and
+its annotation must agree exactly with the result, and `p - s >= 1`. Evaluation
+multiplies the integer by `10^s`; a coefficient whose absolute value reaches
+`10^p` becomes the corresponding signed infinity, matching MiniKQL. Complete
+integer literals retain the normalized-literal representation, while
+value-specific incomplete literals use `cast_decimal`. `Convert`, `StrictCast`,
+nullable source/target/result shapes, zero-integral-digit targets, and
+non-integer Decimal cast sources remain outside this explicit gate.
 
 The explicit comparison core accepts unequal integer widths only when YQL's
 common integer type represents both operands without wrapping: equal signedness,
@@ -248,8 +258,9 @@ proofs or semantic approximations.
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
 Merge. Decimal has exact literals, its legal typed domain, and the comparison
 and arithmetic semantics above, plus exact raw-code Sort/TopSort/Merge ordering.
-Generic division, general casts, and aggregate functions other than the bounded
-`sum` below remain unsupported. String and Utf8 sort keys
+Generic division, casts outside the exact integral-`SafeCast` and constant
+normalization gates, and aggregate functions other than the bounded `sum` below
+remain unsupported. String and Utf8 sort keys
 therefore return `UNSUPPORTED` during strict validation instead of inventing an
 ordering.
 
@@ -433,6 +444,9 @@ solver budget. Nullable `String IN ('first', 'second')` and
 through the real host and prove the normal obligation. A native Decimal
 column filter likewise checks exact tagged literals and comparison predicates
 at both real-host boundaries and proves its normal two-row/two-task obligation.
+A Decimal cast query checks `COUNT(*)` and `1 + COUNT(*)` as non-null `Uint64`
+expressions cast to `Decimal(15,4)` at both boundaries, then proves the normal
+two-row/two-task obligation.
 A Decimal arithmetic query checks `+`, `-`, same-type multiplication and
 division, integer-right multiplication and division, and YQL's normalization
 of the reversed multiplication spelling at both boundaries, then proves the

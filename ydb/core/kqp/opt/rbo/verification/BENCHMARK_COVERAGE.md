@@ -49,9 +49,9 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the seven curated obligations with the pinned
+The checked-in proof floor runs the eight curated obligations with the pinned
 Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3 and
-TPC-DS q3, q48, q52, q55, q93, and q96 directly from the policy, accepts only
+TPC-DS q3, q48, q52, q55, q90, q93, and q96 directly from the policy, accepts only
 `VERIFIED_BOUNDED`, and ignores every ambient `RBO_COVERAGE_*` variable:
 
 ```bash
@@ -97,13 +97,14 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has two monotonic contracts. The formula-construction
-floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q61, q71, q88, q93, and
-q96; it is enforced only for a complete formula-only suite. The proof floor requires
-TPCH q3 and TPC-DS q3, q48, q52, q55, q93, and q96; dedicated hermetic tests require
-each one to remain `VERIFIED_BOUNDED`. Arbitrary focused solver experiments are
-never mistaken for the proof floor, even when they happen to select the same
-IDs. Newly supported or proven queries are allowed without editing either
-floor. Policy parsing and evaluation fail closed, and the report records both
+floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q61, q71, q88, q90, q93,
+and q96; it is enforced only for a complete formula-only suite. The proof floor
+requires TPCH q3 and TPC-DS q3, q48, q52, q55, q90, q93, and q96; dedicated
+hermetic tests require each one to remain `VERIFIED_BOUNDED`. Arbitrary focused
+solver experiments are never mistaken for the proof floor, even when they
+happen to select the same IDs. Newly supported or proven queries are allowed
+without editing either floor. Policy parsing and evaluation fail closed, and
+the report records both
 required and observed ID sets, the explicit mode, each enforced floor, and
 every violation before the test fails.
 
@@ -140,18 +141,18 @@ StageGraph remains a separate diagnostic step.
 
 ## Last complete formula-only baseline
 
-This baseline was rerun on 2026-07-22 in formula-only mode; therefore all ten
+This baseline was rerun on 2026-07-22 in formula-only mode; therefore all eleven
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`. Solver-backed
 evidence is listed separately below.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 1 (q3) | 18 | 3 | 22 |
-| TPCDS_YQL | 9 (q3, q48, q52, q55, q61, q71, q88, q93, q96) | 61 | 29 | 99 |
+| TPCDS_YQL | 10 (q3, q48, q52, q55, q61, q71, q88, q90, q93, q96) | 60 | 29 | 99 |
 
-The supported formula slice is 10/121 queries. This is a useful end-to-end
+The supported formula slice is 11/121 queries (9.1%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 111 workload entries or larger
+slice rather than a claim about the remaining 110 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -166,7 +167,6 @@ initial and final reason.
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
 | Type `Interval` | q1 | - |
-| Decimal constant cast source is not a non-null integer literal | q19 | - |
 | Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
 | OLAP `string_contains` | - | q9 |
 | Unsupported OLAP non-callable node | - | q1, q5, q6, q10, q12, q14 |
@@ -175,8 +175,9 @@ initial and final reason.
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
 the deeper scalar and OLAP reasons above. Restricted static `IN` similarly
-removed the first blocker from q12 and q19, and exact Decimal comparison moved
-q19 to the narrower constant-cast gate.
+removed the first blocker from q12 and q19. Exact Decimal comparison and
+non-null integral `SafeCast` support remove q19's initial blockers; it now fails
+closed only on final `IfPresent`.
 
 Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
 sort key, and the widened partial/final aggregate as q3's first blockers.
@@ -191,7 +192,7 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 59 of the 61
+The exporter matrix below covers the boundary failures among 58 of the 60
 unsupported queries. IDs can appear in both exporter columns or under more than
 one reason because both snapshots are audited independently. The two queries
 that pass export and fail closed inside the verifier are listed after the
@@ -203,10 +204,7 @@ matrix.
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
 | Unavailable physical column `year` | - | q66 |
 | Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
-| Decimal constant cast is incomplete | q5, q75 | - |
-| Decimal constant cast result is nullable | q18, q21, q40 | q18 |
-| Decimal constant cast source is not a non-null integer literal | q65 | - |
-| SafeCast constant Decimal source is not a non-nullable integer literal | q90 | q90 |
+| Decimal cast result is nullable | q18, q21, q40, q65 | q18 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | String `>=` comparison compatibility | q91 | - |
 | String Sort ordering | q4, q11, q25, q29, q42, q46, q50, q64, q68, q76 | q4, q11, q25, q29, q42, q46, q50, q64, q65 |
@@ -216,8 +214,8 @@ matrix.
 | Callable `IfPresent` | - | q34, q68, q73, q79 |
 | Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
-| Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
-| Type `Interval` | q37, q72, q77, q80, q82 | q72 |
+| Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q75, q85 |
+| Type `Interval` | q5, q37, q72, q77, q80, q82 | q72 |
 
 After both snapshots export, q31 fails before allocating its join-matching
 matrix because 32768 candidate-row pairs exceed the 16384 pair construction
@@ -235,24 +233,33 @@ Exact arithmetic, ordering, and SUM remove the old `+`, `-`, `DecimalMul`,
 Occurrence-aware non-Merge StageGraph gathers compact mutually exclusive
 routing copies, and large Sort/Merge choices use bounded symbolic ordinals
 instead of factorial outcome expansion. That moves q3, q52, q55, q61, q71,
-and q93 through formula construction and raises TPC-DS to 9/99. q4 and q11 now
-reach String Sort; q31 reaches the construction cap; q74 reaches aggregate
-`max`; and q90 reaches the narrower SafeCast constant-source gate. q64 still
-stops at String Sort; q65 at the initial Decimal constant-cast gate and final
-String Sort; q75 at the initial constant-cast gate and final `Double`; and q80
-at initial `Interval` and a final OLAP non-callable. q91's final Decimal Sort
+and q93 through formula construction. Exact non-null integral `SafeCast` to
+Decimal then moves q90 through formula construction and raises TPC-DS to 10/99.
+q4 and q11 now reach String Sort; q31 reaches the construction cap; q74 reaches
+aggregate
+`max`. q5 now reaches initial `Interval` and a final OLAP non-callable; q64 still
+stops at String Sort; q65 at an initial nullable Decimal cast and final
+String Sort; q75 at `Double` in both snapshots; and q80 at initial `Interval`
+and a final OLAP non-callable. q91's final Decimal Sort
 exports, while its initial String comparison remains unsupported.
 
 ## Curated proof floor and focused results
 
 - The checked-in proof-floor tests return `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q48, q52, q55, q93, and q96, each at two rows per referenced table
-  and two tasks. These are seven bounded proofs for the modeled pre-physical
-  semantics, not unbounded SQL-equivalence claims.
+  TPC-DS q3, q48, q52, q55, q90, q93, and q96, each at two rows per referenced
+  table and two tasks. These are eight bounded proofs (6.6% of the workload) for
+  the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
 
 - TPC-DS q48 reaches the verifier after exact Decimal literal, domain,
   comparison-alignment, and integer constant-cast support. The proof-floor run
-  spent 175 ms preparing the query and 3,028 ms in verification before returning
+  spent 179 ms preparing the query and 2,997 ms in verification before returning
+  `VERIFIED_BOUNDED`; the checked-in floor retains that proof obligation.
+
+- TPC-DS q90 reaches the verifier after exact non-null integral `SafeCast` to
+  Decimal support. Its two `Uint64` count expressions become explicit
+  `cast_decimal` nodes targeting `Decimal(15,4)`, including the runtime's exact
+  scale multiplication and signed-infinity saturation. The proof-floor run
+  spent 227 ms preparing the query and 7,299 ms in verification before returning
   `VERIFIED_BOUNDED`; the checked-in floor retains that proof obligation.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact

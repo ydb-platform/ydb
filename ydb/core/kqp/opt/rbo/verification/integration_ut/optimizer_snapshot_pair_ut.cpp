@@ -11,6 +11,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -166,6 +167,30 @@ void CollectConjuncts(
     }
     for (const auto& argument : expression["args"].GetArraySafe()) {
         CollectConjuncts(argument, conjuncts);
+    }
+}
+
+void CollectExpressions(
+    const NJson::TJsonValue& value,
+    TStringBuf kind,
+    TVector<const NJson::TJsonValue*>& matches)
+{
+    if (value.IsMap()) {
+        const auto& fields = value.GetMapSafe();
+        const auto kindIt = fields.find("kind");
+        if (kindIt != fields.end() && kindIt->second.IsString() &&
+            kindIt->second.GetStringSafe() == kind)
+        {
+            matches.push_back(&value);
+        }
+        for (const auto& [name, field] : fields) {
+            Y_UNUSED(name);
+            CollectExpressions(field, kind, matches);
+        }
+    } else if (value.IsArray()) {
+        for (const auto& item : value.GetArraySafe()) {
+            CollectExpressions(item, kind, matches);
+        }
     }
 }
 
@@ -945,6 +970,80 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
 
         assertArithmetic(ParseSnapshot(results[0]));
         assertArithmetic(ParseSnapshot(results[1]));
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesIntegralSafeCastToDecimal) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateDecimalColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT
+                    CAST(COUNT(*) AS Decimal(15, 4)) /
+                    CAST(1 + COUNT(*) AS Decimal(15, 4)) AS Ratio
+                FROM `/Root/RboDecimal`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertCasts = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> casts;
+            CollectExpressions(snapshot["plan"], "cast_decimal", casts);
+            UNIT_ASSERT_VALUES_EQUAL(casts.size(), 2);
+            for (const auto* cast : casts) {
+                UNIT_ASSERT_VALUES_EQUAL(cast->GetMapSafe().size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*cast)["type"].GetStringSafe(),
+                    "Decimal(15,4)");
+                UNIT_ASSERT(!(*cast)["nullable"].GetBooleanSafe());
+                const auto& argument = (*cast)["arg"];
+                const TString argumentKind = argument["kind"].GetStringSafe();
+                UNIT_ASSERT_C(
+                    argumentKind == "column" || argumentKind == "add" ||
+                        argumentKind == "opaque",
+                    NJson::WriteJson(argument, false, true));
+                if (argumentKind != "column") {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        argument["type"].GetStringSafe(),
+                        "Uint64");
+                    UNIT_ASSERT(!argument["nullable"].GetBooleanSafe());
+                }
+            }
+
+            TVector<const NJson::TJsonValue*> divisions;
+            CollectExpressions(snapshot["plan"], "div", divisions);
+            UNIT_ASSERT_VALUES_EQUAL(divisions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                (*divisions.front())["type"].GetStringSafe(),
+                "Decimal(15,4)");
+            UNIT_ASSERT(!(*divisions.front())["nullable"].GetBooleanSafe());
+        };
+        assertCasts(initial);
+        assertCasts(final);
+
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(initial, "aggregate").size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(PlanNodes(final, "aggregate").size(), 2);
 
         const auto verdict = BuildVerificationProblem(results[0], results[1]);
         UNIT_ASSERT_VALUES_EQUAL(

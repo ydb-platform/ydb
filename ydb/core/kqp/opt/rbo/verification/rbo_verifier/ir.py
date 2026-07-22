@@ -14,7 +14,6 @@ from typing import Any, Mapping, Sequence, TypeAlias
 from . import decimal
 from .types import (
     BOOL,
-    DATE,
     MAX_DATE,
     VOID,
     equality_comparison_compatible,
@@ -465,6 +464,15 @@ def _parse_expr(value: Any, path: str) -> Expr:
                 _parse_expr(obj["left"], f"{path}.left"),
                 _parse_expr(obj["right"], f"{path}.right"),
             ),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind == "cast_decimal":
+        _keys(obj, {"kind", "arg", "type", "nullable"}, path)
+        return Expr(
+            kind=kind,
+            args=(_parse_expr(obj["arg"], f"{path}.arg"),),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
@@ -1003,6 +1011,22 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
                 f"{expr.kind} nullability must equal the OR of operand nullability",
             )
         return ValueType(expr.result_type, nullable)
+
+    if expr.kind == "cast_decimal":
+        assert expr.result_type is not None and expr.nullable is not None
+        argument = _infer_expr(expr.args[0], columns, f"{path}.arg")
+        if family(argument.name) != "int":
+            _fail(path, "Decimal cast source must be integral")
+        if argument.nullable:
+            _fail(path, "Decimal cast source must be non-nullable")
+        result = decimal.parse_type(expr.result_type)
+        if result is None:
+            _fail(path, "Decimal cast result must be a canonical Decimal type")
+        if result.integral_digits < 1:
+            _fail(path, "Decimal cast result must have at least one integral digit")
+        if expr.nullable:
+            _fail(path, "exact integral Decimal cast must be non-nullable")
+        return ValueType(expr.result_type, False)
 
     raise AssertionError(f"parser admitted unknown expression kind {expr.kind!r}")
 

@@ -172,6 +172,26 @@ def subtract(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     return _add_or_subtract("sub", left, right, result_type)
 
 
+def cast_integral(value: smt.Term, source_type: str, result_type: str) -> smt.Term:
+    """Exactly cast a non-null YQL integer to ``Decimal(p,s)``.
+
+    The finite coefficient is the integer multiplied by the target scale.
+    YDB Decimal bounds are strict: coefficients with absolute value at least
+    ``10**precision`` saturate to the infinity of their sign.  The caller and
+    snapshot IR deliberately exclude nullable and non-integral sources.
+    """
+
+    if _integer_decimal_digits(source_type) is None:
+        raise ValueError(f"Decimal cast source is not integral: {source_type!r}")
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"Decimal cast result is not Decimal: {result_type!r}")
+    if decimal_type.integral_digits < 1:
+        raise ValueError("Decimal cast result must have at least one integral digit")
+    coefficient = smt.mul(value, smt.int_value(10**decimal_type.scale))
+    return _saturate_finite(coefficient, decimal_type.precision)
+
+
 def sum_with_headroom(
     guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
     result_type: str,

@@ -188,6 +188,34 @@ class DecimalDivisionDispatchTest(unittest.TestCase):
             Encoder(smt.Script()).evaluate(expression, {})
 
 
+class DecimalCastDispatchTest(unittest.TestCase):
+    def test_exact_integral_cast_is_forwarded_and_cannot_be_null(self):
+        source_value = smt.int_value(-10)
+        cast_value = smt.int_value(-1_000)
+        expression = Expr(
+            kind="cast_decimal",
+            args=(Expr(kind="column", column="source"),),
+            result_type="Decimal(3,2)",
+            nullable=False,
+        )
+        with mock.patch.object(
+            scalar_module.decimal,
+            "cast_integral",
+            return_value=cast_value,
+        ) as cast_integral:
+            actual = Encoder(smt.Script()).evaluate(
+                expression,
+                {"source": Value("Int8", smt.FALSE, source_value)},
+            )
+
+        cast_integral.assert_called_once_with(
+            source_value,
+            "Int8",
+            "Decimal(3,2)",
+        )
+        self.assertEqual(actual, Value("Decimal(3,2)", smt.FALSE, cast_value))
+
+
 class IntegerDomainTest(unittest.TestCase):
     def test_every_integer_width_has_its_exact_typed_domain(self):
         for scalar_type in sorted(INTEGER_TYPES):

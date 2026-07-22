@@ -24,6 +24,7 @@ SRCS(
     write_session_impl.cpp
     write_session.h
     write_session.cpp
+    ydb_topic_deferred_publish.cpp
 )
 
 PEERDIR(

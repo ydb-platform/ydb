@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 #include <ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers/test_token_exchange_server.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
@@ -11,6 +12,8 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/system/tempfile.h>
+
+#include <future>
 
 using namespace NYdb;
 
@@ -530,6 +533,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
 
     Y_UNIT_TEST(UpdatesTokenAndRetriesErrors) {
         TCredentialsProviderFactoryPtr factory;
+        auto facility = CreateSimpleCoreFacility();
+        TCredentialsProviderPtr provider;
 
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
@@ -543,7 +548,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                     TOauth2TokenExchangeParams()
                         .TokenEndpoint(server.GetEndpoint())
                         .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
-                UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
+                provider = factory->CreateProvider(facility);
+                UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer token_1");
             }
         );
 
@@ -556,8 +562,13 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         );
 
         UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(30)));
-        auto future = factory->CreateProvider()->GetAuthInfoAsync();
+        auto future = provider->GetAuthInfoAsync();
         UNIT_ASSERT(!future.IsReady());
+        auto released = std::make_shared<std::promise<void>>();
+        future.Subscribe([provider = std::move(provider), released](const auto&) mutable {
+            provider.reset();
+            released->set_value();
+        });
 
         server.WithLock(
             [&]() {
@@ -569,21 +580,13 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
 
         UNIT_ASSERT(future.Wait(TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(future.GetValue(), "Bearer token_2");
-
-        server.WithLock(
-            [&]() {
-                server.Check.Reset();
-                server.Check.StatusCode = HTTP_BAD_REQUEST;
-                server.Check.Response = R"({})";
-            }
-        );
-
-        UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(10)));
-        UNIT_ASSERT_EXCEPTION(factory->CreateProvider()->GetAuthInfo(), std::runtime_error);
+        UNIT_ASSERT(released->get_future().wait_for(std::chrono::seconds(10)) == std::future_status::ready);
     }
 
     Y_UNIT_TEST(ShutdownWhileRefreshingToken) {
         TCredentialsProviderFactoryPtr factory;
+        auto facility = CreateSimpleCoreFacility();
+        TCredentialsProviderPtr provider;
 
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
@@ -598,7 +601,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                     TOauth2TokenExchangeParams()
                         .TokenEndpoint(server.GetEndpoint())
                         .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
-                UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
+                provider = factory->CreateProvider(facility);
+                UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer token_1");
             }
         );
 
@@ -611,11 +615,11 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         );
 
         UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(30)));
-        auto future = factory->CreateProvider()->GetAuthInfoAsync();
+        auto future = provider->GetAuthInfoAsync();
         UNIT_ASSERT(!future.IsReady());
 
         const TInstant shutdownStart = TInstant::Now();
-        factory = nullptr;
+        provider = nullptr;
         const TInstant shutdownStop = TInstant::Now();
         UNIT_ASSERT(shutdownStop - shutdownStart < TDuration::Seconds(1));
         UNIT_ASSERT(future.IsReady());

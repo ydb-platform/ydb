@@ -6,7 +6,7 @@
   "suites": {
     "TPCH_YQL": {
       "query_count": 22,
-      "required_verifier_entry_queries": [],
+      "required_verifier_entry_queries": [1],
       "required_formula_queries": [3, 19],
       "required_verified_queries": [3, 19]
     },

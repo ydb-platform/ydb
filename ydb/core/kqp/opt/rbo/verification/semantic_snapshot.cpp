@@ -11,6 +11,7 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/mkql_date_scaler.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -1823,6 +1824,72 @@ i32 ParseIntervalFromDays(const TExprNode& node) {
     return value;
 }
 
+NJson::TJsonValue ConstantDateValue(std::optional<ui16> value) {
+    auto result = JsonMap();
+    result["type"] = "Date";
+    if (value) {
+        result["kind"] = "literal";
+        result["value"] = static_cast<ui64>(*value);
+    } else {
+        result["kind"] = "null";
+    }
+    return result;
+}
+
+ui16 ParseDirectDateLiteral(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Date") || node.ChildrenSize() != 1 ||
+        !node.Child(0)->IsAtom() ||
+        !IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, false))
+    {
+        Unsupported("Direct Date/Interval fold requires a non-null Date literal");
+    }
+    const auto literal = LiteralExpr(node);
+    return static_cast<ui16>(literal["value"].GetUIntegerSafe());
+}
+
+i64 ParseDirectIntervalLiteral(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Interval") || node.ChildrenSize() != 1 ||
+        !node.Child(0)->IsAtom() ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Interval, false))
+    {
+        Unsupported("Direct Date/Interval fold requires a non-null Interval literal");
+    }
+    const i64 value = ParseInteger<i64>(
+        node.Child(0)->Content(), "Interval");
+    if (!NUdf::IsValidLayoutValue<NUdf::TInterval>(value)) {
+        Unsupported(TStringBuilder()
+            << "Interval literal is outside ("
+            << -static_cast<i64>(NUdf::MAX_TIMESTAMP) << ", "
+            << static_cast<i64>(NUdf::MAX_TIMESTAMP) << "): " << value);
+    }
+    return value;
+}
+
+NJson::TJsonValue ConstantDirectDateIntervalExpr(const TExprNode& node) {
+    const i64 date = ParseDirectDateLiteral(*node.Child(0));
+    const i64 interval = ParseDirectIntervalLiteral(*node.Child(1));
+
+    // MiniKQL converts Date to midnight microseconds, performs the signed
+    // arithmetic, validates the scaled result, then truncates back to days in
+    // mkql_date_scaler.h and mkql_builtins_{add,sub}.cpp. Valid Date and
+    // Interval literals keep either intermediate well inside i64.
+    static_assert(2 * NUdf::MAX_TIMESTAMP < std::numeric_limits<i64>::max());
+    const i64 scaledDate = date * NMiniKQL::DateScale;
+    const i64 scaledResult = node.IsCallable("+")
+        ? scaledDate + interval
+        : scaledDate - interval;
+    if (scaledResult < 0 ||
+        scaledResult >= static_cast<i64>(NUdf::MAX_TIMESTAMP))
+    {
+        return ConstantDateValue(std::nullopt);
+    }
+    return ConstantDateValue(static_cast<ui16>(
+        scaledResult / NMiniKQL::DateScale));
+}
+
 // This is a closed normalization, not general Date/Interval support: both
 // operands must be the exact constant shapes validated above.
 NJson::TJsonValue ConstantDateIntervalExpr(const TExprNode& node) {
@@ -1832,23 +1899,21 @@ NJson::TJsonValue ConstantDateIntervalExpr(const TExprNode& node) {
     {
         Unsupported("Date/Interval fold requires Optional<Date> arithmetic");
     }
+    if (node.Child(0)->IsCallable("Date") &&
+        node.Child(1)->IsCallable("Interval"))
+    {
+        return ConstantDirectDateIntervalExpr(node);
+    }
     const auto date = ParseDateSafeCast(*node.Child(0));
     const i32 days = ParseIntervalFromDays(*node.Child(1));
     if (date) {
         const i64 value = static_cast<i64>(*date) +
             (node.IsCallable("+") ? static_cast<i64>(days) : -static_cast<i64>(days));
         if (value >= 0 && value < static_cast<i64>(NUdf::MAX_DATE)) {
-            auto result = JsonMap();
-            result["kind"] = "literal";
-            result["type"] = "Date";
-            result["value"] = static_cast<ui64>(value);
-            return result;
+            return ConstantDateValue(static_cast<ui16>(value));
         }
     }
-    auto result = JsonMap();
-    result["kind"] = "null";
-    result["type"] = "Date";
-    return result;
+    return ConstantDateValue(std::nullopt);
 }
 
 bool IsDateArithmetic(const TExprNode& node) {

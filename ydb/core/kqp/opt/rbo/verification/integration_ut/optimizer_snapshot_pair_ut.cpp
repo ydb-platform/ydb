@@ -1668,6 +1668,69 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesDirectDateIntervalPushedOlapFilter) {
+        TKikimrRunner kikimr;
+        CreateDateColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, D
+                FROM `/Root/RboDate`
+                WHERE D <= Date('1998-12-01') - Interval('P90D');
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        // Query preparation evaluates the Interval literal through the KQP
+        // literal executor, which requires an active actor context.
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+            host,
+            query,
+            settings
+        ] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertBound = [](const NJson::TJsonValue& predicate) {
+            TVector<const NJson::TJsonValue*> literals;
+            CollectExpressions(predicate, "literal", literals);
+            TVector<ui64> dates;
+            for (const auto* literal : literals) {
+                if ((*literal)["type"].GetStringSafe() == "Date") {
+                    dates.push_back((*literal)["value"].GetUIntegerSafe());
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(dates, TVector<ui64>({10'471}));
+        };
+
+        UNIT_ASSERT(OnlyPlanNode(initial, "scan")["predicate"].IsNull());
+        assertBound(OnlyPlanNode(initial, "filter")["predicate"]);
+
+        const auto& finalScan = OnlyPlanNode(final, "scan");
+        UNIT_ASSERT(!finalScan["predicate"].IsNull());
+        assertBound(finalScan["predicate"]);
+        UNIT_ASSERT(PlanNodes(final, "filter").empty());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesPushedOlapPresencePredicates) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);

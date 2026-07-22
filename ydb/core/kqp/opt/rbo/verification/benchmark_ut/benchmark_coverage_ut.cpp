@@ -1233,7 +1233,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto policy = LoadCoveragePolicy();
         UNIT_ASSERT_VALUES_EQUAL(policy.Suites.size(), 2);
         UNIT_ASSERT(
-            policy.Suites.at(Tpch.Name).RequiredVerifierEntryQueries.empty());
+            policy.Suites.at(Tpch.Name).RequiredVerifierEntryQueries ==
+            std::set<ui32>({1}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
             std::set<ui32>({3, 19}));
@@ -1421,6 +1422,45 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT_VALUES_EQUAL(
             report["verifier_entry_queries"].GetArraySafe().size(),
             statuses.size());
+    }
+
+    Y_UNIT_TEST(PolicyPinsTpchQ1AtVerifierEntry) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const TMap<ui32, TString> statuses = {
+            {1, "UNSUPPORTED"},
+            {3, "FORMULA_EMITTED"},
+            {19, "FORMULA_EMITTED"},
+        };
+
+        auto verifierEntries = OutcomeIds(statuses);
+        const auto current = EvaluateCoveragePolicy(
+            policy,
+            Tpch,
+            selected,
+            statuses,
+            verifierEntries,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(current.VerifierEntryFloorEnforced);
+        UNIT_ASSERT(current.FormulaFloorEnforced);
+        UNIT_ASSERT(current.Violations.empty());
+        UNIT_ASSERT(current.VerifierEntryQueries.contains(1));
+        UNIT_ASSERT(!current.FormulaEmittedQueries.contains(1));
+
+        verifierEntries.erase(1);
+        const auto regressed = EvaluateCoveragePolicy(
+            policy,
+            Tpch,
+            selected,
+            statuses,
+            verifierEntries,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
+        UNIT_ASSERT(regressed.Violations.front().Contains(
+            "q1 regressed before verifier entry with status UNSUPPORTED"));
     }
 
     Y_UNIT_TEST(PolicyVerifierEntryFloorAcceptsDeeperOutcomes) {

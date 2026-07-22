@@ -1,7 +1,11 @@
 import copy
 import unittest
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import SnapshotError, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    MAX_BOUND_DEPTH,
+    SnapshotError,
+    parse_snapshot,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import INTEGER_TYPES
 
 
@@ -133,6 +137,40 @@ def decimal_div_snapshot(
         },
     }
     value["plan"]["output"] = ["a.amount"]
+    return value
+
+
+def if_present_snapshot():
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"][0]["nullable"] = True
+    value["plan"]["nodes"][1]["predicate"] = {
+        "kind": "eq",
+        "left": {
+            "kind": "if_present",
+            "optional": {"kind": "column", "column": "a.k"},
+            "present": {"kind": "bound", "depth": 0},
+            "missing": {"kind": "literal", "type": "Int64", "value": 0},
+            "type": "Int64",
+            "nullable": False,
+        },
+        "right": {"kind": "literal", "type": "Int64", "value": 1},
+    }
+    return value
+
+
+def if_snapshot():
+    value = minimal_snapshot()
+    value["plan"]["nodes"][1]["predicate"] = {
+        "kind": "if",
+        "condition": {
+            "kind": "exists",
+            "arg": {"kind": "column", "column": "a.flag"},
+        },
+        "then": {"kind": "literal", "type": "Bool", "value": True},
+        "else": {"kind": "literal", "type": "Bool", "value": False},
+        "type": "Bool",
+        "nullable": False,
+    }
     return value
 
 
@@ -370,6 +408,203 @@ class SnapshotTest(unittest.TestCase):
         nullable["schema"]["tables"][0]["columns"][0]["nullable"] = True
         with self.assertRaisesRegex(SnapshotError, "nullability must equal the OR"):
             parse_snapshot(nullable)
+
+    def test_if_present_has_exact_scoped_unary_handler_semantics(self):
+        snapshot = parse_snapshot(if_present_snapshot())
+        expression = snapshot.plan.nodes[1].predicate.args[0]
+        self.assertEqual(
+            (expression.kind, expression.result_type, expression.nullable),
+            ("if_present", "Int64", False),
+        )
+        self.assertEqual(expression.args[1].depth, 0)
+
+        nullable = if_present_snapshot()
+        nullable["plan"]["nodes"][1]["predicate"] = {
+            "kind": "if_present",
+            "optional": {"kind": "column", "column": "a.k"},
+            "present": {"kind": "column", "column": "a.flag"},
+            "missing": {"kind": "null", "type": "Bool"},
+            "type": "Bool",
+            "nullable": True,
+        }
+        parse_snapshot(nullable)
+
+        opaque = if_present_snapshot()
+        opaque["plan"]["nodes"][1]["predicate"]["left"]["present"] = {
+            "kind": "opaque",
+            "fingerprint": "use-bound",
+            "type": "Int64",
+            "nullable": False,
+            "args": [{"kind": "bound", "depth": 0}],
+        }
+        parse_snapshot(opaque)
+
+    def test_if_and_exists_have_exact_types_and_nullability(self):
+        snapshot = parse_snapshot(if_snapshot())
+        expression = snapshot.plan.nodes[1].predicate
+        self.assertEqual(
+            (expression.kind, expression.result_type, expression.nullable),
+            ("if", "Bool", False),
+        )
+        self.assertEqual(expression.args[0].kind, "exists")
+
+        optional_condition = if_snapshot()
+        optional_condition["plan"]["nodes"][1]["predicate"]["condition"] = {
+            "kind": "column",
+            "column": "a.flag",
+        }
+        optional_condition["plan"]["nodes"][1]["predicate"]["nullable"] = True
+        parse_snapshot(optional_condition)
+
+    def test_if_and_exists_fail_closed_for_invalid_contracts(self):
+        wrong_condition = if_snapshot()
+        wrong_condition["plan"]["nodes"][1]["predicate"]["condition"] = {
+            "kind": "column",
+            "column": "a.k",
+        }
+        with self.assertRaisesRegex(SnapshotError, "If condition must be Boolean"):
+            parse_snapshot(wrong_condition)
+
+        wrong_branch = if_snapshot()
+        wrong_branch["plan"]["nodes"][1]["predicate"]["then"] = {
+            "kind": "literal",
+            "type": "Int64",
+            "value": 1,
+        }
+        with self.assertRaisesRegex(SnapshotError, "branch types"):
+            parse_snapshot(wrong_branch)
+
+        wrong_nullability = if_snapshot()
+        wrong_nullability["plan"]["nodes"][1]["predicate"]["condition"] = {
+            "kind": "column",
+            "column": "a.flag",
+        }
+        with self.assertRaisesRegex(SnapshotError, "If nullability"):
+            parse_snapshot(wrong_nullability)
+
+        extra = if_snapshot()
+        extra["plan"]["nodes"][1]["predicate"]["condition"]["type"] = "Bool"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: type"):
+            parse_snapshot(extra)
+
+    def test_nested_if_present_uses_lexical_de_bruijn_depth(self):
+        value = if_present_snapshot()
+        value["schema"]["tables"][0]["columns"].append(
+            {"name": "other", "type": "Int64", "nullable": True}
+        )
+        value["plan"]["nodes"][0]["columns"].append(
+            {"source": "other", "output": "a.other"}
+        )
+        outer = value["plan"]["nodes"][1]["predicate"]["left"]
+        outer["present"] = {
+            "kind": "if_present",
+            "optional": {"kind": "column", "column": "a.other"},
+            "present": {
+                "kind": "add",
+                "left": {"kind": "bound", "depth": 1},
+                "right": {"kind": "bound", "depth": 0},
+                "type": "Int64",
+                "nullable": False,
+            },
+            "missing": {"kind": "bound", "depth": 0},
+            "type": "Int64",
+            "nullable": False,
+        }
+
+        snapshot = parse_snapshot(value)
+        inner = snapshot.plan.nodes[1].predicate.args[0].args[1]
+        self.assertEqual(inner.args[1].args[0].depth, 1)
+        self.assertEqual(inner.args[1].args[1].depth, 0)
+        self.assertEqual(inner.args[2].depth, 0)
+
+    def test_bound_nodes_cannot_escape_their_exact_handler_scope(self):
+        for field in ("optional", "missing"):
+            value = if_present_snapshot()
+            value["plan"]["nodes"][1]["predicate"]["left"][field] = {
+                "kind": "bound",
+                "depth": 0,
+            }
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(SnapshotError, "enclosing IfPresent handler"):
+                    parse_snapshot(value)
+
+        for depth in (-1, True, 1):
+            value = if_present_snapshot()
+            value["plan"]["nodes"][1]["predicate"]["left"]["present"]["depth"] = depth
+            with self.subTest(depth=depth):
+                with self.assertRaises(SnapshotError):
+                    parse_snapshot(value)
+
+        value = minimal_snapshot()
+        value["plan"]["nodes"][1]["predicate"] = {"kind": "bound", "depth": 0}
+        with self.assertRaisesRegex(SnapshotError, "enclosing IfPresent handler"):
+            parse_snapshot(value)
+
+    def test_if_present_binding_depth_has_an_explicit_audit_limit(self):
+        def nested(count):
+            value = if_present_snapshot()
+            expression = {"kind": "literal", "type": "Int64", "value": 1}
+            for _ in range(count):
+                expression = {
+                    "kind": "if_present",
+                    "optional": {"kind": "column", "column": "a.k"},
+                    "present": expression,
+                    "missing": {"kind": "literal", "type": "Int64", "value": 0},
+                    "type": "Int64",
+                    "nullable": False,
+                }
+            value["plan"]["nodes"][1]["predicate"]["left"] = expression
+            return value
+
+        parse_snapshot(nested(MAX_BOUND_DEPTH))
+        with self.assertRaisesRegex(SnapshotError, "binding depth exceeds"):
+            parse_snapshot(nested(MAX_BOUND_DEPTH + 1))
+
+    def test_if_present_annotations_must_match_exactly(self):
+        non_optional = if_present_snapshot()
+        non_optional["schema"]["tables"][0]["columns"][0]["nullable"] = False
+        with self.assertRaisesRegex(SnapshotError, "optional must be nullable"):
+            parse_snapshot(non_optional)
+
+        wrong_present = if_present_snapshot()
+        wrong_present["plan"]["nodes"][1]["predicate"]["left"]["present"] = {
+            "kind": "null",
+            "type": "Int64",
+        }
+        with self.assertRaisesRegex(SnapshotError, "handler type and nullability"):
+            parse_snapshot(wrong_present)
+
+        wrong_missing = if_present_snapshot()
+        wrong_missing["plan"]["nodes"][1]["predicate"]["left"]["missing"] = {
+            "kind": "literal",
+            "type": "Int32",
+            "value": 0,
+        }
+        with self.assertRaisesRegex(SnapshotError, "missing type and nullability"):
+            parse_snapshot(wrong_missing)
+
+        wrong_result = if_present_snapshot()
+        wrong_result["plan"]["nodes"][1]["predicate"]["left"]["type"] = "Int32"
+        with self.assertRaisesRegex(SnapshotError, "handler type and nullability"):
+            parse_snapshot(wrong_result)
+
+    def test_if_present_and_bound_node_schemas_are_closed(self):
+        for field in ("optional", "present", "missing", "type", "nullable"):
+            value = if_present_snapshot()
+            del value["plan"]["nodes"][1]["predicate"]["left"][field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(SnapshotError, f"missing fields: {field}"):
+                    parse_snapshot(value)
+
+        extra = if_present_snapshot()
+        extra["plan"]["nodes"][1]["predicate"]["left"]["args"] = []
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: args"):
+            parse_snapshot(extra)
+
+        bound_extra = if_present_snapshot()
+        bound_extra["plan"]["nodes"][1]["predicate"]["left"]["present"]["type"] = "Int64"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: type"):
+            parse_snapshot(bound_extra)
 
     def test_decimal_division_accepts_only_its_exact_operand_shapes(self):
         for right_type in ("Decimal(7,2)", *sorted(INTEGER_TYPES)):

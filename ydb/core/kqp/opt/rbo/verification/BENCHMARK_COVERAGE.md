@@ -49,9 +49,9 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the nine curated obligations with the pinned
+The checked-in proof floor runs the ten curated obligations with the pinned
 Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3 and
-TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 directly from the policy,
+q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 directly from the policy,
 accepts only `VERIFIED_BOUNDED`, and ignores every ambient
 `RBO_COVERAGE_*` variable:
 
@@ -69,10 +69,10 @@ choose any focused query set:
 set -o pipefail
 RBO_COVERAGE_USE_SOLVER=1 \
 RBO_COVERAGE_TIMEOUT_MS=60000 \
-RBO_COVERAGE_QUERIES=96 \
+RBO_COVERAGE_QUERIES=19 \
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*::TPCDS' 2>&1 | tail -n 100
+  -F '*::TPCH' 2>&1 | tail -n 100
 ```
 
 `RBO_COVERAGE_QUERIES` accepts comma-separated IDs and inclusive ranges, for
@@ -98,10 +98,11 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has two monotonic contracts. The formula-construction
-floor requires TPCH q3 and TPC-DS q3, q42, q48, q50, q52, q55, q61, q71, q88,
-q90, q93, and q96; it is enforced only for a complete formula-only suite. The
-proof floor requires TPCH q3 and TPC-DS q3, q42, q48, q52, q55, q90, q93, and
-q96; dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
+floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q50, q52, q55, q61,
+q71, q88, q90, q93, and q96; it is enforced only for a complete formula-only
+suite. The proof floor requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52,
+q55, q90, q93, and q96; dedicated hermetic tests require each one to remain
+`VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
 are allowed without editing either floor. Policy parsing and evaluation fail
@@ -142,25 +143,25 @@ StageGraph remains a separate diagnostic step.
 
 ## Current measured formula coverage
 
-The complete post-String-order full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the thirteen-query floor below and recorded a
+The complete post-`IfPresent` full-corpus dashboard was rerun on 2026-07-22 in
+formula-only mode. It emitted the fourteen-query floor below and recorded a
 current outcome for every workload entry. `FORMULA_EMITTED` is not a solver
-proof.
+proof. Both complete suite reports satisfied the checked-in coverage policy.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 1 (q3) | 18 | 3 | 22 |
+| TPCH_YQL | 2 (q3, q19) | 17 | 3 | 22 |
 | TPCDS_YQL | 12 (q3, q42, q48, q50, q52, q55, q61, q71, q88, q90, q93, q96) | 58 | 29 | 99 |
 
-The supported formula slice is 13/121 queries (10.7%). This is a useful end-to-end
+The supported formula slice is 14/121 queries (11.6%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 108 workload entries or larger
+slice rather than a claim about the remaining 107 workload entries or larger
 inputs.
 
 ### TPCH inventory
 
 Optimizer preparation failed for q16, q18, and q20 on unsupported PG
-semantics. Eighteen queries failed closed as follows; a query can have both an
+semantics. Seventeen queries failed closed as follows; a query can have both an
 initial and final reason.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -173,18 +174,19 @@ initial and final reason.
 | OLAP `string_contains` | - | q9 |
 | Unsupported OLAP non-callable node | - | q1, q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
-| `IfPresent` | - | q19 |
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
 the deeper scalar and OLAP reasons above. Restricted static `IN` similarly
-removed the first blocker from q12 and q19. Exact Decimal comparison and
-non-null integral `SafeCast` support remove q19's initial blockers; it now fails
-closed only on final `IfPresent`.
+removed the first blocker from q12 and q19. Exact Decimal comparison,
+non-null integral `SafeCast`, scoped unary `IfPresent`, and its restricted
+static-membership lowering now let q19 construct a complete formula and prove
+bounded equivalence.
 
 Exact Decimal arithmetic, ordering, and SUM remove `DecimalMul`, the Decimal
 sort key, and the widened partial/final aggregate as q3's first blockers.
 Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
-construct a complete formula, raising TPCH to 1/22. q5 reaches initial `Map` and
+construct a complete formula for q3. Together with q19, that raises TPCH to
+2/22. q5 reaches initial `Map` and
 a final OLAP non-callable; q8 reaches `Map` at both boundaries; and q10 reaches
 initial `Map` and a final OLAP non-callable. Those queries remain unsupported.
 
@@ -194,10 +196,10 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 49 of the 58
+The exporter matrix below covers the boundary failures among 48 of the 58
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
-The nine queries that pass export and fail closed inside the verifier are listed
+The ten queries that pass export and fail closed inside the verifier are listed
 after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -209,21 +211,22 @@ after the matrix.
 | Decimal `SafeCast` result is nullable | q18, q21, q40, q65 | q18 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q80, q82 |
-| Callable `/` | q73, q78 | q78 |
+| Callable `/` | q73, q78 | q73, q78 |
 | Callable `Concat` | q84 | q84 |
-| Callable `IfPresent` | - | q34, q68, q73, q79 |
-| Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q99 |
+| Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q79, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
-| Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q75, q85 |
+| Type `Double` | q7, q13, q22, q26, q34, q75, q85 | q7, q13, q22, q26, q34, q75, q85 |
 | Type `Interval` | q5, q37, q72, q77, q80, q82 | q72 |
 
 After both snapshots export, q4 fails before materializing a 13,824-row join
 output above the 4,096-row relation bound. q11's join matching and q25/q29's
 grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
-q46 and q91 each reject 32,640 Merge candidate-row pairs, q64 rejects an
-8,192-row join output, and q74 fails closed because aggregate `max` is not
-modeled.
+q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
+16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
+fails closed because aggregate `max` is not modeled. The focused q68 run passed
+both snapshot exports and reached that Merge audit cap after 11,175 ms of
+verifier work.
 
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
@@ -243,20 +246,30 @@ Exact bounded String/Utf8 comparison and ordering then move q42 and q50 through
 formula construction and raise the measured TPC-DS slice to 12/99. Every other
 former String blocker now exposes a deeper reason: q4, q11, q25, q29, q46, q64,
 and q91 reach the construction bounds enumerated above; q65 retains its initial
-nullable Decimal `SafeCast`; q68 reaches final `IfPresent`; and q76 reaches its
-final OLAP non-callable. q31 still reaches its construction cap and q74 reaches
-aggregate `max`. q5 now reaches initial `Interval` and a final OLAP non-callable;
-q75 reaches `Double` in both snapshots; and q80 reaches initial `Interval` and a
-final OLAP non-callable.
+nullable Decimal `SafeCast`; and q76 reaches its final OLAP non-callable. Exact
+`If`, `Exists`, and scoped unary `IfPresent` move q34 to `Double` at both
+boundaries, q73 to `/` at both boundaries, q79 to `Substring` at both
+boundaries, and q68 through both exports to the Merge construction cap. q31
+still reaches its construction cap and q74 reaches aggregate `max`. q5 now
+reaches initial `Interval` and a final OLAP non-callable; q75 reaches `Double`
+in both snapshots; and q80 reaches initial `Interval` and a final OLAP
+non-callable.
 
 ## Curated proof floor and focused results
 
-- The complete current-code proof floor returns `VERIFIED_BOUNDED` for TPCH q3
-  and TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96, each at two rows per
-  referenced table and two tasks. These are nine bounded proofs (7.4% of the
+- The complete current-code proof floor returns `VERIFIED_BOUNDED` for TPCH q3,
+  q19 and TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96, each at two rows per
+  referenced table and two tasks. These are ten bounded proofs (8.3% of the
   workload) for the modeled pre-physical semantics, not unbounded
   SQL-equivalence claims. In that run TPCH q3 spent 131 ms preparing and 11,845
   ms verifying; q42 spent 95 ms preparing and 15,210 ms verifying.
+
+- TPCH q19 newly reaches formula construction through exact scoped unary
+  `IfPresent` and restricted static-membership lowering. Its focused
+  formula-only run spent 117 ms preparing and 290 ms in verification. A focused
+  solver run spent 116 ms preparing and 851 ms in verification before returning
+  `VERIFIED_BOUNDED`; the checked-in floor now retains that two-row/two-task
+  obligation.
 
 - TPC-DS q42 newly reaches formula construction through exact String ordering.
   The focused formula-only run spent 1,935 ms in verifier/formula construction.
@@ -315,8 +328,10 @@ final OLAP non-callable.
   item, not a bounded proof and not a known optimizer bug.
 
 No proof-floor or focused run has confirmed an optimizer correctness bug. The
-q88 candidate above was a verifier-modeling false positive; replay remains the
-confirmation boundary for any future symbolic counterexample.
+new q19 result is a bounded proof, while q68 is a construction-bound coverage
+gap rather than a candidate divergence. The q88 candidate above was a
+verifier-modeling false positive; replay remains the confirmation boundary for
+any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

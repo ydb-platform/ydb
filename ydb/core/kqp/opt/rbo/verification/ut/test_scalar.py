@@ -40,6 +40,24 @@ def _arithmetic(kind, scalar_type, left, right, nullable=False):
     )
 
 
+def _if_present(optional, present, missing, scalar_type, nullable=False):
+    return Expr(
+        kind="if_present",
+        args=(optional, present, missing),
+        result_type=scalar_type,
+        nullable=nullable,
+    )
+
+
+def _if(condition, then, otherwise, scalar_type, nullable=False):
+    return Expr(
+        kind="if",
+        args=(condition, then, otherwise),
+        result_type=scalar_type,
+        nullable=nullable,
+    )
+
+
 def _ground(term):
     if term.operation in {"bool", "int"}:
         return term.atom
@@ -58,6 +76,8 @@ def _ground(term):
         return values[0] * values[1]
     if term.operation == "mod":
         return values[0] % values[1]
+    if term.operation == "ite":
+        return values[1] if values[0] else values[2]
     raise AssertionError(f"non-ground operation {term.operation!r}")
 
 
@@ -217,6 +237,310 @@ class DecimalCastDispatchTest(unittest.TestCase):
             "Decimal(3,2)",
         )
         self.assertEqual(actual, Value("Decimal(3,2)", smt.FALSE, cast_value))
+
+
+class ConditionalScalarTest(unittest.TestCase):
+    def test_exists_is_the_exact_non_null_optional_presence_test(self):
+        expression = Expr(
+            kind="exists",
+            args=(Expr(kind="column", column="optional"),),
+        )
+        for is_null, expected in ((False, True), (True, False)):
+            with self.subTest(is_null=is_null):
+                actual = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "optional": Value(
+                            "Int64",
+                            smt.bool_value(is_null),
+                            smt.int_value(17),
+                        )
+                    },
+                )
+                self.assertEqual(actual.type, "Bool")
+                self.assertFalse(_ground(actual.is_null))
+                self.assertEqual(_ground(actual.value), expected)
+
+    def test_if_propagates_optional_condition_and_selects_one_branch(self):
+        expression = _if(
+            Expr(kind="column", column="condition"),
+            Expr(kind="column", column="then"),
+            Expr(kind="column", column="else"),
+            "Int32",
+            nullable=True,
+        )
+        for condition_is_null in (False, True):
+            for condition_value in (False, True):
+                for then_is_null in (False, True):
+                    for else_is_null in (False, True):
+                        with self.subTest(
+                            condition_is_null=condition_is_null,
+                            condition_value=condition_value,
+                            then_is_null=then_is_null,
+                            else_is_null=else_is_null,
+                        ):
+                            actual = Encoder(smt.Script()).evaluate(
+                                expression,
+                                {
+                                    "condition": Value(
+                                        "Bool",
+                                        smt.bool_value(condition_is_null),
+                                        smt.bool_value(condition_value),
+                                    ),
+                                    "then": Value(
+                                        "Int32",
+                                        smt.bool_value(then_is_null),
+                                        smt.int_value(11),
+                                    ),
+                                    "else": Value(
+                                        "Int32",
+                                        smt.bool_value(else_is_null),
+                                        smt.int_value(22),
+                                    ),
+                                },
+                            )
+                            selected_null = then_is_null if condition_value else else_is_null
+                            selected_value = 11 if condition_value else 22
+                            self.assertEqual(
+                                _ground(actual.is_null),
+                                condition_is_null or selected_null,
+                            )
+                            self.assertEqual(_ground(actual.value), selected_value)
+
+    def test_lowered_optional_membership_has_the_same_filter_truth(self):
+        lookup = Expr(kind="column", column="optional")
+        items = (_literal("Int64", 1), _literal("Int64", 2))
+        initial = Expr(kind="in", args=(lookup, *items))
+        lowered = _if(
+            Expr(kind="exists", args=(lookup,)),
+            _if_present(
+                lookup,
+                Expr(
+                    kind="in",
+                    args=(Expr(kind="bound", depth=0), *items),
+                ),
+                _literal("Bool", False),
+                "Bool",
+            ),
+            _literal("Bool", False),
+            "Bool",
+        )
+
+        for is_null, value in (
+            (True, 1),
+            (False, 1),
+            (False, 2),
+            (False, 3),
+        ):
+            row = {
+                "optional": Value(
+                    "Int64",
+                    smt.bool_value(is_null),
+                    smt.int_value(value),
+                )
+            }
+            encoder = Encoder(smt.Script())
+            before = encoder.evaluate(initial, row)
+            after = encoder.evaluate(lowered, row)
+            before_is_true = smt.and_(smt.not_(before.is_null), before.value)
+            after_is_true = smt.and_(smt.not_(after.is_null), after.value)
+            with self.subTest(is_null=is_null, value=value):
+                self.assertEqual(_ground(before_is_true), _ground(after_is_true))
+
+
+class IfPresentScalarTest(unittest.TestCase):
+    def test_optional_payload_is_bound_non_null_and_selected_exactly(self):
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(kind="bound", depth=0),
+            _literal("Int64", -1),
+            "Int64",
+        )
+        for optional_is_null, expected in ((False, 17), (True, -1)):
+            with self.subTest(optional_is_null=optional_is_null):
+                actual = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "optional": Value(
+                            "Int64",
+                            smt.bool_value(optional_is_null),
+                            smt.int_value(17),
+                        )
+                    },
+                )
+                self.assertEqual(actual.type, "Int64")
+                self.assertFalse(_ground(actual.is_null))
+                self.assertEqual(_ground(actual.value), expected)
+
+    def test_bound_payload_flows_through_opaque_arguments(self):
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(
+                kind="opaque",
+                args=(Expr(kind="bound", depth=0),),
+                result_type="Int64",
+                nullable=False,
+                fingerprint="use-bound",
+            ),
+            _literal("Int64", 0),
+            "Int64",
+        )
+        actual = Encoder(smt.Script()).evaluate(
+            expression,
+            {"optional": Value("Int64", smt.FALSE, smt.int_value(17))},
+        )
+        self.assertEqual(actual.value.operation, "f_0")
+        self.assertEqual(actual.value.arguments, (smt.FALSE, smt.int_value(17)))
+
+    def test_nested_handlers_use_nearest_first_de_bruijn_bindings(self):
+        inner = _if_present(
+            Expr(kind="column", column="inner"),
+            _arithmetic(
+                "add",
+                "Int64",
+                Expr(kind="bound", depth=1),
+                Expr(kind="bound", depth=0),
+            ),
+            Expr(kind="bound", depth=0),
+            "Int64",
+        )
+        expression = _if_present(
+            Expr(kind="column", column="outer"),
+            inner,
+            _literal("Int64", 0),
+            "Int64",
+        )
+        for outer_is_null, inner_is_null, expected in (
+            (True, False, 0),
+            (True, True, 0),
+            (False, True, 10),
+            (False, False, 30),
+        ):
+            with self.subTest(
+                outer_is_null=outer_is_null,
+                inner_is_null=inner_is_null,
+            ):
+                actual = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "outer": Value(
+                            "Int64",
+                            smt.bool_value(outer_is_null),
+                            smt.int_value(10),
+                        ),
+                        "inner": Value(
+                            "Int64",
+                            smt.bool_value(inner_is_null),
+                            smt.int_value(20),
+                        ),
+                    },
+                )
+                self.assertFalse(_ground(actual.is_null))
+                self.assertEqual(_ground(actual.value), expected)
+
+    def test_selected_branch_controls_both_nullness_and_value(self):
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(kind="column", column="present"),
+            Expr(kind="column", column="missing"),
+            "Int32",
+            nullable=True,
+        )
+        for optional_is_null in (False, True):
+            for present_is_null in (False, True):
+                for missing_is_null in (False, True):
+                    with self.subTest(
+                        optional_is_null=optional_is_null,
+                        present_is_null=present_is_null,
+                        missing_is_null=missing_is_null,
+                    ):
+                        actual = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "optional": Value(
+                                    "Uint8",
+                                    smt.bool_value(optional_is_null),
+                                    smt.int_value(7),
+                                ),
+                                "present": Value(
+                                    "Int32",
+                                    smt.bool_value(present_is_null),
+                                    smt.int_value(11),
+                                ),
+                                "missing": Value(
+                                    "Int32",
+                                    smt.bool_value(missing_is_null),
+                                    smt.int_value(22),
+                                ),
+                            },
+                        )
+                        selected_null = (
+                            missing_is_null if optional_is_null else present_is_null
+                        )
+                        selected_value = 22 if optional_is_null else 11
+                        self.assertEqual(_ground(actual.is_null), selected_null)
+                        self.assertEqual(_ground(actual.value), selected_value)
+
+    def test_decimal_headroom_is_the_conservative_branch_maximum(self):
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(kind="column", column="present"),
+            Expr(kind="column", column="missing"),
+            "Decimal(5,2)",
+        )
+        row = {
+            "optional": Value("Int64", smt.FALSE, smt.ONE),
+            "present": Value("Decimal(5,2)", smt.FALSE, smt.int_value(25), 25),
+            "missing": Value("Decimal(5,2)", smt.FALSE, smt.int_value(40), 40),
+        }
+        actual = Encoder(smt.Script()).evaluate(expression, row)
+        self.assertEqual(actual.decimal_finite_abs_bound, 40)
+
+        unknown = dict(row)
+        unknown["missing"] = Value(
+            "Decimal(5,2)",
+            smt.FALSE,
+            smt.int_value(40),
+        )
+        actual = Encoder(smt.Script()).evaluate(expression, unknown)
+        self.assertIsNone(actual.decimal_finite_abs_bound)
+
+    def test_string_selection_does_not_allocate_an_independent_rank(self):
+        script = smt.Script()
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(
+                kind="opaque",
+                result_type="String",
+                nullable=False,
+                fingerprint="present-string",
+            ),
+            Expr(
+                kind="opaque",
+                result_type="String",
+                nullable=False,
+                fingerprint="missing-string",
+            ),
+            "String",
+        )
+        result = Encoder(script).evaluate(
+            expression,
+            {
+                "optional": Value(
+                    "Int64",
+                    script.fresh_constant("optional_is_null", smt.BOOL),
+                    smt.ONE,
+                )
+            },
+        )
+        self.assertEqual(result.value.operation, "ite")
+
+        script.render()
+        self.assertEqual(script.string_literals, {0: "", 1: "\0"})
+
+    def test_unscoped_bound_fails_closed_in_the_encoder(self):
+        with self.assertRaises(AssertionError):
+            Encoder(smt.Script()).evaluate(Expr(kind="bound", depth=0), {})
 
 
 class IntegerDomainTest(unittest.TestCase):

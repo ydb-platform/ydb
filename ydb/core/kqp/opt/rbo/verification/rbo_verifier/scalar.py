@@ -52,9 +52,21 @@ class Encoder:
         self._opaque: dict[tuple[object, ...], _OpaqueFunctions] = {}
 
     def evaluate(self, expression: Expr, row: Mapping[str, Value]) -> Value:
+        return self._evaluate(expression, row, ())
+
+    def _evaluate(
+        self,
+        expression: Expr,
+        row: Mapping[str, Value],
+        bindings: tuple[Value, ...],
+    ) -> Value:
         if expression.kind == "column":
             assert expression.column is not None
             return row[expression.column]
+
+        if expression.kind == "bound":
+            assert expression.depth is not None and 0 <= expression.depth < len(bindings)
+            return bindings[expression.depth]
 
         if expression.kind == "void":
             return Value(VOID, smt.FALSE, smt.FALSE)
@@ -72,16 +84,26 @@ class Encoder:
             return self.null(expression.result_type)
 
         if expression.kind == "not":
-            argument = self.evaluate(expression.args[0], row)
+            argument = self._evaluate(expression.args[0], row, bindings)
             return Value(BOOL, argument.is_null, smt.not_(argument.value))
 
+        if expression.kind == "exists":
+            argument = self._evaluate(expression.args[0], row, bindings)
+            return Value(BOOL, smt.FALSE, smt.not_(argument.is_null))
+
         if expression.kind in {"and", "or"}:
-            arguments = tuple(self.evaluate(argument, row) for argument in expression.args)
+            arguments = tuple(
+                self._evaluate(argument, row, bindings)
+                for argument in expression.args
+            )
             return self._and(arguments) if expression.kind == "and" else self._or(arguments)
 
         if expression.kind == "in":
-            lookup = self.evaluate(expression.args[0], row)
-            items = tuple(self.evaluate(item, row) for item in expression.args[1:])
+            lookup = self._evaluate(expression.args[0], row, bindings)
+            items = tuple(
+                self._evaluate(item, row, bindings)
+                for item in expression.args[1:]
+            )
             comparisons = tuple(
                 Value(
                     BOOL,
@@ -93,8 +115,8 @@ class Encoder:
             return self._or(comparisons)
 
         if expression.kind in {"eq", "lt", "lte", "gt", "gte"}:
-            left = self.evaluate(expression.args[0], row)
-            right = self.evaluate(expression.args[1], row)
+            left = self._evaluate(expression.args[0], row, bindings)
+            right = self._evaluate(expression.args[1], row, bindings)
             return self._comparison(
                 expression.kind,
                 left,
@@ -104,8 +126,8 @@ class Encoder:
 
         if expression.kind in {"add", "sub", "mul", "div"}:
             assert expression.result_type is not None
-            left = self.evaluate(expression.args[0], row)
-            right = self.evaluate(expression.args[1], row)
+            left = self._evaluate(expression.args[0], row, bindings)
+            right = self._evaluate(expression.args[1], row, bindings)
             is_null = smt.or_(left.is_null, right.is_null)
             if decimal.is_type(expression.result_type):
                 if expression.kind == "add":
@@ -148,7 +170,7 @@ class Encoder:
 
         if expression.kind == "cast_decimal":
             assert expression.result_type is not None
-            argument = self.evaluate(expression.args[0], row)
+            argument = self._evaluate(expression.args[0], row, bindings)
             return Value(
                 expression.result_type,
                 smt.FALSE,
@@ -159,8 +181,64 @@ class Encoder:
                 ),
             )
 
+        if expression.kind == "if":
+            assert expression.result_type is not None
+            condition = self._evaluate(expression.args[0], row, bindings)
+            then = self._evaluate(expression.args[1], row, bindings)
+            otherwise = self._evaluate(expression.args[2], row, bindings)
+            assert condition.type == BOOL
+            assert then.type == otherwise.type == expression.result_type
+            bound = (
+                _selected_decimal_finite_abs_bound(then, otherwise)
+                if decimal.is_type(expression.result_type)
+                else None
+            )
+            # MiniKQL propagates a NULL optional condition without selecting a
+            # branch.  Both branch terms are nevertheless safe to build because
+            # the closed-world exporter admits only deterministic, total trees.
+            return Value(
+                expression.result_type,
+                smt.or_(
+                    condition.is_null,
+                    smt.ite(condition.value, then.is_null, otherwise.is_null),
+                ),
+                smt.ite(condition.value, then.value, otherwise.value),
+                bound,
+            )
+
+        if expression.kind == "if_present":
+            assert expression.result_type is not None
+            optional = self._evaluate(expression.args[0], row, bindings)
+            payload = Value(
+                optional.type,
+                smt.FALSE,
+                optional.value,
+                optional.decimal_finite_abs_bound,
+            )
+            present = self._evaluate(
+                expression.args[1],
+                row,
+                (payload, *bindings),
+            )
+            missing = self._evaluate(expression.args[2], row, bindings)
+            assert present.type == missing.type == expression.result_type
+            bound = (
+                _selected_decimal_finite_abs_bound(present, missing)
+                if decimal.is_type(expression.result_type)
+                else None
+            )
+            # The result is exactly one already-typed branch value.  Its domain
+            # constraints and String rank therefore come from the branches;
+            # registering the derived ite would only enlarge the String quotient.
+            return Value(
+                expression.result_type,
+                smt.ite(optional.is_null, missing.is_null, present.is_null),
+                smt.ite(optional.is_null, missing.value, present.value),
+                bound,
+            )
+
         if expression.kind == "opaque":
-            return self._evaluate_opaque(expression, row)
+            return self._evaluate_opaque(expression, row, bindings)
 
         raise AssertionError(f"unknown expression kind {expression.kind!r}")
 
@@ -180,11 +258,19 @@ class Encoder:
             smt.and_(smt.not_(left.is_null), smt.not_(right.is_null), smt.eq(left.value, right.value)),
         )
 
-    def _evaluate_opaque(self, expression: Expr, row: Mapping[str, Value]) -> Value:
+    def _evaluate_opaque(
+        self,
+        expression: Expr,
+        row: Mapping[str, Value],
+        bindings: tuple[Value, ...],
+    ) -> Value:
         assert expression.fingerprint is not None
         assert expression.result_type is not None
         assert expression.nullable is not None
-        arguments = tuple(self.evaluate(argument, row) for argument in expression.args)
+        arguments = tuple(
+            self._evaluate(argument, row, bindings)
+            for argument in expression.args
+        )
         key = (
             expression.fingerprint,
             expression.result_type,
@@ -336,6 +422,23 @@ def _default(scalar_type: str) -> smt.Term:
     if scalar_family == "unit":
         return smt.FALSE
     raise AssertionError(f"unknown scalar type {scalar_type!r}")
+
+
+def _selected_decimal_finite_abs_bound(
+    present: Value,
+    missing: Value,
+) -> int | None:
+    """Bound either branch only when both alternatives carry exact headroom."""
+
+    if (
+        present.decimal_finite_abs_bound is None
+        or missing.decimal_finite_abs_bound is None
+    ):
+        return None
+    return max(
+        present.decimal_finite_abs_bound,
+        missing.decimal_finite_abs_bound,
+    )
 
 
 def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:

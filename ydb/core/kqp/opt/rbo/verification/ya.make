@@ -10,6 +10,7 @@ PY_SRCS(
     rbo_verifier/scalar.py
     rbo_verifier/smt.py
     rbo_verifier/stages.py
+    rbo_verifier/string_order.py
     rbo_verifier/types.py
     rbo_verifier/verify.py
 )

@@ -17,6 +17,8 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 
@@ -1054,6 +1056,132 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "comparison operand types differ");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsStringUtf8ScalarComparisonsWithoutWideningStaticSqlIn) {
+        for (const auto& [callable, kind] : TVector<std::pair<TString, TString>>{
+            {"==", "eq"},
+            {"<", "lt"},
+            {"<=", "lte"},
+            {">", "gt"},
+            {">=", "gte"},
+        }) {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    {
+                        TypedLiteral(
+                            ctx,
+                            "String",
+                            "e\xCC\x81",
+                            ScalarType(ctx, NUdf::EDataSlot::String)),
+                        TypedLiteral(
+                            ctx,
+                            "Utf8",
+                            "\xC3\xA9",
+                            ScalarType(ctx, NUdf::EDataSlot::Utf8)),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), kind);
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["type"].GetStringSafe(), "String");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Utf8");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "!=",
+                    {
+                        TypedLiteral(
+                            ctx,
+                            "Utf8",
+                            "a",
+                            ScalarType(ctx, NUdf::EDataSlot::Utf8)),
+                        TypedLiteral(
+                            ctx,
+                            "String",
+                            "ab",
+                            ScalarType(ctx, NUdf::EDataSlot::String)),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "not");
+            UNIT_ASSERT_VALUES_EQUAL(expression["arg"]["kind"].GetStringSafe(), "eq");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalString = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String,
+                true);
+            const auto* optionalUtf8 = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Utf8,
+                true);
+            const auto& table = AddTable(ctx, "/Root/TextComparison", {
+                {"bytes", "String", false},
+                {"text", "Utf8", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"bytes", "text"});
+            SetExactOutputType(ctx, *read, {
+                {"a.bytes", optionalString},
+                {"a.text", optionalUtf8},
+            });
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "IsNotDistinctFrom",
+                            {
+                                TypedMember(ctx, "a.bytes", optionalString),
+                                TypedMember(ctx, "a.text", optionalUtf8),
+                            },
+                            ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& expression = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "eq");
+            UNIT_ASSERT(expression["null_safe"].GetBooleanSafe());
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* stringType = ScalarType(ctx, NUdf::EDataSlot::String);
+            const auto* utf8Type = ScalarType(ctx, NUdf::EDataSlot::Utf8);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    TypedStaticTuple(
+                        ctx,
+                        {TypedLiteral(ctx, "String", "a", stringType)},
+                        stringType),
+                    TypedLiteral(ctx, "Utf8", "a", utf8Type),
+                    SqlInOptions(ctx, {}),
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "not equality-compatible");
         }
     }
 
@@ -3885,6 +4013,156 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(StringOrderingContractMatchesRuntimeComparator) {
+        const auto value = [](const TString& bytes) {
+            return NUdf::TUnboxedValuePod::Embedded(
+                NUdf::TStringRef(bytes.data(), bytes.size()));
+        };
+        const auto expectedSign = [](size_t left, size_t right) {
+            return left == right ? 0 : (left < right ? -1 : 1);
+        };
+        const auto assertComparison = [&](int comparison, int expected) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                comparison == 0 ? 0 : (comparison < 0 ? -1 : 1),
+                expected);
+        };
+
+        const TVector<TString> validUtf8 = {
+            TString(),
+            TString("\0", 1),
+            TString("\0\0", 2),
+            TString("a"),
+            TString("a\0", 2),
+            TString("aa"),
+            TString("e\xCC\x81", 3), // NFD: e + combining acute accent.
+            TString("z"),
+            TString("\x7F", 1),
+            TString("\xC3\xA9", 2), // NFC: precomposed e-acute.
+            TString("\xE4\xB8\xAD", 3),
+        };
+        for (size_t left = 0; left < validUtf8.size(); ++left) {
+            for (size_t right = 0; right < validUtf8.size(); ++right) {
+                const int expected = expectedSign(left, right);
+                assertComparison(
+                    NUdf::CompareValues<NUdf::EDataSlot::String>(
+                        value(validUtf8[left]),
+                        value(validUtf8[right])),
+                    expected);
+                assertComparison(
+                    NUdf::CompareValues<NUdf::EDataSlot::Utf8>(
+                        value(validUtf8[left]),
+                        value(validUtf8[right])),
+                    expected);
+            }
+        }
+
+        const TVector<TString> arbitraryBytes = {
+            TString("\x7F", 1),
+            TString(1, static_cast<char>(0x80)),
+            TString("\xC3\xA9", 2),
+            TString(1, static_cast<char>(0xFF)),
+        };
+        for (size_t left = 0; left < arbitraryBytes.size(); ++left) {
+            for (size_t right = 0; right < arbitraryBytes.size(); ++right) {
+                assertComparison(
+                    NUdf::CompareValues<NUdf::EDataSlot::String>(
+                        value(arbitraryBytes[left]),
+                        value(arbitraryBytes[right])),
+                    expectedSign(left, right));
+            }
+        }
+
+        UNIT_ASSERT(NUdf::IsComparable(
+            NUdf::EDataSlot::String,
+            NUdf::EDataSlot::Utf8));
+        UNIT_ASSERT(NUdf::IsComparable(
+            NUdf::EDataSlot::Utf8,
+            NUdf::EDataSlot::String));
+    }
+
+    Y_UNIT_TEST(StringHashContractIsTypeIndependent) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment environment(alloc);
+        auto* stringType = NKikimr::NMiniKQL::TDataType::Create(
+            NUdf::GetDataTypeInfo(NUdf::EDataSlot::String).TypeId,
+            environment);
+        auto* utf8Type = NKikimr::NMiniKQL::TDataType::Create(
+            NUdf::GetDataTypeInfo(NUdf::EDataSlot::Utf8).TypeId,
+            environment);
+        auto* optionalStringType = NKikimr::NMiniKQL::TOptionalType::Create(
+            stringType,
+            environment);
+        auto* optionalUtf8Type = NKikimr::NMiniKQL::TOptionalType::Create(
+            utf8Type,
+            environment);
+
+        const auto stringHasher = NKikimr::NMiniKQL::MakeHashImpl(stringType);
+        const auto utf8Hasher = NKikimr::NMiniKQL::MakeHashImpl(utf8Type);
+        const auto optionalStringHasher = NKikimr::NMiniKQL::MakeHashImpl(
+            optionalStringType);
+        const auto optionalUtf8Hasher = NKikimr::NMiniKQL::MakeHashImpl(
+            optionalUtf8Type);
+
+        NKikimr::NMiniKQL::TBlockTypeHelper blockTypeHelper;
+        const auto stringBlockHasher = blockTypeHelper.MakeHasher(stringType);
+        const auto utf8BlockHasher = blockTypeHelper.MakeHasher(utf8Type);
+        const auto optionalStringBlockHasher = blockTypeHelper.MakeHasher(
+            optionalStringType);
+        const auto optionalUtf8BlockHasher = blockTypeHelper.MakeHasher(
+            optionalUtf8Type);
+
+        const TVector<TString> bytes = {
+            TString(),
+            TString("\0", 1),
+            TString("a\0b", 3),
+            TString(1, static_cast<char>(0x80)),
+            TString("\xC3\xA9", 2),
+            TString(1, static_cast<char>(0xFF)),
+        };
+        for (const auto& item : bytes) {
+            const NUdf::TStringRef reference(item.data(), item.size());
+            const auto value = NUdf::TUnboxedValuePod::Embedded(reference);
+            const NUdf::TBlockItem blockValue(reference);
+
+            const ui64 directHash =
+                NUdf::GetValueHash<NUdf::EDataSlot::String>(value);
+            UNIT_ASSERT_VALUES_EQUAL(
+                directHash,
+                NUdf::GetValueHash<NUdf::EDataSlot::Utf8>(value));
+            UNIT_ASSERT_VALUES_EQUAL(
+                directHash,
+                NUdf::GetValueHash(NUdf::EDataSlot::String, value));
+            UNIT_ASSERT_VALUES_EQUAL(
+                directHash,
+                NUdf::GetValueHash(NUdf::EDataSlot::Utf8, value));
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                stringHasher->Hash(value),
+                utf8Hasher->Hash(value));
+            UNIT_ASSERT_VALUES_EQUAL(stringHasher->Hash(value), directHash);
+            UNIT_ASSERT_VALUES_EQUAL(
+                optionalStringHasher->Hash(value),
+                optionalUtf8Hasher->Hash(value));
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                stringBlockHasher->Hash(blockValue),
+                utf8BlockHasher->Hash(blockValue));
+            UNIT_ASSERT_VALUES_EQUAL(
+                stringBlockHasher->Hash(blockValue),
+                directHash);
+            UNIT_ASSERT_VALUES_EQUAL(
+                optionalStringBlockHasher->Hash(blockValue),
+                optionalUtf8BlockHasher->Hash(blockValue));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            optionalStringHasher->Hash(NUdf::TUnboxedValuePod()),
+            optionalUtf8Hasher->Hash(NUdf::TUnboxedValuePod()));
+        UNIT_ASSERT_VALUES_EQUAL(
+            optionalStringBlockHasher->Hash(NUdf::TBlockItem()),
+            optionalUtf8BlockHasher->Hash(NUdf::TBlockItem()));
+    }
+
     Y_UNIT_TEST(DecimalSumAccumulatorOverflowRequiresHeadroom) {
         using NYql::NDecimal::Add;
         using NYql::NDecimal::Inf;
@@ -3899,7 +4177,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(rightAssociated == maximum);
     }
 
-    Y_UNIT_TEST(ExportsDateAndDecimalSortAndRejectsTextOrdering) {
+    Y_UNIT_TEST(ExportsDateDecimalAndTextSortOrdering) {
         const auto pos = TPositionHandle();
         {
             TExportTestContext ctx;
@@ -3968,20 +4246,52 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             });
             auto read = MakeRead(ctx, table, "a", {"value"});
             SetExactOutputType(ctx, *read, {{"a.value", optionalType}});
-            auto sort = MakeIntrusive<TOpSort>(
-                read,
-                pos,
-                TVector<TSortElement>{TSortElement(TInfoUnit("a.value"), true, false)});
+            const bool ascending = typeName == "String";
+            const bool nullsFirst = !ascending;
+            TIntrusivePtr<TOpSort> sort;
+            if (typeName == "String") {
+                sort = MakeIntrusive<TOpSort>(
+                    read,
+                    pos,
+                    TVector<TSortElement>{TSortElement(
+                        TInfoUnit("a.value"),
+                        ascending,
+                        nullsFirst)});
+            } else {
+                sort = MakeIntrusive<TOpSort>(
+                    read,
+                    pos,
+                    TPhysicalOpProps{},
+                    TVector<TSortElement>{TSortElement(
+                        TInfoUnit("a.value"),
+                        ascending,
+                        nullsFirst)},
+                    std::optional<TExpression>{MakeConstant(
+                        "Uint64",
+                        "7",
+                        pos,
+                        &ctx.ExprCtx)},
+                    EOpPhase::Final);
+            }
             SetExactOutputType(ctx, *sort, {{"a.value", optionalType}});
             TOpRoot root(sort, pos, {"a.value"});
 
-            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
-            UNIT_ASSERT_C(!result.IsSupported(), typeName);
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                TStringBuilder()
-                    << "Sort ordering column a.value has unsupported type "
-                    << typeName);
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                snapshot["schema"]["tables"][0]["columns"][0]["type"].GetStringSafe(),
+                typeName);
+            const auto& node = FindNode(snapshot, "sort");
+            const auto& order = node["order"][0];
+            UNIT_ASSERT_VALUES_EQUAL(order["column"].GetStringSafe(), "a.value");
+            UNIT_ASSERT_VALUES_EQUAL(order["ascending"].GetBooleanSafe(), ascending);
+            UNIT_ASSERT_VALUES_EQUAL(order["nulls_first"].GetBooleanSafe(), nullsFirst);
+            if (typeName == "String") {
+                UNIT_ASSERT(node["limit"].IsNull());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(node["limit"]["value"].GetUIntegerSafe(), 7);
+                UNIT_ASSERT_VALUES_EQUAL(node["phase"].GetStringSafe(), "final");
+            }
         }
     }
 
@@ -4017,6 +4327,25 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Invalid Sort key missing");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {{"flag", "Bool", true}});
+            auto read = MakeRead(ctx, table, "a", {"flag"});
+            SetOutputType(ctx, *read, {{"a.flag", NUdf::EDataSlot::Bool}});
+            auto sort = MakeIntrusive<TOpSort>(
+                read,
+                pos,
+                TVector<TSortElement>{TSortElement(TInfoUnit("a.flag"), true, true)});
+            SetOutputType(ctx, *sort, {{"a.flag", NUdf::EDataSlot::Bool}});
+            TOpRoot root(sort, pos, {"a.flag"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Sort ordering column a.flag has unsupported type Bool");
         }
 
         {
@@ -4589,11 +4918,15 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto& table = AddTable(ctx, "/Root/A", {
             {"k", "Int32", true},
             {"x", "Date", false},
+            {"bytes", "String", true},
+            {"text", "Utf8", false},
         });
-        auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        auto read = MakeRead(ctx, table, "a", {"k", "x", "bytes", "text"});
         SetOutputType(ctx, *read, {
             {"a.k", NUdf::EDataSlot::Int32},
             {"a.x", NUdf::EDataSlot::Date, true},
+            {"a.bytes", NUdf::EDataSlot::String},
+            {"a.text", NUdf::EDataSlot::Utf8, true},
         });
         auto project = MakeCopyMap(ctx, read, "result", "a.k");
         TOpRoot root(project, TPositionHandle(), {"result"});
@@ -4610,6 +4943,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 TVector<TSortElement>{
                     TSortElement(TInfoUnit("a.k"), true, false),
                     TSortElement(TInfoUnit("a.x"), false, true),
+                    TSortElement(TInfoUnit("a.bytes"), true, true),
+                    TSortElement(TInfoUnit("a.text"), false, false),
                 },
                 graph.GetOutputIndex(producer)));
 
@@ -4618,7 +4953,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(edge.GetMapSafe().size(), 8);
         UNIT_ASSERT_VALUES_EQUAL(edge["kind"].GetStringSafe(), "merge");
         const auto& order = edge["order"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(order.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(order.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(order[0].GetMapSafe().size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(order[0]["column"].GetStringSafe(), "a.k");
         UNIT_ASSERT_VALUES_EQUAL(order[0]["ascending"].GetBooleanSafe(), true);
@@ -4627,6 +4962,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(order[1]["column"].GetStringSafe(), "a.x");
         UNIT_ASSERT_VALUES_EQUAL(order[1]["ascending"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(order[1]["nulls_first"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(order[2]["column"].GetStringSafe(), "a.bytes");
+        UNIT_ASSERT_VALUES_EQUAL(order[2]["ascending"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(order[2]["nulls_first"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(order[3]["column"].GetStringSafe(), "a.text");
+        UNIT_ASSERT_VALUES_EQUAL(order[3]["ascending"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(order[3]["nulls_first"].GetBooleanSafe(), false);
     }
 
     Y_UNIT_TEST(ExportsDecimalMergeOrdering) {

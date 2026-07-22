@@ -32,6 +32,7 @@ from .relation import (
     single,
 )
 from .scalar import Encoder as ScalarEncoder, Value
+from .types import family
 
 
 TASKS = 2
@@ -69,7 +70,14 @@ class Router:
     def hash_task(self, edge: StageEdge, row: Row) -> smt.Term:
         values = tuple(row.values[key] for key in edge.keys)
         assert edge.hash_function is not None
-        key = (edge.hash_function, tuple(value.type for value in values))
+        # String and Utf8 have the same raw-byte hash in MiniKQL.  Sharing the
+        # symbolic function is required when comparison-compatible cross-type
+        # keys carry the same bytes through independently typed plans.
+        key_types = tuple(
+            "String/Utf8" if family(value.type) == "string" else value.type
+            for value in values
+        )
+        key = (edge.hash_function, key_types)
         function = self._hashes.get(key)
         arguments = tuple(
             term

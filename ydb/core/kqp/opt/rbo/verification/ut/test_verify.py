@@ -533,6 +533,75 @@ def partial_only_count_snapshot():
     )
 
 
+def quantified_opaque_snapshot(result_type):
+    nodes = [
+        copy.deepcopy(SCAN_A),
+        {
+            "id": "sort",
+            "op": "sort",
+            "input": "a",
+            "order": [
+                {"column": "a.x", "ascending": True, "nulls_first": False}
+            ],
+            "limit": None,
+            "phase": "undefined",
+        },
+        {
+            "id": "limit",
+            "op": "limit",
+            "input": "sort",
+            "count": {"kind": "literal", "type": "Uint64", "value": 1},
+            "offset": None,
+            "phase": "undefined",
+        },
+        {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "limit",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.x",
+                    "function": "count",
+                    "output": "n",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        },
+        {
+            "id": "render",
+            "op": "project",
+            "input": "aggregate",
+            "ordered": False,
+            "columns": [
+                {
+                    "output": "result",
+                    "expression": {
+                        "kind": "opaque",
+                        "fingerprint": "render($0)",
+                        "type": result_type,
+                        "nullable": False,
+                        "args": [{"kind": "column", "column": "n"}],
+                    },
+                }
+            ],
+        },
+    ]
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            nodes,
+            "render",
+            ["result"],
+        )
+    )
+
+
 def right_join(predicate):
     return parse_snapshot(
         {
@@ -748,6 +817,14 @@ def constant_snapshot(value, output="result", scalar_type=None):
 
 
 class SolverProtocolTest(unittest.TestCase):
+    def test_string_rank_decoder_is_exact_and_rejects_out_of_universe_values(self):
+        representatives = {0: "", 1: "a", 2: "é"}
+        self.assertEqual(verifier.decode_string_atom(2, representatives), "é")
+        for value in (-1, 3, True, "1"):
+            with self.subTest(value=value):
+                with self.assertRaises(SolverError):
+                    verifier.decode_string_atom(value, representatives)
+
     def test_solver_error_cannot_be_reported_as_verified(self):
         process = subprocess.CompletedProcess(
             args=["z3"],
@@ -1601,6 +1678,16 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):
+    def test_domain_constrained_opaque_result_after_symbolic_sort_fails_closed(self):
+        for result_type, reason in (
+            ("String", "quantified sequence choice"),
+            ("Int64", "global invariant.*quantified sequence choice"),
+        ):
+            with self.subTest(result_type=result_type):
+                snapshot = quantified_opaque_snapshot(result_type)
+                with self.assertRaisesRegex(VerificationError, reason):
+                    build_logical_kernel_problem_for_tests(snapshot, snapshot, 6)
+
     def test_date_filter_equivalence_and_boundary_mutation_use_exact_days(self):
         before = date_filtered_snapshot("lt", 1)
         self.assertFalse(

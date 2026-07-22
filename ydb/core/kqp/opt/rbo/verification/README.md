@@ -9,7 +9,8 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, exact
-Decimal comparison/integral-cast/arithmetic/ordering/SUM, and
+String/Utf8 comparison and ordering, exact Decimal
+comparison/integral-cast/arithmetic/ordering/SUM, and
 benchmark-dashboard parts of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
@@ -21,14 +22,16 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
-q48, q52, q55, q61, q71, q88, q90, q93, and q96: 11/121 workload queries
-(9.1%). The checked-in solver proof floor requires `VERIFIED_BOUNDED` for TPCH
-q3 and TPC-DS q3, q48, q52, q55, q90, q93, and q96: eight obligations (6.6%
-of the workload). TPC-DS
-q71 reached the external solver process deadline, and q61 and q88 are `UNKNOWN`
-at the 60-second solver budget; no new-RBO optimizer correctness bug has been
-confirmed. Separately, the isolated manual
+The 2026-07-22 complete post-String-order formula-only dashboard establishes
+formula construction for TPCH q3 and TPC-DS q3, q42, q48, q50, q52, q55, q61,
+q71, q88, q90, q93, and q96: 13/121 workload queries (10.7%). The checked-in
+solver proof floor returns `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q42,
+q48, q52, q55, q90, q93, and q96: nine obligations (7.4% of the workload).
+Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
+ms of verification. q50 emits a formula but its solver experiment reached the
+65.0-second external process deadline; q71 did likewise, and q61 and q88 are
+`UNKNOWN` at the 60-second solver budget. None is evidence of an optimizer
+correctness bug. Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
 shared aggregation/runtime defect, not a new-RBO-only counterexample. These
@@ -79,6 +82,42 @@ Integer identities use SMT integer carriers with exact signed or unsigned
 8/16/32/64-bit domains on literals, source cells, and non-null opaque results.
 Date is likewise exact: numeric literals, source cells, and non-null opaque
 results are constrained to unsigned day values in `[0, 49673)`.
+
+`String` and `Utf8` use one exact bounded integer-rank quotient of YDB's
+unsigned UTF-8/raw-byte lexicographic order; there is no collation or Unicode
+normalization. Z3 sees integer ranks rather than its string theory. Ordinary
+and null-safe equality and ordinary ordering accept either identity on either
+side. HashShuffle likewise shares one symbolic hash family for `String` and
+`Utf8`, matching the runtime's type-independent raw-byte hash, while snapshot
+type identity remains distinct. The deliberately narrower static-`IN` gate
+still requires identical string types.
+
+The quotient fixes every strict-UTF-8 snapshot literal and registers every
+distinct observable nonliteral string term from both plans. If there are `M`
+such terms, it keeps `M` concrete representatives in every infinite open
+literal interval and all available representatives up to `M` in the finite
+prefix/NUL gaps. This is enough to preserve every equality and ordering among
+the literals and at most `M` assigned terms in both directions. Representatives
+are constructed from complete UTF-8 literals by NUL extension, so every decoded
+witness is valid UTF-8 and replayable even when it stands for an arbitrary-byte
+`String` value. Construction preflights limits of 65,536 representatives,
+64 MiB of total encoded representative bytes, and 1,000,000 bytes per value;
+exceeding any limit returns `UNSUPPORTED`. The per-value limit is shared with
+witness inspection and replay.
+
+Literal ranks and term bounds are deferred until SMT rendering, after both
+plans and any fixed witness strings have registered their values. Rendering
+seals the universe; later registration fails closed, and the model decoder
+accepts only ranks in that sealed universe. A string-valued term that depends
+on a sequence ordinal which may be rebound under family-comparison quantifiers
+also fails closed, because a top-level rank bound would not constrain every
+rebound valuation.
+
+The same choice-independence audit applies to every top-level source, catalog,
+and opaque-result domain invariant: any such invariant that depends on a
+rebound sequence ordinal fails closed, not only String rank bounds.
+Global invariants render before the ordinary counterexample obligation even
+when deferred String sealing registers them later.
 
 Decimal uses the exact YDB scaled-integer representation. A legal non-null
 `Decimal(p,s)` value is a finite code `c` with `-10^p < c < 10^p`, negative or
@@ -144,7 +183,9 @@ The explicit comparison core accepts unequal integer widths only when YQL's
 common integer type represents both operands without wrapping: equal signedness,
 or a signed type wider than the unsigned type. This covers the canonical
 `Int64`-column/`Int32`-literal benchmark form while mixed-width cases that would
-bitcast or wrap still fail closed. Date comparison requires Date on both sides.
+bitcast or wrap still fail closed. `String` and `Utf8` are mutually compatible
+under the raw-byte comparison above. Date comparison requires Date on both
+sides.
 
 Ordinary Decimal `=`, `<`, `<=`, `>`, and `>=` are strict on NULL; NaN makes
 every ordinary comparison false, and infinities participate in the YDB order.
@@ -254,15 +295,13 @@ each quantifier scope, never hoisting an expression past a binder. These are
 exact finite encodings and rendering transformations, not unbounded ordering
 proofs or semantic approximations.
 
-`String` and `Utf8` remain equality-only uninterpreted atoms. Date is an exact
-bounded integer-day type with literals, equality, ordinary ordering, Sort, and
-Merge. Decimal has exact literals, its legal typed domain, and the comparison
-and arithmetic semantics above, plus exact raw-code Sort/TopSort/Merge ordering.
-Generic division, casts outside the exact integral-`SafeCast` and constant
-normalization gates, and aggregate functions other than the bounded `sum` below
-remain unsupported. String and Utf8 sort keys
-therefore return `UNSUPPORTED` during strict validation instead of inventing an
-ordering.
+`String` and `Utf8` comparison, Sort, TopSort, and Merge use the exact bounded
+byte-order quotient above. Date is an exact bounded integer-day type with
+literals, equality, ordinary ordering, Sort, and Merge. Decimal has exact
+literals, its legal typed domain, and the comparison and arithmetic semantics
+above, plus exact raw-code Sort/TopSort/Merge ordering. Generic division, casts
+outside the exact integral-`SafeCast` and constant normalization gates, and
+aggregate functions other than the bounded `sum` below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, and
 Decimal `sum`, including NULL grouping and inputs and optimizer-generated
@@ -329,10 +368,11 @@ The exporter also emits `predicate` on every scan, with legacy absence meaning
 rather than `OriginalPredicate` statistics metadata. Version one accepts only a
 one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
 its scalar subset is physical columns, supported literals, Boolean
-AND/OR/NOT, equality, lossless integer or same-type Date ordering, and filter-boundary
-`Coalesce(predicate, false)`. Projection wrappers, range reads, malformed type
-descriptors, and unknown operations fail closed. The predicate filters raw scan
-rows before symbolic source partitioning and any per-task pushed limit.
+AND/OR/NOT, equality, the compatible integer, String/Utf8, Date, or Decimal
+ordering described above, and filter-boundary `Coalesce(predicate, false)`.
+Projection wrappers, range reads, malformed type descriptors, and unknown
+operations fail closed. The predicate filters raw scan rows before symbolic
+source partitioning and any per-task pushed limit.
 
 Every relation is capped at 4096 candidate rows. Join matrices and outputs,
 UnionAll, and grouped aggregation are checked before construction; Sort, Merge,

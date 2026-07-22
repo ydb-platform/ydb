@@ -228,12 +228,18 @@ class Encoder:
             functions.is_null(*flat_arguments) if functions.is_null is not None else smt.FALSE,
             functions.value(*flat_arguments),
         )
-        if result.type == DATE:
-            self.script.assert_(smt.or_(result.is_null, date_domain(result.value)))
+        if family(result.type) == "string":
+            self.script.register_string_term(result.value)
+        elif result.type == DATE:
+            self.script.assert_global(smt.or_(result.is_null, date_domain(result.value)))
         elif family(result.type) == "int":
-            self.script.assert_(smt.or_(result.is_null, integer_domain(result.value, result.type)))
+            self.script.assert_global(
+                smt.or_(result.is_null, integer_domain(result.value, result.type))
+            )
         elif decimal.is_type(result.type):
-            self.script.assert_(smt.or_(result.is_null, decimal.domain(result.value, result.type)))
+            self.script.assert_global(
+                smt.or_(result.is_null, decimal.domain(result.value, result.type))
+            )
         return result
 
     def _literal(

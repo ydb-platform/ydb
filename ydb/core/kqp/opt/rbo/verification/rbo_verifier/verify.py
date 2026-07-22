@@ -64,7 +64,10 @@ class Problem:
         return tuple(values)
 
     def formula(self, values: Iterable[smt.Term] = ()) -> str:
-        return self.script.render(values)
+        try:
+            return self.script.render(values)
+        except smt.SmtError as error:
+            raise VerificationError(str(error)) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,7 +252,7 @@ def _build_problem(
             comparison = compare_families(before_family, after_family, scalar)
             comparison_observer(comparison)
             equivalent = comparison.equivalent
-    except (RelationError, StageError) as error:
+    except (RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
     script.assert_(smt.not_(equivalent))
     return Problem(script, database.witness)
@@ -461,10 +464,9 @@ def decode_witness(
 def decode_string_atom(value: bool | int | str, literals: Mapping[int, str]) -> str:
     if not isinstance(value, int) or isinstance(value, bool):
         raise SolverError(f"string atom is not an integer: {value!r}")
-    if value in literals:
+    try:
         return literals[value]
-    candidate = f"__ydb_rbo_string_atom_{value}"
-    literal_values = set(literals.values())
-    while candidate in literal_values:
-        candidate = "_" + candidate
-    return candidate
+    except KeyError as error:
+        raise SolverError(
+            f"string rank {value} is outside the sealed representative universe"
+        ) from error

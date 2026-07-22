@@ -79,8 +79,21 @@ def equality_comparison_compatible(left: str, right: str) -> bool:
     return (
         left == right
         or integer_comparison_compatible(left, right)
+        or string_comparison_compatible(left, right)
         or decimal_comparison_compatible(left, right)
     )
+
+
+def static_in_comparison_compatible(left: str, right: str) -> bool:
+    """The deliberately narrower v1 static-IN common-type gate."""
+
+    return left == right or integer_comparison_compatible(left, right)
+
+
+def string_comparison_compatible(left: str, right: str) -> bool:
+    """YQL compares String and Utf8 by their common raw byte representation."""
+
+    return left in STRING_TYPES and right in STRING_TYPES
 
 
 def decimal_comparison_compatible(left: str, right: str) -> bool:
@@ -96,6 +109,7 @@ def decimal_comparison_compatible(left: str, right: str) -> bool:
 def ordering_comparison_compatible(left: str, right: str) -> bool:
     return (
         integer_comparison_compatible(left, right)
+        or string_comparison_compatible(left, right)
         or (left == DATE and right == DATE)
         or decimal_comparison_compatible(left, right)
     )
@@ -120,6 +134,7 @@ def family(scalar_type: str) -> str:
 def is_ordered_type(scalar_type: str) -> bool:
     return (
         scalar_type in INTEGER_TYPES
+        or scalar_type in STRING_TYPES
         or scalar_type == DATE
         or is_decimal_type(scalar_type)
     )

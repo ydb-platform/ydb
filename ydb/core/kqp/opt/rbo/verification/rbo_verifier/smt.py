@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Sequence
 
+from .string_order import StringOrderUniverse
+
 
 BOOL = "Bool"
 INT = "Int"
@@ -506,6 +508,22 @@ def _require(term: Term, sort: str) -> None:
         raise SmtError(f"expected {sort}, got {term.sort}")
 
 
+def _depends_on(root: Term, needles: set[Term]) -> bool:
+    if not needles:
+        return False
+    pending = [root]
+    seen: set[Term] = set()
+    while pending:
+        term = pending.pop()
+        if term in needles:
+            return True
+        if term in seen:
+            continue
+        seen.add(term)
+        pending.extend(term.arguments)
+    return False
+
+
 class Script:
     """Ordered declarations and assertions with deterministic symbol allocation."""
 
@@ -514,7 +532,12 @@ class Script:
         self._next_symbol = 0
         self._declarations: list[Declaration] = []
         self._assertions: list[Term] = []
-        self._string_codes: dict[str, int] = {}
+        self._ordinary_assertions: list[Term] = []
+        self._global_assertions: list[Term] = []
+        self._string_literals: dict[str, Term] = {}
+        self._string_terms: dict[Term, None] = {}
+        self._string_universe: StringOrderUniverse | None = None
+        self._quantified_choices: set[Term] = set()
 
     def fresh_constant(self, hint: str, sort: str) -> Term:
         name = f"v_{self._next_symbol}"
@@ -534,30 +557,126 @@ class Script:
     def assert_(self, term: Term) -> None:
         _require(term, BOOL)
         self._assertions.append(term)
+        self._ordinary_assertions.append(term)
+
+    def assert_global(self, term: Term) -> None:
+        """Assert an invariant that is independent of quantified plan choices.
+
+        Family comparison deliberately rebinds sequence-choice symbols inside
+        quantifiers.  A top-level assertion mentioning one of those symbols
+        would constrain only its global valuation, not the rebound valuations.
+        Keep domains and catalog invariants honest by rejecting that shape.
+        """
+
+        _require(term, BOOL)
+        if _depends_on(term, self._quantified_choices):
+            raise SmtError(
+                "global invariant depends on a quantified sequence choice; "
+                "that plan shape is not modeled"
+            )
+        self._assertions.append(term)
+        self._global_assertions.append(term)
 
     def string_atom(self, value: str) -> Term:
-        """Encode a v1 string as an equality-only solver-independent atom."""
+        """Return one deferred rank constant for a concrete byte-string value."""
 
-        code = self._string_codes.get(value)
-        if code is None:
-            code = len(self._string_codes)
-            self._string_codes[value] = code
-        return int_value(code)
+        if type(value) is not str:
+            raise SmtError("string literal must be a Python string")
+        try:
+            value.encode("utf-8", errors="strict")
+        except UnicodeEncodeError as error:
+            raise SmtError("string literal is not valid Unicode/UTF-8") from error
+        existing = self._string_literals.get(value)
+        if existing is not None:
+            return existing
+        if self._string_universe is not None:
+            raise SmtError("cannot register a new string literal after the order universe is sealed")
+        result = self.fresh_constant(
+            f"string_literal:{len(self._string_literals)}",
+            INT,
+        )
+        self._string_literals[value] = result
+        return result
+
+    def register_string_term(self, term: Term) -> None:
+        """Register one nonliteral value observed by equality or ordering."""
+
+        _require(term, INT)
+        if term in self._string_terms:
+            return
+        if self._string_universe is not None:
+            raise SmtError("cannot register a new string term after the order universe is sealed")
+        if _depends_on(term, self._quantified_choices):
+            raise SmtError(
+                "string-valued term depends on a quantified sequence choice; "
+                "finite string ordering for that shape is not modeled"
+            )
+        self._string_terms[term] = None
+
+    def register_quantified_choice(self, term: Term) -> None:
+        """Record a symbol that family comparison may bind under a quantifier."""
+
+        _require(term, INT)
+        if term.operation != "symbol" or term.arguments:
+            raise SmtError("quantified choice must be a named constant")
+        if any(_depends_on(value, {term}) for value in self._string_terms):
+            raise SmtError(
+                "string-valued term depends on a quantified sequence choice; "
+                "finite string ordering for that shape is not modeled"
+            )
+        if any(_depends_on(assertion, {term}) for assertion in self._global_assertions):
+            raise SmtError(
+                "global invariant depends on a quantified sequence choice; "
+                "that plan shape is not modeled"
+            )
+        self._quantified_choices.add(term)
+
+    def seal_string_order(self) -> None:
+        """Fix literal ranks and bound every observed string term exactly once."""
+
+        if self._string_universe is not None:
+            return
+        try:
+            universe = StringOrderUniverse(
+                self._string_literals,
+                len(self._string_terms),
+            )
+        except ValueError as error:
+            raise SmtError(f"cannot construct string order universe: {error}") from error
+        self._string_universe = universe
+        for value, term in self._string_literals.items():
+            self.assert_global(eq(term, int_value(universe.rank(value))))
+        if self._string_terms:
+            upper = int_value(len(universe))
+            for term in self._string_terms:
+                self.assert_global(
+                    and_(
+                        not_(lt(term, ZERO)),
+                        lt(term, upper),
+                    )
+                )
 
     @property
     def string_literals(self) -> dict[int, str]:
-        return {code: value for value, code in self._string_codes.items()}
+        if self._string_universe is None:
+            raise SmtError("string order universe is not sealed")
+        return dict(enumerate(self._string_universe.representatives))
 
     @property
     def assertions(self) -> tuple[Term, ...]:
         return tuple(self._assertions)
 
     def render(self, values: Iterable[Term] = ()) -> str:
+        self.seal_string_order()
         requested = tuple(values)
         context = _RenderContext(
             declaration.name for declaration in self._declarations
         )
-        for assertion in self._assertions:
+        ordered_assertions = (
+            *self._global_assertions,
+            *self._ordinary_assertions,
+        )
+        for assertion in ordered_assertions:
             context.reserve(assertion)
         lines = ["; Generated by the YDB new-RBO bounded equivalence verifier."]
         if self.timeout_ms is not None:
@@ -566,7 +685,7 @@ class Script:
         lines.extend(declaration.render() for declaration in self._declarations)
         lines.extend(
             f"(assert {_render_scope(assertion, context)})"
-            for assertion in self._assertions
+            for assertion in ordered_assertions
         )
         lines.append("(check-sat)")
         if requested:

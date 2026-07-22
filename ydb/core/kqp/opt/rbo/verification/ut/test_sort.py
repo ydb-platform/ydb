@@ -727,7 +727,7 @@ class SortIrTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, "Uint64 literal"):
                     parse_snapshot(value)
 
-    def test_decimal_ordering_is_admitted_and_text_fails_closed(self):
+    def test_decimal_and_text_ordering_are_admitted(self):
         parsed = logical_sort(
             [order_item("a.k1")],
             key1_type="Decimal(5,2)",
@@ -741,11 +741,8 @@ class SortIrTest(unittest.TestCase):
             )
             value["schema"]["tables"][0]["columns"][0]["type"] = scalar_type
             with self.subTest(scalar_type=scalar_type):
-                with self.assertRaisesRegex(
-                    SnapshotError,
-                    f"ordering type '{scalar_type}' is unsupported",
-                ):
-                    parse_snapshot(value)
+                parsed = parse_snapshot(value)
+                self.assertEqual(parsed.tables[0].columns[0].type, scalar_type)
 
     def test_project_order_preservation_flag_is_required_and_boolean(self):
         base = snapshot(
@@ -1516,6 +1513,41 @@ class StageTopSortMergeTest(unittest.TestCase):
             _sequences(logical_family, constants),
             _sequences(staged_family, constants),
         )
+
+    def test_string_local_top_sort_merge_is_equivalent_and_direction_is_observable(self):
+        descending = [order_item("a.k1", False, False)]
+        for scalar_type in ("String", "Utf8"):
+            logical = logical_ordered_limit(
+                self.ORDER,
+                count=1,
+                offset=1,
+                key1_type=scalar_type,
+            )
+            staged = staged_top_sort_merge(self.ORDER, key1_type=scalar_type)
+            problem = build_problem(logical, staged, 2)
+            problem.formula()  # Seal the finite rank universe before grounding.
+            for rows in (
+                ((0, 0, 0), (1, 0, 1)),
+                ((None, 0, 0), (1, 0, 1)),
+                ((1, 0, 0), (1, 0, 1)),
+            ):
+                with self.subTest(scalar_type=scalar_type, rows=rows):
+                    self.assertFalse(_counterexample_formula_holds(problem, rows))
+
+            mutated = staged_top_sort_merge(
+                self.ORDER,
+                partial_order=descending,
+                merge_order=descending,
+                key1_type=scalar_type,
+            )
+            corrupted = build_problem(logical, mutated, 2)
+            corrupted.formula()
+            self.assertTrue(
+                _counterexample_formula_holds(
+                    corrupted,
+                    ((0, 0, 0), (1, 0, 1)),
+                )
+            )
 
     def test_decimal_local_sort_and_merge_preserve_total_special_order(self):
         decimal_type = "Decimal(2,0)"

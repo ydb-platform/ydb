@@ -213,8 +213,10 @@ class SnapshotTest(unittest.TestCase):
             "type": "String",
             "value": "1",
         }
-        with self.assertRaisesRegex(SnapshotError, "lt requires integer, Date, or Decimal arguments"):
-            parse_snapshot(value)
+        parse_snapshot(value)
+
+        value["plan"]["nodes"][1]["predicate"]["right"]["type"] = "Utf8"
+        parse_snapshot(value)
 
         value = minimal_snapshot()
         value["plan"]["nodes"][1]["predicate"] = {
@@ -282,6 +284,23 @@ class SnapshotTest(unittest.TestCase):
                 with self.subTest(scalar_type=scalar_type, literal=literal):
                     with self.assertRaisesRegex(SnapshotError, "literal is outside"):
                         parse_snapshot(value)
+
+    def test_string_literals_must_be_valid_unicode(self):
+        for scalar_type in ("String", "Utf8"):
+            value = minimal_snapshot()
+            value["schema"]["tables"][0]["columns"][0]["type"] = scalar_type
+            value["plan"]["nodes"][1]["predicate"] = {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "a.k"},
+                "right": {
+                    "kind": "literal",
+                    "type": scalar_type,
+                    "value": "bad\ud800literal",
+                },
+            }
+            with self.subTest(scalar_type=scalar_type):
+                with self.assertRaisesRegex(SnapshotError, "not valid Unicode"):
+                    parse_snapshot(value)
 
     def test_unknown_field_is_rejected(self):
         value = minimal_snapshot()

@@ -61,10 +61,13 @@ def _expression(value):
     return snapshot, snapshot.plan.nodes[1].columns[0].expression
 
 
-def _ground(term):
+def _ground(term, constants=None):
+    constants = constants or {}
     if term.operation in {"bool", "int"}:
         return term.atom
-    arguments = tuple(_ground(argument) for argument in term.arguments)
+    if term.operation == "symbol":
+        return constants[term.atom]
+    arguments = tuple(_ground(argument, constants) for argument in term.arguments)
     if term.operation == "not":
         return not arguments[0]
     if term.operation == "and":
@@ -74,6 +77,19 @@ def _ground(term):
     if term.operation == "=":
         return arguments[0] == arguments[1]
     raise AssertionError(f"non-ground operation {term.operation!r}")
+
+
+def _sealed_literal_constants(script):
+    script.seal_string_order()
+    result = {}
+    for assertion in script.assertions:
+        if (
+            assertion.operation == "="
+            and assertion.arguments[0].operation == "symbol"
+            and assertion.arguments[1].operation == "int"
+        ):
+            result[assertion.arguments[0].atom] = assertion.arguments[1].atom
+    return result
 
 
 def _reference(lookup, items):
@@ -147,14 +163,21 @@ class StaticSqlInTest(unittest.TestCase):
                         )
                         actual = encoder.evaluate(expression, {"x": row_value})
                         expected = _reference(lookup, items)
+                        constants = _sealed_literal_constants(script)
                         with self.subTest(
                             scalar_type=scalar_type,
                             lookup=lookup,
                             items=items,
                         ):
-                            self.assertEqual(_ground(actual.is_null), expected is None)
+                            self.assertEqual(
+                                _ground(actual.is_null, constants),
+                                expected is None,
+                            )
                             if expected is not None:
-                                self.assertEqual(_ground(actual.value), expected)
+                                self.assertEqual(
+                                    _ground(actual.value, constants),
+                                    expected,
+                                )
 
     def test_lossless_mixed_integer_items_match_the_equality_reference(self):
         cases = (
@@ -267,6 +290,15 @@ class StaticSqlInTest(unittest.TestCase):
             _literal("Uint64", 1)
         ]
         mutations.append((lossy_integer, "not equality-compatible"))
+
+        cross_string = _snapshot(
+            _in(
+                {"kind": "column", "column": "x"},
+                [_literal("Utf8", "same bytes")],
+            ),
+            scalar_type="String",
+        )
+        mutations.append((cross_string, "not equality-compatible"))
 
         unknown = copy.deepcopy(base)
         unknown["plan"]["nodes"][1]["columns"][0]["expression"]["null_safe"] = False

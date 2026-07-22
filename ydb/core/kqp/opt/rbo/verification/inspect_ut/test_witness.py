@@ -136,6 +136,38 @@ class WitnessBindingTest(unittest.TestCase):
             bind_witness(problem, witness)
         self.assertEqual(problem.script.assertions, before)
 
+    def test_new_string_binding_after_formula_sealing_fails_atomically(self):
+        problem = self.problem()
+        problem.formula()
+        before = problem.script.assertions
+
+        with self.assertRaisesRegex(InvalidWitness, "after.*sealed"):
+            bind_witness(problem, self.witness())
+
+        self.assertEqual(problem.script.assertions, before)
+
+    def test_witness_strings_round_trip_independently_of_registration_order(self):
+        problem = self.problem()
+        witness = self.witness()
+        second = dict(witness["A"][0])
+        witness["A"][0]["s"] = "z"
+        witness["A"][0]["t"] = "e\u0301"
+        second["s"] = "a"
+        second["t"] = "é"
+        witness["A"].append(second)
+
+        self.assertEqual(bind_witness(problem, witness), witness)
+        query = query_solver(problem, SOLVER, problem.witness_values(), 10_000)
+        self.assertEqual(query.status, "sat")
+        self.assertEqual(
+            decode_witness(
+                problem.witness,
+                query.values,
+                problem.script.string_literals,
+            ),
+            witness,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -285,20 +285,24 @@ class CaseTest(unittest.TestCase):
 
 
 class ValueRenderingTest(unittest.TestCase):
-    def test_import_uses_base64_date_and_exact_decimal(self):
+    def test_import_preserves_string_utf8_date_and_exact_decimal(self):
         columns = [
             {"name": "id", "type": "Uint64", "nullable": False},
             {"name": "raw", "type": "String", "nullable": False},
+            {"name": "text", "type": "Utf8", "nullable": False},
             {"name": "day", "type": "Date", "nullable": False},
             {"name": "amount", "type": "Decimal(5,2)", "nullable": False},
         ]
-        rows = [{"id": 1, "raw": "é", "day": 0, "amount": -7}]
+        raw = "a\0é"
+        text = "e\u0301"
+        rows = [{"id": 1, "raw": raw, "text": text, "day": 0, "amount": -7}]
         before = snapshot(False, columns=columns)
         after = snapshot(True, columns=columns)
         query = f"SELECT * FROM `{table_path(TABLE)}`;"
         case = prepared(before, after, trace(rows=rows, columns=columns), query)
         data = json.loads(render_import(case.tables[0]))
-        self.assertEqual(data["raw"], base64.b64encode("é".encode()).decode())
+        self.assertEqual(data["raw"], base64.b64encode(raw.encode()).decode())
+        self.assertEqual(data["text"], text)
         self.assertEqual(data["day"], "1970-01-01")
         self.assertEqual(data["amount"], "-0.07")
 

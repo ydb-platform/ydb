@@ -21,9 +21,13 @@ The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
 q48, q52, q55, q71, q88, q93, and q96: 9/121 workload queries. The checked-in
 solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
 q55, q93, and q96. TPC-DS q48 has formula-construction coverage only, q71
-reached the external solver process deadline, and q88 is `UNKNOWN`; no optimizer
-correctness bug has been confirmed. These results retain the two-row-per-table,
-two-task, pre-physical-boundary qualifications described below.
+reached the external solver process deadline, and q88 is `UNKNOWN`; no new-RBO
+optimizer correctness bug has been confirmed. Separately, the isolated manual
+[Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
+depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
+shared aggregation/runtime defect, not a new-RBO-only counterexample. These
+results retain the two-row-per-table, two-task, pre-physical-boundary
+qualifications described below.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
@@ -246,7 +250,11 @@ absolute finite-code bound through partial states and admits a Decimal sum only
 when the total bound is strictly below `10^35`. Within that headroom every row
 order and distributed parenthesization has the same exact result; otherwise the
 query fails closed. A column-storage source is split into symbolic source tasks
-before a pushed intermediate aggregate executes.
+before a pushed intermediate aggregate executes. The separate manual runtime
+diagnostic deliberately crosses this rejected boundary with the same three
+valid rows in one- and two-partition column tables. Both optimizer modes return
+`M` in the former case and `inf` in the latter, confirming why the verifier must
+not assume associativity outside the proved headroom.
 The optimizer's canonical `COUNT(*)` extractor is represented by the exact
 zero-child, typed `Void` expression and evaluated as one non-null unit value;
 it may pass through routing and relational operators, but every path must

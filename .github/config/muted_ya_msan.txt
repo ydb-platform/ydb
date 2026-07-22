@@ -33,6 +33,7 @@ ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
+ydb/core/mind/ut TDynamicNameserverTest.OnlyAliveDynamicNodesStaticNodeChangeSubscribers
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop

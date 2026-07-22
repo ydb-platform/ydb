@@ -33,6 +33,9 @@ struct TSlruCacheConfig
     //! re-enabled again (i.e. the value of this field is ignored).
     bool EnableGhostCaches;
 
+    //! If set, items that cannot survive cache trimming are not admitted.
+    bool RejectOversizedItems;
+
     static TSlruCacheConfigPtr CreateWithCapacity(i64 capacity, int shardCount = 1);
 
     REGISTER_YSON_STRUCT(TSlruCacheConfig);
@@ -57,6 +60,9 @@ struct TSlruCacheDynamicConfig
     //! Set to true if ghost caches are enabled. Once disabled, ghost caches cannot be
     //! re-enabled again (i.e. the value of this field is ignored).
     bool EnableGhostCaches;
+
+    //! If set, items that cannot survive cache trimming are not admitted.
+    std::optional<bool> RejectOversizedItems;
 
     REGISTER_YSON_STRUCT(TSlruCacheDynamicConfig);
 

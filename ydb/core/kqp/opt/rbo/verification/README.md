@@ -23,11 +23,10 @@ transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
 q48, q52, q55, q61, q71, q88, q93, and q96: 10/121 workload queries. The checked-in
-solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
-q55, q93, and q96. TPC-DS q48 has formula-construction coverage only, q71
-reached the external solver process deadline, and q61 and q88 are `UNKNOWN` at
-the 60-second solver budget; no new-RBO optimizer correctness bug has been
-confirmed. Separately, the isolated manual
+solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q48,
+q52, q55, q93, and q96. TPC-DS q71 reached the external solver process
+deadline, and q61 and q88 are `UNKNOWN` at the 60-second solver budget; no
+new-RBO optimizer correctness bug has been confirmed. Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
 shared aggregation/runtime defect, not a new-RBO-only counterexample. These

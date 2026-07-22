@@ -578,8 +578,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
   before allocating its 32768-pair join matrix.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q52, q55, q93, and q96 with a fixed 60-second per-query budget.
-  TPC-DS q48 remains formula-only; q61's 1,572,871-byte formula and q88 both
+  TPC-DS q3, q48, q52, q55, q93, and q96 with a fixed 60-second per-query
+  budget. q48 recorded 175 ms of preparation and 3,028 ms of verification in a
+  proof-floor `VERIFIED_BOUNDED` run. q61's 1,572,871-byte formula and q88 both
   return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of preparation and 63,897
   ms of verification. q71's 118,276,852-byte formula recorded 100,948 ms in the
   verifier/formula-emission phase of the complete run before a focused solver
@@ -612,7 +613,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the six curated workload proofs have separate
+- Formula construction and the seven curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

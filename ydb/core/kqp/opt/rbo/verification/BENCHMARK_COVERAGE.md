@@ -49,9 +49,9 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the six curated obligations with the pinned
+The checked-in proof floor runs the seven curated obligations with the pinned
 Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3 and
-TPC-DS q3, q52, q55, q93, and q96 directly from the policy, accepts only
+TPC-DS q3, q48, q52, q55, q93, and q96 directly from the policy, accepts only
 `VERIFIED_BOUNDED`, and ignores every ambient `RBO_COVERAGE_*` variable:
 
 ```bash
@@ -99,7 +99,7 @@ mistaken for the strict checked-in input-policy document.
 The checked-in policy has two monotonic contracts. The formula-construction
 floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q61, q71, q88, q93, and
 q96; it is enforced only for a complete formula-only suite. The proof floor requires
-TPCH q3 and TPC-DS q3, q52, q55, q93, and q96; dedicated hermetic tests require
+TPCH q3 and TPC-DS q3, q48, q52, q55, q93, and q96; dedicated hermetic tests require
 each one to remain `VERIFIED_BOUNDED`. Arbitrary focused solver experiments are
 never mistaken for the proof floor, even when they happen to select the same
 IDs. Newly supported or proven queries are allowed without editing either
@@ -246,13 +246,14 @@ exports, while its initial String comparison remains unsupported.
 ## Curated proof floor and focused results
 
 - The checked-in proof-floor tests return `VERIFIED_BOUNDED` for TPCH q3 and
-  TPC-DS q3, q52, q55, q93, and q96, each at two rows per referenced table and
-  two tasks. These are six bounded proofs for the modeled pre-physical
+  TPC-DS q3, q48, q52, q55, q93, and q96, each at two rows per referenced table
+  and two tasks. These are seven bounded proofs for the modeled pre-physical
   semantics, not unbounded SQL-equivalence claims.
 
 - TPC-DS q48 reaches the verifier after exact Decimal literal, domain,
-  comparison-alignment, and integer constant-cast support. Its recorded result
-  is formula-only: no solver verdict or bounded proof is claimed.
+  comparison-alignment, and integer constant-cast support. The proof-floor run
+  spent 175 ms preparing the query and 3,028 ms in verification before returning
+  `VERIFIED_BOUNDED`; the checked-in floor retains that proof obligation.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
   `DecimalDiv` support. A focused solver run spent 955 ms preparing the query

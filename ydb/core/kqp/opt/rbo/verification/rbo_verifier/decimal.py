@@ -1,8 +1,8 @@
-"""Exact YDB Decimal values needed by scalar comparison verification.
+"""Exact YDB Decimal values needed by scalar verification.
 
 Decimal values are signed, scaled integers.  The three non-finite values use
 the same codes as ``NYql::NDecimal``; keeping those codes explicit makes the
-SMT model match YDB comparisons and casts without introducing SMT Reals.
+SMT model match YDB comparisons, casts, and arithmetic without SMT Reals.
 """
 
 from __future__ import annotations
@@ -138,6 +138,67 @@ def compare(kind: str, left: smt.Term, right: smt.Term) -> smt.Term:
     return smt.and_(both_comparable, ordered)
 
 
+def add(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
+    """Exact same-type YQL Decimal addition."""
+
+    return _add_or_subtract("add", left, right, result_type)
+
+
+def subtract(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
+    """Exact same-type YQL Decimal subtraction."""
+
+    return _add_or_subtract("sub", left, right, result_type)
+
+
+def multiply(
+    left: smt.Term,
+    right: smt.Term,
+    result_type: str,
+    right_type: str,
+) -> smt.Term:
+    """Exact ``DecimalMul`` for YQL's deliberately narrow operand shapes.
+
+    The left operand and result have ``result_type``.  A same-type Decimal
+    right operand is rescaled with round-to-nearest, ties-to-even; an integral
+    right operand multiplies the scaled coefficient directly.  YDB represents
+    Decimal specials in-band, so they must be handled before finite arithmetic.
+    """
+
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"not a Decimal type: {result_type!r}")
+    right_is_decimal = right_type == result_type
+    if not right_is_decimal and _integer_decimal_digits(right_type) is None:
+        raise ValueError(
+            "Decimal multiplication requires a same-type Decimal or integral right operand"
+        )
+
+    product = smt.mul(left, right)
+    if right_is_decimal and decimal_type.scale:
+        product = _round_divide(product, 10**decimal_type.scale)
+    finite_product = _saturate_finite(product, decimal_type.precision)
+
+    left_is_inf = _is_inf(left)
+    right_is_inf = _is_inf(right) if right_is_decimal else smt.FALSE
+    has_nan = smt.or_(
+        smt.eq(left, smt.int_value(NAN)),
+        smt.eq(right, smt.int_value(NAN)) if right_is_decimal else smt.FALSE,
+    )
+    has_inf = smt.or_(left_is_inf, right_is_inf)
+    has_zero = smt.or_(smt.eq(left, smt.ZERO), smt.eq(right, smt.ZERO))
+    same_sign = smt.eq(smt.lt(left, smt.ZERO), smt.lt(right, smt.ZERO))
+    infinite_product = smt.ite(same_sign, smt.int_value(INF), smt.int_value(-INF))
+    return smt.ite(
+        has_nan,
+        smt.int_value(NAN),
+        smt.ite(
+            has_inf,
+            smt.ite(has_zero, smt.int_value(NAN), infinite_product),
+            finite_product,
+        ),
+    )
+
+
 def align(
     left: smt.Term,
     left_type: str,
@@ -254,6 +315,89 @@ def _check_bounds(value: smt.Term, precision: int) -> smt.Term:
         ),
     )
     return smt.ite(if_normal, value, overflow)
+
+
+def _saturate_finite(value: smt.Term, precision: int) -> smt.Term:
+    """Apply a Decimal result bound to known-finite arithmetic.
+
+    A finite calculation may numerically collide with the in-band NaN code.
+    YDB normalizes that overflow to infinity before decoding specials, so this
+    path deliberately never interprets ``value == NAN`` as NaN.
+    """
+
+    return smt.ite(
+        _normal(value, precision),
+        value,
+        smt.ite(
+            smt.lt(smt.ZERO, value),
+            smt.int_value(INF),
+            smt.int_value(-INF),
+        ),
+    )
+
+
+def _add_or_subtract(
+    kind: str,
+    left: smt.Term,
+    right: smt.Term,
+    result_type: str,
+) -> smt.Term:
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"not a Decimal type: {result_type!r}")
+    if kind == "add":
+        raw = smt.add(left, right)
+    elif kind == "sub":
+        raw = smt.sub(left, right)
+    else:
+        raise ValueError(f"unsupported Decimal additive operation {kind!r}")
+
+    all_normal = smt.and_(
+        _normal(left, decimal_type.precision),
+        _normal(right, decimal_type.precision),
+        _normal(raw, decimal_type.precision),
+    )
+    indeterminate = smt.or_(
+        smt.eq(left, smt.int_value(NAN)),
+        smt.eq(right, smt.int_value(NAN)),
+        smt.eq(raw, smt.ZERO),
+    )
+    overflow = smt.ite(
+        indeterminate,
+        smt.int_value(NAN),
+        smt.ite(
+            smt.lt(smt.ZERO, raw),
+            smt.int_value(INF),
+            smt.int_value(-INF),
+        ),
+    )
+    return smt.ite(all_normal, raw, overflow)
+
+
+def _round_divide(value: smt.Term, divisor: int) -> smt.Term:
+    """Divide by a positive constant, rounding to nearest with even ties."""
+
+    negative = smt.lt(value, smt.ZERO)
+    magnitude = smt.ite(negative, smt.sub(smt.ZERO, value), value)
+    quotient = smt.div(magnitude, divisor)
+    remainder = smt.mod(magnitude, divisor)
+    twice_remainder = smt.mul(remainder, smt.int_value(2))
+    round_up = smt.or_(
+        smt.lt(smt.int_value(divisor), twice_remainder),
+        smt.and_(
+            smt.eq(twice_remainder, smt.int_value(divisor)),
+            smt.eq(smt.mod(quotient, 2), smt.ONE),
+        ),
+    )
+    rounded = smt.add(quotient, smt.ite(round_up, smt.ONE, smt.ZERO))
+    return smt.ite(negative, smt.sub(smt.ZERO, rounded), rounded)
+
+
+def _is_inf(value: smt.Term) -> smt.Term:
+    return smt.or_(
+        smt.eq(value, smt.int_value(-INF)),
+        smt.eq(value, smt.int_value(INF)),
+    )
 
 
 def _normal(value: smt.Term, precision: int) -> smt.Term:

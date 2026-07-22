@@ -9,9 +9,9 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, and
-exact Decimal-comparison, and benchmark-dashboard parts of M4. Separate normalized-plan,
-concrete-counterexample inspection, and isolated real-YDB replay tools are also
-implemented. A real-host transformation-prefix capture
+exact Decimal comparison/arithmetic, and benchmark-dashboard parts of M4.
+Separate normalized-plan, concrete-counterexample inspection, and isolated
+real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
@@ -47,11 +47,10 @@ Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
 `Decimal(p,s)`) even when several identities use the same SMT domain. Decimal
 identity requires `1 <= p <= 35` and `0 <= s <= p`, with no alternate spelling.
-Integer slots currently use unbounded SMT carriers rather than source-domain
-range constraints. This may produce an out-of-range `COUNTEREXAMPLE`, which
-replay can reject, but cannot turn a real bounded counterexample into
-`VERIFIED_BOUNDED`. Date is exact: numeric literals, source cells, and non-null
-opaque results are constrained to unsigned day values in `[0, 49673)`.
+Integer identities use SMT integer carriers with exact signed or unsigned
+8/16/32/64-bit domains on literals, source cells, and non-null opaque results.
+Date is likewise exact: numeric literals, source cells, and non-null opaque
+results are constrained to unsigned day values in `[0, 49673)`.
 
 Decimal uses the exact YDB scaled-integer representation. A legal non-null
 `Decimal(p,s)` value is a finite code `c` with `-10^p < c < 10^p`, negative or
@@ -74,6 +73,9 @@ remains opaque. Evaluation is strict on NULL and wraps modulo the result width,
 using the signed two's-complement representative for `Int8` through `Int64`.
 This narrow rule was added when TPC-DS q88 exposed a spurious witness between
 source arithmetic constants and optimizer-folded literals.
+Source and opaque integer range constraints also prevent out-of-width witnesses
+from observing a difference between a direct integer use and its wrapped
+arithmetic identity.
 
 Static `SqlIn` is exact for a deliberately narrow shape: a direct raw tuple or
 `AsList` with 1..512 recursively supported, non-null items of one scalar type.
@@ -118,6 +120,36 @@ equality is admitted only for exactly identical Decimal types and compares the
 encoded non-null values, including NaN; its usual both-NULL/one-NULL behavior is
 unchanged.
 
+Decimal arithmetic is deliberately canonical and narrow. The exporter accepts
+only binary `+` and `-` with both operands and the result having one exact
+canonical `Decimal(p,s)` type, or binary `DecimalMul` whose left operand and
+result have that exact Decimal type and whose right operand is either the same
+Decimal type or a signed/unsigned 8/16/32/64-bit integer. Result nullability
+must be exactly the OR of operand nullability, and the subtree must still pass
+the reviewed closed-world scalar checks. These callables normalize to explicit
+`add`, `sub`, and `mul` snapshot nodes. An integer is accepted only on the right
+of `DecimalMul`; YQL canonicalizes the supported reversed SQL spelling before
+this boundary.
+
+Evaluation matches `NDecimal` scaled-integer behavior and is strict on NULL.
+Addition and subtraction preserve the common scale. Same-type Decimal
+multiplication rescales the coefficient product by `10^s` with round-to-nearest,
+ties-to-even for both signs; an integer right operand multiplies the coefficient
+without rescaling and therefore preserves the Decimal scale. NaN propagation,
+indeterminate opposite-infinity addition/same-infinity subtraction,
+infinity-times-zero, signed infinities, and finite precision overflow are
+explicit. Finite overflow saturates to the appropriate infinity before an
+in-band NaN code can be mistaken for a calculated NaN.
+
+The arithmetic kernel is checked against an independent rational reference on
+every legal finite code and all specials for precisions up to two. Adversarial
+cases cover both signs of ties-to-even, every integer width, infinity-times-zero,
+precision overflow, and a finite product numerically colliding with the NaN
+code. C++ exporter tests audit the admitted and rejected signatures. Separate
+solver tests send unchanged `add`/`sub`/`mul` through the normal logical-to-
+StageGraph obligation and require `VERIFIED_BOUNDED`; mutations between those
+operations must produce concrete counterexamples.
+
 Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
 It preserves exact callable/atom bytes, normalized atom flags, formatted types,
 child order, constants, settings, and repeated arguments. Input IU names are
@@ -154,9 +186,10 @@ producer-order-preserving interleavings.
 `String` and `Utf8` remain equality-only uninterpreted atoms. Date is an exact
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
 Merge. Decimal has exact literals, its legal typed domain, and the comparison
-semantics above, but Decimal `IN`, Sort/Merge ordering, arithmetic, and general
-casts remain unsupported. String, Utf8, and Decimal sort keys therefore return
-`UNSUPPORTED` during strict validation instead of inventing an ordering.
+and arithmetic semantics above. Decimal division, general casts, static `IN`,
+Sort/Merge ordering, and aggregate functions remain unsupported. String, Utf8,
+and Decimal sort keys therefore return `UNSUPPORTED` during strict validation
+instead of inventing an ordering.
 
 The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
 grouping and inputs, and optimizer-generated intermediate/final phases. Signed
@@ -318,8 +351,10 @@ solver budget. Nullable `String IN ('first', 'second')` and
 through the real host and prove the normal obligation. A native Decimal
 column filter likewise checks exact tagged literals and comparison predicates
 at both real-host boundaries and proves its normal two-row/two-task obligation.
-All equivalent real-host fixtures require `VERIFIED_BOUNDED` from the hermetic
-solver.
+A Decimal arithmetic query checks `+`, `-`, same-type multiplication, integer-
+right multiplication, and YQL's normalization of the reversed SQL spelling at
+both boundaries, then proves the two-row/two-task obligation. All equivalent
+real-host fixtures require `VERIFIED_BOUNDED` from the hermetic solver.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \

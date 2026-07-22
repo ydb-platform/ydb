@@ -1,5 +1,7 @@
 PY3TEST()
 
+SIZE(MEDIUM)
+
 TEST_SRCS(
     test_ir.py
     test_decimal.py

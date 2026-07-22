@@ -1,7 +1,13 @@
 import copy
+import os
 import unittest
 from fractions import Fraction
 from itertools import product
+
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -11,6 +17,14 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder, Value
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem, solve
+
+
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 _REF_RANK = {
@@ -48,7 +62,71 @@ def _ground(term, symbols=None):
         for value in values:
             result *= value
         return result
+    if term.operation == "div":
+        return values[0] // values[1]
+    if term.operation == "mod":
+        return values[0] % values[1]
     raise AssertionError(f"unsupported ground operation {term.operation!r}")
+
+
+def _compile_ground(term):
+    """Compile one symbolic SMT DAG for fast exhaustive concrete evaluation."""
+
+    instructions = []
+    indices = {}
+
+    def visit(node):
+        key = id(node)
+        if key in indices:
+            return indices[key]
+        arguments = tuple(visit(argument) for argument in node.arguments)
+        index = len(instructions)
+        indices[key] = index
+        instructions.append((node.operation, arguments, node.atom))
+        return index
+
+    result_index = visit(term)
+
+    def evaluate(left, right):
+        values = [None] * len(instructions)
+        for index, (operation, arguments, atom) in enumerate(instructions):
+            if operation in {"bool", "int"}:
+                value = atom
+            elif operation == "symbol":
+                if atom == "left":
+                    value = left
+                elif atom == "right":
+                    value = right
+                else:
+                    raise AssertionError(f"unsupported compiled symbol {atom!r}")
+            elif operation == "not":
+                value = not values[arguments[0]]
+            elif operation == "and":
+                value = all(values[argument] for argument in arguments)
+            elif operation == "or":
+                value = any(values[argument] for argument in arguments)
+            elif operation == "=":
+                value = values[arguments[0]] == values[arguments[1]]
+            elif operation == "<":
+                value = values[arguments[0]] < values[arguments[1]]
+            elif operation == "ite":
+                value = values[arguments[1] if values[arguments[0]] else arguments[2]]
+            elif operation == "+":
+                value = sum(values[argument] for argument in arguments)
+            elif operation == "-":
+                value = values[arguments[0]] - values[arguments[1]]
+            elif operation == "*":
+                value = values[arguments[0]] * values[arguments[1]]
+            elif operation == "div":
+                value = values[arguments[0]] // values[arguments[1]]
+            elif operation == "mod":
+                value = values[arguments[0]] % values[arguments[1]]
+            else:
+                raise AssertionError(f"unsupported compiled operation {operation!r}")
+            values[index] = value
+        return values[result_index]
+
+    return evaluate
 
 
 def _decimal_literal(scalar_type, code):
@@ -69,6 +147,15 @@ def _literal(scalar_type, value):
 
 def _comparison(kind, left, right, null_safe=False):
     return Expr(kind=kind, args=(left, right), null_safe=null_safe)
+
+
+def _arithmetic(kind, result_type, left, right, nullable=False):
+    return Expr(
+        kind=kind,
+        args=(left, right),
+        result_type=result_type,
+        nullable=nullable,
+    )
 
 
 def _snapshot(predicate):
@@ -109,6 +196,98 @@ def _snapshot(predicate):
         },
         "stage_graph": None,
     }
+
+
+def _arithmetic_snapshot(kind, staged, right=None):
+    value = {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "A",
+                    "columns": [
+                        {"name": "d", "type": "Decimal(7,2)", "nullable": False},
+                        {"name": "i", "type": "Int8", "nullable": False},
+                    ],
+                    "unique_keys": [],
+                }
+            ]
+        },
+        "plan": {
+            "nodes": [
+                {
+                    "id": "scan",
+                    "op": "scan",
+                    "table": "A",
+                    "columns": [
+                        {"source": "d", "output": "a.d"},
+                        {"source": "i", "output": "a.i"},
+                    ],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "project",
+                    "op": "project",
+                    "input": "scan",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": kind,
+                                "left": {"kind": "column", "column": "a.d"},
+                                "right": (
+                                    right
+                                    if right is not None
+                                    else {"kind": "column", "column": "a.d"}
+                                ),
+                                "type": "Decimal(7,2)",
+                                "nullable": False,
+                            },
+                        }
+                    ],
+                },
+            ],
+            "root": "project",
+            "output": ["result"],
+        },
+        "stage_graph": None,
+    }
+    if staged:
+        value["stage_graph"] = {
+            "root_stage": "project_stage",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "scan"}],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "project_stage",
+                    "nodes": ["project"],
+                    "inputs": ["scan"],
+                    "outputs": [{"index": 0, "node": "project"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "map",
+                    "producer": "source",
+                    "consumer": "project_stage",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "map",
+                }
+            ],
+            "assumptions": [],
+        }
+    return parse_snapshot(value)
 
 
 def _ref_value(code, scalar_type):
@@ -153,6 +332,67 @@ def _small_domain(scalar_type):
 
 def _type_name(scalar_type):
     return f"Decimal({scalar_type.precision},{scalar_type.scale})"
+
+
+def _ref_negate(value):
+    kind, finite = value
+    if kind == decimal.POS_INF:
+        return (decimal.NEG_INF, None)
+    if kind == decimal.NEG_INF:
+        return (decimal.POS_INF, None)
+    return (kind, -finite if kind == decimal.FINITE else None)
+
+
+def _ref_sign(value):
+    kind, finite = value
+    if kind == decimal.POS_INF:
+        return 1
+    if kind == decimal.NEG_INF:
+        return -1
+    assert kind == decimal.FINITE and finite is not None
+    return (finite > 0) - (finite < 0)
+
+
+def _ref_bounded_code(code, scalar_type):
+    bound = 10**scalar_type.precision
+    if -bound < code < bound:
+        return code
+    return decimal.INF if code > 0 else -decimal.INF
+
+
+def _ref_add(left, right, scalar_type):
+    if decimal.NAN_KIND in {left[0], right[0]}:
+        return decimal.NAN
+    if left[0] != decimal.FINITE or right[0] != decimal.FINITE:
+        if left[0] != decimal.FINITE and right[0] != decimal.FINITE:
+            return decimal.NAN if left[0] != right[0] else (
+                decimal.INF if left[0] == decimal.POS_INF else -decimal.INF
+            )
+        infinite = left if left[0] != decimal.FINITE else right
+        return decimal.INF if infinite[0] == decimal.POS_INF else -decimal.INF
+    exact = left[1] + right[1]
+    scaled = exact * 10**scalar_type.scale
+    assert scaled.denominator == 1
+    return _ref_bounded_code(scaled.numerator, scalar_type)
+
+
+def _ref_arithmetic(kind, left, right, scalar_type):
+    if kind == "add":
+        return _ref_add(left, right, scalar_type)
+    if kind == "sub":
+        return _ref_add(left, _ref_negate(right), scalar_type)
+    assert kind == "mul"
+    if decimal.NAN_KIND in {left[0], right[0]}:
+        return decimal.NAN
+    if left[0] != decimal.FINITE or right[0] != decimal.FINITE:
+        finite = right if left[0] != decimal.FINITE else left
+        if finite[0] == decimal.FINITE and finite[1] == 0:
+            return decimal.NAN
+        sign = _ref_sign(left) * _ref_sign(right)
+        return decimal.INF if sign > 0 else -decimal.INF
+    exact = left[1] * right[1]
+    scaled = round(exact * 10**scalar_type.scale)
+    return _ref_bounded_code(scaled, scalar_type)
 
 
 class DecimalKernelTest(unittest.TestCase):
@@ -220,6 +460,216 @@ class DecimalKernelTest(unittest.TestCase):
                         f"Decimal {kind} mismatch for {left} and {right}: "
                         f"actual={_ground(actual)}, expected={expected}"
                     )
+
+    def test_all_arithmetic_matches_exhaustive_fraction_reference(self):
+        types = tuple(
+            decimal.Type(precision, scale)
+            for precision in range(1, 3)
+            for scale in range(precision + 1)
+        )
+        for scalar_type in types:
+            type_name = _type_name(scalar_type)
+            domain = _small_domain(scalar_type)
+            left_term = smt.symbol("left", smt.INT)
+            right_term = smt.symbol("right", smt.INT)
+            evaluators = {
+                "add": _compile_ground(decimal.add(left_term, right_term, type_name)),
+                "sub": _compile_ground(decimal.subtract(left_term, right_term, type_name)),
+                "mul": _compile_ground(
+                    decimal.multiply(left_term, right_term, type_name, type_name)
+                ),
+            }
+            # Multiplication depends on scale and is exhausted for every type.
+            # Add/sub operate directly on scaled coefficients, so their SMT
+            # kernels depend only on precision; scale zero exhausts the exact
+            # same code domain once per precision without tripling this test.
+            kinds = ("add", "sub", "mul") if scalar_type.scale == 0 else ("mul",)
+            for (left, left_ref), (right, right_ref) in product(domain, repeat=2):
+                for kind in kinds:
+                    actual = evaluators[kind](left, right)
+                    expected = _ref_arithmetic(kind, left_ref, right_ref, scalar_type)
+                    if actual != expected:
+                        self.fail(
+                            f"Decimal {kind} mismatch for {type_name} values "
+                            f"{left} and {right}: actual={actual}, "
+                            f"expected={expected}"
+                        )
+
+        left = smt.symbol("left", smt.INT)
+        right = smt.symbol("right", smt.INT)
+        for precision in (1, 2):
+            baseline = f"Decimal({precision},0)"
+            for scale in range(1, precision + 1):
+                scaled = f"Decimal({precision},{scale})"
+                self.assertEqual(
+                    decimal.add(left, right, scaled),
+                    decimal.add(left, right, baseline),
+                )
+                self.assertEqual(
+                    decimal.subtract(left, right, scaled),
+                    decimal.subtract(left, right, baseline),
+                )
+
+    def test_decimal_multiply_integral_preserves_scale_for_every_integer_type(self):
+        decimal_type = "Decimal(35,2)"
+        cases = (
+            ("Int8", -2),
+            ("Int16", 3),
+            ("Int32", -4),
+            ("Int64", 5),
+            ("Uint8", 6),
+            ("Uint16", 7),
+            ("Uint32", 8),
+            ("Uint64", (1 << 64) - 1),
+        )
+        for integer_type, integer in cases:
+            expression = _arithmetic(
+                "mul",
+                decimal_type,
+                _decimal_literal(decimal_type, 100),
+                _literal(integer_type, integer),
+            )
+            result = Encoder(smt.Script()).evaluate(expression, {})
+            with self.subTest(integer_type=integer_type):
+                self.assertEqual(result.type, decimal_type)
+                self.assertEqual(result.is_null, smt.FALSE)
+                self.assertEqual(_ground(result.value), 100 * integer)
+
+    def test_arithmetic_specials_zero_and_precision_overflow_are_explicit(self):
+        scalar_type = "Decimal(5,2)"
+        cases = (
+            ("add", decimal.INF, -decimal.INF, decimal.NAN),
+            ("add", -decimal.INF, -decimal.INF, -decimal.INF),
+            ("sub", decimal.INF, decimal.INF, decimal.NAN),
+            ("sub", -decimal.INF, decimal.INF, -decimal.INF),
+            ("mul", decimal.NAN, 0, decimal.NAN),
+            ("mul", decimal.INF, 0, decimal.NAN),
+            ("mul", decimal.INF, -1, -decimal.INF),
+            ("mul", -decimal.INF, -decimal.INF, decimal.INF),
+            ("mul", 0, -99999, 0),
+            ("add", 99999, 1, decimal.INF),
+            ("sub", -99999, 1, -decimal.INF),
+            ("mul", 99999, 200, decimal.INF),
+            ("mul", -99999, 200, -decimal.INF),
+        )
+        for kind, left, right, expected in cases:
+            if kind == "add":
+                actual = decimal.add(
+                    smt.int_value(left), smt.int_value(right), scalar_type
+                )
+            elif kind == "sub":
+                actual = decimal.subtract(
+                    smt.int_value(left), smt.int_value(right), scalar_type
+                )
+            else:
+                actual = decimal.multiply(
+                    smt.int_value(left), smt.int_value(right), scalar_type, scalar_type
+                )
+            with self.subTest(kind=kind, left=left, right=right):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_multiply_integral_specials_and_overflow(self):
+        scalar_type = "Decimal(5,2)"
+        cases = (
+            (decimal.NAN, "Int8", 0, decimal.NAN),
+            (decimal.INF, "Int8", 0, decimal.NAN),
+            (decimal.INF, "Int8", -2, -decimal.INF),
+            (-decimal.INF, "Int8", -2, decimal.INF),
+            (99999, "Uint8", 2, decimal.INF),
+            (-99999, "Uint8", 2, -decimal.INF),
+        )
+        for left, right_type, right, expected in cases:
+            actual = decimal.multiply(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                right_type,
+            )
+            with self.subTest(left=left, right=right):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_finite_product_colliding_with_nan_code_saturates_to_infinity(self):
+        # 10^35 + 1 is the in-band NaN code and is divisible by 11.  Both
+        # factors are legal Decimal(35,0) finite values, so their arithmetic
+        # result must first normalize to +Inf rather than be decoded as NaN.
+        factor = decimal.NAN // 11
+        self.assertEqual(11 * factor, decimal.NAN)
+        self.assertLess(factor, decimal.INF)
+        for left, expected in ((11, decimal.INF), (-11, -decimal.INF)):
+            actual = decimal.multiply(
+                smt.int_value(left),
+                smt.int_value(factor),
+                "Decimal(35,0)",
+                "Decimal(35,0)",
+            )
+            with self.subTest(left=left):
+                self.assertEqual(_ground(actual), expected)
+
+        # The Decimal-by-integer kernel must normalize the same finite
+        # collision before interpreting any in-band special code.
+        for left, right, expected in (
+            (factor, 11, decimal.INF),
+            (-factor, 11, -decimal.INF),
+        ):
+            actual = decimal.multiply(
+                smt.int_value(left),
+                smt.int_value(right),
+                "Decimal(35,0)",
+                "Int8",
+            )
+            with self.subTest(left=left, right_type="Int8"):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_multiply_rounds_half_to_even_for_both_signs(self):
+        scalar_type = "Decimal(5,2)"
+        # Scaled products 2.5 and 3.5 distinguish ties-to-even from truncation
+        # and ties-away; signs must be applied after rounding the magnitude.
+        for left, right, expected in (
+            (1, 250, 2),
+            (1, 350, 4),
+            (-1, 250, -2),
+            (-1, 350, -4),
+        ):
+            actual = decimal.multiply(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                scalar_type,
+            )
+            with self.subTest(left=left, right=right):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_arithmetic_is_strictly_null_propagating(self):
+        scalar_type = "Decimal(7,2)"
+        for kind in ("add", "sub", "mul"):
+            expression = _arithmetic(
+                kind,
+                scalar_type,
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+                nullable=True,
+            )
+            result = Encoder(smt.Script()).evaluate(
+                expression,
+                {
+                    "left": Value(scalar_type, smt.TRUE, smt.int_value(125)),
+                    "right": Value(scalar_type, smt.FALSE, smt.int_value(200)),
+                },
+            )
+            with self.subTest(kind=kind):
+                self.assertEqual(result.is_null, smt.TRUE)
+
+    def test_symbolic_decimal_rescale_renders_only_exact_integer_operations(self):
+        result = decimal.multiply(
+            smt.symbol("left", smt.INT),
+            smt.symbol("right", smt.INT),
+            "Decimal(5,2)",
+            "Decimal(5,2)",
+        ).render()
+        self.assertIn("(div ", result)
+        self.assertIn("(mod ", result)
+        self.assertNotIn("Real", result)
+        self.assertNotIn("to_int", result)
 
     def test_decimal_integer_alignment_uses_integer_decimal_width(self):
         encoder = Encoder(smt.Script())
@@ -337,6 +787,89 @@ class DecimalIrTest(unittest.TestCase):
                 with self.subTest(kind=kind, right=right["column"]):
                     parse_snapshot(_snapshot(predicate))
 
+    def test_exact_decimal_arithmetic_gate_is_admitted(self):
+        cases = (
+            ("add", "a.d", "a.d", "Decimal(7,2)", True),
+            ("sub", "a.wide", "a.wide", "Decimal(12,2)", False),
+            ("mul", "a.d", "a.d", "Decimal(7,2)", True),
+            ("mul", "a.d", "a.i", "Decimal(7,2)", True),
+        )
+        for kind, left, right, result_type, nullable in cases:
+            arithmetic = {
+                "kind": kind,
+                "left": {"kind": "column", "column": left},
+                "right": {"kind": "column", "column": right},
+                "type": result_type,
+                "nullable": nullable,
+            }
+            predicate = {
+                "kind": "eq",
+                "left": arithmetic,
+                "right": {
+                    "kind": "literal",
+                    "type": result_type,
+                    "value": {"kind": "finite", "scaled": "0"},
+                },
+            }
+            with self.subTest(kind=kind, left=left, right=right):
+                expression = parse_snapshot(_snapshot(predicate)).plan.nodes[1].predicate.args[0]
+                self.assertEqual(
+                    (expression.kind, expression.result_type, expression.nullable),
+                    (kind, result_type, nullable),
+                )
+
+    def test_unaudited_decimal_arithmetic_shapes_fail_closed(self):
+        base = {
+            "kind": "mul",
+            "left": {"kind": "column", "column": "a.d"},
+            "right": {"kind": "column", "column": "a.d"},
+            "type": "Decimal(7,2)",
+            "nullable": True,
+        }
+
+        def predicate(arithmetic):
+            return {
+                "kind": "eq",
+                "left": arithmetic,
+                "right": {
+                    "kind": "literal",
+                    "type": arithmetic["type"],
+                    "value": {"kind": "finite", "scaled": "0"},
+                },
+            }
+
+        cases = []
+        for kind in ("add", "sub"):
+            arithmetic = copy.deepcopy(base)
+            arithmetic["kind"] = kind
+            arithmetic["right"] = {"kind": "column", "column": "a.i"}
+            cases.append((f"{kind} integral right", arithmetic, "right operand"))
+
+        different_decimal = copy.deepcopy(base)
+        different_decimal["right"] = {"kind": "column", "column": "a.wide"}
+        cases.append(("mul different Decimal", different_decimal, "right operand"))
+
+        reversed_operands = copy.deepcopy(base)
+        reversed_operands["left"] = {"kind": "column", "column": "a.i"}
+        cases.append(("mul integral left", reversed_operands, "left operand"))
+
+        wrong_result = copy.deepcopy(base)
+        wrong_result["type"] = "Decimal(12,2)"
+        cases.append(("mul wrong result", wrong_result, "left operand"))
+
+        non_scalar_right = copy.deepcopy(base)
+        non_scalar_right["right"] = {"kind": "literal", "type": "Bool", "value": True}
+        cases.append(("mul Boolean right", non_scalar_right, "right operand"))
+
+        wrong_nullability = copy.deepcopy(base)
+        wrong_nullability["nullable"] = False
+        cases.append(("mul wrong nullability", wrong_nullability, "nullability"))
+
+        for label, arithmetic, message in cases:
+            with self.subTest(case=label):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(_snapshot(predicate(arithmetic)))
+
     def test_unproven_decimal_forms_fail_closed(self):
         decimal_in = {
             "kind": "in",
@@ -409,6 +942,64 @@ class DecimalIrTest(unittest.TestCase):
             smt.or_(opaque.is_null, decimal.domain(opaque.value, opaque.type)),
             opaque_script.assertions,
         )
+
+
+@unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
+class DecimalVerificationTest(unittest.TestCase):
+    def test_arithmetic_survives_normal_initial_to_stage_verification(self):
+        for kind in ("add", "sub", "mul"):
+            result = solve(
+                build_problem(
+                    _arithmetic_snapshot(kind, staged=False),
+                    _arithmetic_snapshot(kind, staged=True),
+                    1,
+                    10_000,
+                ),
+                SOLVER,
+                1,
+                10_000,
+            )
+            with self.subTest(kind=kind):
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_wrong_arithmetic_transformations_produce_counterexamples(self):
+        for before, after in (("add", "sub"), ("sub", "add"), ("mul", "add")):
+            result = solve(
+                build_problem(
+                    _arithmetic_snapshot(before, staged=False),
+                    _arithmetic_snapshot(after, staged=True),
+                    1,
+                    10_000,
+                ),
+                SOLVER,
+                1,
+                10_000,
+            )
+            with self.subTest(before=before, after=after):
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+                self.assertEqual(len(result.witness["A"]), 1)
+
+    def test_decimal_integer_multiply_observes_the_integer_source_domain(self):
+        integer = {"kind": "column", "column": "a.i"}
+        wrapped_integer = {
+            "kind": "add",
+            "left": integer,
+            "right": {"kind": "literal", "type": "Int8", "value": 0},
+            "type": "Int8",
+            "nullable": False,
+        }
+        result = solve(
+            build_problem(
+                _arithmetic_snapshot("mul", staged=False, right=integer),
+                _arithmetic_snapshot("mul", staged=True, right=wrapped_integer),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
 
 if __name__ == "__main__":

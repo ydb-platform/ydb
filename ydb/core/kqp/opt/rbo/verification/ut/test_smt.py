@@ -54,6 +54,19 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.mod(value, 0)
 
+    def test_positive_constant_integer_division_is_exact_and_typed(self):
+        value = smt.symbol("value", smt.INT)
+        self.assertEqual(smt.div(value, 10).render(), "(div value 10)")
+        self.assertEqual(smt.div(value, 1), value)
+        self.assertEqual(smt.div(smt.int_value(9), 2), smt.int_value(4))
+        self.assertEqual(smt.div(smt.int_value(-9), 2), smt.int_value(-5))
+        for divisor in (0, -1, True):
+            with self.subTest(divisor=divisor):
+                with self.assertRaises(smt.SmtError):
+                    smt.div(value, divisor)
+        with self.assertRaises(smt.SmtError):
+            smt.div(smt.TRUE, 2)
+
     def test_integer_arithmetic_is_typed_and_constant_folded(self):
         left = smt.symbol("left", smt.INT)
         right = smt.symbol("right", smt.INT)

@@ -27,7 +27,7 @@ from .ir import (
     validate_snapshot,
 )
 from .scalar import Encoder as ScalarEncoder
-from .scalar import Value, date_domain, smt_sort
+from .scalar import Value, date_domain, integer_domain, smt_sort
 from .types import DATE, family
 
 
@@ -152,6 +152,8 @@ class Database:
                     )
                     if column.type == DATE:
                         script.assert_(date_domain(value))
+                    elif family(column.type) == "int":
+                        script.assert_(integer_domain(value, column.type))
                     elif decimal.is_type(column.type):
                         script.assert_(decimal.domain(value, column.type))
                     values[column.name] = Value(column.type, is_null, value)

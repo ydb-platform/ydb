@@ -26,6 +26,7 @@ INTEGER_TYPES = frozenset(
 STRING_TYPES = frozenset({"String", "Utf8"})
 FIXED_SCALAR_TYPES = frozenset({BOOL, DATE}) | INTEGER_TYPES | STRING_TYPES
 
+
 def is_decimal_type(scalar_type: str) -> bool:
     return decimal.is_type(scalar_type)
 
@@ -42,6 +43,18 @@ def integer_width(scalar_type: str) -> int | None:
     else:
         return None
     return int(suffix) if suffix in {"8", "16", "32", "64"} else None
+
+
+def integer_bounds(scalar_type: str) -> tuple[int, int] | None:
+    """Inclusive lower and exclusive upper bounds for one YQL integer type."""
+
+    width = integer_width(scalar_type)
+    if width is None:
+        return None
+    if scalar_type.startswith("Uint"):
+        return 0, 1 << width
+    half = 1 << (width - 1)
+    return -half, half
 
 
 def integer_comparison_compatible(left: str, right: str) -> bool:

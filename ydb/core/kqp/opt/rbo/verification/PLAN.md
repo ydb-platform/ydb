@@ -75,7 +75,7 @@ The trusted Python code is deliberately split into small semantic modules:
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
-rbo_verifier/decimal.py     exact Decimal values, alignment, and comparison
+rbo_verifier/decimal.py     exact Decimal values, comparison, and arithmetic
 rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
 rbo_verifier/relation.py    bounded bag/sequence operator semantics
 rbo_verifier/stages.py      two-task StageGraph and connection semantics
@@ -99,7 +99,11 @@ The explicit scalar core initially contains:
   ordering; exact Decimal equality and ordering use YDB `DataCompare`
   alignment for Decimal/Decimal and Decimal/integer operands;
 - same-type signed and unsigned integer `+`, `-`, and `*`, with strict NULL
-  propagation and exact fixed-width modular/two's-complement overflow;
+  propagation, exact typed input domains, and fixed-width
+  modular/two's-complement overflow;
+- canonical Decimal `+` and `-` with same-type operands, plus `DecimalMul` with
+  a same-type Decimal or integer right operand, all with exact `NDecimal`
+  specials, rounding, overflow, and strict NULL propagation;
 - restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
   recursively supported, non-null expressions of one item type; that type is
   identical to the lookup or uses the same lossless common-integer gate as
@@ -129,10 +133,22 @@ Volatile, stateful, observably failing, evaluation-count-sensitive, or otherwise
 unsupported expressions produce `UNSUPPORTED`. New concrete scalar semantics are
 added only in response to real optimizer transformations or spurious witnesses.
 
-The arithmetic node is deliberately narrow: both operands and the result must
+Integer arithmetic is deliberately narrow: both operands and the result must
 have exactly the same integer identity, and result nullability must be the OR of
 operand nullability. Mixed-width arithmetic remains opaque instead of asking
-the verifier to reproduce YQL's promotion rules.
+the verifier to reproduce YQL's promotion rules. Integer literals, source
+cells, and non-null opaque results are constrained to their exact signed or
+unsigned width, so a model cannot manufacture an out-of-range arithmetic
+witness.
+
+Decimal arithmetic has a separate canonical gate. Binary `+` and `-` require
+both operands and the result to have one exact canonical `Decimal(p,s)` type.
+Binary `DecimalMul` requires the left operand and result to have that type; its
+right operand is either the same Decimal type or one signed/unsigned integer
+width. In every case result nullability is exactly the OR of operand
+nullability, and the expression must pass the same closed-world scalar audit as
+an opaque expression. The normalized snapshot node is `add`, `sub`, or `mul`;
+an integer is never admitted on the left at this boundary.
 
 YQL does not expose a complete determinism-and-totality annotation. The v1 C++
 exporter therefore uses a reviewed positive list for opaque subtrees: integer
@@ -179,8 +195,17 @@ same exact Decimal type and compares encoded non-null values, including NaN.
 Decimal/Decimal and Decimal/integer comparison alignment mirrors YDB
 `DataCompare`, including scale increase, integer decimal widths, the precision
 35 cap, and conversion saturation. Any alignment requiring an invalid
-zero-precision type fails closed. Decimal `IN`, Sort/Merge keys, arithmetic,
-and general casts remain unsupported.
+zero-precision type fails closed.
+
+Decimal `add` and `sub` operate on same-scale coefficients with exact
+`NDecimal` NaN/infinity algebra and saturation at the result precision.
+Same-type `mul` divides the coefficient product by `10^s` using nearest,
+ties-to-even rounding for either sign. `DecimalMul` with an integer right
+operand does not rescale, so it preserves the left Decimal scale. NaN,
+infinity-times-zero, signed infinity, and finite overflow—including a finite
+result that numerically collides with the in-band NaN code—are handled before
+the result is decoded. Decimal division, general casts, `IN`, Sort/Merge keys,
+and aggregate functions remain unsupported.
 
 ## Relational semantics
 
@@ -199,7 +224,8 @@ Implementation sequence:
 7. M4: actual column-store filter pushdown from the executed OLAP dialect;
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
-9. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+9. M4: exact canonical Decimal `+`, `-`, and `DecimalMul`;
+10. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -316,8 +342,18 @@ UnionAll, and local-join routing combinations. The StageGraph reference checks
 also distinguish wrong hash functions, shuffle keys, broadcasts, and UnionAll
 modes. Decimal tests exhaust every finite value for all `Decimal(p,s)` with
 `p <= 2`, plus all specials, against an independent rational-value comparison
-reference. Separate boundary cases cover precision-cap saturation and integer
-alignment; C++ tests use `NDecimal` as an exporter oracle.
+reference. Arithmetic uses the same independent reference: multiplication is
+exhausted at every scale, while addition/subtraction are exhausted once per
+precision and checked structurally scale-independent. Adversarial cases cover
+ties-to-even for both signs, every integer width, special values, precision
+overflow, and finite collisions with the NaN code. Existing C++ literal and
+alignment tests use `NDecimal` as an oracle, while arithmetic exporter tests
+audit the signature gates. Normal verifier tests prove unchanged
+`add`/`sub`/`mul` across a staged Map and require operation mutations to produce
+solver counterexamples.
+All integer-width endpoints are checked independently for literals, source
+cells, and opaque results; a solver regression proves that `Decimal * i` and
+`Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
 
 The first useful bound is two row slots per referenced table and two tasks.
 Larger bounds are query-specific because multiway joins grow rapidly.
@@ -394,10 +430,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   or NaN; source and opaque values use the exact legal typed domain. Ordinary
   equality/order, exact-type null-safe equality, Decimal/Decimal and
   Decimal/integer `DataCompare` alignment, precision-cap saturation, and
-  complete non-null integer constant casts are modeled. General casts, Decimal
-  `IN`, Sort/Merge keys, and arithmetic still fail closed. Exhaustive rational
-  references, `NDecimal` exporter tests, and a green real-host native Decimal
-  filter obligation cover this boundary.
+  complete non-null integer constant casts are modeled. Canonical same-type
+  Decimal `+`/`-` and `DecimalMul` with a same-type Decimal or integer right
+  operand have exact `NDecimal` special, ties-to-even, scale, and overflow
+  semantics. General casts, Decimal division, `IN`, Sort/Merge keys, and
+  aggregate functions still fail closed. Exhaustive rational references,
+  adversarial arithmetic cases, signature and mutation tests, and green
+  real-host Decimal filter and arithmetic obligations cover this boundary.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -419,6 +458,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   emits its two-row/two-task SMT obligation. This is formula coverage, not a
   solver proof; the focused formula-only run took 365116 ms and no Z3 executable
   was present.
+- Focused Decimal-arithmetic corpus reruns move the affected TPCH and TPC-DS
+  queries past `DecimalMul`, `+`, and `-` to deeper sort, division, cast,
+  Map/OLAP, Double, or Interval blockers. No additional formula is emitted: the
+  complete floors remain TPCH 0/22 and TPC-DS 3/99.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
   and explicit unsupported/optimizer-failure inventory.

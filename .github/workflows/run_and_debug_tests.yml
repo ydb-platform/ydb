@@ -150,38 +150,43 @@ jobs:
           REAL_SECONDS=$(grep '^REAL_SECONDS=' time_result.txt | cut -d= -f2 || echo "n/a")
           LOADAVG_AFTER="$(cut -d' ' -f1-3 /proc/loadavg)"
 
-          BINARY_PATH=""
+          BINARY_LINK=""
           BINARY_BASENAME="$(basename "$BUILD_TARGET")"
           for candidate in \
             "${BUILD_TARGET}/${BINARY_BASENAME}" \
-            "${BUILD_TARGET}" \
-            "$(find "${BUILD_TARGET}" -maxdepth 1 -type f -executable -name "${BINARY_BASENAME}" 2>/dev/null | head -1)"; do
-            if [ -n "$candidate" ] && [ -f "$candidate" ] && [ -x "$candidate" ]; then
-              BINARY_PATH="$candidate"
+            "${BUILD_TARGET}"; do
+            # -e follows nothing; accept regular files and symlinks to binaries
+            if [ -n "$candidate" ] && { [ -f "$candidate" ] || [ -L "$candidate" ]; } && [ -x "$candidate" ]; then
+              BINARY_LINK="$candidate"
               break
             fi
           done
-          if [ -z "$BINARY_PATH" ]; then
-            BINARY_PATH="$(find . -path "*/${BUILD_TARGET}/${BINARY_BASENAME}" -type f -executable 2>/dev/null | head -1 || true)"
+          if [ -z "$BINARY_LINK" ]; then
+            BINARY_LINK="$(find "${BUILD_TARGET}" -maxdepth 1 \( -type f -o -type l \) -executable -name "${BINARY_BASENAME}" 2>/dev/null | head -1 || true)"
           fi
 
+          BINARY_PATH="n/a"
           BINARY_SIZE_BYTES="n/a"
           BINARY_SIZE_HUMAN="n/a"
           BINARY_SIZE_MIB="n/a"
-          if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-            BINARY_SIZE_BYTES="$(stat -c%s "$BINARY_PATH")"
-            BINARY_SIZE_HUMAN="$(ls -lh "$BINARY_PATH" | awk '{print $5}')"
+          if [ -n "$BINARY_LINK" ] && [ -e "$BINARY_LINK" ]; then
+            # ya make installs a symlink into the source tree; size the real binary.
+            BINARY_PATH="$(readlink -f "$BINARY_LINK" 2>/dev/null || realpath "$BINARY_LINK" 2>/dev/null || echo "$BINARY_LINK")"
+            BINARY_SIZE_BYTES="$(stat -L -c%s "$BINARY_LINK")"
+            BINARY_SIZE_HUMAN="$(ls -Llh "$BINARY_LINK" | awk '{print $5}')"
             BINARY_SIZE_MIB="$(python3 -c "print(round(int('${BINARY_SIZE_BYTES}')/1024/1024, 2))")"
-            ls -lh "$BINARY_PATH" > binary_info.txt
             {
+              ls -Llh "$BINARY_LINK"
+              echo "link=$BINARY_LINK"
               echo "path=$BINARY_PATH"
               echo "size_bytes=$BINARY_SIZE_BYTES"
               echo "size_human=$BINARY_SIZE_HUMAN"
               echo "size_mib=$BINARY_SIZE_MIB"
-              file "$BINARY_PATH" || true
-            } >> binary_info.txt
+              file -L "$BINARY_LINK" || true
+            } > binary_info.txt
           else
             echo "binary not found for target=${BUILD_TARGET}" > binary_info.txt
+            BINARY_LINK="not found"
             BINARY_PATH="not found"
           fi
 
@@ -193,6 +198,7 @@ jobs:
             echo "build_rc=$RC"
             echo "build_threads=$BUILD_THREADS"
             echo "loadavg_after=$LOADAVG_AFTER"
+            echo "binary_link=$BINARY_LINK"
             echo "binary_path=$BINARY_PATH"
             echo "binary_size_bytes=$BINARY_SIZE_BYTES"
             echo "binary_size_human=$BINARY_SIZE_HUMAN"
@@ -204,6 +210,7 @@ jobs:
             echo "loadavg_after=$LOADAVG_AFTER"
             echo "duration_sec=$DURATION"
             echo "real_seconds=$REAL_SECONDS"
+            echo "binary_link=$BINARY_LINK"
             echo "binary_path=$BINARY_PATH"
             echo "binary_size_bytes=$BINARY_SIZE_BYTES"
             echo "binary_size_human=$BINARY_SIZE_HUMAN"
@@ -237,7 +244,8 @@ jobs:
             echo "| Build target | \`${{ inputs.build_target }}\` |"
             echo "| Build threads (\`-j\`) | **${{ steps.build.outputs.build_threads }}** |"
             echo "| Link threads | \`${{ inputs.link_threads }}\` |"
-            echo "| Binary | \`${{ steps.build.outputs.binary_path }}\` |"
+            echo "| Binary link | \`${{ steps.build.outputs.binary_link }}\` |"
+            echo "| Binary path | \`${{ steps.build.outputs.binary_path }}\` |"
             echo "| Binary size | **${{ steps.build.outputs.binary_size_human }}** (${{ steps.build.outputs.binary_size_mib }} MiB / ${{ steps.build.outputs.binary_size_bytes }} bytes) |"
             echo "| Started (UTC) | ${{ steps.build.outputs.start_ts }} |"
             echo "| Finished (UTC) | ${{ steps.build.outputs.end_ts }} |"

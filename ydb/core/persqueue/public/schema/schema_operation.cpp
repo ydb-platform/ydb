@@ -10,6 +10,8 @@
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {

@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         };
 
         TCoroutineChunkSerializer chunker;
-        chunker.SetSerializingEvent(&event);
+        chunker.SetSerializingEvent(&event, true);
 
         TString headerBuffer(info.Sections[0].Size, '\0');
         auto chunks = chunker.FeedBuf(headerBuffer.begin(), headerBuffer.size());

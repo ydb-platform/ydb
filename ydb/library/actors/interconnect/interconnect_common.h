@@ -9,7 +9,9 @@
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/generic/ptr.h>
 #include <util/system/datetime.h>
+#include <util/system/mutex.h>
 
 #include "event_filter.h"
 
@@ -86,6 +88,7 @@ namespace NActors {
         // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
         // v2 is used only when both peers have this enabled and encryption is not in effect.
         bool EnableInterconnectSessionV2 = false;
+        bool ChecksumInterconnectSessionV2 = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -128,6 +131,8 @@ namespace NActors {
     using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
 
     using TUpdateWhiteboardCallback = std::function<void(const TWhiteboardSessionStatus& data)>;
+
+    class IUringEngine; // shared v2 io_uring data-plane engine (see interconnect_uring_engine.h)
 
     struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
         TActorId NameserviceId;
@@ -180,6 +185,26 @@ namespace NActors {
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
 
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+
+        // Shared v2 io_uring data-plane engine for the node (created once at startup when v2 + io_uring
+        // are enabled). Sessions fetch it and call it directly. Guarded because it is published on one
+        // thread and read from session mailbox threads.
+        mutable TMutex UringEngineLock;
+        TIntrusivePtr<IUringEngine> UringEngineV2;
+
+        void SetUringEngineV2(TIntrusivePtr<IUringEngine> engine);
+        TIntrusivePtr<IUringEngine> GetUringEngineV2() const;
+
+        // Returns the node's v2 io_uring engine, creating it lazily on first use and registering it to
+        // be stopped when the actor system stops (via DeferPreStop). Returns null only when io_uring is
+        // unavailable. This keeps the engine working without any per-deployment initializer wiring.
+        TIntrusivePtr<IUringEngine> EnsureUringEngineV2(TActorSystem* actorSystem, ui32 numShards,
+            NMonitoring::TDynamicCounterPtr counters);
+
+        // Out-of-line so translation units that construct/destroy Common do not need the complete
+        // IUringEngine type (it is only complete in interconnect_common.cpp).
+        TInterconnectProxyCommon();
+        ~TInterconnectProxyCommon();
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

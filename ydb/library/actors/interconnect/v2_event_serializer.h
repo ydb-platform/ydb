@@ -7,6 +7,9 @@
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 #include <deque>
 
 namespace NActors {
@@ -18,6 +21,7 @@ namespace NActors {
             ui32 Type;
             ui32 Flags;
             ui64 Cookie;
+            ui64 Checksum; // checksum (optional) for the whole event, including this header (with zero checksum)
             TActorId Sender;
             TActorId Recipient;
             NWilson::TTraceId::TSerializedTraceId TraceId;
@@ -40,6 +44,8 @@ namespace NActors {
 #pragma pack(pop)
 
     private:
+        const bool Checksumming;
+
         struct TPerChannelQuota {
             ui16 Channel; // channel number
             ui16 Quota; // quota in bytes to produce
@@ -69,37 +75,70 @@ namespace NActors {
             ESerializeStage SerializeStage = ESerializeStage::kInitial;
             TEventSerializationInfo EvSerInfoHolder;
             const TEventSerializationInfo *EvSerInfo;
-            size_t EventProducedSize = 0;
             ui16 Quota = 0; // must be the same as TPerChannelQuota for this channel
+            XXH3_state_t ChecksumState;
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
 
-        // refcounted objects tracking
+        // Refcounted objects tracking. An event's serialized bytes may be scattered across the output
+        // stream (interleaved with other channels) and across several pipelined write batches, so we can
+        // only release an event once *all* of its bytes have been sent. We track that with absolute stream
+        // offsets: an event's memory is freed once the total number of committed (sent) bytes reaches the
+        // stream offset just past the event's last produced byte. Releasing on a plain FIFO byte count is
+        // wrong -- committed bytes belonging to one channel would be charged against a different event at
+        // the head of the queue, freeing it while a later, still-in-flight batch aliases its memory.
         struct TRefcountItem {
-            size_t NumBytesRemaining = 0;
+            ui64 EndOffset = 0; // total produced bytes at the moment this event was fully produced
             TIntrusivePtr<TEventSerializedData> Buffer;
             std::unique_ptr<IEventBase> Event;
+            TRcBuf Scratch;
         };
         std::deque<TRefcountItem> RefcountItems;
-        size_t OverproducedBytes = 0;
+        ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
+        ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
+
+        THPTimer Timer;
+        ui64 SerializeBufferTime = 0;
+        ui64 SerializeEventTime = 0;
+        ui64 OtherTime = 0;
+        ui64 BytesCopied = 0;
+        ui64 BytesAliased = 0;
 
     public:
+        TEventSerializer(bool checksumming);
+
         void Push(std::unique_ptr<IEventHandle> ev);
 
+        bool IsTrafficPending() const { return !PerChannelQuotaHeap.empty(); }
+
         // this function generates output stream for transmission; it returns number of bytes added to output spans
-        size_t ProduceOutputStream(TMutableContiguousSpan *buffer, std::vector<TContiguousSpan> *out);
+        size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
 
         // notification issued when N produced bytes have been sent to the other party
         void CommitProducedBytes(size_t numBytes);
+
+        void ResetCounters() {
+            SerializeBufferTime = 0;
+            SerializeEventTime = 0;
+            OtherTime = 0;
+            BytesCopied = 0;
+            BytesAliased = 0;
+        }
+
+        ui64 GetSerializeBufferTime() const { return SerializeBufferTime; }
+        ui64 GetSerializeEventTime() const { return SerializeEventTime; }
+        ui64 GetOtherTime() const { return OtherTime; }
+        ui64 GetBytesCopied() const { return BytesCopied; }
+        ui64 GetBytesAliased() const { return BytesAliased; }
 
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {
             return channel < NumDefaultChannels ? PerChannelQueue[channel] : PerChannelQueueMap[channel];
         }
 
-        size_t ProduceOutputStreamForQueue(TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TMutableContiguousSpan *buffer, std::vector<TContiguousSpan> *out);
+        size_t ProduceOutputStreamForQueue(TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
+            std::deque<TContiguousSpan> *out, ui64 *bufferProduced);
     };
 
     class TEventDeserializer {
@@ -107,6 +146,8 @@ namespace NActors {
 
         using TEventHeader = TEventSerializer::TEventHeader;
         using TChunkHeader = TEventSerializer::TChunkHeader;
+
+        const TScopeId PeerScopeId;
 
         struct TPerChannelQueue {
             TRope Accum;
@@ -126,7 +167,8 @@ namespace NActors {
         };
 
     public:
-        void Push(TRcBuf buffer, IEventProcessor *eventProcessor);
+        TEventDeserializer(TScopeId peerScopeId);
+        void Push(TRcBuf buffer, IEventProcessor *eventProcessor, TActorId sessionId);
 
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {

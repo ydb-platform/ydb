@@ -117,9 +117,8 @@ public:
         const bool forceSnapshot = (
             !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
-            !ImmediateTx &&
-            !HasPersistentChannels &&
-            !HasOlapTable &&
+            Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO &&
+            !IsSingleShardRead() &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
         AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
@@ -128,7 +127,18 @@ public:
     }
 
     // TODO: simplified way to detect if we should use followers - should be refactored away.
-    bool GetSimplifiedUseFollowers() const {
+    bool GetUseFollowers() const {
+        if (Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_STALE
+                || !ReadOnlyTx
+                || GetSnapshot().IsValid()) {
+            return false;
+        }
+
+        AFL_ENSURE(!HasOlapTable);
+        return IsSingleShardRead();
+    }
+
+    bool IsSingleShardRead() const {
         size_t sourceScanPartitionsCount = 0;
         bool unknownAffectedShardCount = false;
 
@@ -170,30 +180,7 @@ public:
             }
         }
 
-        bool isSingleShardRead = sourceScanPartitionsCount <= 1 && !unknownAffectedShardCount && !HasOlapTable;
-
-        return
-            Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
-            !GetSnapshot().IsValid() &&
-            ReadOnlyTx && (
-                isSingleShardRead ||
-                HasPersistentChannels ||
-                HasOlapTable ||
-                (Database.empty() && !AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
-            );
-    }
-
-    bool GetUseFollowers() const {
-        return (
-            // first, we must specify read stale flag.
-            Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
-            // next, if snapshot is already defined, so in this case followers are not allowed.
-            !GetSnapshot().IsValid() &&
-            // ensure that followers are allowed only for read only transactions.
-            ReadOnlyTx &&
-            // if we are forced to acquire snapshot by some reason, so we cannot use followers.
-            !ForceAcquireSnapshot()
-        );
+        return sourceScanPartitionsCount <= 1 && !unknownAffectedShardCount;
     }
 
     void Finalize() {
@@ -681,32 +668,13 @@ private:
             return;
         }
 
-        // Single-shard datashard transactions are always immediate
-        ImmediateTx = (TxManager->GetTopicOperations().GetSize() + sourceScanPartitionsCount) <= 1
-                    && !TasksGraph.GetMeta().UnknownAffectedShardCount
-                    && !HasOlapTable;
-
-        switch (Request.IsolationLevel) {
-            // OnlineRO with AllowInconsistentReads = true
-            case NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO:
-                YQL_ENSURE(ReadOnlyTx);
-                TasksGraph.GetMeta().AllowInconsistentReads = true;
-                ImmediateTx = true;
-                break;
-
-            default:
-                break;
-        }
-
-        if ((ReadOnlyTx || Request.FlushEffects) && GetSnapshot().IsValid()) {
-            // Snapshot reads are always immediate
-            // Uncommitted writes are executed without coordinators, so they can be immediate
-            ImmediateTx = true;
-        }
-
         ComputeTasks = std::move(computeTasks);
 
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
+        if (Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO) {
+            YQL_ENSURE(ReadOnlyTx);
+            TasksGraph.GetMeta().AllowInconsistentReads = true;
+        }
 
         // TODO: use coroutines here.
         if (Request.SaveQueryPhysicalGraph) {
@@ -745,6 +713,7 @@ private:
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
                     HasOlapTable = true;
+                    AFL_ENSURE(!ReadOnlyTx || GetSnapshot().IsValid());
                     ResourceSnapshotRequired = true;
                 }
             }
@@ -859,7 +828,6 @@ private:
         ExecuterStateSpan.EndOk();
 
         SetSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
-        ImmediateTx = true;
 
         ContinueExecute();
     }
@@ -881,7 +849,6 @@ private:
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         KQP_STLOG_D(KQPDATA, "become ExecuteState",
             (current_state, CurrentStateFuncName()),
-            (immediate, true),
             (trace_id, TraceId()));
         Become(&TKqpDataExecuter::ExecuteState);
     }
@@ -906,7 +873,6 @@ private:
         KQP_STLOG_I(KQPDATA, "Total tasks",
             (total_tasks, TasksGraph.GetTasks().size()),
             (read_only, ReadOnlyTx),
-            (immediate, ImmediateTx),
             (pending_compute_tasks, Planner ? Planner->GetPendingComputeTasks().size() : 0),
             (use_followers, GetUseFollowers()),
             (trace_id, TraceId()));
@@ -953,10 +919,6 @@ private:
         Counters->TxProxyMon->TxExecuteTimeHgram->Collect(totalTime.MilliSeconds());
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-
-        if (GetUseFollowers()) {
-            Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
-        }
 
         if (CheckpointCoordinatorId) {
             Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
@@ -1242,12 +1204,9 @@ private:
     bool SaveScriptExternalEffectRequired = false;
 
     const bool ReadOnlyTx;
-    bool ImmediateTx = false;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;
-
-    bool HasPersistentChannels = false;
 
     TVector<ui64> ComputeTasks;
 

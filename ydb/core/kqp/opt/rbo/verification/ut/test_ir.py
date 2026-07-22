@@ -445,6 +445,51 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported aggregate phase"):
             parse_snapshot(bad_phase)
 
+    def test_decimal_sum_widens_to_max_precision_and_preserves_scale(self):
+        value = minimal_snapshot()
+        value["schema"]["tables"][0]["columns"][0]["type"] = "Decimal(7,2)"
+        value["plan"]["nodes"][-1] = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "sum",
+                    "output": "result",
+                    "type": "Decimal(35,2)",
+                    "nullable": True,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        value["plan"]["root"] = "aggregate"
+        value["plan"]["output"] = ["result"]
+        snapshot = parse_snapshot(value)
+        self.assertEqual(
+            [
+                (column.name, column.type, column.nullable)
+                for column in snapshot.output_schema()
+            ],
+            [("result", "Decimal(35,2)", True)],
+        )
+
+        for wrong_type in ("Decimal(34,2)", "Decimal(35,3)"):
+            malformed = copy.deepcopy(value)
+            malformed["plan"]["nodes"][-1]["aggregates"][0][
+                "type"
+            ] = wrong_type
+            with self.subTest(wrong_type=wrong_type):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "sum output type must be 'Decimal\\(35,2\\)'",
+                ):
+                    parse_snapshot(malformed)
+
     def test_void_is_an_exact_non_nullable_count_input_expression(self):
         value = count_star_snapshot()
         snapshot = parse_snapshot(value)

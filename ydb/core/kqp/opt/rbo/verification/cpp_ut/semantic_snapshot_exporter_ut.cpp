@@ -2977,6 +2977,68 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL((*aggregates[1])["distinct_all"].GetBooleanSafe(), false);
     }
 
+    Y_UNIT_TEST(ExportsDecimalSumSplitPhaseTypeContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"x", "Decimal(7,2)", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x"});
+        const auto* inputType = DecimalType(ctx, "7", "2", true);
+        const auto* sumType = DecimalType(ctx, "35", "2", true);
+        SetExactOutputType(ctx, *read, {{"a.x", inputType}});
+
+        const auto pos = TPositionHandle();
+        auto partial = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"), "sum", TInfoUnit("_state"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *partial, {{"_state", sumType}});
+
+        auto final = MakeIntrusive<TOpAggregate>(
+            partial,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("_state"), "sum", TInfoUnit("result"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Final,
+            false,
+            pos);
+        SetExactOutputType(ctx, *final, {{"result", sumType}});
+        TOpRoot root(final, pos, {"result"});
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& inputColumn = snapshot["schema"]["tables"][0]["columns"][0];
+        UNIT_ASSERT_VALUES_EQUAL(inputColumn["type"].GetStringSafe(), "Decimal(7,2)");
+        UNIT_ASSERT_VALUES_EQUAL(inputColumn["nullable"].GetBooleanSafe(), true);
+
+        TVector<const NJson::TJsonValue*> aggregates;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                aggregates.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(aggregates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL((*aggregates[0])["phase"].GetStringSafe(), "intermediate");
+        UNIT_ASSERT_VALUES_EQUAL((*aggregates[1])["phase"].GetStringSafe(), "final");
+
+        const auto& partialTrait = (*aggregates[0])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["input"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["function"].GetStringSafe(), "sum");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["output"].GetStringSafe(), "_state");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["type"].GetStringSafe(), "Decimal(35,2)");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["nullable"].GetBooleanSafe(), true);
+
+        const auto& finalTrait = (*aggregates[1])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["input"].GetStringSafe(), "_state");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["function"].GetStringSafe(), "sum");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["output"].GetStringSafe(), "result");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["type"].GetStringSafe(), "Decimal(35,2)");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["nullable"].GetBooleanSafe(), true);
+    }
+
     Y_UNIT_TEST(PreservesNonDefaultAggregateTraitFlags) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {
@@ -3268,6 +3330,20 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     left == right ? 0 : (left < right ? -1 : 1));
             }
         }
+    }
+
+    Y_UNIT_TEST(DecimalSumAccumulatorOverflowRequiresHeadroom) {
+        using NYql::NDecimal::Add;
+        using NYql::NDecimal::Inf;
+
+        const auto maximum = Inf() - 1;
+        const auto leftAssociated = Add(Add(maximum, maximum, 35), -maximum, 35);
+        const auto rightAssociated = Add(
+            maximum,
+            Add(maximum, -maximum, 35),
+            35);
+        UNIT_ASSERT(leftAssociated == Inf());
+        UNIT_ASSERT(rightAssociated == maximum);
     }
 
     Y_UNIT_TEST(ExportsDateAndDecimalSortAndRejectsTextOrdering) {

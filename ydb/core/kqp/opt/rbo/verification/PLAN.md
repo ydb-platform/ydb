@@ -213,7 +213,19 @@ equality makes two NaNs a sort tie. One order item retains one exact canonical
 `Decimal(p,s)` identity without scale alignment; separate tuple keys may have
 different Decimal identities. NULL placement continues to use the pre-physical
 snapshot's explicit `nulls_first` field. Decimal division, general casts, `IN`,
-and aggregate functions remain unsupported.
+and aggregate functions other than the bounded `sum` below remain unsupported.
+
+`sum(Decimal(p,s))` widens inputs, partial state, and result to
+`Decimal(35,s)`. MiniKQL/DQ combines them with saturating `AggrAdd`, which is not
+associative when finite overflow is possible. Each modeled Decimal value can
+therefore retain a conservative absolute finite-code bound. A sum is admitted
+only when the sum of all candidate bounds is strictly less than `10^35`; that
+guarantees every input order and partial/final parenthesization agrees. In this
+domain the compact exact result is NULL for no non-NULL input, NaN for any NaN
+or both infinity signs, the sole infinity sign when present, and otherwise the
+raw scaled-integer total. Partial states preserve the tighter bound through
+aliases and StageGraph connections. Missing provenance falls back to the full
+declared-type bound and can only make verification fail closed.
 
 ## Relational semantics
 
@@ -234,7 +246,8 @@ Implementation sequence:
    normalization;
 9. M4: exact canonical Decimal `+`, `-`, and `DecimalMul`;
 10. M4: exact Decimal Sort, TopSort, and Merge ordering;
-11. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+11. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
+12. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -366,6 +379,12 @@ TopSort prefixes, and two-task Merge. A C++ oracle locks the stated total order
 to `NUdf::CompareValues<Decimal>`. A real-host Decimal query verifies the
 bounded two-row/two-task pre-physical logical Sort+Limit to staged
 TopSort+Merge+final-Limit transformation pair.
+Decimal sum is exhaustively checked across finite values, specials, NULLs,
+grouping, scalar empty input, and every two-row/two-task partial-state routing.
+A C++ `NDecimal::Add` oracle locks the overflow non-associativity that requires
+the headroom gate, the exporter test locks `Decimal(7,2)` to `Decimal(35,2)`
+widening across intermediate/final phases, and a real-host query proves the
+split two-row/two-task aggregate obligation.
 All integer-width endpoints are checked independently for literals, source
 cells, and opaque results; a solver regression proves that `Decimal * i` and
 `Decimal * (i + 0)` cannot be distinguished by an out-of-range integer model.
@@ -418,8 +437,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
 ### M4: benchmark coverage — in progress
 
-- Grouped/scalar count and integer sum, including split intermediate/final
-  execution, NULLs, and exact 64-bit numeric behavior; distinct variants remain.
+- Grouped/scalar count, integer sum, and headroom-bounded Decimal sum, including
+  split intermediate/final execution, NULLs, exact 64-bit integer behavior,
+  Decimal specials, and partial-state bound provenance; distinct variants
+  remain.
 - Unordered literal Limit/offset, split per-task execution, and column-source
   pushed limits, with exhaustive and mutation tests.
 - Sort/TopSort, ordered Limit, and Merge, with exhaustive concrete differential
@@ -449,11 +470,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Decimal `+`/`-` and `DecimalMul` with a same-type Decimal or integer right
   operand have exact `NDecimal` special, ties-to-even, scale, and overflow
   semantics. Sort, TopSort, and Merge use the distinct raw-code total order,
-  including ordered NaN and exact Decimal key identity. General casts, Decimal
-  division, `IN`, and aggregate functions still fail closed. Exhaustive
-  rational and ordering references, adversarial arithmetic cases, signature
-  and mutation tests, and green real-host Decimal filter, arithmetic, and
-  ordered obligations cover this boundary.
+  including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
+  `Decimal(35,s)` and is exact whenever its carried finite bound proves that
+  saturating partial addition cannot overflow; unsafe bounds fail closed.
+  General casts, Decimal division, `IN`, and other aggregate functions remain
+  unsupported. Exhaustive rational, ordering, and aggregate references,
+  adversarial arithmetic and accumulator-overflow cases, signature and mutation
+  tests, and green real-host Decimal filter, arithmetic, ordered, and aggregate
+  obligations cover this boundary.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
@@ -475,11 +499,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   emits its two-row/two-task SMT obligation. This is formula coverage, not a
   solver proof; the focused formula-only run took 365116 ms and no Z3 executable
   was present.
-- Focused Decimal-arithmetic and ordering corpus reruns move the affected TPCH
-  and TPC-DS queries past `DecimalMul`, `+`, `-`, and Decimal order keys. TPCH
-  q3 and TPC-DS q3, q52, q55, q71, and q93 now reach the narrower verifier-level
-  Decimal `sum` gap; String keys remain fail-closed. No additional formula is
-  emitted: the complete floors remain TPCH 0/22 and TPC-DS 3/99.
+- Focused Decimal-arithmetic, ordering, and SUM corpus reruns move the affected
+  TPCH and TPC-DS queries past `DecimalMul`, `+`, `-`, Decimal order keys, and
+  the widened partial/final aggregate. TPCH q3 and TPC-DS q3, q52, q55, and q93
+  now reach the verifier's 256-alternative factorial Sort bound. TPC-DS q71 has
+  48 candidate aggregate slots at the current catalog bound; constructing its
+  first 257 permutation outcomes was stopped after 4m28s at about 531 MiB RSS.
+  No additional formula is emitted: the complete floors remain TPCH 0/22 and
+  TPC-DS 3/99. A non-factorial exact Sort encoding is the common next gate.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, formula-only baseline, solver-backed q96 proof, q88 investigation,
   and explicit unsupported/optimizer-failure inventory.

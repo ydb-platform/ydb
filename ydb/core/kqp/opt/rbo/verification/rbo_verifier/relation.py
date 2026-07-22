@@ -464,6 +464,38 @@ class Evaluator:
                 smt.add(*(smt.ite(guard, smt.ONE, smt.ZERO) for guard in non_null)),
             )
         if trait.function == "sum":
+            if decimal.is_type(trait.output_type):
+                guarded_values = tuple(
+                    (guard, row.values[trait.input])
+                    for guard, row in zip(non_null, source.rows)
+                    if guard != smt.FALSE
+                )
+                finite_abs_bound = sum(
+                    _decimal_finite_abs_bound(value)
+                    for _, value in guarded_values
+                )
+                result_type = decimal.parse_type(trait.output_type)
+                assert result_type is not None
+                if finite_abs_bound >= 10**result_type.precision:
+                    raise RelationError(
+                        f"Decimal sum may overflow its {trait.output_type} accumulator "
+                        "within the current bound; non-associative overflow is not modeled"
+                    )
+                return Value(
+                    trait.output_type,
+                    smt.not_(smt.or_(*non_null))
+                    if trait.output_nullable
+                    else smt.FALSE,
+                    decimal.sum_with_headroom(
+                        tuple(
+                            (guard, value.value)
+                            for guard, value in guarded_values
+                        ),
+                        trait.output_type,
+                        finite_abs_bound,
+                    ),
+                    decimal_finite_abs_bound=finite_abs_bound,
+                )
             total = smt.add(
                 *(
                     smt.ite(
@@ -579,6 +611,15 @@ def _wrap_sum(value: smt.Term, scalar_type: str) -> smt.Term:
             smt.int_value(-sign),
         )
     raise RelationError(f"sum output type {scalar_type!r} is not modeled")
+
+
+def _decimal_finite_abs_bound(value: Value) -> int:
+    if value.decimal_finite_abs_bound is not None:
+        return value.decimal_finite_abs_bound
+    decimal_type = decimal.parse_type(value.type)
+    if decimal_type is None:
+        raise RelationError(f"Decimal sum input type {value.type!r} is not modeled")
+    return 10**decimal_type.precision - 1
 
 
 def _unwrap_sum(value: Value) -> smt.Term:

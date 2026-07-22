@@ -37,6 +37,7 @@ class Value:
     type: str
     is_null: smt.Term
     value: smt.Term
+    decimal_finite_abs_bound: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

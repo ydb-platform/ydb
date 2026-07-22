@@ -18,13 +18,14 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     parse_snapshot,
     stage_task_counts,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli, decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import verify as verifier
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator as RelationEvaluator,
+    RelationError,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder as ScalarEncoder,
@@ -51,6 +52,8 @@ SOLVER = (
     if yatest_common is not None
     else os.environ.get("RBO_Z3")
 )
+REFERENCE_DECIMAL_INF = 10**35
+REFERENCE_DECIMAL_NAN = REFERENCE_DECIMAL_INF + 1
 
 
 def schema():
@@ -373,10 +376,11 @@ def aggregate_stage_snapshot(
     shuffle_key="a.k",
     input_type="Int64",
 ):
+    decimal_sum_type = decimal.sum_type(input_type)
     output_type = (
         "Uint64"
         if function == "count" or input_type.startswith("Uint")
-        else "Int64"
+        else decimal_sum_type or "Int64"
     )
     final_function = final_function or ("sum" if staged else function)
     keys = ["a.k"] if grouped else []
@@ -1246,6 +1250,139 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     )
                     self.assertEqual(actual, expected, (rows, placements))
 
+    def test_decimal_sum_matches_independent_special_null_and_group_reference(self):
+        self.assertEqual(decimal.INF, REFERENCE_DECIMAL_INF)
+        self.assertEqual(decimal.NAN, REFERENCE_DECIMAL_NAN)
+        concrete_values = (
+            -REFERENCE_DECIMAL_INF,
+            -1,
+            0,
+            1,
+            REFERENCE_DECIMAL_INF,
+            REFERENCE_DECIMAL_NAN,
+        )
+        for grouped, nullable_input, nullable_key in product(
+            (False, True),
+            (False, True),
+            (False, True),
+        ):
+            if not grouped and nullable_key:
+                continue
+            snapshot = aggregate_stage_snapshot(
+                "sum",
+                grouped,
+                False,
+                nullable_input=nullable_input,
+                nullable_key=nullable_key,
+                input_type="Decimal(2,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+            keys = (None, 0, 1) if nullable_key else (0, 1)
+            values = (
+                (None,) + concrete_values
+                if nullable_input
+                else concrete_values
+            )
+            states = (None,) + tuple(product(keys, values))
+            for rows in product(states, repeat=2):
+                with self.subTest(
+                    grouped=grouped,
+                    nullable_input=nullable_input,
+                    nullable_key=nullable_key,
+                    rows=rows,
+                ):
+                    actual = self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    )
+                    expected = self._decimal_reference_bag(grouped, rows)
+                    self.assertEqual(actual, expected)
+
+    def test_split_decimal_sum_retains_headroom_across_partial_states(self):
+        values = (
+            None,
+            -REFERENCE_DECIMAL_INF,
+            -1,
+            0,
+            1,
+            REFERENCE_DECIMAL_INF,
+            REFERENCE_DECIMAL_NAN,
+        )
+        for grouped in (False, True):
+            snapshot = aggregate_stage_snapshot(
+                "sum",
+                grouped,
+                True,
+                nullable_input=True,
+                nullable_key=True,
+                input_type="Decimal(2,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            router = Router(script)
+            relation = StageEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root().certain()
+            states = (None,) + tuple(product((None, 0, 1), values))
+            for rows, placements in product(
+                product(states, repeat=2),
+                product((False, True), repeat=2),
+            ):
+                with self.subTest(
+                    grouped=grouped,
+                    rows=rows,
+                    placements=placements,
+                ):
+                    constants = self._constants(database, rows)
+                    for slot, placement in enumerate(placements):
+                        constants[
+                            router.source_task("A", slot).atom
+                        ] = placement
+                    actual = self._symbolic_bag(
+                        relation,
+                        constants,
+                        self._hash_choice,
+                    )
+                    expected = self._decimal_reference_bag(grouped, rows)
+                    self.assertEqual(actual, expected)
+
+    def test_decimal_sum_fails_closed_when_finite_overflow_can_depend_on_order(self):
+        snapshot = aggregate_stage_snapshot(
+            "sum",
+            False,
+            False,
+            input_type="Decimal(35,0)",
+        )
+
+        one_row_script = smt.Script()
+        one_row_database = Database(snapshot, 1, one_row_script)
+        RelationEvaluator(
+            snapshot,
+            one_row_database,
+            ScalarEncoder(one_row_script),
+        ).root()
+
+        two_row_script = smt.Script()
+        two_row_database = Database(snapshot, 2, two_row_script)
+        with self.assertRaisesRegex(
+            RelationError,
+            "non-associative overflow is not modeled",
+        ):
+            RelationEvaluator(
+                snapshot,
+                two_row_database,
+                ScalarEncoder(two_row_script),
+            ).root()
+
     @staticmethod
     def _constants(database, rows):
         result = {}
@@ -1300,6 +1437,38 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     if unsigned_sum
                     else ((total + (1 << 63)) % (1 << 64)) - (1 << 63)
                 )
+            prefix = (key,) if grouped else ()
+            result[prefix + (aggregate,)] += 1
+        return result
+
+    @staticmethod
+    def _decimal_reference_bag(grouped, slots):
+        rows = [row for row in slots if row is not None]
+        groups = {}
+        if grouped:
+            for key, value in rows:
+                groups.setdefault(key, []).append(value)
+        else:
+            groups[()] = [value for _, value in rows]
+
+        result = Counter()
+        for key, values in groups.items():
+            non_null = [value for value in values if value is not None]
+            if not non_null:
+                aggregate = None
+            elif REFERENCE_DECIMAL_NAN in non_null:
+                aggregate = REFERENCE_DECIMAL_NAN
+            elif (
+                REFERENCE_DECIMAL_INF in non_null
+                and -REFERENCE_DECIMAL_INF in non_null
+            ):
+                aggregate = REFERENCE_DECIMAL_NAN
+            elif REFERENCE_DECIMAL_INF in non_null:
+                aggregate = REFERENCE_DECIMAL_INF
+            elif -REFERENCE_DECIMAL_INF in non_null:
+                aggregate = -REFERENCE_DECIMAL_INF
+            else:
+                aggregate = sum(non_null)
             prefix = (key,) if grouped else ()
             result[prefix + (aggregate,)] += 1
         return result

@@ -126,6 +126,7 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
+    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
     library/cpp/json
 )

@@ -137,11 +137,12 @@ message FulltextIndexSettings {
         //   Tokens: ["foo-bar", "baz_lorem", "ipsum"]
         WHITESPACE = 1;
 
-        // Splits text into sequences of alphabetic and numeric characters
+        // Applies general language-aware tokenization
+        // Splits text on whitespace and punctuation
         // Example:
         //   Text: "foo-bar baz_lorem ipsum"
         //   Tokens: ["foo", "bar", "baz", "lorem", "ipsum"]
-        ALPHANUMERIC = 2;
+        STANDARD = 2;
 
         // Treats the entire input as a single token
         // No splitting is performed
@@ -149,13 +150,6 @@ message FulltextIndexSettings {
         //   Text: "Hello World!"
         //   Tokens: ["Hello World!"]
         KEYWORD = 3;
-
-        // Applies general language-aware tokenization
-        // According to a simplified Unicode UAX#29 standard
-        // Example:
-        //   Text: "The 24.18 Brown-Foxes jumped over the lazy dog's bone!"
-        //   Tokens: ["The", "24.18", "Brown", "Foxes", "jumped", "over", "the", "lazy", "dog's", "bone"]
-        STANDARD = 4;
     }
 
     // Represents text analyzers settings

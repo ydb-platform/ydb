@@ -1123,7 +1123,7 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
         ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         FirstRead = false;
     }
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, Min(ReadOffset, EndOffset), EndOffset));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
 }
 
 

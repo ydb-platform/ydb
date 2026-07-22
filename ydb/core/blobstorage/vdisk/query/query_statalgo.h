@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "query_stat_yield.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
 #include <util/stream/length.h>
@@ -8,55 +9,137 @@
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
-    // TraverseDbWithoutMerge
-    // Traversing LevelIndex Database per fresh segment, per Sst, usefull
-    // for gathering info disregarding garbage collection
+    // TraverseFreshSegment
+    // Traverses a single fresh segment. May yield mid-traversal and resume
+    // from yielded position later.
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
-    void TraverseDbWithoutMerge(
+    std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseFreshSegment(
             const TIntrusivePtr<THullCtx> &hullCtx,
             TAggr *aggr,
-            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> &snap)
+            const char *segName,
+            const ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec> &seg,
+            typename TDbStatYeildedState<TKey, TMemRec>::EFreshSegment segmentType,
+            std::optional<typename TDbStatYeildedState<TKey, TMemRec>::TFreshIterator> resumeIt,
+            TDbStatYieldChecker& yeildChecker)
     {
-        using TLevelSliceSnapshot = ::NKikimr::TLevelSliceSnapshot<TKey, TMemRec>;
-        using TSstIterator = typename TLevelSliceSnapshot::TSstIterator;
-        using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
-        using TMemIterator = typename TLevelSegment::TMemIterator;
-        using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
+        using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
+        using TIterator = typename TFreshSegmentSnapshot::TIteratorWOMerge;
 
-        // Fresh Segment Traversal Function
-        auto traverseFreshSeg = [&] (const char *segName, const TFreshSegmentSnapshot &seg) {
-            using TIterator = typename TFreshSegmentSnapshot::TIteratorWOMerge;
-            TIterator it(hullCtx, &seg);
+        TIterator it = resumeIt ? *resumeIt : TIterator(hullCtx, &seg);
+        if (!resumeIt) {
             it.SeekToFirst();
-            while (it.Valid()) {
-                aggr->UpdateFresh(segName, it.GetUnmergedKey(), it.GetUnmergedMemRec());
-                it.Next();
+        }
+
+        while (it.Valid()) {
+            aggr->UpdateFresh(segName, it.GetUnmergedKey(), it.GetUnmergedMemRec());
+            it.Next();
+            if (it.Valid() && yeildChecker.StepAndCheckForYield()) {
+                return TYeildedState{typename TYeildedState::TFreshPosition{segmentType, it}};
             }
+        }
+        return std::nullopt;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TraverseDbWithoutMerge
+    // Traversing LevelIndex Database per fresh segment, per Sst, usefull
+    // for gathering info disregarding garbage collection.
+    //
+    // Execution may be yielded if according policy is passed and later resumed
+    // from saved state. 
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TAggr, class TKey, class TMemRec>
+    std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseDbWithoutMerge(
+            const TIntrusivePtr<THullCtx> &hullCtx,
+            TAggr *aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> &snap,
+            std::optional<TDbStatYeildedState<TKey, TMemRec>> yeildedState = std::nullopt,
+            std::optional<TDbStatYieldPolicy> yeildPolicy = std::nullopt)
+    {
+        using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
+        using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
+        using TSstIterator = typename TYeildedState::TSstIterator;
+        using TMemIterator = typename TYeildedState::TMemIterator;
+        using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
+        using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
+        using EFreshSegment = typename TYeildedState::EFreshSegment;
+
+        TDbStatYieldChecker yeildChecker(std::move(yeildPolicy));
+
+        // Description of a single fresh segment to traverse
+        struct TSegmentDescription {
+            const char* Name;
+            EFreshSegment Type;
+            const TFreshSegmentSnapshot& Seg;
+        };
+        const TSegmentDescription segments[] = {
+            {"FCur", EFreshSegment::Cur, snap.FreshSnap.Cur},
+            {"FDreg", EFreshSegment::Dreg, snap.FreshSnap.Dreg},
+            {"FOld", EFreshSegment::Old, snap.FreshSnap.Old},
         };
 
+        // Figure out where to (re)start traversal
+        size_t startFreshSegmentIdx = 0;
+        bool resumeLevels = false;
+        std::optional<typename TYeildedState::TFreshIterator> freshResumeIt;
+        std::optional<TSstIterator> sstResumeIt;
+        std::optional<TMemIterator> memResumeIt;
+
+        if (yeildedState) {
+            if (auto* fresh = std::get_if<typename TYeildedState::TFreshPosition>(&yeildedState->Position)) {
+                startFreshSegmentIdx = static_cast<size_t>(fresh->Segment);
+                freshResumeIt = fresh->Iterator;
+            } else {
+                auto& level = std::get<typename TYeildedState::TLevelPosition>(yeildedState->Position);
+                resumeLevels = true;
+                sstResumeIt = level.SstIt;
+                memResumeIt = level.MemIt;
+            }
+        }
 
         // Traverse Fresh
-        traverseFreshSeg("FCur", snap.FreshSnap.Cur);
-        traverseFreshSeg("FDreg", snap.FreshSnap.Dreg);
-        traverseFreshSeg("FOld", snap.FreshSnap.Old);
+        if (!resumeLevels) {
+            for (size_t i = startFreshSegmentIdx; i < Y_ARRAY_SIZE(freshSegs); ++i) {
+                const TSegmentDescription& description = freshSegs[i];
+                std::optional<typename TYeildedState::TFreshIterator> resumeIt;
+                if (i == startFreshSegmentIdx) {
+                    resumeIt = std::move(freshResumeIt);
+                }
+                if (auto yielded = TraverseFreshSegment(hullCtx, aggr, description.Name, description.Seg,
+                        description.Type, std::move(resumeIt), yeildChecker)) {
+                    return yielded;
+                }
+            }
+        }
 
         // Traverse SSTs
-        TSstIterator it(&snap.SliceSnap);
-        it.SeekToFirst();
+        TSstIterator it = resumeLevels ? *sstResumeIt : TSstIterator(&snap.SliceSnap);
+        if (!resumeLevels) {
+            it.SeekToFirst();
+        }
         while (it.Valid()) {
             TLevelSstPtr p = it.Get();
-            TMemIterator c(p.SstPtr.Get());
-            c.SeekToFirst();
+            TMemIterator c = (resumeLevels && memResumeIt) ? *memResumeIt : TMemIterator(p.SstPtr.Get());
+            if (!(resumeLevels && memResumeIt)) {
+                c.SeekToFirst();
+            }
+            // consume the resume state only for the first SST after a resume
+            resumeLevels = false;
+            memResumeIt.reset();
             while (c.Valid()) {
                 aggr->UpdateLevel(p, c.GetCurKey(), c.GetMemRec());
                 c.Next();
+                if (c.Valid() && yeildChecker.StepAndCheckForYield()) {
+                    return TYeildedState{typename TYeildedState::TLevelPosition{it, c}};
+                }
             }
             it.Next();
         }
 
         aggr->Finish();
+        return std::nullopt;
     }
 
     ////////////////////////////////////////////////////////////////////////////

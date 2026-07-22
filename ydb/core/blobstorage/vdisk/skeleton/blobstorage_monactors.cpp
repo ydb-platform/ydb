@@ -883,7 +883,7 @@ namespace NKikimr {
         }
 
         struct TMessage {
-            bool Error;                 // was an error?
+            bool Error;                         // was an error?
             std::unique_ptr<IEventBase> Msg;    // in case of error contains reply, or a request to VDisk otherwise
         };
 

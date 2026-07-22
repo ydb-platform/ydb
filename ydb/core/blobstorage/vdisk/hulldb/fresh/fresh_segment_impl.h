@@ -681,6 +681,12 @@ namespace NKikimr {
             Next();
         }
 
+        void Seek(const TKey &key) {
+            Recs.clear();
+            It.Seek(key);
+            Next();
+        }
+
         TKey GetUnmergedKey() const {
             return Recs.back().first;
         }

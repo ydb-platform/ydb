@@ -1442,7 +1442,7 @@ namespace NKikimr {
                 IActor *actor = CreateDbStatActor(HullCtx, HugeBlobCtx, ctx, std::move(fullSnap),
                         ctx.SelfID, ev, std::move(result));
                 if (actor) {
-                    auto aid = ctx.Register(actor);
+                    auto aid = RunInBatchPool(ctx, actor);
                     ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
                 // CreateDbStatActor is responsible for sending result to the recipient
@@ -1460,7 +1460,7 @@ namespace NKikimr {
             IActor *actor = CreateDbStatActor(HullCtx, HugeBlobCtx, ctx, std::move(fullSnap),
                     ctx.SelfID, ev, std::move(result));
             if (actor) {
-                auto aid = ctx.Register(actor);
+                auto aid = RunInBatchPool(ctx, actor);
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }

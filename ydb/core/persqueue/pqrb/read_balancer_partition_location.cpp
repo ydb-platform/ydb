@@ -51,6 +51,7 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
     while (!PartitionsLocationQueue.empty()) {
         auto request = std::move(PartitionsLocationQueue.front());
         PartitionsLocationQueue.pop_front();
+        // Prefer a successful answer whenever possible — even past the deadline.
         if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
             continue;
         }

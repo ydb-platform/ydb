@@ -576,6 +576,24 @@ message TSetVDiskReadOnly {
 message TGetInterfaceVersion
 {}
 
+message TInferPDiskSlotCountForDriveTypeSettings {
+    // NodeWarden infers PDiskConfig ExpectedSlotCount by the formula
+    // ExpectedSlotCount = TotalSize / (UnitSize * 2^N)
+    // where 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
+    optional uint64 UnitSize = 1; // in bytes
+    optional uint32 MaxSlots = 2;
+    // Unless true, explicit PDisk slot settings override inferred settings.
+    optional bool PreferInferredSettingsOverExplicit = 3;
+    // SlotSize is used as PDiskConfig ExpectedSlotSize for this drive type.
+    // It is mutually exclusive with UnitSize and requires MaxSlots as slot-count cap.
+    optional uint64 SlotSize = 4; // in bytes
+}
+
+message TInferPDiskSlotCountSettings {
+    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 1;
+    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -775,6 +793,7 @@ message TBaseConfig {
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
+    TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
 }
 
 message TMoveCommand {

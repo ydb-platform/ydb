@@ -1,5 +1,6 @@
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 
 namespace NKikimr::NStorage {
@@ -369,6 +370,13 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfig(const NKikimrConfig::TBlobStorageConfig& config, const THashSet<ui32>& nodeIds) {
         if (config.HasServiceSet()) {
             if (auto error = ValidateConfig(config.GetServiceSet(), nodeIds)) {
+                return error;
+            }
+        }
+
+        if (config.HasInferPDiskSlotCountSettings()) {
+            if (auto error = ValidateInferPDiskSlotCountSettings(
+                    config.GetInferPDiskSlotCountSettings(), "BlobStorageConfig.InferPDiskSlotCountSettings")) {
                 return error;
             }
         }

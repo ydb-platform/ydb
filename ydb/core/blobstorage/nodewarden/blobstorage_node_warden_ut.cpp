@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -993,6 +994,123 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
     }
 
+    void TestInferPDiskSlotCount(ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots,
+            ui32 expectedSlotCount) {
+        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig("fake_drive", 0, 0, 0);
+
+        NStorage::TNodeWarden::InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes, maxSlots);
+
+        VERBOSE_COUT(""
+            << " driveSize# " << driveSize
+            << " unitSizeInBytes# " << unitSizeInBytes
+            << " maxSlots# " << maxSlots
+            << " -> ExpectedSlotCount# " << pdiskConfig->ExpectedSlotCount);
+
+        if (expectedSlotCount) {
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ExpectedSlotCount, expectedSlotCount);
+        } else {
+            UNIT_ASSERT(pdiskConfig->ExpectedSlotCount >= 1);
+            UNIT_ASSERT(pdiskConfig->ExpectedSlotCount <= (maxSlots ? maxSlots : 16));
+        }
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountPureFunction) {
+        // expected counts match mainline InferPDiskSlotCount: the 2^N slot scaling is folded
+        // into the count on this branch, so only the count is asserted
+        TestInferPDiskSlotCount(7900, 1000, 16, 8);
+        TestInferPDiskSlotCount(8000, 1000, 16, 8);
+        TestInferPDiskSlotCount(8100, 1000, 16, 8);
+        TestInferPDiskSlotCount(16000, 1000, 16, 16);
+        TestInferPDiskSlotCount(24000, 1000, 16, 12);
+        TestInferPDiskSlotCount(31000, 1000, 16, 16);
+        TestInferPDiskSlotCount(50000, 1000, 16, 13);
+        TestInferPDiskSlotCount(50000, 100, 16, 16);
+        TestInferPDiskSlotCount(18000, 200, 16, 11);
+        TestInferPDiskSlotCount(200, 1000, 16, 1);
+        TestInferPDiskSlotCount(999, 1000, 16, 1);
+        TestInferPDiskSlotCount(1499, 1000, 16, 1);
+        TestInferPDiskSlotCount(1500, 1000, 16, 2);
+
+        for (ui32 maxSlots = 1; maxSlots <= 24; maxSlots++) {
+            for (ui64 i = 1; i <= 1024; i++) {
+                TestInferPDiskSlotCount(i, 1, maxSlots, 0);
+            }
+        }
+
+        const size_t c_160GB = 160'000'000'000;
+        const size_t c_200GB = 200'000'000'000;
+        const size_t c_2000GB = 2000'000'000'000;
+
+        // Some real-world examples
+        TestInferPDiskSlotCount(1919'366'987'776, c_200GB, 16, 10); // "Micron_5200_MTFDDAK1T9TDD"
+        TestInferPDiskSlotCount(3199'243'124'736, c_200GB, 16, 16); // "SAMSUNG MZWLR3T8HBLS-00007"
+        TestInferPDiskSlotCount(6400'161'873'920, c_200GB, 16, 16); // "INTEL SSDPE2KE064T8"
+        TestInferPDiskSlotCount(6398'611'030'016, c_200GB, 16, 16); // "INTEL SSDPF2KX076T1"
+        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 16, 9); // "WDC  WUH721818ALE6L4"
+
+        // Another real-world case
+        TestInferPDiskSlotCount(3199'556'648'960, c_160GB, 24, 20);
+        TestInferPDiskSlotCount(6399'968'935'936, c_160GB, 24, 20);
+        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 24, 9);
+    }
+
+    void UpdateInferPDiskSlotCountSettings(TTestBasicRuntime& runtime, TActorId realNodeWarden,
+            ui64 unitSize, ui32 maxSlots, bool preferInferredSettings) {
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto& record = request->Record;
+        auto* blobStorageConfig = record.MutableConfig()->MutableBlobStorageConfig();
+        auto* inferSettings = blobStorageConfig->MutableInferPDiskSlotCountSettings();
+        auto* inferRotSettings = inferSettings->MutableRot();
+
+        inferRotSettings->SetUnitSize(unitSize);
+        inferRotSettings->SetMaxSlots(maxSlots);
+        inferRotSettings->SetPreferInferredSettingsOverExplicit(preferInferredSettings);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(realNodeWarden, sender, request.release()));
+
+        auto response = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
+        Y_UNUSED(response);
+    }
+
+    void UpdateInferPDiskSlotCountFromSlotSizeSettings(TTestBasicRuntime& runtime, TActorId realNodeWarden,
+            ui64 slotSize, ui32 maxSlots, bool preferInferredSettings = false) {
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto& record = request->Record;
+        auto* blobStorageConfig = record.MutableConfig()->MutableBlobStorageConfig();
+        auto* inferSettings = blobStorageConfig->MutableInferPDiskSlotCountSettings();
+        auto* inferRotSettings = inferSettings->MutableRot();
+
+        inferRotSettings->SetSlotSize(slotSize);
+        inferRotSettings->SetMaxSlots(maxSlots);
+        inferRotSettings->SetPreferInferredSettingsOverExplicit(preferInferredSettings);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(realNodeWarden, sender, request.release()));
+
+        auto response = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
+        Y_UNUSED(response);
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountSettingsSlotSizeValidation) {
+        NKikimrBlobStorage::TInferPDiskSlotCountSettings settings;
+        settings.MutableRot()->SetSlotSize(600ull << 30);
+        auto error = ValidateInferPDiskSlotCountSettings(
+            settings, "BlobStorageConfig.InferPDiskSlotCountSettings");
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_C(error->Contains("MaxSlots is mandatory with SlotSize or UnitSize"), *error);
+
+        settings.MutableRot()->SetMaxSlots(16);
+        UNIT_ASSERT(!ValidateInferPDiskSlotCountSettings(
+            settings, "BlobStorageConfig.InferPDiskSlotCountSettings"));
+
+        settings.MutableRot()->SetUnitSize(100_GB);
+        error = ValidateInferPDiskSlotCountSettings(
+            settings, "BlobStorageConfig.InferPDiskSlotCountSettings");
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_C(error->Contains("SlotSize is mutually exclusive with UnitSize"), *error);
+    }
+
     void CheckExpectedPDiskSlotSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
             TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount,
             std::optional<ui64> expectedSlotSize = std::nullopt,
@@ -1074,11 +1192,102 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return realNodeWarden;
     }
 
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountExplicitConfig) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+        UpdateInferPDiskSlotCountSettings(runtime, realNodeWarden,
+            100_GB, 16, false);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1001;
+        const TString pdiskPath = "SectorMap:TestInferPDiskSlotCountExplicitConfig:2400";
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        VERBOSE_COUT("- Test case 1 - create PDisk");
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotCount(13);
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 13);
+
+        VERBOSE_COUT("- Test case 2 - enable PreferInferredSettingsOverExplicit");
+        UpdateInferPDiskSlotCountSettings(runtime, realNodeWarden,
+            100_GB, 16, true);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12);
+
+        VERBOSE_COUT("- Test case 3 - update InferPDiskSlotCountSettings");
+        UpdateInferPDiskSlotCountSettings(runtime, realNodeWarden,
+            50_GB, 9, true);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 6);
+
+        VERBOSE_COUT("- Test case 4 - remove InferPDiskSlotCountSettings");
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        {
+            auto& record = request->Record;
+            record.MutableConfig()->MutableBlobStorageConfig();
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(realNodeWarden, sender, request.release()));
+            runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
+        }
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 13);
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountFromSlotSizeWithRealNodeWarden) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+        const ui64 expectedSlotSize = 600ull << 30;
+        UpdateInferPDiskSlotCountFromSlotSizeSettings(runtime, realNodeWarden, expectedSlotSize, 64);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1006;
+        const TString pdiskPath = "SectorMap:TestInferPDiskSlotCountFromSlotSizeWithRealNodeWarden:2400";
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 4, expectedSlotSize);
+
+        const ui64 updatedExpectedSlotSize = 800ull << 30;
+        UpdateInferPDiskSlotCountFromSlotSizeSettings(runtime, realNodeWarden, updatedExpectedSlotSize, 64);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 3, updatedExpectedSlotSize);
+
+        UpdateInferPDiskSlotCountFromSlotSizeSettings(runtime, realNodeWarden, updatedExpectedSlotSize, 2);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 2, updatedExpectedSlotSize);
+
+        pdiskConfig.SetExpectedSlotCount(17);
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 17);
+
+        UpdateInferPDiskSlotCountFromSlotSizeSettings(runtime, realNodeWarden, updatedExpectedSlotSize, 64, true);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 3, updatedExpectedSlotSize);
+    }
+
     CUSTOM_UNIT_TEST(TestExpectedSlotSizeCalculatesSlotCount) {
         TTestBasicRuntime runtime(1, false);
         TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
 
         const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1003;
+        const TString pdiskPath = "SectorMap:TestExpectedSlotSizeCalculatesSlotCount:2400";
         const ui64 expectedSlotSize = 600ull << 30;
 
         TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
@@ -1086,29 +1295,27 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
         runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
 
-        // this branch has no runtime slot settings reconfiguration for a running PDisk,
-        // so each configuration variant is checked on a freshly created PDisk
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
         pdiskConfig.SetMaxSlots(8);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_1:2400", 0, 1003, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1003, 4, expectedSlotSize);
+            pdiskId, 4, expectedSlotSize);
 
         const ui64 updatedExpectedSlotSize = 800ull << 30;
         pdiskConfig.SetExpectedSlotSize(updatedExpectedSlotSize);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_2:2400", 0, 1013, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1013, 3, updatedExpectedSlotSize);
+            pdiskId, 3, updatedExpectedSlotSize);
 
         const ui64 smallExpectedSlotSize = 1ull << 30;
         pdiskConfig.SetExpectedSlotSize(smallExpectedSlotSize);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_3:2400", 0, 1023, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1023, 8u, smallExpectedSlotSize);
+            pdiskId, 8u, smallExpectedSlotSize);
     }
 
     CUSTOM_UNIT_TEST(TestExpectedSlotSettingsTransitions) {
@@ -1116,6 +1323,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
 
         const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1004;
+        const TString pdiskPath = "SectorMap:TestExpectedSlotSettingsTransitions:2400";
         const ui64 expectedSlotSize = 600ull << 30;
 
         TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
@@ -1123,30 +1332,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
         runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
 
-        // this branch has no runtime slot settings reconfiguration for a running PDisk,
-        // so each configuration variant is checked on a freshly created PDisk
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         pdiskConfig.SetExpectedSlotCount(7);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_1:2400", 0, 1004, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1004, 7);
+            pdiskId, 7);
 
         pdiskConfig.ClearExpectedSlotCount();
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
         pdiskConfig.SetMaxSlots(8);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_2:2400", 0, 1014, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1014, 4, expectedSlotSize);
+            pdiskId, 4, expectedSlotSize);
 
         pdiskConfig.ClearExpectedSlotSize();
         pdiskConfig.ClearMaxSlots();
         pdiskConfig.SetExpectedSlotCount(9);
-        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_3:2400", 0, 1024, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1024, 9);
+            pdiskId, 9);
     }
 
     CUSTOM_UNIT_TEST(TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden) {
@@ -1154,6 +1361,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
 
         const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1005;
+        const TString pdiskPath = "SectorMap:TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden:2400";
         const ui64 expectedSlotSize = 600ull << 30;
 
         TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
@@ -1165,10 +1374,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdiskConfig.SetExpectedSlotCount(17);
         pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
         pdiskConfig.SetMaxSlots(8);
-        CreatePDisk(runtime, 0, "SectorMap:TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden_1:2400", 0, 1005, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1005, 4, expectedSlotSize);
+            pdiskId, 4, expectedSlotSize);
 
         auto edge = runtime.AllocateEdgeActor();
         THttpRequestMock httpRequest;
@@ -1187,10 +1396,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         // without MaxSlots the slot count cannot be derived from ExpectedSlotSize, so the
         // invalid setting must be ignored and the explicit slot settings kept in effect
         pdiskConfig.ClearMaxSlots();
-        CreatePDisk(runtime, 0, "SectorMap:TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden_2:2400", 0, 1015, 0,
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
         CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-            1015, 17);
+            pdiskId, 17);
     }
 
     CUSTOM_UNIT_TEST(TestExpectedSlotSizeLargerThanDriveKeepsZeroSlotCount) {

@@ -159,6 +159,10 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryGroupInfo, Handle);
         hFunc(TEvNodeWardenQueryStorageConfig, Handle);
         hFunc(TEvNodeWardenStorageConfig, Handle);
+        hFunc(NPDisk::TEvChangeExpectedSlotCountResult, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
 
         // proxy requests for the NodeWhiteboard to prevent races
@@ -329,6 +333,10 @@ void TNodeWarden::StartRequestReportingThrottler() {
 
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
+
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
+
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
@@ -499,6 +507,11 @@ void TNodeWarden::Bootstrap() {
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
 
     YamlConfig = std::move(Cfg->YamlConfig);
+
+    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings());
+    ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
@@ -1217,6 +1230,56 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
             }
         }
     }
+}
+
+void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
+    const NPDisk::TEvChangeExpectedSlotCountResult &msg = *ev->Get();
+    STLOG(PRI_DEBUG, BS_NODE, NW108, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)", (Msg, msg.ToString()));
+
+    // For now, just log the result. In the future, we might want to track this or take action based on the result.
+    if (msg.Status != NKikimrProto::OK) {
+        STLOG(PRI_ERROR, BS_NODE, NW109, "ChangeExpectedSlotCount failed",
+            (Status, msg.Status), (ErrorReason, msg.ErrorReason));
+    }
+}
+
+void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
+void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
+void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
+    auto& record = ev->Get()->Record;
+    if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
+        auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
+        auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
+        if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
+            InferPDiskSlotCountSettings.CopyFrom(inferSettings);
+            for (auto& [key, localPDisk] : LocalPDisks) {
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
+                    localPDisk.Record, &localPDisk.PDiskConfigWarning);
+                const ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                const ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
+
+                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                        newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (ExpectedSlotSize, newExpectedSlotSize));
+
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
+                        newExpectedSlotCount, newExpectedSlotSize));
+
+                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+                    localPDisk.ExpectedSlotSize = newExpectedSlotSize;
+                }
+            }
+        }
+    }
+    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 
 void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial) {

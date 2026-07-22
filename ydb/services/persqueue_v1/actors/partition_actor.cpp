@@ -1526,6 +1526,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
             {"partition", Partition},
             {"session", Session});
+        WaitForData = false;
+        WaitDataInfly.clear();
         Counters.Errors.Inc();
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
             TStringBuilder() << "status is not ok: no such session '" << Session << "'",

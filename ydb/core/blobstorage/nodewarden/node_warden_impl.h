@@ -38,6 +38,7 @@ namespace NKikimr::NStorage {
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
     constexpr TDuration BackoffMax = TDuration::Seconds(5);
+    constexpr TDuration SlayRetryInitialDelay = TDuration::Seconds(5);
     constexpr const char *MockDevicesPath = "/Berkanavt/kikimr/testing/mock_devices.txt";
     constexpr const char *YamlConfigFileName = "config.yaml";
     constexpr const char *StorageConfigFileName = "storage.yaml";
@@ -189,6 +190,7 @@ namespace NKikimr::NStorage {
                 EvDereferencePDisk,
                 EvSaveConfigResult,
                 EvRetrySaveConfig,
+                EvRetrySlay,
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
@@ -212,6 +214,27 @@ namespace NKikimr::NStorage {
                     , MainYamlVersion(mainYamlVersion)
                     , StorageYaml(std::move(storageYaml))
                     , StorageYamlVersion(storageYamlVersion)
+                {}
+            };
+
+            struct TEvRetrySlay : TEventLocal<TEvRetrySlay, EvRetrySlay> {
+                enum class EReason {
+                    UNCONFIRMED,
+                    NOTREADY,
+                };
+
+                ui32 NodeId;
+                ui32 PDiskId;
+                ui32 VDiskSlotId;
+                ui64 Round;
+                EReason Reason;
+
+                TEvRetrySlay(ui32 nodeId, ui32 pdiskId, ui32 vdiskSlotId, ui64 round, EReason reason)
+                    : NodeId(nodeId)
+                    , PDiskId(pdiskId)
+                    , VDiskSlotId(vdiskSlotId)
+                    , Round(round)
+                    , Reason(reason)
                 {}
             };
         };
@@ -526,7 +549,19 @@ namespace NKikimr::NStorage {
 
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
         THashMap<TActorId, TVSlotId> VDiskIdByActor;
-        std::map<TVSlotId, ui64> SlayInFlight;
+        enum class ESlayAction {
+            WIPE,
+            DESTROY,
+        };
+
+        struct TSlayInFlight {
+            TVDiskID VDiskId;
+            ESlayAction Action;
+            ui64 Round = 0;
+            TDuration RetryDelay = SlayRetryInitialDelay;
+        };
+
+        std::map<TVSlotId, TSlayInFlight> SlayInFlight;
         // PDiskId -> is another restart required after the current restart.
         std::unordered_map<ui32, bool> PDiskRestartInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
@@ -540,7 +575,8 @@ namespace NKikimr::NStorage {
         // process VDisk configuration
         void ApplyLocalVDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk);
 
-        void Slay(TVDiskRecord& vdisk);
+        void Slay(TVDiskRecord& vdisk, ESlayAction action);
+        void IssueSlay(const TVSlotId& vslotId, TSlayInFlight& slay);
 
         void UpdateGroupInfoForDisk(TVDiskRecord& vdisk, const TIntrusivePtr<TBlobStorageGroupInfo>& newInfo);
 
@@ -682,6 +718,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
         void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+        void Handle(TEvPrivate::TEvRetrySlay::TPtr&);
         void Handle(TEvPrivate::TEvUpdateStats::TPtr&);
 
         void Handle(NMon::TEvHttpInfo::TPtr&);

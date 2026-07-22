@@ -193,6 +193,7 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
         TSubSystems SubSystems;
+        std::vector<size_t> SubSystemOrder;
 
         std::atomic_bool StartExecuted = false;
         std::atomic_bool StopExecuted = false;

@@ -45,17 +45,23 @@ def render(plan: dict, title: str = "Shard plan") -> str:
         lines.append(total_line)
         weighting = plan.get("weighting") or {}
         if weighting:
+            mode = weighting.get("mode")
             hist = weighting.get("history_uid_count")
+            units = weighting.get("timeout_budget_units")
             small = weighting.get("size_small_uid_count")
             medium = weighting.get("size_medium_uid_count")
             large = weighting.get("size_large_uid_count")
             days = weighting.get("days_back")
             bits = []
-            if hist is not None:
+            if mode:
+                bits.append(f"mode={mode}")
+            if units is not None:
+                bits.append(f"timeout_units={units}")
+            if hist is not None and int(hist or 0) > 0:
                 bits.append(f"history_uids={hist}")
             if small is not None or medium is not None or large is not None:
                 bits.append(
-                    "size_fallback_uids="
+                    "size_uids="
                     f"{int(small or 0) + int(medium or 0) + int(large or 0)}"
                     f" (small={int(small or 0)}, medium={int(medium or 0)}, "
                     f"large={int(large or 0)})"

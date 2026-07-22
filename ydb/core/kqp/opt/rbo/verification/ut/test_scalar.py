@@ -1,13 +1,20 @@
 import unittest
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder,
     Value,
     date_domain,
+    integer_domain,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import DATE, MAX_DATE
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
+    DATE,
+    INTEGER_TYPES,
+    MAX_DATE,
+    integer_bounds,
+)
 
 
 def _literal(scalar_type, value):
@@ -32,6 +39,12 @@ def _ground(term):
     if term.operation in {"bool", "int"}:
         return term.atom
     values = tuple(_ground(argument) for argument in term.arguments)
+    if term.operation == "not":
+        return not values[0]
+    if term.operation == "and":
+        return all(values)
+    if term.operation == "<":
+        return values[0] < values[1]
     if term.operation == "+":
         return sum(values)
     if term.operation == "-":
@@ -85,6 +98,79 @@ class IntegerArithmeticTest(unittest.TestCase):
         )
         self.assertEqual(actual.is_null, smt.TRUE)
         self.assertEqual(_ground(actual.value), 21)
+
+
+class IntegerDomainTest(unittest.TestCase):
+    def test_every_integer_width_has_its_exact_typed_domain(self):
+        for scalar_type in sorted(INTEGER_TYPES):
+            bounds = integer_bounds(scalar_type)
+            assert bounds is not None
+            lower, upper = bounds
+            for value, expected in (
+                (lower - 1, False),
+                (lower, True),
+                (upper - 1, True),
+                (upper, False),
+            ):
+                with self.subTest(scalar_type=scalar_type, value=value):
+                    self.assertEqual(
+                        _ground(integer_domain(smt.int_value(value), scalar_type)),
+                        expected,
+                    )
+
+    def test_source_and_opaque_integer_values_are_range_constrained(self):
+        for scalar_type in sorted(INTEGER_TYPES):
+            snapshot = parse_snapshot(
+                {
+                    "format": "ydb-rbo-semantic-snapshot",
+                    "version": 1,
+                    "schema": {
+                        "tables": [
+                            {
+                                "name": "A",
+                                "columns": [
+                                    {"name": "i", "type": scalar_type, "nullable": True}
+                                ],
+                                "unique_keys": [],
+                            }
+                        ]
+                    },
+                    "plan": {
+                        "nodes": [
+                            {
+                                "id": "scan",
+                                "op": "scan",
+                                "table": "A",
+                                "columns": [{"source": "i", "output": "a.i"}],
+                                "predicate": None,
+                                "pushed_limit": None,
+                            }
+                        ],
+                        "root": "scan",
+                        "output": ["a.i"],
+                    },
+                    "stage_graph": None,
+                }
+            )
+            source_script = smt.Script()
+            database = Database(snapshot, 1, source_script)
+            cell = database.witness["A"][0].cells["i"]
+            self.assertIn(integer_domain(cell.value, scalar_type), source_script.assertions)
+
+            opaque_script = smt.Script()
+            opaque = Encoder(opaque_script).evaluate(
+                Expr(
+                    kind="opaque",
+                    result_type=scalar_type,
+                    nullable=True,
+                    fingerprint=f"{scalar_type}-result",
+                ),
+                {},
+            )
+            self.assertIn(
+                smt.or_(opaque.is_null, integer_domain(opaque.value, scalar_type)),
+                opaque_script.assertions,
+            )
 
 
 class DateScalarTest(unittest.TestCase):

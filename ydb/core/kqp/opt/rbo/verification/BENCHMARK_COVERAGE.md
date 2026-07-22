@@ -110,6 +110,9 @@ not regress a required formula-only query.
 
 This baseline was rerun on 2026-07-21 in formula-only mode; therefore its three
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`.
+Later focused Decimal-arithmetic reruns updated the affected reasons below. All
+selected queries remained unsupported, so the complete-suite counts and query
+sets are unchanged.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -129,10 +132,10 @@ both an initial and final reason.
 | `StringContains` | q9 | - |
 | Type `Interval` | q1 | - |
 | Decimal constant cast source is not a non-null integer literal | q19 | - |
-| Callable `DecimalMul` | q3 | q3, q5, q8, q10 |
-| Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7 |
+| Sort outside integer/Date ordering | q3 | q3 |
+| Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
 | OLAP `string_contains` | - | q9 |
-| Unsupported OLAP non-callable node | - | q1, q6, q12, q14 |
+| Unsupported OLAP non-callable node | - | q1, q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
 | `IfPresent` | - | q19 |
 
@@ -141,6 +144,12 @@ changing the 0/22 formula count: these deeper scalar and OLAP blockers were
 then exposed. Restricted static `IN` similarly removed the first blocker from
 q12 and q19, and exact Decimal comparison moved q19 to the narrower constant-
 cast gate, without yet changing the formula count.
+
+Exact Decimal arithmetic removes `DecimalMul` as the first blocker in focused
+reruns: q3 now reaches Decimal Sort at both boundaries; q5 reaches initial
+`Map` and a final OLAP non-callable; q8 reaches `Map` at both boundaries; and
+q10 reaches initial `Map` and a final OLAP non-callable. All four remain
+unsupported, so TPCH stays at 0/22 formulas.
 
 ### TPC-DS inventory
 
@@ -157,24 +166,21 @@ are audited independently.
 | Catalog required for subplans | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
 | Unavailable physical column `year` | - | q66 |
-| Opaque arithmetic `+` | q64 | q64 |
-| Opaque arithmetic `-` | q11, q75 | q11, q75, q80 |
 | Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
-| Decimal constant cast is incomplete | q5 | - |
+| Decimal constant cast is incomplete | q5, q75 | - |
 | Decimal constant cast result is nullable | q18, q21, q40 | q18 |
 | Decimal constant cast source is not a non-null integer literal | q65 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | String `>=` comparison compatibility | q91 | - |
-| Sort outside integer/Date ordering | q3, q25, q29, q42, q46, q50, q52, q55, q68, q71, q76 | q3, q25, q29, q42, q46, q50, q52, q55, q71, q91 |
-| Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q82 |
+| Sort outside integer/Date ordering | q3, q25, q29, q42, q46, q50, q52, q55, q64, q68, q71, q76, q93 | q3, q25, q29, q42, q46, q50, q52, q55, q64, q65, q71, q91, q93 |
+| Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q80, q82 |
 | Callable `/` | q73, q78 | q78 |
 | Callable `Concat` | q84 | q84 |
-| Callable `DecimalDiv` | q4, q31, q74, q90 | q4, q31, q74, q90 |
-| Callable `DecimalMul` | q61, q93 | q61, q65, q93 |
+| Callable `DecimalDiv` | q4, q11, q31, q61, q74, q90 | q4, q11, q31, q61, q74, q90 |
 | Callable `IfPresent` | - | q34, q68, q73, q79 |
 | Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
-| Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q85 |
+| Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
 | Type `Interval` | q37, q72, q77, q80, q82 | q72 |
 
 Restricted static `IN` with exact types or lossless common-integer equality has
@@ -183,6 +189,13 @@ comparison removed every old Decimal-comparison blocker: q48 now emits a
 formula, while q13, q21, q28, q31, q37, q40, q43, q61, q65, q74, q82, q85,
 and q91 reach the deeper cast, scalar, OLAP, arithmetic, type, or ordering
 reasons shown above. The formula-only count is now 3/99.
+
+Focused arithmetic reruns remove the old `+`, `-`, and `DecimalMul` blockers
+without increasing formula coverage. q11 and q61 now stop at `DecimalDiv`;
+q64 and q93 at Decimal Sort; q65 at the initial Decimal constant-cast gate and
+final Decimal Sort; q75 at the initial constant-cast gate and final `Double`; and
+q80 at initial `Interval` and a final OLAP non-callable. TPC-DS therefore
+remains at 3/99 formulas (q48, q88, and q96).
 
 ## Focused formula and solver results
 

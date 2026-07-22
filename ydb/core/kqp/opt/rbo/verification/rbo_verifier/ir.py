@@ -19,6 +19,7 @@ from .types import (
     VOID,
     equality_comparison_compatible,
     family,
+    integer_bounds,
     is_ordered_type,
     is_scalar_type,
     ordering_comparison_compatible,
@@ -336,9 +337,20 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | deci
     if decimal.is_type(scalar_type):
         return _decimal_literal(value, scalar_type, path)
     scalar_family = family(scalar_type)
+    if scalar_family == "int":
+        if not isinstance(value, int) or isinstance(value, bool):
+            _fail(path, f"value does not have type {scalar_type!r}")
+        bounds = integer_bounds(scalar_type)
+        assert bounds is not None
+        if bounds[0] <= value < bounds[1]:
+            return value
+        _fail(
+            path,
+            f"{scalar_type} literal is outside "
+            f"[{bounds[0]}, {bounds[1] - 1}]",
+        )
     valid = (
         (scalar_family == "bool" and isinstance(value, bool))
-        or (scalar_family == "int" and isinstance(value, int) and not isinstance(value, bool))
         or (
             scalar_family == "date"
             and type(value) is int
@@ -963,14 +975,25 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         assert expr.result_type is not None and expr.nullable is not None
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
-        if family(expr.result_type) != "int":
-            _fail(path, f"{expr.kind} requires an integer result")
-        if left.name != expr.result_type or right.name != expr.result_type:
-            _fail(
-                path,
-                f"{expr.kind} operands and result must have exactly the same type: "
-                f"{left.name!r}, {right.name!r}, and {expr.result_type!r}",
-            )
+        if decimal.is_type(expr.result_type):
+            if left.name != expr.result_type:
+                _fail(path, f"Decimal {expr.kind} left operand must exactly match its result type")
+            right_is_integral_mul = expr.kind == "mul" and family(right.name) == "int"
+            if right.name != expr.result_type and not right_is_integral_mul:
+                _fail(
+                    path,
+                    f"Decimal {expr.kind} right operand must exactly match its result type"
+                    + (" or be integral" if expr.kind == "mul" else ""),
+                )
+        else:
+            if family(expr.result_type) != "int":
+                _fail(path, f"{expr.kind} requires an integer result")
+            if left.name != expr.result_type or right.name != expr.result_type:
+                _fail(
+                    path,
+                    f"{expr.kind} operands and result must have exactly the same type: "
+                    f"{left.name!r}, {right.name!r}, and {expr.result_type!r}",
+                )
         nullable = left.nullable or right.nullable
         if expr.nullable != nullable:
             _fail(

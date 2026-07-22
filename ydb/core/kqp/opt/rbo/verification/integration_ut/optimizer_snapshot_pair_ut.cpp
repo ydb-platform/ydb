@@ -856,6 +856,96 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesDecimalArithmetic) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateDecimalColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT
+                    D + Decimal("1.25", 7, 2) AS DecimalSum,
+                    D - Decimal("0.50", 7, 2) AS DecimalDifference,
+                    D * Decimal("2.00", 7, 2) AS DecimalProduct,
+                    D * 3 AS IntegerProduct,
+                    3 * D AS ReversedIntegerProduct
+                FROM `/Root/RboDecimal`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+
+        const auto assertArithmetic = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> expressions;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                for (const auto& column : (*project)["columns"].GetArraySafe()) {
+                    const auto& expression = column["expression"];
+                    const TString kind = expression["kind"].GetStringSafe();
+                    if ((kind == "add" || kind == "sub" || kind == "mul") &&
+                        expression["type"].GetStringSafe() == "Decimal(7,2)")
+                    {
+                        expressions.push_back(&expression);
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(expressions.size(), 5);
+
+            THashMap<TString, ui32> kindCounts;
+            THashSet<TString> rightTypes;
+            THashSet<TString> scaledValues;
+            for (const auto* expression : expressions) {
+                ++kindCounts[(*expression)["kind"].GetStringSafe()];
+                UNIT_ASSERT((*expression)["nullable"].GetBooleanSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["left"]["kind"].GetStringSafe(),
+                    "column");
+                const auto& right = (*expression)["right"];
+                UNIT_ASSERT_VALUES_EQUAL(right["kind"].GetStringSafe(), "literal");
+                const TString rightType = right["type"].GetStringSafe();
+                rightTypes.insert(rightType);
+                if (rightType == "Decimal(7,2)") {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        right["value"]["kind"].GetStringSafe(),
+                        "finite");
+                    scaledValues.insert(
+                        right["value"]["scaled"].GetStringSafe());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(rightType, "Int32");
+                    UNIT_ASSERT_VALUES_EQUAL(right["value"].GetIntegerSafe(), 3);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(kindCounts["add"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(kindCounts["sub"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(kindCounts["mul"], 3);
+            UNIT_ASSERT_VALUES_EQUAL(
+                rightTypes,
+                THashSet<TString>({"Decimal(7,2)", "Int32"}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                scaledValues,
+                THashSet<TString>({"50", "125", "200"}));
+        };
+
+        assertArithmetic(ParseSnapshot(results[0]));
+        assertArithmetic(ParseSnapshot(results[1]));
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);

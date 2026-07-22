@@ -755,6 +755,48 @@ NJson::TJsonValue DecimalConstantCastExpr(const TExprNode& node) {
     return DecimalValueExpr(resultType, *parameters, source.Child(0)->Content());
 }
 
+struct TDecimalArithmeticSignature {
+    TString ResultType;
+    bool ResultNullable;
+};
+
+TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node) {
+    CheckScalarArity(node, 2, 2);
+
+    const TStringBuf callable = node.Content();
+    bool resultNullable = false;
+    bool leftNullable = false;
+    bool rightNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
+    const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
+
+    if (!ParseCanonicalDecimalType(resultType)) {
+        Unsupported(TStringBuilder() << callable << " result is not Decimal");
+    }
+    if (leftType != resultType) {
+        Unsupported(TStringBuilder()
+            << callable
+            << " left operand must exactly match its Decimal result type");
+    }
+    if (rightType != resultType &&
+        !(callable == "DecimalMul" && IsIntegerType(rightType)))
+    {
+        Unsupported(TStringBuilder()
+            << callable << " right operand must be "
+            << (callable == "DecimalMul"
+                ? "the same Decimal type or an integer"
+                : "the same Decimal type"));
+    }
+    if (resultNullable != (leftNullable || rightNullable)) {
+        Unsupported(TStringBuilder()
+            << callable
+            << " result nullability must equal the OR of operand nullability");
+    }
+
+    return {resultType, resultNullable};
+}
+
 void CheckOpaqueCallable(const TExprNode& node) {
     const TStringBuf name = node.Content();
 
@@ -791,11 +833,22 @@ void CheckOpaqueCallable(const TExprNode& node) {
         return;
     }
 
+    if (node.IsCallable("DecimalMul")) {
+        CheckDecimalArithmeticCallable(node);
+        return;
+    }
+
     // This is deliberately a positive list.  TExprNode exposes side-effect and
     // CSE-safety flags, but YQL has no generic totality contract for a callable.
     // Keep every accepted family small enough to audit and fail closed for UDFs,
     // division, strict casts, Unwrap, and every other not-yet-reviewed form.
     if (name == "+" || name == "-" || name == "*") {
+        if ((name == "+" || name == "-") &&
+            ParseCanonicalDecimalType(ScalarTypeName(node)))
+        {
+            CheckDecimalArithmeticCallable(node);
+            return;
+        }
         CheckScalarArity(node, 2, 2);
         if (!IsIntegerType(ScalarTypeName(node))) {
             Unsupported(TStringBuilder() << "Opaque arithmetic result is not an integer: " << name);
@@ -1285,9 +1338,16 @@ NJson::TJsonValue ExportExprNode(
         const TString resultType = ScalarTypeName(node, &resultNullable);
         const TString leftType = ScalarTypeName(*node.Child(0), &leftNullable);
         const TString rightType = ScalarTypeName(*node.Child(1), &rightNullable);
-        if (IsIntegerType(resultType) &&
+        const bool exactInteger =
+            IsIntegerType(resultType) &&
             leftType == resultType &&
-            rightType == resultType &&
+            rightType == resultType;
+        const bool exactDecimalAddOrSub =
+            node.IsCallable({"+", "-"}) &&
+            ParseCanonicalDecimalType(resultType) &&
+            leftType == resultType &&
+            rightType == resultType;
+        if ((exactInteger || exactDecimalAddOrSub) &&
             resultNullable == (leftNullable || rightNullable))
         {
             // Keep the old closed-world and safety checks even though the result
@@ -1310,6 +1370,24 @@ NJson::TJsonValue ExportExprNode(
             result["nullable"] = resultNullable;
             return result;
         }
+    }
+
+    if (node.IsCallable("DecimalMul")) {
+        const auto signature = CheckDecimalArithmeticCallable(node);
+
+        // Retain the same closed-world node checks as opaque expressions while
+        // giving the admitted Decimal arithmetic an exact verifier meaning.
+        TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
+
+        TStringBuf kind;
+        kind = "mul";
+        auto result = BinaryExpr(
+            kind,
+            ExportExprNode(*node.Child(0), rowArgument, visibleColumns),
+            ExportExprNode(*node.Child(1), rowArgument, visibleColumns));
+        result["type"] = signature.ResultType;
+        result["nullable"] = signature.ResultNullable;
+        return result;
     }
 
     return TOpaqueExpressionEncoder(rowArgument, visibleColumns).Export(node);

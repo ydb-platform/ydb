@@ -226,6 +226,25 @@ def mul(left: Term, right: Term) -> Term:
     return Term(INT, "*", (left, right))
 
 
+def div(term: Term, divisor: int) -> Term:
+    """SMT integer division by a positive constant.
+
+    With a positive divisor, SMT-LIB ``div`` rounds toward negative infinity,
+    exactly like Python's ``//``.  Keeping the divisor concrete is sufficient
+    for the trusted kernels and avoids admitting general division semantics.
+    """
+
+    _require(term, INT)
+    if type(divisor) is not int or divisor <= 0:
+        raise SmtError("divisor must be a positive integer")
+    if divisor == 1:
+        return term
+    if term.operation == "int":
+        assert isinstance(term.atom, int)
+        return int_value(term.atom // divisor)
+    return Term(INT, "div", (term, int_value(divisor)))
+
+
 def mod(term: Term, modulus: int) -> Term:
     _require(term, INT)
     if type(modulus) is not int or modulus <= 0:

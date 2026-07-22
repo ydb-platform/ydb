@@ -200,6 +200,41 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "comparison type mismatch"):
             parse_snapshot(value)
 
+    def test_integer_literals_must_fit_their_declared_width(self):
+        cases = {
+            "Int8": (-(1 << 7), 1 << 7),
+            "Int16": (-(1 << 15), 1 << 15),
+            "Int32": (-(1 << 31), 1 << 31),
+            "Int64": (-(1 << 63), 1 << 63),
+            "Uint8": (0, 1 << 8),
+            "Uint16": (0, 1 << 16),
+            "Uint32": (0, 1 << 32),
+            "Uint64": (0, 1 << 64),
+        }
+        for scalar_type, (lower, upper) in cases.items():
+            for literal in (lower, upper - 1):
+                value = minimal_snapshot()
+                value["schema"]["tables"][0]["columns"][0]["type"] = scalar_type
+                value["plan"]["nodes"][1]["predicate"] = {
+                    "kind": "eq",
+                    "left": {"kind": "column", "column": "a.k"},
+                    "right": {"kind": "literal", "type": scalar_type, "value": literal},
+                }
+                with self.subTest(scalar_type=scalar_type, literal=literal):
+                    parse_snapshot(value)
+
+            for literal in (lower - 1, upper):
+                value = minimal_snapshot()
+                value["schema"]["tables"][0]["columns"][0]["type"] = scalar_type
+                value["plan"]["nodes"][1]["predicate"] = {
+                    "kind": "eq",
+                    "left": {"kind": "column", "column": "a.k"},
+                    "right": {"kind": "literal", "type": scalar_type, "value": literal},
+                }
+                with self.subTest(scalar_type=scalar_type, literal=literal):
+                    with self.assertRaisesRegex(SnapshotError, "literal is outside"):
+                        parse_snapshot(value)
+
     def test_unknown_field_is_rejected(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][0]["estimate"] = 42

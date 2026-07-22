@@ -2225,6 +2225,251 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(typeFallback["kind"].GetStringSafe(), "opaque");
     }
 
+    Y_UNIT_TEST(ExportsExactDecimalArithmetic) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DecimalMul", {
+            {"d", "Decimal(5,2)", false},
+            {"i", "Int32", true},
+        });
+        auto read = MakeRead(ctx, table, "a", {"d", "i"});
+        const auto* decimalType = DecimalType(ctx, "5", "2");
+        const auto* optionalDecimalType = DecimalType(ctx, "5", "2", true);
+        const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("add_result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "+",
+                            {
+                                TypedMember(ctx, "a.d", optionalDecimalType),
+                                TypedDecimalLiteral(
+                                    ctx,
+                                    "1.25",
+                                    "5",
+                                    "2",
+                                    decimalType),
+                            },
+                            optionalDecimalType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("sub_result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "-",
+                            {
+                                TypedMember(ctx, "a.d", optionalDecimalType),
+                                TypedDecimalLiteral(
+                                    ctx,
+                                    "0.50",
+                                    "5",
+                                    "2",
+                                    decimalType),
+                            },
+                            optionalDecimalType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("decimal_result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "DecimalMul",
+                            {
+                                TypedMember(ctx, "a.d", optionalDecimalType),
+                                TypedDecimalLiteral(
+                                    ctx,
+                                    "2.00",
+                                    "5",
+                                    "2",
+                                    decimalType),
+                            },
+                            optionalDecimalType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("integer_result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "DecimalMul",
+                            {
+                                TypedMember(ctx, "a.d", optionalDecimalType),
+                                TypedLiteral(ctx, "Int32", "3", intType),
+                            },
+                            optionalDecimalType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+            });
+        TOpRoot root(
+            map,
+            TPositionHandle(),
+            {"add_result", "sub_result", "decimal_result", "integer_result"});
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
+        const auto findExpression = [&](TStringBuf output) -> const NJson::TJsonValue& {
+            for (const auto& column : columns) {
+                if (column["output"].GetStringSafe() == output) {
+                    return column["expression"];
+                }
+            }
+            UNIT_FAIL(TStringBuilder() << "missing projection " << output);
+            return columns.front();
+        };
+
+        const auto assertDecimalBinary = [&](TStringBuf output, TStringBuf kind, TStringBuf scaled) {
+            const auto& expression = findExpression(output);
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), kind);
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["column"].GetStringSafe(), "a.d");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["right"]["value"]["kind"].GetStringSafe(),
+                "finite");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["right"]["value"]["scaled"].GetStringSafe(),
+                scaled);
+        };
+        assertDecimalBinary("add_result", "add", "125");
+        assertDecimalBinary("sub_result", "sub", "50");
+
+        const auto& decimalExpression = findExpression("decimal_result");
+        UNIT_ASSERT_VALUES_EQUAL(decimalExpression["kind"].GetStringSafe(), "mul");
+        UNIT_ASSERT_VALUES_EQUAL(decimalExpression["type"].GetStringSafe(), "Decimal(5,2)");
+        UNIT_ASSERT(decimalExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(decimalExpression["left"]["column"].GetStringSafe(), "a.d");
+        UNIT_ASSERT_VALUES_EQUAL(decimalExpression["right"]["type"].GetStringSafe(), "Decimal(5,2)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            decimalExpression["right"]["value"]["kind"].GetStringSafe(),
+            "finite");
+        UNIT_ASSERT_VALUES_EQUAL(
+            decimalExpression["right"]["value"]["scaled"].GetStringSafe(),
+            "200");
+
+        const auto& integerExpression = findExpression("integer_result");
+        UNIT_ASSERT_VALUES_EQUAL(integerExpression["kind"].GetStringSafe(), "mul");
+        UNIT_ASSERT_VALUES_EQUAL(integerExpression["type"].GetStringSafe(), "Decimal(5,2)");
+        UNIT_ASSERT(integerExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(integerExpression["right"]["type"].GetStringSafe(), "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(integerExpression["right"]["value"].GetIntegerSafe(), 3);
+    }
+
+    Y_UNIT_TEST(DecimalArithmeticTypeAndNullabilityMismatchesFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "+",
+                    {
+                        TypedMember(ctx, "a.x", decimal),
+                        TypedLiteral(ctx, "Int32", "1", intType),
+                    },
+                    decimal));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "right operand must be the same Decimal type");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* otherDecimal = DecimalType(ctx, "6", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalMul",
+                    {
+                        TypedMember(ctx, "a.x", decimal),
+                        TypedDecimalLiteral(ctx, "1", "6", "2", otherDecimal),
+                    },
+                    decimal));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "same Decimal type or an integer");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalMul",
+                    {
+                        TypedMember(ctx, "a.x", decimal),
+                        TypedLiteral(ctx, "Int32", "1", intType),
+                    },
+                    intType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "result is not Decimal");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalMul",
+                    {
+                        TypedMember(ctx, "a.x", decimal),
+                        TypedLiteral(ctx, "Bool", "true", boolType),
+                    },
+                    decimal));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "same Decimal type or an integer");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalMul",
+                    {
+                        TypedMember(ctx, "a.x", decimal),
+                        TypedDecimalLiteral(ctx, "1", "5", "2", decimal),
+                    },
+                    optionalDecimal));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "OR of operand nullability");
+        }
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalMul",
+                    {TypedMember(ctx, "a.x", decimal)},
+                    decimal));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unsupported arity 1");
+        }
+    }
+
     Y_UNIT_TEST(OpaqueExpressionFingerprintIsAlphaStableAndKeepsOrderedUses) {
         TExportTestContext first;
         const auto* firstInt = ScalarType(first, NUdf::EDataSlot::Int32);

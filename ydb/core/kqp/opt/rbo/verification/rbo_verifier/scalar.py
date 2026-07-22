@@ -7,7 +7,7 @@ from typing import Mapping
 
 from . import decimal, smt
 from .ir import Expr
-from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_width
+from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_bounds, integer_width
 
 
 def smt_sort(scalar_type: str) -> str:
@@ -18,6 +18,17 @@ def date_domain(value: smt.Term) -> smt.Term:
     return smt.and_(
         smt.not_(smt.lt(value, smt.ZERO)),
         smt.lt(value, smt.int_value(MAX_DATE)),
+    )
+
+
+def integer_domain(value: smt.Term, scalar_type: str) -> smt.Term:
+    bounds = integer_bounds(scalar_type)
+    if bounds is None:
+        raise ValueError(f"not an integer type: {scalar_type!r}")
+    lower, upper = bounds
+    return smt.and_(
+        smt.not_(smt.lt(value, smt.int_value(lower))),
+        smt.lt(value, smt.int_value(upper)),
     )
 
 
@@ -94,6 +105,25 @@ class Encoder:
             assert expression.result_type is not None
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
+            is_null = smt.or_(left.is_null, right.is_null)
+            if decimal.is_type(expression.result_type):
+                if expression.kind == "add":
+                    value = decimal.add(left.value, right.value, expression.result_type)
+                elif expression.kind == "sub":
+                    value = decimal.subtract(left.value, right.value, expression.result_type)
+                else:
+                    assert expression.kind == "mul"
+                    value = decimal.multiply(
+                        left.value,
+                        right.value,
+                        expression.result_type,
+                        right.type,
+                    )
+                return Value(
+                    expression.result_type,
+                    is_null,
+                    value,
+                )
             if expression.kind == "add":
                 raw = smt.add(left.value, right.value)
             elif expression.kind == "sub":
@@ -102,7 +132,7 @@ class Encoder:
                 raw = smt.mul(left.value, right.value)
             return Value(
                 expression.result_type,
-                smt.or_(left.is_null, right.is_null),
+                is_null,
                 _wrap_integer(raw, expression.result_type),
             )
 
@@ -177,6 +207,8 @@ class Encoder:
         )
         if result.type == DATE:
             self.script.assert_(smt.or_(result.is_null, date_domain(result.value)))
+        elif family(result.type) == "int":
+            self.script.assert_(smt.or_(result.is_null, integer_domain(result.value, result.type)))
         elif decimal.is_type(result.type):
             self.script.assert_(smt.or_(result.is_null, decimal.domain(result.value, result.type)))
         return result

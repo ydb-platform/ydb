@@ -279,6 +279,74 @@ def multiply(
     )
 
 
+def divide(
+    left: smt.Term,
+    right: smt.Term,
+    result_type: str,
+    right_type: str,
+) -> smt.Term:
+    """Exact ``DecimalDiv`` for YQL's deliberately narrow operand shapes.
+
+    The left operand and result have ``result_type``.  Dividing by a same-type
+    Decimal restores the result scale before applying ``NDecimal::Div``'s
+    signed rounding; dividing by an integral value preserves the left
+    coefficient's scale.  Specials are handled before the symbolic finite
+    quotient, exactly like ``NDecimal::TDecimalDivisor``.
+    """
+
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"not a Decimal type: {result_type!r}")
+    right_is_decimal = right_type == result_type
+    if not right_is_decimal and _integer_decimal_digits(right_type) is None:
+        raise ValueError(
+            "Decimal division requires a same-type Decimal or integral right operand"
+        )
+
+    numerator = left
+    if right_is_decimal and decimal_type.scale:
+        numerator = smt.mul(left, smt.int_value(10**decimal_type.scale))
+    quotient = _round_ratio(numerator, right)
+
+    # The widened same-Decimal calculation normalizes to the global Decimal
+    # representation before the result precision is checked.  In particular,
+    # a finite quotient numerically equal to the in-band NaN code is greater
+    # than +Inf and therefore normalizes to +Inf, not NaN.
+    finite_quotient = _saturate_finite(quotient, MAX_PRECISION)
+    finite_quotient = _saturate_finite(finite_quotient, decimal_type.precision)
+
+    left_is_inf = _is_inf(left)
+    right_is_inf = _is_inf(right) if right_is_decimal else smt.FALSE
+    has_nan = smt.or_(
+        smt.eq(left, smt.int_value(NAN)),
+        smt.eq(right, smt.int_value(NAN)) if right_is_decimal else smt.FALSE,
+    )
+    same_sign = smt.eq(smt.lt(left, smt.ZERO), smt.lt(right, smt.ZERO))
+    signed_inf = smt.ite(same_sign, smt.int_value(INF), smt.int_value(-INF))
+    zero_divisor = smt.ite(
+        smt.eq(left, smt.ZERO),
+        smt.int_value(NAN),
+        smt.ite(
+            smt.lt(smt.ZERO, left),
+            smt.int_value(INF),
+            smt.int_value(-INF),
+        ),
+    )
+    return smt.ite(
+        has_nan,
+        smt.int_value(NAN),
+        smt.ite(
+            smt.eq(right, smt.ZERO),
+            zero_divisor,
+            smt.ite(
+                right_is_inf,
+                smt.ite(left_is_inf, smt.int_value(NAN), smt.ZERO),
+                smt.ite(left_is_inf, signed_inf, finite_quotient),
+            ),
+        ),
+    )
+
+
 def align(
     left: smt.Term,
     left_type: str,
@@ -470,6 +538,60 @@ def _round_divide(value: smt.Term, divisor: int) -> smt.Term:
         ),
     )
     rounded = smt.add(quotient, smt.ite(round_up, smt.ONE, smt.ZERO))
+    return smt.ite(negative, smt.sub(smt.ZERO, rounded), rounded)
+
+
+def _round_ratio(numerator: smt.Term, denominator: smt.Term) -> smt.Term:
+    """Reproduce ``NDecimal::Div``'s exact signed integer rounding.
+
+    The zero denominator is replaced before constructing SMT ``div``.  The
+    public division kernel selects the required special result separately, but
+    SMT's totalized division must never influence which quotient convention the
+    model uses on that branch.  YDB's signed-remainder algorithm rounds a
+    positive divisor to nearest with even ties, but truncates negative-divisor
+    non-ties while retaining even-tie rounding.  The asymmetry here is therefore
+    intentional rather than an algebraic sign simplification.
+    """
+
+    numerator_negative = smt.lt(numerator, smt.ZERO)
+    denominator_negative = smt.lt(denominator, smt.ZERO)
+    numerator_magnitude = smt.ite(
+        numerator_negative,
+        smt.sub(smt.ZERO, numerator),
+        numerator,
+    )
+    denominator_magnitude = smt.ite(
+        denominator_negative,
+        smt.sub(smt.ZERO, denominator),
+        denominator,
+    )
+    positive_denominator = smt.ite(
+        smt.eq(denominator_magnitude, smt.ZERO),
+        smt.ONE,
+        denominator_magnitude,
+    )
+    quotient = smt.div_nonnegative_by_positive(
+        numerator_magnitude,
+        positive_denominator,
+    )
+    remainder = smt.sub(
+        numerator_magnitude,
+        smt.mul(quotient, positive_denominator),
+    )
+    twice_remainder = smt.mul(remainder, smt.int_value(2))
+    tie_and_odd = smt.and_(
+        smt.eq(twice_remainder, positive_denominator),
+        smt.eq(smt.mod(quotient, 2), smt.ONE),
+    )
+    increment = smt.or_(
+        tie_and_odd,
+        smt.and_(
+            smt.lt(smt.ZERO, denominator),
+            smt.lt(positive_denominator, twice_remainder),
+        ),
+    )
+    rounded = smt.add(quotient, smt.ite(increment, smt.ONE, smt.ZERO))
+    negative = smt.not_(smt.eq(numerator_negative, denominator_negative))
     return smt.ite(negative, smt.sub(smt.ZERO, rounded), rounded)
 
 

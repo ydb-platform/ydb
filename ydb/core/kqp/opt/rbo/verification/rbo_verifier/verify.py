@@ -201,10 +201,10 @@ def _build_problem(
             )
 
     script = smt.Script(timeout_ms)
-    database = Database(before, row_bound, script)
-    scalar = ScalarEncoder(script)
-    router = Router(script)
     try:
+        database = Database(before, row_bound, script)
+        scalar = ScalarEncoder(script)
+        router = Router(script)
         before_family = (
             Evaluator(
                 before,

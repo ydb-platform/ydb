@@ -462,6 +462,33 @@ def div(term: Term, divisor: int) -> Term:
     return Term(INT, "div", (term, int_value(divisor)))
 
 
+def div_nonnegative_by_positive(dividend: Term, divisor: Term) -> Term:
+    """Floor a nonnegative integer by a positive symbolic integer.
+
+    This deliberately narrow primitive is the only trusted-kernel entry point
+    for SMT ``div`` with a symbolic divisor.  Callers must construct terms that
+    satisfy the two sign preconditions for every model; known constants are
+    checked here so an obviously invalid use fails closed.
+    """
+
+    _require(dividend, INT)
+    _require(divisor, INT)
+    if dividend.operation == "int":
+        assert isinstance(dividend.atom, int)
+        if dividend.atom < 0:
+            raise SmtError("dividend must be a nonnegative integer")
+    if divisor.operation == "int":
+        assert isinstance(divisor.atom, int)
+        if divisor.atom <= 0:
+            raise SmtError("divisor must be a positive integer")
+        if divisor.atom == 1:
+            return dividend
+    if dividend.operation == "int" and divisor.operation == "int":
+        assert isinstance(dividend.atom, int) and isinstance(divisor.atom, int)
+        return int_value(dividend.atom // divisor.atom)
+    return Term(INT, "div", (dividend, divisor))
+
+
 def mod(term: Term, modulus: int) -> Term:
     _require(term, INT)
     if type(modulus) is not int or modulus <= 0:

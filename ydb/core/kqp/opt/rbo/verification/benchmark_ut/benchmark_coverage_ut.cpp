@@ -1186,7 +1186,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({3}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 48, 52, 55, 71, 88, 93, 96}));
+            std::set<ui32>({3, 48, 52, 55, 61, 71, 88, 93, 96}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 52, 55, 93, 96}));
@@ -1306,6 +1306,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {48, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
             {55, "FORMULA_EMITTED"},
+            {61, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
@@ -1322,7 +1323,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.Violations.empty());
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 48, 52, 55, 71, 88, 93, 96}));
+            std::set<ui32>({1, 3, 48, 52, 55, 61, 71, 88, 93, 96}));
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
@@ -1336,6 +1337,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {48, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
             {55, "FORMULA_EMITTED"},
+            {61, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
             {93, "FORMULA_EMITTED"},
@@ -1452,7 +1454,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto focused = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 48, 52, 55, 71, 88, 93, 96},
+            {3, 48, 52, 55, 61, 71, 88, 93, 96},
             statuses,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(!focused.FormulaFloorEnforced);

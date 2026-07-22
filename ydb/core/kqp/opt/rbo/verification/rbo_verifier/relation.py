@@ -71,6 +71,7 @@ class Relation:
     ordinals: tuple[smt.Term, ...] | None = None
 
     def __post_init__(self) -> None:
+        _require_relation_rows(len(self.rows), "relation")
         if self.ordinals is not None:
             if len(self.ordinals) != len(self.rows):
                 raise ValueError("relation ordinals must align with rows")
@@ -172,6 +173,28 @@ class RelationError(ValueError):
 
 MAX_OUTCOME_ALTERNATIVES = 256
 MAX_OUTCOME_COMPARISONS = 4096
+MAX_RELATION_ROWS = 4096
+MAX_RELATION_ROW_PAIRS = 16384
+
+
+def _require_relation_rows(count: int, operation: str) -> None:
+    if count > MAX_RELATION_ROWS:
+        raise RelationError(
+            f"{operation} requires {count} candidate rows, exceeding "
+            f"the {MAX_RELATION_ROWS} row construction audit bound"
+        )
+
+
+def _require_relation_row_pairs(count: int, operation: str) -> None:
+    if count > MAX_RELATION_ROW_PAIRS:
+        raise RelationError(
+            f"{operation} requires {count} candidate-row pairs, exceeding "
+            f"the {MAX_RELATION_ROW_PAIRS} pair construction audit bound"
+        )
+
+
+def _unordered_row_pairs(count: int) -> int:
+    return count * (count - 1) // 2
 
 
 class Database:
@@ -180,6 +203,8 @@ class Database:
     def __init__(self, snapshot: Snapshot, row_bound: int, script: smt.Script) -> None:
         if row_bound < 0:
             raise ValueError("row bound must not be negative")
+        if snapshot.tables:
+            _require_relation_rows(row_bound, "database table")
         self.relations: dict[str, Relation] = {}
         self.witness: dict[str, tuple[WitnessRow, ...]] = {}
         for table in snapshot.tables:
@@ -452,6 +477,10 @@ class Evaluator:
             )
 
             def union(relations: tuple[Relation, ...]) -> Relation:
+                _require_relation_rows(
+                    sum(len(source.rows) for source in relations),
+                    "union-all",
+                )
                 rows: list[Row] = []
                 for input_ordinal, (item, source) in enumerate(
                     zip(node.inputs, relations)
@@ -513,6 +542,10 @@ class Evaluator:
                 )
             )
         else:
+            _require_relation_row_pairs(
+                len(source.rows) * len(source.rows),
+                "grouped aggregate",
+            )
             for index, candidate in enumerate(source.rows):
                 matches = tuple(
                     smt.and_(row.present, self._same_group(node, candidate, row))
@@ -632,6 +665,34 @@ class Evaluator:
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
+        matching_rows = len(left.rows) * len(right.rows)
+        _require_relation_row_pairs(matching_rows, "join matching")
+        emit_matches = node.kind not in {
+            "left_semi",
+            "right_semi",
+            "left_anti",
+            "right_anti",
+            "exclusion",
+        }
+        emit_left = node.kind in {
+            "left",
+            "full",
+            "left_anti",
+            "left_semi",
+            "exclusion",
+        }
+        emit_right = node.kind in {
+            "right",
+            "full",
+            "right_anti",
+            "right_semi",
+            "exclusion",
+        }
+        output_rows = matching_rows if emit_matches else 0
+        output_rows += len(left.rows) if emit_left else 0
+        output_rows += len(right.rows) if emit_right else 0
+        _require_relation_rows(output_rows, "join output")
+
         matches: list[list[smt.Term]] = []
         for left_row in left.rows:
             match_row: list[smt.Term] = []
@@ -647,13 +708,7 @@ class Evaluator:
             matches.append(match_row)
 
         rows: list[Row] = []
-        if node.kind not in {
-            "left_semi",
-            "right_semi",
-            "left_anti",
-            "right_anti",
-            "exclusion",
-        }:
+        if emit_matches:
             for left_index, left_row in enumerate(left.rows):
                 for right_index, right_row in enumerate(right.rows):
                     rows.append(
@@ -670,7 +725,7 @@ class Evaluator:
                         )
                     )
 
-        if node.kind in {"left", "full", "left_anti", "left_semi", "exclusion"}:
+        if emit_left:
             right_nulls = {
                 column.name: self.scalar.null(column.type)
                 for column in right.columns
@@ -699,7 +754,7 @@ class Evaluator:
                     )
                 )
 
-        if node.kind in {"right", "full", "right_anti", "right_semi", "exclusion"}:
+        if emit_right:
             left_nulls = {
                 column.name: self.scalar.null(column.type)
                 for column in left.columns
@@ -985,6 +1040,13 @@ def sort_family(
 
     if not order:
         raise RelationError("sort order must not be empty")
+    _require_relation_row_pairs(
+        sum(
+            _unordered_row_pairs(len(outcome.relation.rows))
+            for outcome in source.outcomes
+        ),
+        "sort construction",
+    )
     if sum(factorial(len(outcome.relation.rows)) for outcome in source.outcomes) <= (
         MAX_OUTCOME_ALTERNATIVES
     ):
@@ -1072,6 +1134,10 @@ def merge_family(
     row_count = len(source.outcomes[0].relation.rows) if source.outcomes else 0
     if sorted(indices) != list(range(row_count)):
         raise RelationError("merge producer groups do not partition the input rows")
+    _require_relation_row_pairs(
+        _unordered_row_pairs(row_count),
+        "merge construction",
+    )
     interleavings = factorial(row_count)
     for group in groups:
         interleavings //= factorial(len(group))
@@ -1088,6 +1154,15 @@ def merge_family(
         and interleavings * len(source.outcomes) <= MAX_OUTCOME_ALTERNATIVES
     ):
         return _enumerated_merge_family(source, order, groups, decision)
+
+    _require_relation_row_pairs(
+        len(source.outcomes)
+        * (
+            _unordered_row_pairs(row_count)
+            + sum(len(group) * (len(group) - 1) for group in groups)
+        ),
+        "merge ordinal construction",
+    )
 
     outcomes: list[Outcome] = []
     for source_outcome in source.outcomes:
@@ -1658,6 +1733,13 @@ def _as_sequence_family(
 ) -> RelationFamily:
     """Give an unordered bag every possible compressed sequence order."""
 
+    _require_relation_row_pairs(
+        sum(
+            _unordered_row_pairs(len(outcome.relation.rows))
+            for outcome in family.outcomes
+        ),
+        "latent sequence construction",
+    )
     if sum(factorial(len(outcome.relation.rows)) for outcome in family.outcomes) <= (
         MAX_OUTCOME_ALTERNATIVES
     ):

@@ -872,7 +872,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                     D - Decimal("0.50", 7, 2) AS DecimalDifference,
                     D * Decimal("2.00", 7, 2) AS DecimalProduct,
                     D * 3 AS IntegerProduct,
-                    3 * D AS ReversedIntegerProduct
+                    3 * D AS ReversedIntegerProduct,
+                    D / Decimal("2.00", 7, 2) AS DecimalQuotient,
+                    D / 4 AS IntegerQuotient
                 FROM `/Root/RboDecimal`;
             )";
         IKqpHost::TPrepareSettings settings;
@@ -891,18 +893,20 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                 for (const auto& column : (*project)["columns"].GetArraySafe()) {
                     const auto& expression = column["expression"];
                     const TString kind = expression["kind"].GetStringSafe();
-                    if ((kind == "add" || kind == "sub" || kind == "mul") &&
+                    if ((kind == "add" || kind == "sub" || kind == "mul" ||
+                         kind == "div") &&
                         expression["type"].GetStringSafe() == "Decimal(7,2)")
                     {
                         expressions.push_back(&expression);
                     }
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(expressions.size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(expressions.size(), 7);
 
             THashMap<TString, ui32> kindCounts;
             THashSet<TString> rightTypes;
             THashSet<TString> scaledValues;
+            THashSet<i64> integerValues;
             for (const auto* expression : expressions) {
                 ++kindCounts[(*expression)["kind"].GetStringSafe()];
                 UNIT_ASSERT((*expression)["nullable"].GetBooleanSafe());
@@ -921,18 +925,22 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                         right["value"]["scaled"].GetStringSafe());
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(rightType, "Int32");
-                    UNIT_ASSERT_VALUES_EQUAL(right["value"].GetIntegerSafe(), 3);
+                    integerValues.insert(right["value"].GetIntegerSafe());
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL(kindCounts["add"], 1);
             UNIT_ASSERT_VALUES_EQUAL(kindCounts["sub"], 1);
             UNIT_ASSERT_VALUES_EQUAL(kindCounts["mul"], 3);
+            UNIT_ASSERT_VALUES_EQUAL(kindCounts["div"], 2);
             UNIT_ASSERT_VALUES_EQUAL(
                 rightTypes,
                 THashSet<TString>({"Decimal(7,2)", "Int32"}));
             UNIT_ASSERT_VALUES_EQUAL(
                 scaledValues,
                 THashSet<TString>({"50", "125", "200"}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                integerValues,
+                THashSet<i64>({3, 4}));
         };
 
         assertArithmetic(ParseSnapshot(results[0]));

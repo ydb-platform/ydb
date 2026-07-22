@@ -22,11 +22,12 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
-q48, q52, q55, q71, q88, q93, and q96: 9/121 workload queries. The checked-in
+q48, q52, q55, q61, q71, q88, q93, and q96: 10/121 workload queries. The checked-in
 solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
 q55, q93, and q96. TPC-DS q48 has formula-construction coverage only, q71
-reached the external solver process deadline, and q88 is `UNKNOWN`; no new-RBO
-optimizer correctness bug has been confirmed. Separately, the isolated manual
+reached the external solver process deadline, and q61 and q88 are `UNKNOWN` at
+the 60-second solver budget; no new-RBO optimizer correctness bug has been
+confirmed. Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
 shared aggregation/runtime defect, not a new-RBO-only counterexample. These
@@ -118,11 +119,12 @@ arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just`, `Exists`,
-`Coalesce`, and `If`; `SafeCast`; and non-failing `Convert`. YQL has no complete
-generic totality or determinism flag, so all other callables fail closed rather
-than relying on a denylist. This includes UDF and PG calls, division, strict
-casts, `Unwrap`, runtime-dependent generators, free variables, and unsafe AST
-metadata.
+`Coalesce`, and `If`; `SafeCast`; and non-failing `Convert`. The same audit
+treats the explicit `DecimalDiv` core node as total, so a supported opaque
+parent may contain it. YQL has no complete generic totality or determinism flag,
+so all other callables fail closed rather than relying on a denylist. This
+includes UDF and PG calls, generic division, strict casts, `Unwrap`, runtime-
+dependent generators, free variables, and unsafe AST metadata.
 
 A complete cast of a non-null integer constant to a non-null Decimal is handled
 before opaque fallback: the exporter evaluates the YDB cast and emits the
@@ -157,14 +159,15 @@ that non-null order at the selected pre-physical boundary.
 
 Decimal arithmetic is deliberately canonical and narrow. The exporter accepts
 only binary `+` and `-` with both operands and the result having one exact
-canonical `Decimal(p,s)` type, or binary `DecimalMul` whose left operand and
-result have that exact Decimal type and whose right operand is either the same
-Decimal type or a signed/unsigned 8/16/32/64-bit integer. Result nullability
-must be exactly the OR of operand nullability, and the subtree must still pass
-the reviewed closed-world scalar checks. These callables normalize to explicit
-`add`, `sub`, and `mul` snapshot nodes. An integer is accepted only on the right
-of `DecimalMul`; YQL canonicalizes the supported reversed SQL spelling before
-this boundary.
+canonical `Decimal(p,s)` type, or binary `DecimalMul`/`DecimalDiv` whose left
+operand and result have that exact Decimal type and whose right operand is
+either the same Decimal type or a signed/unsigned 8/16/32/64-bit integer.
+Result nullability must be exactly the OR of operand nullability, and the
+subtree must still pass the reviewed closed-world scalar checks. These
+callables normalize to explicit `add`, `sub`, `mul`, and `div` snapshot nodes.
+An integer is accepted only on the right of `DecimalMul` or `DecimalDiv`; YQL
+canonicalizes the supported reversed multiplication spelling before this
+boundary.
 
 Evaluation matches `NDecimal` scaled-integer behavior and is strict on NULL.
 Addition and subtraction preserve the common scale. Same-type Decimal
@@ -176,14 +179,24 @@ infinity-times-zero, signed infinities, and finite precision overflow are
 explicit. Finite overflow saturates to the appropriate infinity before an
 in-band NaN code can be mistaken for a calculated NaN.
 
-The arithmetic kernel is checked against an independent rational reference on
-every legal finite code and all specials for precisions up to two. Adversarial
-cases cover both signs of ties-to-even, every integer width, infinity-times-zero,
-precision overflow, and a finite product numerically colliding with the NaN
+Same-type Decimal division multiplies the left coefficient by `10^s` before
+division; an integer right operand divides the coefficient directly. The model
+matches `NDecimal::Div`'s current signed-remainder behavior rather than assuming
+algebraic sign symmetry: positive divisors round to nearest with ties to even,
+negative-divisor non-ties truncate toward zero, and exact ties still round to
+even. Zero divisors, NaN, signed infinities, global 35-digit normalization,
+result-precision saturation, and finite collisions with the reserved NaN code
+are explicit.
+
+The arithmetic kernel is checked against independent rational and literal
+NDecimal-control-flow references on every legal finite code and all specials
+for precisions up to two. Adversarial cases cover both signs of ties-to-even,
+negative-divisor non-ties, every integer width, infinity-times-zero, precision
+overflow, and finite products or quotients numerically colliding with the NaN
 code. C++ exporter tests audit the admitted and rejected signatures. Separate
-solver tests send unchanged `add`/`sub`/`mul` through the normal logical-to-
-StageGraph obligation and require `VERIFIED_BOUNDED`; mutations between those
-operations must produce concrete counterexamples.
+solver tests send unchanged `add`/`sub`/`mul`/`div` through the normal
+logical-to-StageGraph obligation and require `VERIFIED_BOUNDED`; mutations
+between those operations must produce concrete counterexamples.
 
 Opaque identity is an inspectable `yql-opaque-v1` canonical string, not a hash.
 It preserves exact callable/atom bytes, normalized atom flags, formatted types,
@@ -236,8 +249,8 @@ proofs or semantic approximations.
 bounded integer-day type with literals, equality, ordinary ordering, Sort, and
 Merge. Decimal has exact literals, its legal typed domain, and the comparison
 and arithmetic semantics above, plus exact raw-code Sort/TopSort/Merge ordering.
-Decimal division, general casts, static `IN`, and aggregate functions other
-than the bounded `sum` below remain unsupported. String and Utf8 sort keys
+Generic division, general casts, and aggregate functions other than the bounded
+`sum` below remain unsupported. String and Utf8 sort keys
 therefore return `UNSUPPORTED` during strict validation instead of inventing an
 ordering.
 
@@ -311,12 +324,18 @@ AND/OR/NOT, equality, lossless integer or same-type Date ordering, and filter-bo
 descriptors, and unknown operations fail closed. The predicate filters raw scan
 rows before symbolic source partitioning and any per-task pushed limit.
 
-Every explicit outcome family is capped at 256 alternatives, including
-unordered-Limit choices, small enumerated sequence choices, Cartesian products,
-and gathers. Sort, Merge, and latent sequences switch to bounded symbolic
-ordinals before a large factorial expansion. Cross-plan bag or sequence equality
-is capped at 4096 explicit outcome pairs. Exceeding either remaining audit bound
-returns `UNSUPPORTED` rather than approximating.
+Every relation is capped at 4096 candidate rows. Join matrices and outputs,
+UnionAll, and grouped aggregation are checked before construction; Sort, Merge,
+and latent sequences may construct at most 16384 candidate-row pairs before
+factorials or symbolic ordinals are allocated. Every explicit outcome family is
+separately capped at 256 alternatives, including unordered-Limit choices, small
+enumerated sequence choices, Cartesian products, and gathers. Large ordered
+families switch to bounded symbolic ordinals, and cross-plan bag or sequence
+equality is capped at 4096 explicit outcome pairs. Exceeding any audit bound
+returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
+approximating semantics.
+The pair ceiling admits q71's 9072-term Merge ordinal construction while q31
+deterministically fails before allocating its 32768-pair join matrix.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:
@@ -415,10 +434,11 @@ solver budget. Nullable `String IN ('first', 'second')` and
 through the real host and prove the normal obligation. A native Decimal
 column filter likewise checks exact tagged literals and comparison predicates
 at both real-host boundaries and proves its normal two-row/two-task obligation.
-A Decimal arithmetic query checks `+`, `-`, same-type multiplication, integer-
-right multiplication, and YQL's normalization of the reversed SQL spelling at
-both boundaries, then proves the two-row/two-task obligation. All equivalent
-real-host fixtures require `VERIFIED_BOUNDED` from the hermetic solver. A
+A Decimal arithmetic query checks `+`, `-`, same-type multiplication and
+division, integer-right multiplication and division, and YQL's normalization
+of the reversed multiplication spelling at both boundaries, then proves the
+two-row/two-task obligation. All equivalent real-host fixtures require
+`VERIFIED_BOUNDED` from the hermetic solver. A
 Decimal aggregate query checks the `Decimal(7,2)` to `Decimal(35,2)` widening,
 undefined/intermediate/final `sum` phases, and serial partial-state UnionAll,
 then proves its two-row/two-task obligation. A

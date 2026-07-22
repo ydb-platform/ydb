@@ -97,8 +97,8 @@ The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
 The checked-in policy has two monotonic contracts. The formula-construction
-floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q71, q88, q93, and q96; it
-is enforced only for a complete formula-only suite. The proof floor requires
+floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q61, q71, q88, q93, and
+q96; it is enforced only for a complete formula-only suite. The proof floor requires
 TPCH q3 and TPC-DS q3, q52, q55, q93, and q96; dedicated hermetic tests require
 each one to remain `VERIFIED_BOUNDED`. Arbitrary focused solver experiments are
 never mistaken for the proof floor, even when they happen to select the same
@@ -140,18 +140,18 @@ StageGraph remains a separate diagnostic step.
 
 ## Last complete formula-only baseline
 
-This baseline was rerun on 2026-07-22 in formula-only mode; therefore all nine
+This baseline was rerun on 2026-07-22 in formula-only mode; therefore all ten
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`. Solver-backed
 evidence is listed separately below.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 1 (q3) | 18 | 3 | 22 |
-| TPCDS_YQL | 8 (q3, q48, q52, q55, q71, q88, q93, q96) | 62 | 29 | 99 |
+| TPCDS_YQL | 9 (q3, q48, q52, q55, q61, q71, q88, q93, q96) | 61 | 29 | 99 |
 
-The supported formula slice is 9/121 queries. This is a useful end-to-end
+The supported formula slice is 10/121 queries. This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 112 workload entries or larger
+slice rather than a claim about the remaining 111 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -191,9 +191,11 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers exactly the other 62 unsupported queries. IDs
-can appear in both exporter columns or under more than one reason because both
-snapshots are audited independently.
+The exporter matrix below covers the boundary failures among 59 of the 61
+unsupported queries. IDs can appear in both exporter columns or under more than
+one reason because both snapshots are audited independently. The two queries
+that pass export and fail closed inside the verifier are listed after the
+matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
@@ -204,37 +206,42 @@ snapshots are audited independently.
 | Decimal constant cast is incomplete | q5, q75 | - |
 | Decimal constant cast result is nullable | q18, q21, q40 | q18 |
 | Decimal constant cast source is not a non-null integer literal | q65 | - |
+| SafeCast constant Decimal source is not a non-nullable integer literal | q90 | q90 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | String `>=` comparison compatibility | q91 | - |
-| String Sort ordering | q25, q29, q42, q46, q50, q64, q68, q76 | q25, q29, q42, q46, q50, q64, q65 |
+| String Sort ordering | q4, q11, q25, q29, q42, q46, q50, q64, q68, q76 | q4, q11, q25, q29, q42, q46, q50, q64, q65 |
 | Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q80, q82 |
 | Callable `/` | q73, q78 | q78 |
 | Callable `Concat` | q84 | q84 |
-| Callable `DecimalDiv` | q4, q11, q31, q61, q74, q90 | q4, q11, q31, q61, q74, q90 |
 | Callable `IfPresent` | - | q34, q68, q73, q79 |
 | Callable `Substring` | q8, q15, q19, q62, q79, q99 | q8, q15, q19, q62, q99 |
 | Callable `Unwrap` | q38, q87 | q38, q87 |
 | Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
 | Type `Interval` | q37, q72, q77, q80, q82 | q72 |
 
+After both snapshots export, q31 fails before allocating its join-matching
+matrix because 32768 candidate-row pairs exceed the 16384 pair construction
+audit bound. q74 fails closed because aggregate `max` is not modeled.
+
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
 comparison removed every old Decimal-comparison blocker: q48 now emits a
-formula, while q13, q21, q28, q31, q37, q40, q43, q61, q65, q74, q82, q85,
-and q91 reach the deeper cast, scalar, OLAP, arithmetic, type, or ordering
-reasons shown above.
+formula, while q13, q21, q28, q31, q37, q40, q43, q65, q74, q82, q85, and q91
+reach deeper cast, scalar, OLAP, construction, aggregate, type, or ordering
+reasons.
 
 Exact arithmetic, ordering, and SUM remove the old `+`, `-`, `DecimalMul`,
-Decimal sort-key, and Decimal aggregate blockers. Occurrence-aware non-Merge
-StageGraph gathers compact mutually exclusive routing copies, and large
-Sort/Merge choices use bounded symbolic ordinals instead of factorial outcome
-expansion. That moves
-q3, q52, q55, q71, and q93 through formula construction and raises TPC-DS to
-8/99. q11 and q61 still stop at `DecimalDiv`; q64 at String Sort; q65 at the
-initial Decimal constant-cast gate and final String Sort; q75 at the initial
-constant-cast gate and final `Double`; and q80 at initial `Interval` and a final
-OLAP non-callable. q91's final Decimal Sort exports, while its initial String
-comparison remains unsupported.
+`DecimalDiv`, Decimal sort-key, and Decimal aggregate blockers.
+Occurrence-aware non-Merge StageGraph gathers compact mutually exclusive
+routing copies, and large Sort/Merge choices use bounded symbolic ordinals
+instead of factorial outcome expansion. That moves q3, q52, q55, q61, q71,
+and q93 through formula construction and raises TPC-DS to 9/99. q4 and q11 now
+reach String Sort; q31 reaches the construction cap; q74 reaches aggregate
+`max`; and q90 reaches the narrower SafeCast constant-source gate. q64 still
+stops at String Sort; q65 at the initial Decimal constant-cast gate and final
+String Sort; q75 at the initial constant-cast gate and final `Double`; and q80
+at initial `Interval` and a final OLAP non-callable. q91's final Decimal Sort
+exports, while its initial String comparison remains unsupported.
 
 ## Curated proof floor and focused results
 
@@ -247,10 +254,21 @@ comparison remains unsupported.
   comparison-alignment, and integer constant-cast support. Its recorded result
   is formula-only: no solver verdict or bounded proof is claimed.
 
-- TPC-DS q71 now constructs a 118,276,852-byte SMT formula. Formula construction
-  took 80,359 ms in the complete run. A focused solver attempt reached the
-  external solver-process deadline without producing a verdict, so q71 is not a
-  bounded proof.
+- TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
+  `DecimalDiv` support. A focused solver run spent 955 ms preparing the query
+  and 63,897 ms in verification before Z3 returned `UNKNOWN` at the 60000 ms
+  budget. It is formula-covered, but is neither a bounded proof nor evidence of
+  an optimizer bug.
+
+- TPC-DS q31 now fails closed before a large join allocation: 32768
+  candidate-row pairs exceed the 16384 pair construction audit bound. A
+  focused run reports `UNSUPPORTED` from the verifier in under one second of
+  verifier work instead of exhausting memory.
+
+- TPC-DS q71 now constructs a 118,276,852-byte SMT formula. The complete run
+  recorded 100,948 ms in its verifier/formula-emission phase. A focused solver
+  attempt reached the external solver-process deadline without producing a
+  verdict, so q71 is not a bounded proof.
 
 - TPC-DS q96 is `VERIFIED_BOUNDED` with a 60000 ms solver budget, two rows per
   referenced table, and two tasks. Its obligation covers the exact benchmark

@@ -156,19 +156,21 @@ Decimal arithmetic has a separate canonical gate. Binary `+` and `-` require
 both operands and the result to have one exact canonical `Decimal(p,s)` type.
 Binary `DecimalMul` requires the left operand and result to have that type; its
 right operand is either the same Decimal type or one signed/unsigned integer
-width. In every case result nullability is exactly the OR of operand
-nullability, and the expression must pass the same closed-world scalar audit as
-an opaque expression. The normalized snapshot node is `add`, `sub`, or `mul`;
-an integer is never admitted on the left at this boundary.
+width. Binary `DecimalDiv` has the same closed operand gate as `DecimalMul`.
+In every case result nullability is exactly the OR of operand nullability, and
+the expression must pass the same closed-world scalar audit as an opaque
+expression. The normalized snapshot node is `add`, `sub`, `mul`, or `div`; an
+integer is never admitted on the left at this boundary.
 
 YQL does not expose a complete determinism-and-totality annotation. The v1 C++
 exporter therefore uses a reviewed positive list for opaque subtrees: integer
 `+`, `-`, and `*` forms that do not meet the structural gate; scalar
 comparisons; `Just`, `Exists`, `Coalesce`, and `If`; `SafeCast`; and `Convert`
 only when YQL's cast analysis says it cannot fail. Unknown callables, UDF/PG
-calls, division, strict casts, `Unwrap`, free variables, position-aware or
-unordered nodes, and side-effecting/CSE-unsafe nodes fail closed. Expanding this
-list requires an explicit totality review and tests.
+calls, generic division, strict casts, `Unwrap`, free variables, position-aware
+or unordered nodes, and side-effecting/CSE-unsafe nodes fail closed.
+`DecimalDiv` is the one explicitly audited total division callable. Expanding
+this list requires an explicit totality review and tests.
 
 One cast shape is normalized before opaque fallback: when YQL cast analysis
 reports a complete conversion from a non-null integer literal to a non-null
@@ -217,14 +219,24 @@ infinity-times-zero, signed infinity, and finite overflow—including a finite
 result that numerically collides with the in-band NaN code—are handled before
 the result is decoded.
 
+Same-type `div` multiplies the left coefficient by `10^s` before division;
+`DecimalDiv` with an integer right operand divides the coefficient directly and
+therefore preserves the left Decimal scale. Both reproduce `NDecimal::Div`'s
+current signed-remainder behavior exactly: positive divisors round to nearest
+with ties to even, while negative-divisor non-ties truncate toward zero and
+exact ties still round to even. Division by zero, NaN, signed infinities,
+global 35-digit saturation, result-precision saturation, and a finite quotient
+that collides with the reserved NaN code are explicit.
+
 Decimal Sort, TopSort, and Merge use the MiniKQL/DQ runtime comparator,
 not ordinary `DataCompare`: raw signed 128-bit codes form the total non-null
 order `-Inf < finite values < +Inf < NaN`, reversed for descending. Raw code
 equality makes two NaNs a sort tie. One order item retains one exact canonical
 `Decimal(p,s)` identity without scale alignment; separate tuple keys may have
 different Decimal identities. NULL placement continues to use the pre-physical
-snapshot's explicit `nulls_first` field. Decimal division, general casts, `IN`,
-and aggregate functions other than the bounded `sum` below remain unsupported.
+snapshot's explicit `nulls_first` field. Generic division, general casts,
+dynamic or otherwise non-core `IN`, and aggregate functions other than the
+bounded `sum` below remain unsupported.
 
 `sum(Decimal(p,s))` widens inputs, partial state, and result to
 `Decimal(35,s)`. MiniKQL/DQ combines them with saturating `AggrAdd`, which is not
@@ -265,7 +277,7 @@ Implementation sequence:
 7. M4: actual column-store filter pushdown from the executed OLAP dialect;
 8. M4: exact Decimal literals, domains, comparison, and constant-cast
    normalization;
-9. M4: exact canonical Decimal `+`, `-`, and `DecimalMul`;
+9. M4: exact canonical Decimal `+`, `-`, `DecimalMul`, and `DecimalDiv`;
 10. M4: exact Decimal Sort, TopSort, and Merge ordering;
 11. M4: exact headroom-bounded Decimal `sum` and partial-state combination;
 12. M4: occurrence-aware routing compaction and scalable symbolic ordinals for
@@ -308,12 +320,16 @@ Limit phases are preserved but do not independently change the modeled runtime
 semantics. If the initial root is ordered, results are compared as compressed
 sequences; otherwise they are compared as bags.
 
-Explicit outcome families still fail closed above 256 alternatives. The cap
-applies to unordered-Limit masks, small enumerated ordered choices, and family
-products/gathers. Large Sort, Merge, and latent-sequence choices switch to the
-exact ordinal representation before factorial expansion; the number of row
-slots itself remains bounded. Cross-plan equality fails closed above 4096
-explicit outcome pairs. Neither cap is approximated.
+Every materialized relation fails closed above 4096 candidate rows. Join
+matching/output, UnionAll, and grouped-aggregate sizes are checked before their
+large intermediates are allocated. Sort, Merge, and latent-sequence encodings
+likewise fail closed above 16384 candidate-row pairs before computing factorials
+or allocating ordinals. Explicit outcome families separately fail closed above
+256 alternatives; that cap applies to unordered-Limit masks, small enumerated
+ordered choices, and family products/gathers. Large ordered choices switch to
+the exact ordinal representation within the row-pair bound. Cross-plan equality
+fails closed above 4096 explicit outcome pairs. None of these caps is
+approximated.
 
 ## StageGraph semantics
 
@@ -407,14 +423,15 @@ also distinguish wrong hash functions, shuffle keys, broadcasts, and UnionAll
 modes. Decimal tests exhaust every finite value for all `Decimal(p,s)` with
 `p <= 2`, plus all specials, against an independent rational-value comparison
 reference. Arithmetic uses the same independent reference: multiplication is
-exhausted at every scale, while addition/subtraction are exhausted once per
-precision and checked structurally scale-independent. Adversarial cases cover
-ties-to-even for both signs, every integer width, special values, precision
-overflow, and finite collisions with the NaN code. Existing C++ literal and
-alignment tests use `NDecimal` as an oracle, while arithmetic exporter tests
-audit the signature gates. Normal verifier tests prove unchanged
-`add`/`sub`/`mul` across a staged Map and require operation mutations to produce
-solver counterexamples.
+exhausted at every scale, division is checked against a structurally separate
+literal transcription of `NDecimal::Div`, and addition/subtraction are
+exhausted once per precision and checked structurally scale-independent.
+Adversarial cases cover ties-to-even for both signs, negative-divisor non-ties,
+every integer width, special values, precision overflow, and finite collisions
+with the NaN code. Existing C++ literal, alignment, and division tests use
+`NDecimal` as an oracle, while arithmetic exporter tests audit the signature
+gates. Normal verifier tests prove unchanged `add`/`sub`/`mul`/`div` across a
+staged Map and require operation mutations to produce solver counterexamples.
 Decimal ordering is exhaustively checked on every legal finite code through
 precision two plus specials, directions, explicit NULL placement, NaN ties,
 TopSort prefixes, and two-task Merge. A C++ oracle locks the stated total order
@@ -521,14 +538,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   equality/order, exact-type null-safe equality, Decimal/Decimal and
   Decimal/integer `DataCompare` alignment, precision-cap saturation, and
   complete non-null integer constant casts are modeled. Canonical same-type
-  Decimal `+`/`-` and `DecimalMul` with a same-type Decimal or integer right
-  operand have exact `NDecimal` special, ties-to-even, scale, and overflow
-  semantics. Sort, TopSort, and Merge use the distinct raw-code total order,
+  Decimal `+`/`-`, `DecimalMul`, and `DecimalDiv` with a same-type Decimal or
+  integer right operand have exact `NDecimal` special, scale, rounding, and
+  overflow semantics, including the current negative-divisor asymmetry. Sort,
+  TopSort, and Merge use the distinct raw-code total order,
   including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
   `Decimal(35,s)` and is exact whenever its carried finite bound proves that
   saturating partial addition cannot overflow; unsafe bounds fail closed.
-  General casts, Decimal division, `IN`, and other aggregate functions remain
-  unsupported. Exhaustive rational, ordering, and aggregate references,
+  General casts, generic division, non-core `IN`, and other aggregate functions
+  remain unsupported. Exhaustive rational, ordering, and aggregate references,
   adversarial arithmetic and accumulator-overflow cases, signature and mutation
   tests, and green real-host Decimal filter, arithmetic, ordered, and aggregate
   obligations cover this boundary.
@@ -552,15 +570,21 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
   2026-07-22 complete formula-only baseline emits TPCH q3 (1/22) and TPC-DS q3,
-  q48, q52, q55, q71, q88, q93, and q96 (8/99). Formula emission confirms
+  q48, q52, q55, q61, q71, q88, q93, and q96 (9/99). Formula emission confirms
   end-to-end model coverage at two rows per referenced table and two tasks; it
   is not a proof by itself.
+- Construction preflights cap every materialized relation at 4096 candidate
+  rows and each quadratic construction at 16384 candidate-row pairs. This
+  preserves q71's 9072-term Merge ordinal construction while q31 fails closed
+  before allocating its 32768-pair join matrix.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3 and
   TPC-DS q3, q52, q55, q93, and q96 with a fixed 60-second per-query budget.
-  TPC-DS q48 remains formula-only, q88 remains `UNKNOWN` at 60 seconds, and
-  q71's 118,276,852-byte formula took 80,359 ms to construct in the complete run
-  before a focused solver attempt reached the external process deadline. No
-  optimizer correctness bug is confirmed by these runs.
+  TPC-DS q48 remains formula-only; q61's 1,572,871-byte formula and q88 both
+  return `UNKNOWN` at 60 seconds. q61 recorded 955 ms of preparation and 63,897
+  ms of verification. q71's 118,276,852-byte formula recorded 100,948 ms in the
+  verifier/formula-emission phase of the complete run before a focused solver
+  attempt reached the external process deadline. No optimizer correctness bug
+  is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q88
   investigation, and explicit unsupported/optimizer-failure inventory.

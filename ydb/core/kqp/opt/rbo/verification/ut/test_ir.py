@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import SnapshotError, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import INTEGER_TYPES
 
 
 def minimal_snapshot():
@@ -85,6 +86,53 @@ def count_star_snapshot():
     ]
     value["plan"]["root"] = "aggregate"
     value["plan"]["output"] = ["result"]
+    return value
+
+
+def decimal_div_snapshot(
+    right_type="Decimal(7,2)",
+    *,
+    left_nullable=False,
+    right_nullable=False,
+    result_nullable=None,
+):
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"] = [
+        {
+            "name": "amount",
+            "type": "Decimal(7,2)",
+            "nullable": left_nullable,
+        },
+        {
+            "name": "divisor",
+            "type": right_type,
+            "nullable": right_nullable,
+        },
+    ]
+    value["plan"]["nodes"][0]["columns"] = [
+        {"source": "amount", "output": "a.amount"},
+        {"source": "divisor", "output": "a.divisor"},
+    ]
+    value["plan"]["nodes"][1]["predicate"] = {
+        "kind": "eq",
+        "left": {
+            "kind": "div",
+            "left": {"kind": "column", "column": "a.amount"},
+            "right": {"kind": "column", "column": "a.divisor"},
+            "type": "Decimal(7,2)",
+            "nullable": (
+                left_nullable or right_nullable
+                if result_nullable is None
+                else result_nullable
+            ),
+        },
+        "right": {
+            "kind": "literal",
+            "type": "Decimal(7,2)",
+            "value": {"kind": "finite", "scaled": "0"},
+        },
+    }
+    value["plan"]["output"] = ["a.amount"]
     return value
 
 
@@ -303,6 +351,111 @@ class SnapshotTest(unittest.TestCase):
         nullable["schema"]["tables"][0]["columns"][0]["nullable"] = True
         with self.assertRaisesRegex(SnapshotError, "nullability must equal the OR"):
             parse_snapshot(nullable)
+
+    def test_decimal_division_accepts_only_its_exact_operand_shapes(self):
+        for right_type in ("Decimal(7,2)", *sorted(INTEGER_TYPES)):
+            with self.subTest(right_type=right_type):
+                snapshot = parse_snapshot(decimal_div_snapshot(right_type))
+                expression = snapshot.plan.nodes[1].predicate.args[0]
+                self.assertEqual(
+                    (
+                        expression.kind,
+                        expression.result_type,
+                        expression.nullable,
+                    ),
+                    ("div", "Decimal(7,2)", False),
+                )
+
+        rejected_right_types = (
+            "Decimal(7,1)",
+            "Decimal(8,2)",
+            "Bool",
+            "Date",
+            "String",
+        )
+        for right_type in rejected_right_types:
+            with self.subTest(right_type=right_type):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "right operand must exactly match.*or be integral",
+                ):
+                    parse_snapshot(decimal_div_snapshot(right_type))
+
+    def test_decimal_division_rejects_result_or_left_type_broadening(self):
+        integer_result = decimal_div_snapshot("Int64")
+        division = integer_result["plan"]["nodes"][1]["predicate"]["left"]
+        division["left"] = {"kind": "column", "column": "a.divisor"}
+        division["type"] = "Int64"
+        integer_result["plan"]["nodes"][1]["predicate"]["right"] = {
+            "kind": "literal",
+            "type": "Int64",
+            "value": 0,
+        }
+        with self.assertRaisesRegex(SnapshotError, "div requires a Decimal result"):
+            parse_snapshot(integer_result)
+
+        for result_type in ("Decimal(6,2)", "Decimal(8,2)", "Decimal(7,3)"):
+            broadened = decimal_div_snapshot()
+            division = broadened["plan"]["nodes"][1]["predicate"]["left"]
+            division["type"] = result_type
+            broadened["plan"]["nodes"][1]["predicate"]["right"]["type"] = result_type
+            with self.subTest(result_type=result_type):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "left operand must exactly match its result type",
+                ):
+                    parse_snapshot(broadened)
+
+    def test_decimal_division_nullability_is_exactly_the_operand_or(self):
+        for left_nullable in (False, True):
+            for right_nullable in (False, True):
+                expected = left_nullable or right_nullable
+                with self.subTest(
+                    left_nullable=left_nullable,
+                    right_nullable=right_nullable,
+                ):
+                    snapshot = parse_snapshot(
+                        decimal_div_snapshot(
+                            "Int16",
+                            left_nullable=left_nullable,
+                            right_nullable=right_nullable,
+                        )
+                    )
+                    expression = snapshot.plan.nodes[1].predicate.args[0]
+                    self.assertEqual(expression.nullable, expected)
+
+                    wrong = decimal_div_snapshot(
+                        "Int16",
+                        left_nullable=left_nullable,
+                        right_nullable=right_nullable,
+                        result_nullable=not expected,
+                    )
+                    with self.assertRaisesRegex(
+                        SnapshotError,
+                        "div nullability must equal the OR",
+                    ):
+                        parse_snapshot(wrong)
+
+    def test_decimal_division_node_schema_is_closed(self):
+        value = decimal_div_snapshot()
+        for field in ("left", "right", "type", "nullable"):
+            malformed = copy.deepcopy(value)
+            del malformed["plan"]["nodes"][1]["predicate"]["left"][field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(SnapshotError, f"missing fields: {field}"):
+                    parse_snapshot(malformed)
+
+        unknown = copy.deepcopy(value)
+        division = unknown["plan"]["nodes"][1]["predicate"]["left"]
+        division["rounding"] = "half_even"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: rounding"):
+            parse_snapshot(unknown)
+
+        non_boolean = copy.deepcopy(value)
+        division = non_boolean["plan"]["nodes"][1]["predicate"]["left"]
+        division["nullable"] = 0
+        with self.assertRaisesRegex(SnapshotError, "expected a Boolean"):
+            parse_snapshot(non_boolean)
 
     def test_abstract_scalar_names_are_rejected(self):
         value = minimal_snapshot()

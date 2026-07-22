@@ -292,6 +292,10 @@ void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) {
 DEF_OPTIONAL(ui32);
 DEF_OPTIONAL(i64);
 DEF_OPTIONAL(ui64);
+#if defined(_darwin_) && defined(_64_)
+DEF_OPTIONAL(long long);
+DEF_OPTIONAL(unsigned long long);
+#endif
 DEF_OPTIONAL(std::string);
 DEF_OPTIONAL(TString);
 DEF_OPTIONAL(TStringBuf);

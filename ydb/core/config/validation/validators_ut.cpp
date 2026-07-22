@@ -763,4 +763,76 @@ Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
             UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
         }
     }
+
+    Y_UNIT_TEST(ClientCertificateRequired) {
+        { // Without monitoring TLS certificate data
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Monitoring server certificate is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With server certificate, but without CA
+            NKikimrConfig::TAppConfig config;
+            auto* monitoringConfig = config.MutableMonitoringConfig();
+            monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
+            monitoringConfig->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "MonitoringCaFile is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With server certificate and CA
+            NKikimrConfig::TAppConfig config;
+            auto* monitoringConfig = config.MutableMonitoringConfig();
+            monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
+            monitoringConfig->SetMonitoringCaFile("/path/to/ca.pem");
+            monitoringConfig->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(ClientCertificateAuthorizationValidation) {
+    Y_UNIT_TEST(ClientCertificateRequired) {
+        { // Without RequestClientCertificate
+            NKikimrConfig::TAppConfig config;
+            config.MutableClientCertificateAuthorization()->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "RequestClientCertificate is disabled, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With RequestClientCertificate, with CA file
+            NKikimrConfig::TAppConfig config;
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
+            config.MutableGRpcConfig()->SetPathToCaFile("/path/to/ca.pem");
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+        { // With RequestClientCertificate, but without CA file
+            NKikimrConfig::TAppConfig config;
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "gRPC CA is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+    }
 }

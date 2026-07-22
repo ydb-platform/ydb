@@ -1,10 +1,11 @@
 #include "viewer_utils.h"
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NViewer {
 
-TString GetDatabaseParam(const TCgiParameters& params, const TStringBuf& method, const TStringBuf& body) {
+TString GetDatabaseParam(const TCgiParameters& params, const TStringBuf method, const TStringBuf body) {
     TString database = params.Get("database");
     if (database) {
         return database;

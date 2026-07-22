@@ -1,5 +1,6 @@
 #include "viewer_utils.h"
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NViewer {

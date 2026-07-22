@@ -18,6 +18,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <functional>
+#include <optional>
+#include <optional>
 
 const bool STRAND_PDISK = true;
 #ifndef NDEBUG
@@ -288,7 +290,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return MakeBSControllerID();
     }
 
-    ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory) {
+    ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
+            const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, TActorId nodeWarden = {}) {
         VERBOSE_COUT(" Creating pdisk");
 
         ui32 nodeId = runtime.GetNodeId(nodeIdx);
@@ -301,7 +304,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdisk->SetPDiskGuid(guid);
         pdisk->SetPDiskCategory(pDiskCategory);
         pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
-        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), TActorId(), ev.release()));
+        if (pdiskConfig) {
+            pdisk->MutablePDiskConfig()->CopyFrom(*pdiskConfig);
+        }
+
+        if (!nodeWarden) {
+            nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+        }
+        runtime.Send(new IEventHandle(nodeWarden, TActorId(), ev.release()));
 
         return pdiskId;
     }
@@ -981,6 +991,241 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_STRINGS_EQUAL("Fake error", restartPDiskEv->Details);
 
         UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
+    }
+
+    void CheckExpectedPDiskSlotSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
+            TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount,
+            std::optional<ui64> expectedSlotSize = std::nullopt,
+            TDuration simTimeout = TDuration::Seconds(10)) {
+        const int maxAttempts = 30;
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+            // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
+            const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(fakeWhiteboard, simTimeout);
+            VERBOSE_COUT(" Got TEvPDiskStateUpdate# " << ev->ToString());
+
+            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = ev->Get()->Record;
+            if (pdiskInfo.GetPDiskId() != pdiskId ||
+                    pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
+                continue;
+            }
+            UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
+            UNIT_ASSERT(pdiskInfo.HasAvailableSize());
+            UNIT_ASSERT(pdiskInfo.HasTotalSize());
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
+            // the field is always present in whiteboard updates; 0 means 'not set'
+            UNIT_ASSERT(pdiskInfo.HasExpectedSlotSize());
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotSize(), expectedSlotSize.value_or(0));
+            break;
+        }
+
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+            // Check EvControllerUpdateDiskStatus sent from PDiskActor to NodeWarden
+            const auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden, simTimeout);
+            VERBOSE_COUT(" Got TEvControllerUpdateDiskStatus# " << ev->ToString());
+
+            NKikimrBlobStorage::TEvControllerUpdateDiskStatus diskStatus = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(diskStatus.PDisksMetricsSize(), 1);
+
+            const NKikimrBlobStorage::TPDiskMetrics &metrics = diskStatus.GetPDisksMetrics(0);
+            if (metrics.GetPDiskId() != pdiskId ||
+                    metrics.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
+                continue;
+            }
+            // metrics are replaced as a whole on the receiving side, so zero values are
+            // reported by omitting the field
+            UNIT_ASSERT_VALUES_EQUAL(metrics.HasSlotCount(), expectedSlotCount != 0);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
+            if (expectedSlotSize) {
+                UNIT_ASSERT(metrics.HasExpectedSlotSize());
+                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), *expectedSlotSize);
+            } else {
+                UNIT_ASSERT(!metrics.HasExpectedSlotSize());
+            }
+            break;
+        }
+    }
+
+    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime) {
+        // Setup logging
+        SetupLogging(runtime);
+        runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
+
+        // Initialize runtime
+        TAppPrepare app;
+        app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
+        app.AddHive(0);
+        runtime.Initialize(app.Unwrap());
+
+        // Setup BSNodeWarden
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+        IActor* nodeWardenActor = CreateBSNodeWarden(nodeWardenConfig.Release());
+        TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
+        runtime.EnableScheduleForActor(realNodeWarden, true);
+
+        // Communication scheme:
+        //                                      .-> fakeNodeWarden -.
+        // test -> realNodeWarden -> realPDsik -                     -> test
+        //                                      `-> fakeWhiteboard -`
+        // Now give it some time to bootstrap
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        return realNodeWarden;
+    }
+
+    CUSTOM_UNIT_TEST(TestExpectedSlotSizeCalculatesSlotCount) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui64 expectedSlotSize = 600ull << 30;
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        // this branch has no runtime slot settings reconfiguration for a running PDisk,
+        // so each configuration variant is checked on a freshly created PDisk
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_1:2400", 0, 1003, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1003, 4, expectedSlotSize);
+
+        const ui64 updatedExpectedSlotSize = 800ull << 30;
+        pdiskConfig.SetExpectedSlotSize(updatedExpectedSlotSize);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_2:2400", 0, 1013, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1013, 3, updatedExpectedSlotSize);
+
+        const ui64 smallExpectedSlotSize = 1ull << 30;
+        pdiskConfig.SetExpectedSlotSize(smallExpectedSlotSize);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSizeCalculatesSlotCount_3:2400", 0, 1023, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1023, 8u, smallExpectedSlotSize);
+    }
+
+    CUSTOM_UNIT_TEST(TestExpectedSlotSettingsTransitions) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui64 expectedSlotSize = 600ull << 30;
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        // this branch has no runtime slot settings reconfiguration for a running PDisk,
+        // so each configuration variant is checked on a freshly created PDisk
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotCount(7);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_1:2400", 0, 1004, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1004, 7);
+
+        pdiskConfig.ClearExpectedSlotCount();
+        pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_2:2400", 0, 1014, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1014, 4, expectedSlotSize);
+
+        pdiskConfig.ClearExpectedSlotSize();
+        pdiskConfig.ClearMaxSlots();
+        pdiskConfig.SetExpectedSlotCount(9);
+        CreatePDisk(runtime, 0, "SectorMap:TestExpectedSlotSettingsTransitions_3:2400", 0, 1024, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1024, 9);
+    }
+
+    CUSTOM_UNIT_TEST(TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui64 expectedSlotSize = 600ull << 30;
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotCount(17);
+        pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
+        CreatePDisk(runtime, 0, "SectorMap:TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden_1:2400", 0, 1005, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1005, 4, expectedSlotSize);
+
+        auto edge = runtime.AllocateEdgeActor();
+        THttpRequestMock httpRequest;
+        NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &httpRequest, nullptr, nullptr, "",
+            nullptr);
+        runtime.Send(new IEventHandle(realNodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);
+        auto httpInfoRes = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(1));
+        UNIT_ASSERT(httpInfoRes && httpInfoRes->Get());
+
+        TStringStream out;
+        httpInfoRes->Get()->Output(out);
+        UNIT_ASSERT_C(out.Str().Contains("PDiskConfig has ExpectedSlotSize"), out.Str());
+        UNIT_ASSERT_C(out.Str().Contains("ExpectedSlotCount# 17"), out.Str());
+        UNIT_ASSERT_C(out.Str().Contains("ExpectedSlotSize and MaxSlots take precedence"), out.Str());
+
+        // without MaxSlots the slot count cannot be derived from ExpectedSlotSize, so the
+        // invalid setting must be ignored and the explicit slot settings kept in effect
+        pdiskConfig.ClearMaxSlots();
+        CreatePDisk(runtime, 0, "SectorMap:TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden_2:2400", 0, 1015, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            1015, 17);
+    }
+
+    CUSTOM_UNIT_TEST(TestExpectedSlotSizeLargerThanDriveKeepsZeroSlotCount) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1007;
+        const TString pdiskPath = "SectorMap:TestExpectedSlotSizeLargerThanDriveKeepsZeroSlotCount:2400";
+        const ui64 expectedSlotSize = 3000ull << 30; // larger than the 2400 GB drive
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotSize(expectedSlotSize);
+        pdiskConfig.SetMaxSlots(8);
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, realNodeWarden);
+        CheckExpectedPDiskSlotSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 0, expectedSlotSize);
+
+        auto edge = runtime.AllocateEdgeActor();
+        THttpRequestMock httpRequest;
+        NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &httpRequest, nullptr, nullptr, "",
+            nullptr);
+        runtime.Send(new IEventHandle(realNodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);
+        auto httpInfoRes = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(1));
+        UNIT_ASSERT(httpInfoRes && httpInfoRes->Get());
+
+        TStringStream out;
+        httpInfoRes->Get()->Output(out);
+        UNIT_ASSERT_C(out.Str().Contains("Drive is smaller than ExpectedSlotSize"), out.Str());
     }
 }
 

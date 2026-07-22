@@ -85,6 +85,8 @@ namespace NKikimr::NStorage {
 
         ui32 RefCount = 0;
         bool Temporary = false;
+        ui64 ExpectedSlotSize = 0;
+        TString PDiskConfigWarning;
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
@@ -280,7 +282,8 @@ namespace NKikimr::NStorage {
             return LocalPDiskInitOwnerRound;
         }
 
-        TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
+        TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
+            TString *configWarning = nullptr);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);

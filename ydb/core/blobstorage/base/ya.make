@@ -20,6 +20,7 @@ SRCS(
     defs.h
     html.cpp
     html.h
+    pdisk_config_validation.h
     ptr.h
     vdisk_lsn.h
     vdisk_sync_common.h

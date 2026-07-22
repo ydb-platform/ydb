@@ -1,7 +1,9 @@
 #include "validators.h"
 
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <library/cpp/protobuf/json/util.h>
@@ -51,6 +53,16 @@ bool IsSame(const NKikimrBlobStorage::TVDiskID& lhs, const NKikimrBlobStorage::T
 bool IsSame(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& lhs, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& rhs) {
     return
         IsSame(lhs.GetVDiskID(), rhs.GetVDiskID()) && IsSame(lhs.GetVDiskLocation(), rhs.GetVDiskLocation());
+}
+
+bool ValidatePDiskConfig(const NKikimrBlobStorage::TPDiskConfig& config, const TString& context,
+        std::vector<TString>& msg) {
+    if (auto error = ::NKikimr::ValidatePDiskConfig(config, context)) {
+        msg.push_back(*error);
+        return false;
+    }
+
+    return true;
 }
 
 EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
@@ -208,6 +220,41 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateColumnShardConfig(config.GetColumnShardConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
             return EValidationResult::Error;
+        }
+    }
+    if (config.HasBlobStorageConfig()) {
+        const auto& blobStorageConfig = config.GetBlobStorageConfig();
+        for (ui32 hostConfigIndex = 0; hostConfigIndex < blobStorageConfig.DefineHostConfigSize(); ++hostConfigIndex) {
+            const auto& hostConfig = blobStorageConfig.GetDefineHostConfig(hostConfigIndex);
+            if (hostConfig.HasDefaultHostPDiskConfig() && !ValidatePDiskConfig(
+                    hostConfig.GetDefaultHostPDiskConfig(),
+                    TStringBuilder() << "BlobStorageConfig.DefineHostConfig[" << hostConfigIndex
+                        << "].DefaultHostPDiskConfig",
+                    msg)) {
+                return EValidationResult::Error;
+            }
+            for (ui32 driveIndex = 0; driveIndex < hostConfig.DriveSize(); ++driveIndex) {
+                const auto& drive = hostConfig.GetDrive(driveIndex);
+                if (drive.HasPDiskConfig() && !ValidatePDiskConfig(
+                        drive.GetPDiskConfig(),
+                        TStringBuilder() << "BlobStorageConfig.DefineHostConfig[" << hostConfigIndex
+                            << "].Drive[" << driveIndex << "].PDiskConfig",
+                        msg)) {
+                    return EValidationResult::Error;
+                }
+            }
+        }
+        if (blobStorageConfig.HasServiceSet()) {
+            const auto& serviceSet = blobStorageConfig.GetServiceSet();
+            for (ui32 pdiskIndex = 0; pdiskIndex < serviceSet.PDisksSize(); ++pdiskIndex) {
+                const auto& pdisk = serviceSet.GetPDisks(pdiskIndex);
+                if (pdisk.HasPDiskConfig() && !ValidatePDiskConfig(
+                        pdisk.GetPDiskConfig(),
+                        TStringBuilder() << "BlobStorageConfig.ServiceSet.PDisks[" << pdiskIndex << "].PDiskConfig",
+                        msg)) {
+                    return EValidationResult::Error;
+                }
+            }
         }
     }
     if (msg.size() > 0) {

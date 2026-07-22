@@ -137,7 +137,10 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
+    // Slot sizing settings are either user-defined or inferred from drive size
     ui64 ExpectedSlotCount = 0;
+    ui64 ExpectedSlotSize = 0;
+    ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -325,6 +328,8 @@ struct TPDiskConfig : public TThrRefBase {
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " ExpectedSlotSize# " << ExpectedSlotSize << x;
+        str << " MaxSlots# " << MaxSlots << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -417,6 +422,14 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasExpectedSlotSize()) {
+            ExpectedSlotSize = cfg->GetExpectedSlotSize();
+        }
+
+        if (cfg->HasMaxSlots()) {
+            MaxSlots = cfg->GetMaxSlots();
         }
 
         if (cfg->HasChunkBaseLimit()) {

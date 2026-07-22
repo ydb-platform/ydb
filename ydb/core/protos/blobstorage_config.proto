@@ -706,6 +706,7 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
+        uint64 ExpectedSlotSize = 24;
     }
     message TVSlot {
         message TDonorDisk {

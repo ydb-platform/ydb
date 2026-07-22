@@ -1602,8 +1602,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
 
                 // Reset chunk trackers
                 TKeeperParams params;
+                NormalizeExpectedSlotSettings();
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
+                params.ExpectedOwnerSize = GetExpectedOwnerSizeInChunks();
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
                 if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
                     params.SeparateCommonLog = false;

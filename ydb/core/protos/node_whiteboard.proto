@@ -146,6 +146,7 @@ message TPDiskStateInfo {
     optional uint32 ExpectedSlotCount = 22 [(DefaultField) = true];
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
+    optional uint64 ExpectedSlotSize = 28 [(DefaultField) = true];
 }
 
 message TEvPDiskStateRequest {

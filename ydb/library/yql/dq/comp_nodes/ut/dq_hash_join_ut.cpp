@@ -56,9 +56,9 @@ struct TJoinTestData {
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
     TBlockHashJoinSettings JoinSettings;
-    TDqProgramBuilder::TScalarJoinFilterLambda LeftFilter;
-    TDqProgramBuilder::TScalarJoinFilterLambda RightFilter;
-    TDqProgramBuilder::TScalarJoinCommonFilterLambda CommonFilter;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -970,7 +970,7 @@ TJoinTestData ScalarPayloadInnerJoinTestData() {
 
 // Predicate helpers. The lambdas are invoked lazily inside DqScalarHashJoin with the wide-row
 // argument nodes, so they fetch the program builder from the (still alive) setup at build time.
-TDqProgramBuilder::TScalarJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
+TDqProgramBuilder::TJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
                                                                   ui64 value) {
     return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
         auto& pb = setup->GetDqProgramBuilder();
@@ -978,7 +978,7 @@ TDqProgramBuilder::TScalarJoinFilterLambda GreaterThanConstFilter(TDqSetup<false
     };
 }
 
-TDqProgramBuilder::TScalarJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* setup, ui32 column, ui64 value) {
+TDqProgramBuilder::TJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* setup, ui32 column, ui64 value) {
     return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
         auto& pb = setup->GetDqProgramBuilder();
         return pb.Coalesce(pb.Less(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
@@ -986,7 +986,7 @@ TDqProgramBuilder::TScalarJoinFilterLambda LessThanConstFilter(TDqSetup<false, t
 }
 
 // right[column] > left[column]
-TDqProgramBuilder::TScalarJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<false, true>* setup, ui32 column) {
+TDqProgramBuilder::TJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<false, true>* setup, ui32 column) {
     return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
         auto& pb = setup->GetDqProgramBuilder();
         return pb.Coalesce(pb.Greater(right[column], left[column]), pb.NewDataLiteral<bool>(false));

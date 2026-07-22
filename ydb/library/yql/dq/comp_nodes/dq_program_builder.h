@@ -13,10 +13,10 @@ class TDqProgramBuilder : public TProgramBuilder {
 
     // Single-side join filter: receives the wide row (one runtime node per input column) and
     // must return a Bool (or Optional<Bool>) predicate. An empty callback means "no filter".
-    using TScalarJoinFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList)>;
+    using TJoinFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList)>;
     // Common (non-equi) join filter over both sides: receives (leftRow, rightRow) wide rows and
     // must return a Bool (or Optional<Bool>) predicate. An empty callback means "no filter".
-    using TScalarJoinCommonFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode::TList)>;
+    using TJoinCommonFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode::TList)>;
 
     TRuntimeNode DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor,
                                const TBinaryWideLambda& init, const TTernaryWideLambda& update,
@@ -29,17 +29,17 @@ class TDqProgramBuilder : public TProgramBuilder {
                                  const TArrayRef<const ui32>& leftKeyColumns,
                                  const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& leftRenames,
                                  const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                 TBlockHashJoinSettings settings = {}, const TScalarJoinFilterLambda& leftFilter = {},
-                                 const TScalarJoinFilterLambda& rightFilter = {},
-                                 const TScalarJoinCommonFilterLambda& commonFilter = {});
+                                 TBlockHashJoinSettings settings = {}, const TJoinFilterLambda& leftFilter = {},
+                                 const TJoinFilterLambda& rightFilter = {},
+                                 const TJoinCommonFilterLambda& commonFilter = {});
 
     TRuntimeNode DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
                                   const TArrayRef<const ui32>& leftKeyColumns,
                                   const TArrayRef<const ui32>& rightKeyColumns,
                                   const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames,
-                                  TType* returnType, const TScalarJoinFilterLambda& leftFilter = {},
-                                  const TScalarJoinFilterLambda& rightFilter = {},
-                                  const TScalarJoinCommonFilterLambda& commonFilter = {});
+                                  TType* returnType, const TJoinFilterLambda& leftFilter = {},
+                                  const TJoinFilterLambda& rightFilter = {},
+                                  const TJoinCommonFilterLambda& commonFilter = {});
 
     TType* LastScalarIndexBlock();
 

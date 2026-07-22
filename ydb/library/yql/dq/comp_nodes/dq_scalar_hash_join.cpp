@@ -49,7 +49,7 @@ struct TDqScalarJoinMetadata {
 class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
 public:
     TScalarPackedTupleSource(TComputationContext& ctx, IComputationWideFlowNode* flow, IScalarLayoutConverter* converter,
-                             int columns, const TScalarJoinFilter* filter = nullptr)
+                             int columns, const TJoinFilter* filter = nullptr)
         : Ctx_(&ctx)
         , Flow_(flow)
         , Buff_(columns)
@@ -125,7 +125,7 @@ private:
     TMKQLVector<NYql::NUdf::TUnboxedValue*> Pointers_;
     IScalarLayoutConverter* Converter_;
     int Columns_;
-    const TScalarJoinFilter* Filter_ = nullptr;
+    const TJoinFilter* Filter_ = nullptr;
     static constexpr int BatchSize_ = 1024;
     TMKQLVector<NYql::NUdf::TUnboxedValue> BatchValues_;
     int BatchCount_ = 0;
@@ -138,7 +138,7 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
     };
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters,
-                         TComputationContext* ctx, const TScalarJoinCommonFilter* commonFilter)
+                         TComputationContext* ctx, const TJoinCommonFilter* commonFilter)
         : Renames_(&meta->Renames)
         , Converters_(converters)
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
@@ -214,7 +214,7 @@ private:
     const int BuildWidth_;
     const int ProbeWidth_;
     TComputationContext* Ctx_ = nullptr;
-    const TScalarJoinCommonFilter* CommonFilter_ = nullptr;
+    const TJoinCommonFilter* CommonFilter_ = nullptr;
 };
 
 template <EJoinKind Kind>
@@ -224,8 +224,8 @@ private:
 
 public:
     TScalarHashJoinWrapper(TComputationMutables& mutables, TDqScalarJoinMetadata meta,
-                           TSides<IComputationWideFlowNode*> flows, TScalarJoinFilter leftFilter,
-                           TScalarJoinFilter rightFilter, TScalarJoinCommonFilter commonFilter)
+                           TSides<IComputationWideFlowNode*> flows, TJoinFilter leftFilter,
+                           TJoinFilter rightFilter, TJoinCommonFilter commonFilter)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , Meta_(std::make_unique<TDqScalarJoinMetadata>(std::move(meta)))
         , Flows_(flows)
@@ -250,8 +250,8 @@ private:
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
                      TSides<std::unique_ptr<IScalarLayoutConverter>> converters, const TDqScalarJoinMetadata* meta,
-                     const TScalarJoinFilter* leftFilter, const TScalarJoinFilter* rightFilter,
-                     const TScalarJoinCommonFilter* commonFilter)
+                     const TJoinFilter* leftFilter, const TJoinFilter* rightFilter,
+                     const TJoinCommonFilter* commonFilter)
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
@@ -386,9 +386,9 @@ private:
 private:
     std::unique_ptr<const TDqScalarJoinMetadata> Meta_;
     TSides<IComputationWideFlowNode*> Flows_;
-    TScalarJoinFilter LeftFilter_;
-    TScalarJoinFilter RightFilter_;
-    TScalarJoinCommonFilter CommonFilter_;
+    TJoinFilter LeftFilter_;
+    TJoinFilter RightFilter_;
+    TJoinCommonFilter CommonFilter_;
 };
 
 } // namespace
@@ -462,11 +462,11 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     }
 
     // Absent filters are encoded as empty argument tuples by TDqProgramBuilder::DqScalarHashJoin.
-    TScalarJoinFilter leftFilter = ParseScalarJoinFilter(ctx, callable, NScalarHashJoinParams::LeftFilterArgs,
+    TJoinFilter leftFilter = ParseJoinFilter(ctx, callable, NScalarHashJoinParams::LeftFilterArgs,
                                                          NScalarHashJoinParams::LeftFilterBody);
-    TScalarJoinFilter rightFilter = ParseScalarJoinFilter(ctx, callable, NScalarHashJoinParams::RightFilterArgs,
+    TJoinFilter rightFilter = ParseJoinFilter(ctx, callable, NScalarHashJoinParams::RightFilterArgs,
                                                           NScalarHashJoinParams::RightFilterBody);
-    TScalarJoinCommonFilter commonFilter = ParseScalarJoinCommonFilter(
+    TJoinCommonFilter commonFilter = ParseJoinCommonFilter(
         ctx, callable, NScalarHashJoinParams::CommonFilterLeftArgs, NScalarHashJoinParams::CommonFilterRightArgs,
         NScalarHashJoinParams::CommonFilterBody);
 

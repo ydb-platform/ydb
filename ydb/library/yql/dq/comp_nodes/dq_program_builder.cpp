@@ -133,9 +133,9 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TArrayRef<const ui32>& leftRenames,
                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
                                                 TBlockHashJoinSettings settings,
-                                                const TScalarJoinFilterLambda& leftFilter,
-                                                const TScalarJoinFilterLambda& rightFilter,
-                                                const TScalarJoinCommonFilterLambda& commonFilter) {
+                                                const TJoinFilterLambda& leftFilter,
+                                                const TJoinFilterLambda& rightFilter,
+                                                const TJoinCommonFilterLambda& commonFilter) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
@@ -214,9 +214,9 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
                                                  const TArrayRef<const ui32>& rightKeyColumns,
                                                  const TArrayRef<const ui32>& leftRenames,
                                                  const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                                 const TScalarJoinFilterLambda& leftFilter,
-                                                 const TScalarJoinFilterLambda& rightFilter,
-                                                 const TScalarJoinCommonFilterLambda& commonFilter) {
+                                                 const TJoinFilterLambda& leftFilter,
+                                                 const TJoinFilterLambda& rightFilter,
+                                                 const TJoinCommonFilterLambda& commonFilter) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");

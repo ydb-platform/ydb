@@ -23,9 +23,9 @@ struct TJoinDescription {
     TVector<int> ScalarizeLeftColumns;
     TVector<int> ScalarizeRightColumns;
     // Optional non-equi join filters (supported by kScalarHash and kBlockHash).
-    TDqProgramBuilder::TScalarJoinFilterLambda LeftFilter;
-    TDqProgramBuilder::TScalarJoinFilterLambda RightFilter;
-    TDqProgramBuilder::TScalarJoinCommonFilterLambda CommonFilter;
+    TDqProgramBuilder::TJoinFilterLambda LeftFilter;
+    TDqProgramBuilder::TJoinFilterLambda RightFilter;
+    TDqProgramBuilder::TJoinCommonFilterLambda CommonFilter;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

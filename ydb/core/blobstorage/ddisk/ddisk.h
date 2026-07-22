@@ -335,6 +335,12 @@ struct TPersistentBufferFormat {
     ui32 DeallocateFreeSpaceThresholdPercent = 90;
     // Deallocate a chunk proactively when it has been freed for this many seconds.
     ui32 DeallocateThresholdSeconds = 30;
+    // TEvListPersistentBuffer must not observe a partially-applied write/erase for its tablet: the
+    // listing is deferred (queued and retried) while any disk operation is in flight for the
+    // requesting tablet. These parameters bound how long/how often we wait before giving up and
+    // replying with whatever state is currently visible.
+    ui32 ListPersistentBufferMaxRetries = 10;
+    ui32 ListPersistentBufferRetryPeriodMilliseconds = 20;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

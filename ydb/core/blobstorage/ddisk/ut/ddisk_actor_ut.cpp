@@ -805,6 +805,85 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     }
 
+    // TEvListPersistentBuffer must not observe a partially-applied write for its tablet: it has to
+    // wait for any in-flight persistent-buffer disk operation belonging to that tablet to finish
+    // before replying. Regression test for that ordering guarantee.
+    Y_UNIT_TEST(PersistentBufferListWaitsForInflightWrite) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 40, 1);
+
+        const ui64 lsn = 10;
+        const TString payload = MakeData('P', BlockSize);
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(TRope(payload));
+        SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+        // The write's disk op is now in flight (not yet acked by PDisk). Issue the list request for
+        // the same tablet while it is still in flight: it must be deferred and only answered once the
+        // write completes, never with a stale/partial view.
+        auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
+
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds));
+
+        ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
+
+        auto listResult = WaitFromDDisk<NDDisk::TEvListPersistentBufferResult>(ctx);
+        AssertStatus(listResult, TReplyStatus::OK);
+        // The list must reflect the completed write (i.e. it waited for the inflight to drain),
+        // not the state as it was before the write finished.
+        UNIT_ASSERT_VALUES_EQUAL(listResult->Get()->Record.RecordsSize(), 1);
+        const auto& record = listResult->Get()->Record.GetRecords(0);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetLsn(), lsn);
+    }
+
+    // Once retries are exhausted while the tablet's persistent-buffer disk operation is still in
+    // flight, TEvListPersistentBuffer must reply with an error (not hang, and not answer with a
+    // possibly-stale view).
+    Y_UNIT_TEST(PersistentBufferListRepliesErrorAfterRetriesExhausted) {
+        TTestContext ctx;
+        NDDisk::TPersistentBufferFormat fmt;
+        fmt.MaxChunks = 256;
+        fmt.InitChunks = PersistentBufferInitChunks;
+        fmt.MaxInMemoryCache = BlockSize * 128;
+        fmt.MaxChunkRestoreInflight = 8;
+        fmt.UpdateFreeSpaceInfoMilliseconds = 5000;
+        fmt.PerTabletStorageLimit = 512 * 1024;
+        fmt.ListPersistentBufferMaxRetries = 2;
+        fmt.ListPersistentBufferRetryPeriodMilliseconds = 5;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1, fmt);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 40, 1);
+
+        const ui64 lsn = 10;
+        const TString payload = MakeData('P', BlockSize);
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(TRope(payload));
+        SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+        // Leave the write's disk op in flight (never ack it) and issue a list request for the same
+        // tablet: it must keep retrying, then give up and reply with an error once retries run out.
+        auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
+
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds));
+
+        auto listResult = WaitFromDDisk<NDDisk::TEvListPersistentBufferResult>(ctx);
+        AssertStatus(listResult, TReplyStatus::OVERLOADED);
+
+        // Complete the write afterwards so the test tears down cleanly.
+        ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
+    }
+
     Y_UNIT_TEST(PersistentBufferWriteTunnel) {
         TTestContext ctx;
         const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);

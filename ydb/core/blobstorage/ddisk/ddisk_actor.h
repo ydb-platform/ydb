@@ -254,6 +254,17 @@ namespace NKikimr::NDDisk {
                 EvIssuePersistentBufferChunkAllocation,
                 EvDeallocatePersistentBufferChunk,
                 EvDeallocatePersistentBufferChunkResult,
+                EvRetryListPersistentBuffer,
+            };
+
+           struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
+                TAutoPtr<TEventHandle<TEvListPersistentBuffer>> Ev;
+                ui32 RetriesLeft;
+
+                TEvRetryListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft)
+                    : Ev(ev)
+                    , RetriesLeft(retriesLeft)
+                {}
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
@@ -364,6 +375,10 @@ namespace NKikimr::NDDisk {
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
         };
+
+        // Note: TEvListPersistentBuffer retries do NOT use EWakeupTag / TEvents::TEvWakeup, since
+        // they need to carry the original event plus a retry counter, not just a bare tag. See
+        // TEvPrivate::TEvRetryListPersistentBuffer and Schedule() in ProcessListPersistentBuffer.
 
         struct TPbOpSnapshot {
             TInstant Timestamp;
@@ -847,6 +862,13 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev);
+        // Returns true if the given tablet currently has at least one persistent-buffer disk
+        // operation (write/erase/read) in flight. TEvListPersistentBuffer must not be answered
+        // while this holds, otherwise it could observe a partially-applied write or erase.
+        bool HasPersistentBufferInflightForTablet(ui64 tabletId) const;
+        void ProcessListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft);
+        void ReplyListPersistentBuffer(TEventHandle<TEvListPersistentBuffer>& ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
         void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk::TPtr ev);
         void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev);

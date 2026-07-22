@@ -338,7 +338,7 @@ struct TPersistentBufferFormat {
     // TEvListPersistentBuffer must not observe a partially-applied write/erase for its tablet: the
     // listing is deferred (queued and retried) while any disk operation is in flight for the
     // requesting tablet. These parameters bound how long/how often we wait before giving up and
-    // replying with whatever state is currently visible.
+    // replying with an OVERLOADED error to avoid returning a potentially-stale view.
     ui32 ListPersistentBufferMaxRetries = 10;
     ui32 ListPersistentBufferRetryPeriodMilliseconds = 20;
 };

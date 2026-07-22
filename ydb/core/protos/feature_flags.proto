@@ -306,7 +306,7 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
-    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
+    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = false];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
@@ -333,7 +333,7 @@ message TFeatureFlags {
     // Guards using the synthetic __ydb_row_id column as doc_id for fulltext/JSON indexes over tables
     // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
     // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
-    optional bool EnableFulltextIndexRowId = 289 [default = true];
+    optional bool EnableFulltextIndexRowId = 289 [default = false];
     optional bool EnableForcedColumnCompactions = 290 [default = false];
     optional bool EnableExportFiltering = 291 [default = false];
     optional bool EnableNodeBrokerLongLease = 292 [default = false];

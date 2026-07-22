@@ -2790,7 +2790,7 @@ message TColumnShardConfig {
 
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
-    optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional bool EnableBulkUpsertValidation = 72 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -2896,12 +2896,12 @@ message TCompactionConfig {
         // The maximum number of stored operations regardless of status.
         // Creating an operation beyond this limit fails, unless AutoForgetOperations is enabled.
         // 0 means unlimited.
-        optional uint32 StoredOperationsLimit = 7 [default = 1000];
+        optional uint32 StoredOperationsLimit = 7 [default = 0];
 
         // When the StoredOperationsLimit is reached, automatically forget the oldest finished
         // (Done or Cancelled) operations to make room for a new one instead of failing the request.
         // If there are still not enough finished operations to forget, the request fails.
-        optional bool AutoForgetOperations = 8 [default = true];
+        optional bool AutoForgetOperations = 8 [default = false];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

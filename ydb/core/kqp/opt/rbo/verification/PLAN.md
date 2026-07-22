@@ -238,6 +238,14 @@ raw scaled-integer total. Partial states preserve the tighter bound through
 aliases and StageGraph connections. Missing provenance falls back to the full
 declared-type bound and can only make verification fail closed.
 
+An isolated manual real-YDB diagnostic exercises the rejected overflow domain
+without weakening that gate. For the same three `Decimal(35,0)` rows it observes
+`M` with one column-table partition and `inf` with two partitions under both the
+new-RBO and legacy optimizers. This is a confirmed shared aggregation/runtime
+partition-sensitivity witness, not a new-RBO-only optimizer counterexample; the
+ordinary verification target remains green and the intentionally failing
+diagnostic stays manual and separate.
+
 ## Relational semantics
 
 Each base table has a fixed number of symbolic row slots. A slot contains a
@@ -570,6 +578,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Formula construction and the six curated workload proofs have separate
   checked-in regression floors. Automatic replay-confirmation policy for future
   counterexamples remains.
+- A separate manual real-YDB Decimal `SUM` diagnostic checks one- versus
+  two-partition execution of identical rows in both optimizer modes. It
+  currently confirms the shared `M` versus `inf` mismatch and is intentionally
+  excluded from normal recursive tests until the runtime aggregate state is
+  fixed.
 
 ## Non-goals
 

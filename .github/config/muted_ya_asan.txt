@@ -499,6 +499,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
+ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
@@ -597,6 +598,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.DimensionMisma
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding

@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NKeyValue {
 
-void TKeyValueState::ClearMoveData() {
-    MoveDataIsInProgress = false;
-    MoveDataNeedsAnotherPass = false;
+void TKeyValueState::ClearMoveDataBlobMovingStage() {
+    MoveDataBlobMovingIsInProgress = false;
+    MoveDataBlobMovingNeedsAnotherPass = false;
     MoveDataKey.clear();
     MoveDataBlobId = TLogoBlobID();
     MoveDataChainIndex = 0;
@@ -16,10 +16,19 @@ void TKeyValueState::ClearMoveData() {
     MoveDataBlobIdToNewBlobId.clear();
 }
 
+void TKeyValueState::ClearMoveDataTrashCheckingStage() {
+    MoveDataTrashCheckingVacuumGeneration = {};
+    MoveDataTrashCheckingBlobId = TLogoBlobID();
+    MoveDataTrashCheckingWaitingForGC = false;
+}
+
 void TKeyValueState::StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& moveDataRequestSender) {
     MoveDataGroups = std::move(moveDataGroups);
     MoveDataRequestSender = moveDataRequestSender;
     MoveDataIsInProgress = true;
+
+    ClearMoveDataBlobMovingStage();
+    MoveDataBlobMovingIsInProgress = true;
 }
 
 bool TKeyValueState::NeedMoveBlob(const TLogoBlobID& blobId) const {
@@ -28,14 +37,15 @@ bool TKeyValueState::NeedMoveBlob(const TLogoBlobID& blobId) const {
     return MoveDataGroups.contains(groupId);
 }
 
-std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMoveData(
-        ISimpleDb& db, const TActorContext& ctx) {
+std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMoveData(ISimpleDb& db) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "AdvanceMoveData",
         {"keyValue", TabletId},
         {"marker", "KV93"});
 
+    Y_ABORT_UNLESS(MoveDataBlobMovingIsInProgress);
+
     if (Index.empty()) {
-        return TryFinishMoveData(ctx);
+        return TryCheckTrash();
     }
 
     if (MoveDataRecordTouched) {
@@ -53,7 +63,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
             itIndex = Index.upper_bound(MoveDataKey);
             MoveDataChainIndex = 0;
             if (itIndex == Index.end()) {
-                return TryFinishMoveData(ctx);
+                return TryCheckTrash();
             }
         }
     }
@@ -86,10 +96,17 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
             if (itRefCounts->second > 1) {
                 --itRefCounts->second;
             } else {
-                RefCounts.erase(itRefCounts);
+                Dereference(blobId, db, false);
             }
 
             auto newBlobId = MoveDataBlobIdToNewBlobId[blobId];
+            if (RefCounts.find(newBlobId) == RefCounts.end()) {
+                // blob has been deleted since we copied it
+                // we need to copy it again
+                MoveDataBlobIdToNewBlobId.erase(blobId);
+                return TEvKeyValue::TEvAdvanceMoveDataResult::CopyBlob(newBlobId);
+            }
+
             item.LogoBlobId = newBlobId;
             ++RefCounts[newBlobId];
             UpdateKeyValue(MoveDataKey, record, db);
@@ -98,16 +115,18 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
         MoveDataChainIndex = 0;
     }
 
-    return TryFinishMoveData(ctx);
+    return TryCheckTrash();
 }
 
 std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopied(
-        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db, const TActorContext& ctx) {
+        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied",
         {"keyValue", TabletId},
         {"marker", "KV94"},
         {"blobId", blobId.ToString()},
         {"newBlobId", newBlobId.ToString()});
+
+    Y_ABORT_UNLESS(MoveDataBlobMovingIsInProgress);
 
     Y_ABORT_UNLESS(!MoveDataKey.empty());
     Y_ABORT_UNLESS(blobId == MoveDataBlobId);
@@ -115,7 +134,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
     if (MoveDataRecordTouched) {
         MoveDataRecordTouched = false;
         MoveDataChainIndex = 0;
-        return AdvanceMoveData(db, ctx);
+        return AdvanceMoveData(db);
     }
 
     auto itIndex = Index.find(MoveDataKey);
@@ -131,7 +150,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         --itRefCounts->second;
         MoveDataBlobIdToNewBlobId[blobId] = newBlobId;
     } else {
-        RefCounts.erase(itRefCounts);
+        Dereference(blobId, db, false);
     }
 
     item.LogoBlobId = newBlobId;
@@ -146,35 +165,100 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         ++itIndex;
         if (itIndex != Index.end()) {
             MoveDataKey = itIndex->first;
-            return AdvanceMoveData(db, ctx);
+            return AdvanceMoveData(db);
         } else {
-            return TryFinishMoveData(ctx);
+            return TryCheckTrash();
         }
     }
 
-    return AdvanceMoveData(db, ctx);
+    return AdvanceMoveData(db);
 }
 
-std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::TryFinishMoveData(
-        const TActorContext& ctx) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TryFinishMoveData",
+std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::TryCheckTrash() {
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TryCheckTrash",
         {"keyValue", TabletId},
         {"marker", "KV95"});
 
-    if (MoveDataNeedsAnotherPass) {
-        ClearMoveData();
-
-        MoveDataIsInProgress = true;
+    if (MoveDataBlobMovingNeedsAnotherPass) {
+        ClearMoveDataBlobMovingStage();
+        MoveDataBlobMovingIsInProgress = true;
         return TEvKeyValue::TEvAdvanceMoveDataResult::Repeat();
     } else {
-        ClearMoveData();
-
-        ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(TabletId));
-
-        MoveDataGroups.clear();
-        MoveDataRequestSender = {};
-        return TEvKeyValue::TEvAdvanceMoveDataResult::Finish();
+        MoveDataBlobMovingIsInProgress = false;
+        ClearMoveDataTrashCheckingStage();
+        return TEvKeyValue::TEvAdvanceMoveDataResult::CheckTrash();
     }
+}
+
+std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTrash() {
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "CheckTrash",
+        {"keyValue", TabletId},
+        {"marker", "KV96"});
+
+    TSet<TLogoBlobID>& trashBin = Trash;
+
+    TMap<ui64, TSet<TLogoBlobID>>::iterator itTrashBin;
+    bool finished = false;
+
+    auto nextTrashBin = [&]() {
+        if (!MoveDataTrashCheckingVacuumGeneration) {
+            itTrashBin = TrashForVacuum.begin();
+        } else {
+            itTrashBin = TrashForVacuum.upper_bound(*MoveDataTrashCheckingVacuumGeneration);
+        }
+        if (itTrashBin == TrashForVacuum.end()) {
+            finished = true;
+            return;
+        }
+        trashBin = itTrashBin->second;
+        MoveDataTrashCheckingVacuumGeneration = itTrashBin->first;
+        MoveDataTrashCheckingBlobId = TLogoBlobID();
+    };
+
+    if (MoveDataTrashCheckingVacuumGeneration) {
+        itTrashBin = TrashForVacuum.find(*MoveDataTrashCheckingVacuumGeneration);
+        if (itTrashBin == TrashForVacuum.end()) {
+            nextTrashBin();
+            if (finished) {
+                return TEvKeyValue::TEvAdvanceMoveDataResult::Finish();
+            }
+        } else {
+            trashBin = itTrashBin->second;
+        }
+    }
+
+    ui64 checkedBlobsCount = 0;
+    while (!finished) {
+        auto itTrash = trashBin.lower_bound(MoveDataTrashCheckingBlobId);
+        if (itTrash == trashBin.end()) {
+            nextTrashBin();
+            if (finished) {
+                break;
+            }
+            itTrash = trashBin.begin();
+        }
+        for (; itTrash != trashBin.end(); ++itTrash, ++checkedBlobsCount) {
+            MoveDataTrashCheckingBlobId = *itTrash;
+            if (checkedBlobsCount >= MaxMoveDataTrashCheckingBlobs) {
+                return TEvKeyValue::TEvAdvanceMoveDataResult::CheckTrash();
+            }
+            if (NeedMoveBlob(MoveDataTrashCheckingBlobId)) {
+                MoveDataTrashCheckingWaitingForGC = true;
+                return TEvKeyValue::TEvAdvanceMoveDataResult::WaitForGC();
+            }
+        }
+        nextTrashBin();
+    }
+
+    return TEvKeyValue::TEvAdvanceMoveDataResult::Finish();
+}
+
+void TKeyValueState::FinishMoveData(const TActorContext& ctx) {
+    ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(TabletId));
+
+    MoveDataIsInProgress = false;
+    MoveDataGroups.clear();
+    MoveDataRequestSender = {};
 }
 
 } // NKeyValue

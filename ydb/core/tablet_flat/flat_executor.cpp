@@ -5538,10 +5538,19 @@ void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
     }
 }
 
+void TExecutor::StartMoveDataVacuumFromOwner() {
+    MoveDataVacuumInProgress = true;
+    StartVacuum(TNoTag());
+}
+
 void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
     if (generation) {
         Owner->VacuumComplete(generation, ctx);
     }
+    if (MoveDataVacuumInProgress) {
+        Owner->MoveDataCompleted(ctx);
+    }
+    MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
         ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
     }

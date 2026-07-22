@@ -335,6 +335,7 @@ public:
     void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
     void MoveData(TEvTablet::TEvMoveData::TPtr&) override { Y_TABLET_ERROR("Not supported"); }
+    void StartMoveDataVacuumFromOwner() override { Y_TABLET_ERROR("Not supported"); }
 
 private:
     void ScheduleProcessPending() {

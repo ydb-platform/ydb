@@ -123,7 +123,6 @@ public:
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const final {
         return CreateProviderInBackground(Params_, std::move(facility));
     }
-
 private:
     static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
         TIamHost params,

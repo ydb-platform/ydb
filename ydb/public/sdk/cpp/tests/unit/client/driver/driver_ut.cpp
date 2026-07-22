@@ -15,6 +15,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 
 #include <google/protobuf/text_format.h>
 

@@ -15,6 +15,8 @@
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
+#include <functional>
+#include <optional>
 
 #if defined(_asan_enabled_)
 #define YDB_ASAN_SIZE_ATTRIBUTES __attribute__((nodebug))
@@ -245,7 +247,6 @@ public:
                 });
             return;
         }
-
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
             userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
@@ -492,7 +493,6 @@ public:
                 });
             return;
         }
-
         if (!TryCreateContext(context)) {
             responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -584,7 +584,6 @@ public:
                 });
             return;
         }
-
         if (!TryCreateContext(context)) {
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;

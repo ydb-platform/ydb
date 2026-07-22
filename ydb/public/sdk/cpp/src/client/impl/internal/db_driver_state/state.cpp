@@ -80,7 +80,6 @@ std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() cons
     return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
 }
 #endif
-
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {
     std::lock_guard lock(NotifyCbsLock);
     NotifyCbs[static_cast<size_t>(type)].emplace_back(std::move(cb));

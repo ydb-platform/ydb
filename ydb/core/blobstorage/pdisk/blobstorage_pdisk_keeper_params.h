@@ -27,6 +27,9 @@ struct TKeeperParams {
     // Split main chunk pool between this many owners (or 0 for 'split as you go' mode)
     i64 ExpectedOwnerCount = 0;
 
+    // Exact chunk quota for one owner weight unit; 0 means derive it from ExpectedOwnerCount
+    i64 ExpectedOwnerSize = 0;
+
     // Number of chunks used for format record and system log
     i64 SysLogSize = 0;
 

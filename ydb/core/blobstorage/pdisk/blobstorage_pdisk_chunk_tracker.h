@@ -24,11 +24,16 @@ class TPerOwnerQuotaTracker {
     TColorLimits ColorLimits;
     i64 Total;
     size_t ExpectedOwnerCount; // 0 means 'add and remove owners as you go'
+    i64 ExpectedOwnerSize; // 0 means 'derive owner quota from expected/active owner count'
 
     TStackVec<TOwner, 256> ActiveOwnerIds; // Can be accessed only from the main thread (changes only when owner is
                                         // added or removed).
     std::array<TQuotaRecord, 256> QuotaForOwner; // Always allocated, can be read from anywhere
     static_assert(sizeof(TOwner) == 1, "Make sure to use large enough QuotaForOwner buffer");
+
+    ui32 NormalizeOwnerWeight(ui32 weight) const {
+        return ExpectedOwnerSize ? 1 : weight;
+    }
 
 public:
     TPerOwnerQuotaTracker() {
@@ -40,6 +45,7 @@ public:
         ColorLimits = limits;
         Total = total;
         ExpectedOwnerCount = 0;
+        ExpectedOwnerSize = 0;
         ActiveOwnerIds.clear();
         QuotaForOwner.fill(TQuotaRecord{});
     }
@@ -48,7 +54,22 @@ public:
     // Increasing expected owner count is fundamentally unfair and may cause instant jumps right into 0 free,
     // overusers will keep their unfair share as a result.
     void SetExpectedOwnerCount(size_t newOwnerCount) {
+        SetExpectedOwnerSettings(newOwnerCount, ExpectedOwnerSize);
+    }
+
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        SetExpectedOwnerSettings(ExpectedOwnerCount, newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        Y_VERIFY(newOwnerSize >= 0);
         ExpectedOwnerCount = newOwnerCount;
+        ExpectedOwnerSize = newOwnerSize;
+        if (ExpectedOwnerSize) {
+            for (TOwner id : ActiveOwnerIds) {
+                QuotaForOwner[id].SetWeight(1);
+            }
+        }
         RedistributeQuotas();
     }
 
@@ -66,14 +87,20 @@ public:
     }
 
     void RedistributeQuotas() {
-        size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
-        if (parts) {
-            i64 limit = Total / parts;
-
-            // Divide into equal parts and that's it.
+        if (ExpectedOwnerSize) {
             for (TOwner id : ActiveOwnerIds) {
-                auto weight = QuotaForOwner[id].GetWeight();
-                ForceHardLimit(id, limit * weight);
+                ForceHardLimit(id, ExpectedOwnerSize);
+            }
+        } else {
+            size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
+            if (parts) {
+                i64 limit = Total / parts;
+
+                // Divide into equal parts and that's it.
+                for (TOwner id : ActiveOwnerIds) {
+                    auto weight = QuotaForOwner[id].GetWeight();
+                    ForceHardLimit(id, limit * weight);
+                }
             }
         }
     }
@@ -84,7 +111,7 @@ public:
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
-        record.SetWeight(weight);
+        record.SetWeight(NormalizeOwnerWeight(weight));
 
         ActiveOwnerIds.push_back(id);
         RedistributeQuotas();
@@ -95,7 +122,7 @@ public:
         Y_VERIFY(it != ActiveOwnerIds.end());
 
         TQuotaRecord &record = QuotaForOwner[id];
-        record.SetWeight(weight);
+        record.SetWeight(NormalizeOwnerWeight(weight));
         RedistributeQuotas();
     }
 
@@ -190,6 +217,7 @@ public:
         ColorLimits.Print(str);
         str << "\nTotal# " << Total;
         str << "\nExpectedOwnerCount# " << ExpectedOwnerCount;
+        str << "\nExpectedOwnerSize# " << ExpectedOwnerSize;
         str << "\nActiveOwners# " << ActiveOwnerIds.size();
         str << "\nNumActiveSlots# " << GetNumActiveSlots();
         if (colorBorder) {
@@ -338,7 +366,7 @@ public:
         TColorLimits chunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
         SharedQuota->ForceHardLimit(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
         OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
-        OwnerQuota->SetExpectedOwnerCount(params.ExpectedOwnerCount);
+        OwnerQuota->SetExpectedOwnerSettings(params.ExpectedOwnerCount, params.ExpectedOwnerSize);
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
@@ -530,8 +558,18 @@ public:
 
     bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
         if (IsOwnerUser(owner)) {
-            OwnerQuota->ForceAllocate(owner, count);
-            return SharedQuota->TryAllocate(count, outErrorReason);
+            if (Params.ExpectedOwnerSize) {
+                if (!OwnerQuota->TryAllocate(owner, count, outErrorReason)) {
+                    return false;
+                }
+            } else {
+                OwnerQuota->ForceAllocate(owner, count);
+            }
+            if (SharedQuota->TryAllocate(count, outErrorReason)) {
+                return true;
+            }
+            OwnerQuota->Release(owner, count);
+            return false;
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:
@@ -622,7 +660,19 @@ public:
     }
 
     void SetExpectedOwnerCount(size_t newOwnerCount) {
+        Params.ExpectedOwnerCount = newOwnerCount;
         OwnerQuota->SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        Params.ExpectedOwnerSize = newOwnerSize;
+        OwnerQuota->SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        Params.ExpectedOwnerCount = newOwnerCount;
+        Params.ExpectedOwnerSize = newOwnerSize;
+        OwnerQuota->SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
     }
 
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {

@@ -4,10 +4,18 @@
 #include "error.h"
 #include "impl.h"
 
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr {
     namespace NBsController {
+
+        inline void ValidatePDiskConfig(const NKikimrBlobStorage::TPDiskConfig& config,
+                TStringBuf context) {
+            if (auto error = ::NKikimr::ValidatePDiskConfig(config, context)) {
+                throw TExError() << *error;
+            }
+        }
 
         struct TConfigFitAction {
             std::set<TBoxId> Boxes;

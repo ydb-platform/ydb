@@ -66,7 +66,7 @@ void WaitClassifierVisible(TStreamingTestFixture& fixture,
 // HAS_PATH end-to-end coverage for the object kinds whose fixture requirements
 // (real local PQ, mock connector, mock PQ gateway, http gateway) are only met
 // by TStreamingTestFixture. Cheaper kinds (regular tables, sysview, secondary
-// index, view underlying) live in ydb/core/kqp/workload_service/ut.
+// index, view underlying) live in ydb/services/workload_manager/ut.
 Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
     // KindTopic — direct read of a local topic (no EDS in the chain).

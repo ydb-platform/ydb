@@ -19,7 +19,7 @@ PEERDIR(
     ydb/core/kqp/run_script_actor
     ydb/core/kqp/proxy_service
     ydb/core/kqp/ut/common
-    ydb/core/kqp/workload_service/ut/common
+    ydb/services/workload_manager/ut/common
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/query

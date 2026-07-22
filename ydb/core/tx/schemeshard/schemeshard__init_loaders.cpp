@@ -616,6 +616,7 @@ bool TSchemeShard::TTxInit::LoadBackupRestoreHistory(NIceDb::TNiceDb& db, TCompl
         return true;
     }
 
+template <typename T, typename U, typename V>
 bool TSchemeShard::TTxInit::LoadBackupStatusesImpl(TShardBackupStatusRows& statuses, T& byShardBackupStatus, U& byMigratedShardBackupStatus, V& byTxShardStatus) const {
         {
             T& rowSet = byShardBackupStatus;

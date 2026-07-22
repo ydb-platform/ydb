@@ -103,6 +103,9 @@ namespace NYdb {
             return parquet::schema::PrimitiveNode::Make(name, repType, parquet::Type::BYTE_ARRAY, parquet::ConvertedType::UTF8);
         case EPrimitiveType::DyNumber:
             return parquet::schema::PrimitiveNode::Make(name, repType, parquet::Type::BYTE_ARRAY, parquet::ConvertedType::UTF8);
+        case EPrimitiveType::Uuid:
+            return parquet::schema::PrimitiveNode::Make(name, repType, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                parquet::ConvertedType::NONE, /*length=*/16);
         default:
             ythrow yexception() << "Cannot save type to parquet: " << type.GetPrimitive();
         }
@@ -198,6 +201,11 @@ namespace NYdb {
                 case EPrimitiveType::DyNumber:
                     os << arrow::util::string_view(value.GetDyNumber().c_str(), value.GetDyNumber().length());
                     break;
+                case EPrimitiveType::Uuid: {
+                    const auto& uuid = value.GetUuid();
+                    os << parquet::StreamWriter::FixedStringView(uuid.Buf_.Bytes, 16);
+                    break;
+                }
                 default:
                     ythrow yexception() << "Cannot save type to parquet: " << value.GetPrimitiveType();
                 }

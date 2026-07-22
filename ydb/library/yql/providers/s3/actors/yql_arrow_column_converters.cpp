@@ -865,6 +865,10 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::DyNumber:
             return {};
         case NUdf::EDataSlot::Date32:
         case NUdf::EDataSlot::Datetime64:
@@ -966,6 +970,8 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
             type = arrow::timestamp(arrow::TimeUnit::SECOND, "UTC");
             return true;
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
             type = arrow::int64();
             return true;
         case NUdf::EDataSlot::Uint64:
@@ -980,7 +986,11 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::DyNumber:
             type = arrow::binary();
+            return true;
+        case NUdf::EDataSlot::Uuid:
+            type = arrow::fixed_size_binary(16);
             return true;
         case NUdf::EDataSlot::Decimal: {
             if (itemType) {

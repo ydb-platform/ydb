@@ -1208,6 +1208,9 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Columns { Name: "double_value" Type: "Double" }
                 Columns { Name: "bool_value" Type: "Bool" }
                 Columns { Name: "timestamp_value" Type: "Timestamp" }
+                Columns { Name: "interval_value" Type: "Interval" }
+                Columns { Name: "uuid_value" Type: "Uuid" }
+                Columns { Name: "dynumber_value" Type: "DyNumber" }
                 KeyColumnNames: ["key"]
             )",
         }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());

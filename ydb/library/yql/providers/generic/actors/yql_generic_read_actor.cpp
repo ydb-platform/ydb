@@ -80,7 +80,7 @@ namespace NYql::NDq {
                 try {
                     actorSystem->Send(selfId, new TEvGotCredentials(ExtractFromConstFuture(future)));
                 } catch (std::exception& ex) {
-                    // TODO consider retry (we can retry before first data was returned)
+                    // GetAuthInfoAsync handles retries internally
                     NConnector::NApi::TError error;
                     error.set_status(Ydb::StatusIds::UNAUTHORIZED);
                     error.set_message(ex.what());

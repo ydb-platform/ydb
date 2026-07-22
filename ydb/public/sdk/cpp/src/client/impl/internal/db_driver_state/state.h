@@ -82,8 +82,7 @@ private:
 #endif
     };
 
-    NThreading::TFuture<void> CredentialsReady;
-    NThreading::TFuture<TCredentials> Credentials;
+    TCredentials Credentials;
 };
 
 // Tracker allows to get driver state by database and credentials

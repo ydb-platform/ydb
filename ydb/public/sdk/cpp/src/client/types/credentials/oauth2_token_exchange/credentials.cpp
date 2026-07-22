@@ -85,17 +85,10 @@ bool IsRetryableError(TKeepAliveHttpClient::THttpCode code) {
         || code == HTTP_GATEWAY_TIME_OUT;
 }
 
-ERetryErrorClass RetryPolicyClass(TKeepAliveHttpClient::THttpCode code) {
-    return IsRetryableError(code) ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry; // In case when we already have token we know that all params are correct and all errors are temporary
-}
-
-ERetryErrorClass SyncRetryPolicyClass(const std::exception* ex, bool retryAllErrors) {
+ERetryErrorClass RetryPolicyClass(const std::exception* ex) {
     if (const TTokenExchangeError* err = dynamic_cast<const TTokenExchangeError*>(ex)) {
         if (IsRetryableError(err->HttpCode)) {
             return ERetryErrorClass::LongRetry;
-        }
-        if (retryAllErrors) {
-            return ERetryErrorClass::ShortRetry;
         }
     }
     if (dynamic_cast<const TSystemError*>(ex)) {
@@ -106,8 +99,7 @@ ERetryErrorClass SyncRetryPolicyClass(const std::exception* ex, bool retryAllErr
     return ERetryErrorClass::NoRetry;
 }
 
-using TRetryPolicy = IRetryPolicy<TKeepAliveHttpClient::THttpCode>;
-using TSyncRetryPolicy = IRetryPolicy<const std::exception*, bool>;
+using TRetryPolicy = IRetryPolicy<const std::exception*>;
 
 struct TPrivateOauth2TokenExchangeParams: public TOauth2TokenExchangeParams {
     TPrivateOauth2TokenExchangeParams(const TOauth2TokenExchangeParams& params)
@@ -176,44 +168,52 @@ class TOauth2TokenExchangeProviderImpl: public std::enable_shared_from_this<TOau
 {
     struct TTokenExchangeResult {
         std::string Token;
-        TInstant TokenDeadline;
         TInstant TokenRefreshTime;
     };
 
 public:
     explicit TOauth2TokenExchangeProviderImpl(const TPrivateOauth2TokenExchangeParams& params)
         : Params(params)
-    {
-        ExchangeTokenSync(TInstant::Now());
+        , AuthInfo(NThreading::NewPromise<std::string>())
+    {}
+
+    void Start() {
+        try {
+            WorkerThread = std::thread([self = shared_from_this()] { self->Run(); });
+        } catch (...) {
+            Fail(std::current_exception());
+        }
     }
 
     void Stop() {
+        NThreading::TPromise<std::string> promise;
         {
             std::unique_lock<std::mutex> lock(StopMutex);
             Stopping = true;
             StopVar.notify_all();
         }
+        with_lock (Lock) {
+            promise = AuthInfo;
+        }
+        promise.TrySetException(std::make_exception_ptr(yexception() << PROV_ERR "stopped"));
 
-        if (RefreshTokenThread.joinable()) {
-            RefreshTokenThread.join();
+        if (WorkerThread.joinable()) {
+            if (WorkerThread.get_id() == std::this_thread::get_id()) {
+                WorkerThread.detach();
+            } else {
+                WorkerThread.join();
+            }
         }
     }
 
     std::string GetAuthInfo() const {
-        const TInstant now = TInstant::Now();
-        std::string token;
+        return GetAuthInfoAsync().GetValueSync();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const {
         with_lock (Lock) {
-            if (Token.empty() || now >= TokenDeadline) { // Update sync. This can be if we have repeating error during token refresh process. In this case we will try for the last time and throw an error
-                ExchangeTokenSync(now, true);
-                token = Token;
-            } else {
-                if (now >= TokenRefreshTime) {
-                    TryRefreshToken();
-                }
-                token = Token; // Still valid
-            }
+            return AuthInfo.GetFuture();
         }
-        return token;
     }
 
 private:
@@ -344,7 +344,6 @@ private:
 
         const TDuration expireDelta = TDuration::Seconds(expireTime);
         TTokenExchangeResult result;
-        result.TokenDeadline = now + expireDelta;
         result.TokenRefreshTime = now + expireDelta / 2;
         result.Token = TStringBuilder() << "Bearer " << token;
         return result;
@@ -361,30 +360,60 @@ private:
         return ProcessExchangeTokenResponse(now, statusCode, responseStream);
     }
 
-    void ExchangeTokenSync(TInstant now, bool retryAllErrors = false) const { // Is run under lock
-        TSyncRetryPolicy::IRetryState::TPtr retryState;
+    void Run() {
         while (true) {
-            try {
-                TTokenExchangeResult result = ExchangeToken(now);
-                Token = result.Token;
-                TokenDeadline = result.TokenDeadline;
-                TokenRefreshTime = result.TokenRefreshTime;
-                break;
-            } catch (const std::exception& ex) {
-                if (!retryState) {
-                    retryState = TSyncRetryPolicy::GetFixedIntervalPolicy( // retry more aggresively when we are in sync mode
-                        SyncRetryPolicyClass,
-                        TDuration::MilliSeconds(100), // delay // default
-                        TDuration::MilliSeconds(300), // long delay // default
-                        std::numeric_limits<size_t>::max(), // max retries // default
-                        Params.SyncUpdateTimeout_ // max time
-                    )->CreateRetryState();
+            TRetryPolicy::IRetryState::TPtr retryState;
+            TTokenExchangeResult result;
+            while (true) {
+                if (IsStopping()) {
+                    return;
                 }
-                if (auto interval = retryState->GetNextRetryDelay(&ex, retryAllErrors)) {
-                    Sleep(*interval);
-                } else {
-                    throw;
+                try {
+                    result = ExchangeToken(TInstant::Now());
+                    break;
+                } catch (const std::exception& ex) {
+                    if (!retryState) {
+                        retryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                            RetryPolicyClass,
+                            TDuration::MilliSeconds(10),
+                            TDuration::MilliSeconds(200),
+                            TDuration::Seconds(30))->CreateRetryState();
+                    }
+                    auto delay = retryState->GetNextRetryDelay(&ex);
+                    if (!delay) {
+                        Fail(std::current_exception());
+                        return;
+                    }
+                    std::unique_lock<std::mutex> lock(StopMutex);
+                    if (StopVar.wait_for(lock, TChronoDuration(delay->GetValue()), [this] { return Stopping; })) {
+                        return;
+                    }
+                } catch (...) {
+                    Fail(std::current_exception());
+                    return;
                 }
+            }
+
+            NThreading::TPromise<std::string> promise;
+            with_lock (Lock) {
+                promise = AuthInfo;
+            }
+            promise.TrySetValue(std::move(result.Token));
+
+            {
+                std::unique_lock<std::mutex> lock(StopMutex);
+                const auto delay = result.TokenRefreshTime - TInstant::Now();
+                if (delay > TDuration::Zero() &&
+                    StopVar.wait_for(lock, TChronoDuration(delay.GetValue()), [this] { return Stopping; }))
+                {
+                    return;
+                }
+                if (Stopping) {
+                    return;
+                }
+            }
+            with_lock (Lock) {
+                AuthInfo = NThreading::NewPromise<std::string>();
             }
         }
     }
@@ -394,85 +423,20 @@ private:
         return Stopping;
     }
 
-    void RefreshToken() const {
-        TRetryPolicy::IRetryState::TPtr retryState;
-        TInstant deadline;
+    void Fail(std::exception_ptr error) const {
+        NThreading::TPromise<std::string> promise;
         with_lock (Lock) {
-            deadline = TokenDeadline;
+            promise = AuthInfo;
         }
-        while (!IsStopping()) {
-            const TInstant now = TInstant::Now();
-            try {
-                TTokenExchangeResult result = ExchangeToken(now);
-                with_lock (Lock) {
-                    Token = result.Token;
-                    TokenDeadline = result.TokenDeadline;
-                    TokenRefreshTime = result.TokenRefreshTime;
-                    break;
-                }
-            } catch (const std::exception& ex) { // If this error will repeat, we finally will get it syncronously in GetAuthInfo() and pass to client
-                if (!retryState) {
-                    retryState = TRetryPolicy::GetExponentialBackoffPolicy(
-                        RetryPolicyClass,
-                        TDuration::MilliSeconds(10), // min delay // default
-                        TDuration::MilliSeconds(200), // min long delay // default
-                        TDuration::Seconds(30), // max delay // default
-                        std::numeric_limits<size_t>::max(), // max retries // default
-                        deadline - TInstant::Now() // max time
-                    )->CreateRetryState();
-                } else {
-                    TKeepAliveHttpClient::THttpCode code = HTTP_CODE_MAX;
-                    if (const auto* err = dynamic_cast<const TTokenExchangeError*>(&ex)) {
-                        code = err->HttpCode;
-                    }
-                    if (auto delay = retryState->GetNextRetryDelay(code)) {
-                        std::unique_lock<std::mutex> lock(StopMutex);
-                        const bool stopping = StopVar.wait_for(
-                            lock,
-                            TChronoDuration(delay->GetValue()),
-                            [this]() {
-                                return Stopping;
-                            }
-                        );
-                        if (stopping) {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-        TokenIsRefreshing.store(false);
-    }
-
-    void TryRefreshToken() const { // Is run under lock
-        if (TokenIsRefreshing.load()) {
-            return;
-        }
-        if (RefreshTokenThread.joinable()) {
-            RefreshTokenThread.join();
-        }
-
-        TokenIsRefreshing.store(true);
-        RefreshTokenThread = std::thread(
-            [w = weak_from_this()]() {
-                if (auto p = w.lock()) {
-                    p->RefreshToken();
-                }
-            }
-        );
+        promise.TrySetException(std::move(error));
     }
 
 private:
     TPrivateOauth2TokenExchangeParams Params;
 
-    TAdaptiveLock Lock;
-    mutable std::atomic<bool> TokenIsRefreshing = false;
-    mutable std::thread RefreshTokenThread;
-    mutable std::string Token;
-    mutable TInstant TokenDeadline;
-    mutable TInstant TokenRefreshTime;
+    mutable TAdaptiveLock Lock;
+    mutable NThreading::TPromise<std::string> AuthInfo;
+    std::thread WorkerThread;
 
     // Stop
     bool Stopping = false;
@@ -485,10 +449,15 @@ public:
     explicit TOauth2TokenExchangeProvider(const TPrivateOauth2TokenExchangeParams& params)
         : Impl(std::make_shared<TOauth2TokenExchangeProviderImpl>(params))
     {
+        Impl->Start();
     }
 
     std::string GetAuthInfo() const override {
         return Impl->GetAuthInfo();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        return Impl->GetAuthInfoAsync();
     }
 
     bool IsValid() const override {

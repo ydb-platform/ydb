@@ -108,6 +108,19 @@ struct TTestConfigFile : public TJsonFiller<TTestConfigFile> {
 };
 
 Y_UNIT_TEST_SUITE(TestTokenExchange) {
+    bool WaitRequest(TTestTokenExchangeServer& server, TDuration timeout) {
+        const auto deadline = TInstant::Now() + timeout;
+        do {
+            bool received = false;
+            server.WithLock([&] { received = server.Check.InputParams.has_value(); });
+            if (received) {
+                return true;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        } while (TInstant::Now() < deadline);
+        return false;
+    }
+
     void Exchanges(bool fromConfig) {
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
@@ -405,28 +418,6 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.erase("scope");
 
 
-        server.Check.ExpectedErrorPart = "can not connect to";
-        server.Check.ExpectRequest = false;
-        if (fromConfig) {
-            server.RunFromConfig(
-                TTestConfigFile()
-                    .Field("token-endpoint", "https://localhost:42/aaa")
-                    .SubMap("subject-credentials")
-                        .Field("type", "Fixed")
-                        .Field("token", "test_token")
-                        .Field("token-type", "test_token_type")
-                        .Build()
-                    .Build()
-            );
-        } else {
-            server.Run(
-                TOauth2TokenExchangeParams()
-                    .TokenEndpoint("https://localhost:42/aaa")
-                    .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
-            );
-        }
-        server.Check.ExpectRequest = true;
-
         // parsing response
         server.Check.StatusCode = HTTP_FORBIDDEN;
         server.Check.Response = R"(not json)";
@@ -488,16 +479,13 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
 
         server.WithLock(
             [&]() {
+                server.Check.Reset();
                 server.Check.Response = R"({"access_token": "token_2", "token_type": "bearer", "expires_in": 1})";
             }
         );
 
-        Sleep(TDuration::Seconds(1));
-        server.Run(
-            [&]() {
-                UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_2");
-            }
-        );
+        UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_2");
     }
 
     Y_UNIT_TEST(UpdatesToken) {
@@ -540,88 +528,6 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer the_only_token");
     }
 
-    Y_UNIT_TEST(UpdatesTokenInBackgroud) {
-        TCredentialsProviderFactoryPtr factory;
-        TInstant startTime;
-
-        TTestTokenExchangeServer server;
-        server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
-        server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
-        server.Check.ExpectedInputParams.emplace("actor_token", "test_token");
-        server.Check.ExpectedInputParams.emplace("actor_token_type", "test_token_type");
-
-        for (int i = 0; i < 2; ++i) {
-            server.WithLock(
-                [&]() {
-                    server.Check.Response = R"({"access_token": "token_1", "token_type": "bearer", "expires_in": 2})";
-                }
-            );
-            if (!factory) {
-                server.Run(
-                    [&]() {
-                        factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
-                            TOauth2TokenExchangeParams()
-                                .TokenEndpoint(server.GetEndpoint())
-                                .ActorTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
-                        startTime = TInstant::Now();
-                        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
-                    }
-                );
-            }
-
-            server.WithLock(
-                [&]() {
-                    server.Check.Reset();
-                    if (i == 0) {
-                        server.Check.Response = R"({"access_token": "token_2", "token_type": "bearer", "expires_in": 2})";
-                    } else {
-                        server.Check.Response = R"({"access_token": "token_3", "token_type": "bearer", "expires_in": 2})";
-                    }
-                }
-            );
-
-            SleepUntil(startTime + TDuration::Seconds(1) + TDuration::MilliSeconds(5));
-            const std::string token = factory->CreateProvider()->GetAuthInfo();
-            TInstant halfTimeTokenValid = TInstant::Now();
-            if (halfTimeTokenValid < startTime + TDuration::Seconds(2)) { // valid => got cached token, but async update must be run after half time token is valid
-                if (i == 0) {
-                    UNIT_ASSERT_VALUES_EQUAL(token, "Bearer token_1");
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(token, "Bearer token_2");
-                }
-                do {
-                    Sleep(TDuration::MilliSeconds(10));
-                    bool gotRequest = false;
-                    server.WithLock(
-                        [&]() {
-                            if (server.Check.InputParams) { // InputParams are created => got the request
-                                gotRequest = true;
-                            }
-                        }
-                    );
-                    if (gotRequest) {
-                        startTime = TInstant::Now(); // for second iteration
-                        break;
-                    }
-                } while (TInstant::Now() <= startTime + TDuration::Seconds(30));
-                server.CheckExpectations();
-                server.WithLock(
-                    [&]() {
-                        server.Check.Reset();
-                        server.Check.Response = R"(invalid response)"; // update must finish asyncronously
-                    }
-                );
-                Sleep(TDuration::MilliSeconds(500)); // After the request is got, it takes some time to get updated token
-                if (i == 0) { // Finally check that we got updated token
-                    UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_2");
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_3");
-                }
-                Cerr << "Checked backgroud update on " << i << " iteration" << Endl;
-            }
-        }
-    }
-
     Y_UNIT_TEST(UpdatesTokenAndRetriesErrors) {
         TCredentialsProviderFactoryPtr factory;
 
@@ -630,7 +536,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
         server.Check.ExpectedInputParams.emplace("subject_token", "test_token");
         server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
-        server.Check.Response = R"({"access_token": "token_1", "token_type": "bearer", "expires_in": 6})";
+        server.Check.Response = R"({"access_token": "token_1", "token_type": "bearer", "expires_in": 2})";
         server.Run(
             [&]() {
                 factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
@@ -644,34 +550,14 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.WithLock(
             [&]() {
                 server.Check.Reset();
-                server.Check.StatusCode = HTTP_BAD_REQUEST; // all errors are temporary, because the first attempt is always successful (in constructor)
+                server.Check.StatusCode = HTTP_INTERNAL_SERVER_ERROR;
                 server.Check.Response = R"({"error": "tmp", "error_description": "temporary error"})";
             }
         );
 
-        Sleep(TDuration::Seconds(3) + TDuration::MilliSeconds(5));
-        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
-
-        auto waitRequest = [&](TDuration howLong) {
-            TInstant startTime = TInstant::Now();
-            bool gotRequest = false;
-            do {
-                Sleep(TDuration::MilliSeconds(10));
-                server.WithLock(
-                    [&]() {
-                        if (server.Check.InputParams) { // InputParams are created => got the request
-                            gotRequest = true;
-                        }
-                    }
-                );
-                if (gotRequest) {
-                    break;
-                }
-            } while (TInstant::Now() <= startTime + howLong);
-            return gotRequest;
-        };
-
-        UNIT_ASSERT(waitRequest(TDuration::Seconds(30)));
+        UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(30)));
+        auto future = factory->CreateProvider()->GetAuthInfoAsync();
+        UNIT_ASSERT(!future.IsReady());
 
         server.WithLock(
             [&]() {
@@ -681,19 +567,18 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
             }
         );
 
-        UNIT_ASSERT(waitRequest(TDuration::Seconds(10)));
-        Sleep(TDuration::MilliSeconds(500)); // After the request is got, it takes some time to get updated token
-        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_2");
+        UNIT_ASSERT(future.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(future.GetValue(), "Bearer token_2");
 
         server.WithLock(
             [&]() {
                 server.Check.Reset();
-                server.Check.StatusCode = HTTP_INTERNAL_SERVER_ERROR;
+                server.Check.StatusCode = HTTP_BAD_REQUEST;
                 server.Check.Response = R"({})";
             }
         );
 
-        Sleep(TDuration::Seconds(2));
+        UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(10)));
         UNIT_ASSERT_EXCEPTION(factory->CreateProvider()->GetAuthInfo(), std::runtime_error);
     }
 
@@ -725,14 +610,16 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
             }
         );
 
-        Sleep(TDuration::Seconds(3) + TDuration::MilliSeconds(5));
-
-        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer token_1");
+        UNIT_ASSERT(WaitRequest(server, TDuration::Seconds(30)));
+        auto future = factory->CreateProvider()->GetAuthInfoAsync();
+        UNIT_ASSERT(!future.IsReady());
 
         const TInstant shutdownStart = TInstant::Now();
         factory = nullptr;
         const TInstant shutdownStop = TInstant::Now();
-        Cerr << "Shutdown: " << (shutdownStop - shutdownStart) << Endl;
+        UNIT_ASSERT(shutdownStop - shutdownStart < TDuration::Seconds(1));
+        UNIT_ASSERT(future.IsReady());
+        UNIT_ASSERT_EXCEPTION(future.GetValue(), yexception);
     }
 
     Y_UNIT_TEST(ExchangesFromFileConfig) {

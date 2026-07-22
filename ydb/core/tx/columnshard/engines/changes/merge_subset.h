@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/portions_index.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -30,15 +31,19 @@ private:
 
 protected:
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
+    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const bool useDeletionFilter) const;
 
 public:
-    ISubsetToMerge(const std::shared_ptr<TGranuleMeta>& granule)
+    ISubsetToMerge(
+        const std::shared_ptr<TGranuleMeta>& granule, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
         : GranuleMeta(granule)
+        , PortionsIndexSnapshot(portionsIndexSnapshot)
     {
         AFL_VERIFY(GranuleMeta);
+        AFL_VERIFY(PortionsIndexSnapshot);
     }
 
     virtual ~ISubsetToMerge() = default;
@@ -62,8 +67,9 @@ private:
         const bool useDeletionFilter) const override;
 
 public:
-    TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta)
-        : TBase(granuleMeta)
+    TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta,
+        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+        : TBase(granuleMeta, portionsIndexSnapshot)
         , ReadPortion(std::move(rPortion))
     {
     }
@@ -89,7 +95,8 @@ private:
     virtual ui64 GetColumnMaxChunkMemory() const override;
 
 public:
-    TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions, const std::shared_ptr<TGranuleMeta>& granuleMeta);
+    TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions, const std::shared_ptr<TGranuleMeta>& granuleMeta,
+        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot);
 };
 
 }   // namespace NKikimr::NOlap::NCompaction

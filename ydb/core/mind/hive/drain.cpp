@@ -206,8 +206,8 @@ public:
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             SeqNo = nodeInfo->DrainSeqNo;
 
-            if (nodeInfo->ServicedDomains.size() == 1) {
-                TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());
+            if (auto domainKey = nodeInfo->GetServicedDomain()) {
+                TDomainInfo* domainInfo = Hive->FindDomain(domainKey);
                 if (domainInfo != nullptr) {
                     if (domainInfo->HiveId != 0 && domainInfo->HiveId != Hive->TabletID()) {
                         DomainHiveId = domainInfo->HiveId;

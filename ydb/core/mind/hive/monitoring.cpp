@@ -3076,7 +3076,7 @@ public:
             return true;
         }
         for (const auto& tablet : Self->Tablets) {
-            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+            Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
         return true;
     }

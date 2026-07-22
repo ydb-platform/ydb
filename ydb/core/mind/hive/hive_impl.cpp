@@ -896,7 +896,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
             Execute(CreateRestartTablet(tabletId));
         }
     } else {
-        Execute(CreateRestartTablet(tabletId));
+        Execute(CreateForceRestartTablet(tabletId));
     }
 }
 
@@ -2122,10 +2122,8 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         }
         auto& nodeStats = *record.AddNodeStats();
         nodeStats.SetNodeId(node.Id);
-        if (!node.ServicedDomains.empty()) {
-            nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
-        } else if (!node.LastSeenServicedDomains.empty()) {
-            nodeStats.MutableNodeDomain()->CopyFrom(node.LastSeenServicedDomains.front());
+        if (const auto& domain = node.GetServicedDomain()) {
+            nodeStats.MutableNodeDomain()->CopyFrom(domain);
         }
         if (!node.Name.empty()) {
             nodeStats.SetNodeName(node.Name);
@@ -3074,10 +3072,10 @@ void THive::UpdatePiles() {
 }
 
 std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
-    if (!nodeInfo || nodeInfo->ServicedDomains.size() != 1) {
+    if (!nodeInfo) {
         return std::nullopt;
     }
-    TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
+    TDomainInfo* domainInfo = FindDomain(nodeInfo->GetServicedDomain());
     if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
         return std::nullopt;
     }

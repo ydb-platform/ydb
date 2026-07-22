@@ -290,12 +290,16 @@ def main() -> int:
     if args.shard_count == "auto":
         hour = args.now_utc_hour if args.now_utc_hour is not None else datetime.now(timezone.utc).hour
         peak = (not args.no_peak_cap) and is_peak_hour_utc(hour)
-        shard_count, estimate_min = choose_shard_count(
-            total_weight,
-            threads=args.threads,
-            profile=args.profile,
-            is_peak=peak,
-        )
+        # timeout_budget is a worst-case CPU ceiling (N * SIZE timeout), not an
+        # expected-duration estimate — do not inflate shard count via wall_floor.
+        choose_kwargs: dict[str, Any] = {
+            "threads": args.threads,
+            "profile": args.profile,
+            "is_peak": peak,
+        }
+        if args.weight_mode == WEIGHT_MODE_TIMEOUT_BUDGET:
+            choose_kwargs["max_shard_wall_min"] = 1e9
+        shard_count, estimate_min = choose_shard_count(total_weight, **choose_kwargs)
         print(
             f"Adaptive shard count (profile={args.profile}) from graph weight {total_weight:.0f}s "
             f"(~{estimate_min:.1f} min single job), peak={peak} (hour {hour} UTC) -> {shard_count}",

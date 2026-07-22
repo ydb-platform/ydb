@@ -93,11 +93,14 @@ run_split "$SHARD_COUNT"
 
 # Resolve final shard count: capacity may shrink the plan, wall-time floor may
 # raise it back so the slowest shard stays within MAX_SHARD_WALL_MIN.
+# timeout_budget weights are worst-case CPU ceilings, not expected duration —
+# do not use them to inflate shard count or fail the prepare job.
 final_count=$(
   PLAN_FILE="$PLAN_FILE" \
   MAX_SHARDS="${MAX_SHARDS:-}" \
   TEST_THREADS="$TEST_THREADS" \
   MAX_SHARD_WALL_MIN="$MAX_SHARD_WALL_MIN" \
+  WEIGHT_MODE="$WEIGHT_MODE" \
   SCRIPT_DIR="$SCRIPT_DIR" \
   python3 - <<'PY'
 import json
@@ -116,9 +119,9 @@ if active <= 0:
 weight = float(plan.get("total_weight") or 0.0)
 threads = int(os.environ["TEST_THREADS"])
 max_wall = float(os.environ["MAX_SHARD_WALL_MIN"])
-wall_floor = min_shards_for_wall_budget(
-    weight, threads=threads, max_shard_wall_min=max_wall
-)
+weight_mode = (os.environ.get("WEIGHT_MODE") or "timeout_budget").strip().lower()
+mode = ((plan.get("weighting") or {}).get("mode") or "")
+timeout_budget = weight_mode == "timeout_budget" or mode == "graph_uid_timeout_budget_lpt"
 
 desired = active
 capacity = os.environ.get("MAX_SHARDS") or ""
@@ -131,14 +134,24 @@ if capacity:
         )
         desired = capacity_n
 
-if desired < wall_floor:
+if not timeout_budget:
+    wall_floor = min_shards_for_wall_budget(
+        weight, threads=threads, max_shard_wall_min=max_wall
+    )
+    if desired < wall_floor:
+        print(
+            f"Raising shards from {desired} to {wall_floor} "
+            f"to keep estimated shard wall <= {max_wall:.0f} min "
+            f"(single-job ~{float(plan.get('estimated_single_job_min') or 0):.1f} min)",
+            file=sys.stderr,
+        )
+        desired = wall_floor
+elif desired < active:
     print(
-        f"Raising shards from {desired} to {wall_floor} "
-        f"to keep estimated shard wall <= {max_wall:.0f} min "
-        f"(single-job ~{float(plan.get('estimated_single_job_min') or 0):.1f} min)",
+        f"timeout_budget mode: keeping capacity/profile shard count {desired} "
+        f"(worst-case weight would want more; not used as wall SLA)",
         file=sys.stderr,
     )
-    desired = wall_floor
 
 print(desired)
 PY
@@ -150,7 +163,8 @@ if [ "$final_count" != "$active_count" ]; then
   run_split "$final_count"
 fi
 
-# Fail-fast: do not schedule shard jobs that are estimated to exceed the budget.
+# Wall-time check: hard fail for history/expected weights; warn-only for
+# timeout_budget (N * SIZE timeout is a packing ceiling, not ETA).
 python3 - <<PY
 import json
 import sys
@@ -161,10 +175,22 @@ if count <= 0:
     raise SystemExit(0)
 crit = float(plan.get("estimated_critical_path_min") or 0.0)
 max_wall = float("$MAX_SHARD_WALL_MIN")
+mode = ((plan.get("weighting") or {}).get("mode") or "")
+timeout_budget = mode == "graph_uid_timeout_budget_lpt" or "$WEIGHT_MODE" == "timeout_budget"
 if crit > max_wall:
+    msg = (
+        f"estimated slowest shard ~{crit:.1f} min exceeds "
+        f"max_shard_wall_min={max_wall:.0f} with {count} shards"
+    )
+    if timeout_budget:
+        print(
+            f"WARNING: {msg} (timeout_budget is worst-case packing weight; "
+            f"continuing)",
+            file=sys.stderr,
+        )
+        raise SystemExit(0)
     print(
-        f"ERROR: estimated slowest shard ~{crit:.1f} min exceeds "
-        f"max_shard_wall_min={max_wall:.0f} with {count} shards. "
+        f"ERROR: {msg}. "
         f"Increase shard_count / free pool capacity, or shrink test scope.",
         file=sys.stderr,
     )

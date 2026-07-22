@@ -3,11 +3,11 @@
 
 Bin-packs individual result UIDs for graph-replay shards.
 
-Default weight mode ``timeout_budget``: ``N * timeout(size)`` where N is the
-number of chunk ``run_test`` deps outside ``graph.result`` (else 1), and
-timeout is ya SIZE default (60/600/3600) or ``--timeout`` from the graph.
+Default weight mode ``history``: longest suite_folder prefix match using
+nightly regression p90 / size fallback.
 
-Opt-in ``history``: longest suite_folder prefix match / size fallback.
+Opt-in ``timeout_budget``: ``N * timeout(size)`` where N is the number of
+chunk ``run_test`` deps outside ``graph.result`` (else 1).
 
 Each shard keeps the full graph and runs a subset of ``graph.result`` via
 filter_graph_for_shard.
@@ -221,7 +221,7 @@ def main() -> int:
         "--weight-mode",
         default=DEFAULT_WEIGHT_MODE,
         choices=(WEIGHT_MODE_TIMEOUT_BUDGET, WEIGHT_MODE_HISTORY),
-        help="UID weight source (default: timeout_budget = N_chunks * SIZE timeout)",
+        help="UID weight source (default: history from nightly regression p90)",
     )
     args = parser.parse_args()
 

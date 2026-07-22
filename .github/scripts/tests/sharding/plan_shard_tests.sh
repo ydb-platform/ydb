@@ -32,9 +32,9 @@ fi
 
 echo "Planned scope: $(jq '.total_suites' "$FILTERED_SUMMARY") suites, $(jq '.total_tests' "$FILTERED_SUMMARY") tests, weight $(jq '.total_weight' "$FILTERED_SUMMARY")"
 
-# Default: keep N_tests * SIZE timeout from extract_suites_from_ya_test_list.py.
-# Opt-in history: WEIGHT_MODE=history.
-WEIGHT_MODE="${WEIGHT_MODE:-timeout_budget}"
+# Default: nightly regression suite duration p90.
+# Opt-in timeout budget: WEIGHT_MODE=timeout_budget (N_tests * SIZE timeout).
+WEIGHT_MODE="${WEIGHT_MODE:-history}"
 if [ "$WEIGHT_MODE" = "history" ]; then
   python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
     "$TEST_LIST_LOG" \

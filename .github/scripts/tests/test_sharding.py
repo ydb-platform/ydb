@@ -27,6 +27,7 @@ from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
     WEIGHT_MODE_HISTORY,
+    WEIGHT_MODE_TIMEOUT_BUDGET,
     assign_result_uids_to_shards,
     extract_node_path,
     load_graph,
@@ -730,7 +731,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             "yql/essentials/udfs/common/compress_base",
         )
 
-    def test_plan_uid_weights_timeout_budget_default(self):
+    def test_plan_uid_weights_timeout_budget_mode(self):
         nodes = {
             "test-acc": {
                 "uid": "test-acc",
@@ -761,6 +762,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             ["test-acc", "test-leaf"],
             nodes,
             {},
+            weight_mode=WEIGHT_MODE_TIMEOUT_BUDGET,
         )
         self.assertEqual(weights["test-acc"], 2 * 3600.0)
         self.assertEqual(weights["test-leaf"], 60.0)
@@ -794,7 +796,6 @@ class FilterGraphForShardTest(unittest.TestCase):
             ["test-a", "test-b", "test-large"],
             nodes,
             {"ydb/tests/foo": 100.0},
-            weight_mode=WEIGHT_MODE_HISTORY,
         )
         self.assertEqual(weights["test-a"], 50.0)
         self.assertEqual(weights["test-b"], 50.0)

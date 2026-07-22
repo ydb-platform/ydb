@@ -47,7 +47,7 @@ DEFAULT_SIZE_WEIGHTS = {
 
 WEIGHT_MODE_TIMEOUT_BUDGET = "timeout_budget"
 WEIGHT_MODE_HISTORY = "history"
-DEFAULT_WEIGHT_MODE = WEIGHT_MODE_TIMEOUT_BUDGET
+DEFAULT_WEIGHT_MODE = WEIGHT_MODE_HISTORY
 
 
 def validate_graph(graph: dict[str, Any]) -> None:
@@ -491,13 +491,12 @@ def plan_uid_weights(
 ) -> tuple[dict[str, float], dict[str, Any]]:
     """Weight result UIDs for LPT packing.
 
-    Default ``timeout_budget``: ``N * timeout(size)`` where N is the number of
-    chunk ``run_test`` deps outside ``graph.result`` (else 1). Matches ya SIZE
-    default timeouts (60/600/3600).
+    Default ``history``: longest suite_folder prefix match on test nodes; p90
+    from nightly regression jobs goes to the heaviest SIZE at that key. Other
+    sizes / non-test peers use size fallback.
 
-    Opt-in ``history``: longest suite_folder prefix match on test nodes; p90
-    goes to the heaviest SIZE at that key. Other sizes / non-test peers use
-    size fallback.
+    Opt-in ``timeout_budget``: ``N * timeout(size)`` where N is the number of
+    chunk ``run_test`` deps outside ``graph.result`` (else 1).
     """
     weights_cfg = dict(DEFAULT_SIZE_WEIGHTS)
     if size_weights:

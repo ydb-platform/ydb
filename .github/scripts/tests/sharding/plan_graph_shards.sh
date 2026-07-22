@@ -37,9 +37,9 @@ SPLIT_EXTRA_ARGS=()
 if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
   SPLIT_EXTRA_ARGS+=(--no-peak-cap)
 fi
-# timeout_budget (default): N_chunk_run_tests * SIZE timeout.
-# history: suite duration p90 from YDB (opt-in).
-WEIGHT_MODE="${WEIGHT_MODE:-timeout_budget}"
+# history (default): nightly regression suite duration p90 from YDB.
+# timeout_budget: N_chunk_run_tests * SIZE timeout (opt-in).
+WEIGHT_MODE="${WEIGHT_MODE:-history}"
 SPLIT_EXTRA_ARGS+=(--weight-mode "$WEIGHT_MODE")
 
 # Real pool-capacity cap supersedes the static peak-hour heuristic (same as
@@ -119,7 +119,7 @@ if active <= 0:
 weight = float(plan.get("total_weight") or 0.0)
 threads = int(os.environ["TEST_THREADS"])
 max_wall = float(os.environ["MAX_SHARD_WALL_MIN"])
-weight_mode = (os.environ.get("WEIGHT_MODE") or "timeout_budget").strip().lower()
+weight_mode = (os.environ.get("WEIGHT_MODE") or "history").strip().lower()
 mode = ((plan.get("weighting") or {}).get("mode") or "")
 timeout_budget = weight_mode == "timeout_budget" or mode == "graph_uid_timeout_budget_lpt"
 

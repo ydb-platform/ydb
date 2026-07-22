@@ -3,7 +3,7 @@ name: PR-check-parallel pipeline
 #
 # Differences from the pr-check-sharding-pilot branch:
 #   - change-volume classifier picks single vs sharded mode before any build;
-#   - shard count is adaptive: from estimated work (N * SIZE timeout by default) with
+#   - shard count is adaptive: from estimated work (nightly history p90 by default) with
 #     a cap during shared-pool peak hours (see choose_shard_count.py);
 #   - build, ya test -L and shard planning share one job on one runner:
 #     listing runs in the background while the (cached, ~3 min) build runs in

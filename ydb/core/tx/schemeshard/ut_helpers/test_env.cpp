@@ -574,8 +574,13 @@ void SetupKqpResourceManager(TTestActorRuntime& runtime,
     const ui32 nodeId = runtime.GetNodeId(nodeIdx);
     auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
+    const auto& rmConfig = tableServiceConfig.GetResourceManager();
+    auto resourceManager = NKqp::NResourceManager::CreateKqpResourceManager(
+        rmConfig, MakeIntrusive<NKqp::TKqpCounters>(runtime.GetAppData(nodeIdx).Counters));
+    NKqp::NResourceManager::PublishKqpResourceManager(resourceManager);
+
     IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-        tableServiceConfig.GetResourceManager(), nullptr, {}, kqpProxySharedResources, nodeId
+        rmConfig, std::move(resourceManager), {}, kqpProxySharedResources
     );
 
     const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;

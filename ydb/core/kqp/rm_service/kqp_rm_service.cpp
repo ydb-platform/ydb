@@ -609,15 +609,16 @@ public:
     }
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        const TIntrusivePtr<TKqpCounters>& counters, const TActorId& resourceBrokerId,
+        std::shared_ptr<IKqpResourceManager>&& resourceManager, const TActorId& resourceBrokerId,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, TDuration warmupDeadline)
         : Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , ResourceManager(std::dynamic_pointer_cast<TKqpResourceManager>(std::move(resourceManager)))
         , WarmupInProgress(warmupDeadline > TDuration::Zero())
         , WarmupDeadline(warmupDeadline)
     {
-        ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
+        Y_ABORT_UNLESS(ResourceManager, "KqpResourceManagerActor requires an instance made by CreateKqpResourceManager()");
     }
 
     // Is called right after service registration
@@ -1038,14 +1039,19 @@ private:
     TDuration WarmupDeadline;
 };
 
+std::shared_ptr<IKqpResourceManager> CreateKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters) {
+    return std::make_shared<TKqpResourceManager>(config, std::move(counters));
+}
+
 } // namespace NResourceManager
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    const TIntrusivePtr<TKqpCounters>& counters, NActors::TActorId resourceBroker,
+    std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager, NActors::TActorId resourceBroker,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, TDuration warmupDeadline)
 {
-    return new NResourceManager::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), warmupDeadline);
+    return new NResourceManager::TKqpResourceManagerActor(config, std::move(resourceManager), resourceBroker,
+        std::move(kqpProxySharedResources), warmupDeadline);
 }
 
 std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager() {

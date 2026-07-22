@@ -313,14 +313,23 @@ NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters>
     std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
     const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings);
 
+// Creates a resource manager instance to be passed into CreateKqpResourceManagerActor().
+// If `counters` is null - the default ones are created when the owning actor is registered.
+std::shared_ptr<IKqpResourceManager> CreateKqpResourceManager(
+    const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
+    TIntrusivePtr<TKqpCounters> counters = nullptr);
+
 } // namespace NResourceManager
 
 struct TKqpProxySharedResources {
     std::atomic<ui32> AtomicLocalSessionCount{0};
 };
 
+// Takes the ownership over `resourceManager` and binds it to the created actor.
+// A single resource manager instance must not be shared between several actors.
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    const TIntrusivePtr<TKqpCounters>& counters, NActors::TActorId resourceBroker = {},
+    std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
+    NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
     TDuration warmupDeadline = TDuration::Zero());
 

@@ -140,6 +140,7 @@ public:
     void TearDown() override {
         ResourceBrokers.clear();
         ResourceManagers.clear();
+        Instances.clear();
         Runtime.Reset();
     }
 
@@ -152,7 +153,9 @@ public:
     void CreateKqpResourceManager(
             const NKikimrConfig::TTableServiceConfig::TResourceManager& config, ui32 nodeInd = 0) {
         auto kqpCounters = MakeIntrusive<TKqpCounters>(Counters);
-        auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd], nullptr, Runtime->GetNodeId(nodeInd));
+        auto rm = NResourceManager::CreateKqpResourceManager(config, kqpCounters);
+        Instances.push_back(rm);
+        auto resman = CreateKqpResourceManagerActor(config, std::move(rm), ResourceBrokers[nodeInd], nullptr);
         // RM creates children during its registration, we need to enable schedule for them
         auto prevObserver = Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId& /*parentId*/, const TActorId& actorId) {
             runtime.EnableScheduleForActor(actorId, true);
@@ -306,6 +309,7 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TVector<TActorId> ResourceBrokers;
     TVector<TActorId> ResourceManagers;
+    TVector<std::shared_ptr<NResourceManager::IKqpResourceManager>> Instances;
 };
 UNIT_TEST_SUITE_REGISTRATION(KqpRm);
 
@@ -314,7 +318,7 @@ void KqpRm::SingleTask() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     auto stats = rm->GetLocalResources();
     UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory);
@@ -343,7 +347,7 @@ void KqpRm::ManyTasks() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 100};
 
@@ -367,7 +371,7 @@ void KqpRm::NotEnoughMemory() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     auto tx = MakeTx(1, rm);
     auto task = 2;
@@ -383,7 +387,7 @@ void KqpRm::NotEnoughExecutionUnits() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     auto tx = MakeTx(1, rm);
     auto task = 2;
@@ -402,7 +406,7 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     StartRms({config, MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     auto tx = MakeTx(1, rm);
     auto task = 2;
@@ -421,7 +425,7 @@ void KqpRm::Snapshot() {
     StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 10, .Memory = 100};
 
@@ -467,7 +471,7 @@ void KqpRm::Reduce() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     auto tx = MakeTx(1, rm);
     auto task = 1;
@@ -490,7 +494,7 @@ void KqpRm::ConcurrentTasks() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     {
         auto tx = MakeTx(1, rm);
@@ -540,7 +544,7 @@ void KqpRm::ConcurrentChannels() {
     StartRms();
     NKikimr::TActorSystemStub stub;
 
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto rm = Instances.front();
 
     {
         auto tx = MakeTx(1, rm);
@@ -595,8 +599,8 @@ void KqpRm::SnapshotSharing() {
     StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
-    auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
+    auto rm_first = Instances[0];
+    auto rm_second = Instances[1];
 
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
@@ -666,8 +670,8 @@ void KqpRm::NodesMembership() {
     StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
-    auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
+    auto rm_first = Instances[0];
+    auto rm_second = Instances[1];
 
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
@@ -697,8 +701,8 @@ void KqpRm::DisonnectNodes() {
     StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
 
-    auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
+    auto rm_first = Instances[0];
+    auto rm_second = Instances[1];
 
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 

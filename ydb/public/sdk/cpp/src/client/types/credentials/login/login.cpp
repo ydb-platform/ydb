@@ -75,6 +75,7 @@ private:
     mutable std::mutex Mutex_;
     TInstant TokenRequestAt_;
     bool Requesting_ = false;
+    bool HasToken_ = false;
     bool Stopped_ = false;
     mutable NThreading::TPromise<std::string> AuthInfo_;
 };
@@ -185,11 +186,17 @@ void TLoginCredentialsProvider::FinishRequest(
     const auto& responseValue = response ? *response : emptyResponse;
     const auto operationStatus = static_cast<EStatus>(responseValue.operation().status());
     if (!status.Ok() || operationStatus != EStatus::SUCCESS) {
-        if ((!status.Ok() && IsRetryable(status.Status)) ||
-            (status.Ok() && IsRetryableOperation(operationStatus))) {
+        bool retry;
+        {
             std::lock_guard lock(Mutex_);
-            Requesting_ = false;
-            TokenRequestAt_ = TInstant::Now() + TDuration::Seconds(1);
+            retry = (!status.Ok() && IsRetryable(status.Status)) ||
+                (HasToken_ && status.Ok() && IsRetryableOperation(operationStatus));
+            if (retry) {
+                Requesting_ = false;
+                TokenRequestAt_ = TInstant::Now() + TDuration::Seconds(1);
+            }
+        }
+        if (retry) {
             return;
         }
         Fail(GetError(status, responseValue));
@@ -207,6 +214,7 @@ void TLoginCredentialsProvider::FinishRequest(
     {
         std::lock_guard lock(Mutex_);
         Requesting_ = false;
+        HasToken_ = true;
         TokenRequestAt_ = now + (ToInstant(GetTokenExpiresAt(token)) - now) / 2;
         promise = AuthInfo_;
     }

@@ -629,8 +629,8 @@ namespace NInterconnect::NRdma {
 
     class TDummyMemPool: public TMemPoolBase {
     public:
-        TDummyMemPool()
-            : TMemPoolBase(-1, MakeCounters(nullptr), /* emulateRegistration=*/true)
+        explicit TDummyMemPool(bool emulateRegistration = false)
+            : TMemPoolBase(-1, MakeCounters(nullptr), emulateRegistration)
         {}
 
         TMemRegionPtr AllocImpl(int size, ui32) noexcept override {
@@ -961,8 +961,21 @@ namespace NInterconnect::NRdma {
 
     thread_local TSlotMemPool::TSlotMemPoolCache TSlotMemPool::LocalCache;
 
-    std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept {
-        auto* pool = Singleton<TDummyMemPool>();
+    namespace {
+        struct TDummyMemPoolRealTag : public TDummyMemPool {
+            TDummyMemPoolRealTag() : TDummyMemPool(/*emulateRegistration=*/false) {}
+        };
+        struct TDummyMemPoolEmulatedTag : public TDummyMemPool {
+            TDummyMemPoolEmulatedTag() : TDummyMemPool(/*emulateRegistration=*/true) {}
+        };
+    }
+
+    std::shared_ptr<IMemPool> CreateDummyMemPool(bool emulateRegistration) noexcept {
+        if (emulateRegistration) {
+            auto* pool = Singleton<TDummyMemPoolEmulatedTag>();
+            return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
+        }
+        auto* pool = Singleton<TDummyMemPoolRealTag>();
         return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 

@@ -1,5 +1,6 @@
 #include "yql_generic_credentials_provider.h"
 
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/utils/log/log.h>
@@ -36,9 +37,8 @@ namespace NYql::NDq {
         // 2. Otherwise use credentials provider to get token from Token Accessor
         Y_ENSURE(CredentialsProvider_);
         return CredentialsProvider_->GetAuthInfoAsync()
-            .Apply([](const NThreading::TFuture<std::string>& f1) {
-                NThreading::TFuture<std::string> f2 = f1;
-                auto iamToken = f2.ExtractValueSync();
+            .Apply([](const NThreading::TFuture<std::string>& future) {
+                auto iamToken = ExtractFromConstFuture(future);
                 TGenericCredentials credentials;
                 auto& token = *credentials.mutable_token();
                 *token.mutable_type() = "IAM";

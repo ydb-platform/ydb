@@ -15,6 +15,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -120,9 +121,8 @@ NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> TGenericDescribeTab
                 .first;
     }
     return providersIt->second->GetAuthInfoAsync()
-        .Apply([request=std::move(request)](const NThreading::TFuture<std::string>& f1) mutable {
-            NThreading::TFuture<std::string> f2(f1);
-            TString iamToken = f2.ExtractValueSync();
+        .Apply([request=std::move(request)](const NThreading::TFuture<std::string>& future) mutable {
+            TString iamToken = ExtractFromConstFuture(future);
             auto dsi = request.mutable_data_source_instance();
             Y_ENSURE(iamToken, "empty IAM token");
             *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
@@ -425,18 +425,15 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
         promise = std::move(promise),
         client = State_->GenericClient,
         timeout = State_->Configuration->DescribeTableTimeout
-    ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& f1) mutable {
+    ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& future) mutable {
         try {
             Y_ENSURE(client);
-
-            NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> f2(f1);
-            auto request = f2.ExtractValueSync();
+            auto request = ExtractFromConstFuture(future);
             desc->DataSourceInstance = request.data_source_instance();
 
-            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& future) mutable {
                 try {
-                    NConnector::TDescribeTableAsyncResult f2(f1);
-                    auto result = f2.ExtractValueSync();
+                    auto result = ExtractFromConstFuture(future);
 
                     // Check transport error
                     if (!result.Status.Ok()) {

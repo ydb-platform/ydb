@@ -1,6 +1,7 @@
 #pragma  once
 
 #include <ydb/core/kqp/common/compilation/result.h>
+#include <ydb/core/kqp/common/kqp_user_trace_data.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
@@ -19,6 +20,9 @@ struct TKqpQueryStats {
     ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
+    // Index-aligned with Executions (only ever appended as a pair, see ProcessExecuterResult);
+    // an execution the user channel didn't trace holds an empty entry.
+    TVector<TUserTraceExecutionData> UserTraces;
 
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;

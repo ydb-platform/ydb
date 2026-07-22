@@ -180,13 +180,11 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         case PARTITIONS_LOCATION_WAKEUP_TAG: {
             PartitionsLocationWakeupScheduled = false;
-            ProcessExpiredPartitionsLocationRequests(ctx);
             ProcessPartitionsLocationQueue(ctx);
-            SchedulePartitionsLocationWakeup(ctx);
             break;
         }
         default: {
-            ProcessExpiredPartitionsLocationRequests(ctx);
+            ProcessPartitionsLocationQueue(ctx);
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
             CleanupReceiveAttemptPartitions(ctx);
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
@@ -664,24 +662,23 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
     SchedulePartitionsLocationWakeup(ctx);
 }
 
-void TPersQueueReadBalancer::ProcessExpiredPartitionsLocationRequests(const TActorContext& ctx) {
-    const auto now = TAppData::TimeProvider->Now();
-    while (!PartitionsLocationQueue.empty() && PartitionsLocationQueue.front().Deadline <= now) {
-        PQ_LOG_D("GetPartitionsLocation request expired, sender=" << PartitionsLocationQueue.front().Sender);
-        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
-        PartitionsLocationQueue.pop_front();
-    }
-}
-
 void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext& ctx) {
-    ProcessExpiredPartitionsLocationRequests(ctx);
+    const auto now = TAppData::TimeProvider->Now();
+    std::deque<TPartitionsLocationRequest> deferred;
     while (!PartitionsLocationQueue.empty()) {
-        auto& request = PartitionsLocationQueue.front();
-        if (!TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
-            break;
-        }
+        auto request = std::move(PartitionsLocationQueue.front());
         PartitionsLocationQueue.pop_front();
+        if (request.Deadline <= now) {
+            PQ_LOG_D("GetPartitionsLocation request expired, sender=" << request.Sender);
+            SendPartitionsLocationError(request.Sender, ctx);
+            continue;
+        }
+        if (!TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
+            deferred.push_back(std::move(request));
+            continue;
+        }
     }
+    PartitionsLocationQueue = std::move(deferred);
     SchedulePartitionsLocationWakeup(ctx);
 }
 

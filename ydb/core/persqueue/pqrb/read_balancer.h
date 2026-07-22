@@ -121,7 +121,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
-    void ProcessExpiredPartitionsLocationRequests(const TActorContext& ctx);
     void ProcessPartitionsLocationQueue(const TActorContext& ctx);
     bool TryRespondPartitionsLocation(const TActorId& sender, const NKikimrPQ::TGetPartitionsLocation& request, const TActorContext& ctx);
     bool AllPartitionPipesReady() const;

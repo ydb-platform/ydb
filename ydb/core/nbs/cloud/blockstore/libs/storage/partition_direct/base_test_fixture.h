@@ -56,7 +56,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters{
         new ::NMonitoring::TDynamicCounters()};
-    std::shared_ptr<TTraceServiceMock> TraceService;
+    std::shared_ptr<TTraceServiceMock> TraceService =
+        std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};

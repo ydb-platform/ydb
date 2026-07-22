@@ -36,7 +36,6 @@ private:
             EvAclModified,
             EvMigrationRead,
             EvMigrationWritten,
-            EvProducerSequenceStart,
             EvEnd
         };
 
@@ -98,19 +97,6 @@ private:
             const TString Error;
             const ui64 RowCount;
         };
-
-        // Result of the "max producer_id from the old shared table" query used to pick the serverless
-        // producer_id sequence start value (see SendProducerSequenceStartQuery).
-        struct TEvProducerSequenceStart: public NActors::TEventLocal<TEvProducerSequenceStart, EvProducerSequenceStart> {
-            TEvProducerSequenceStart(Ydb::StatusIds::StatusCode status, const TString& error, i64 minValue)
-                : Status(status)
-                , Error(error)
-                , MinValue(minValue) {}
-
-            const Ydb::StatusIds::StatusCode Status;
-            const TString Error;
-            const i64 MinValue;
-        };
     };
 
     STATEFN(StateWork) {
@@ -120,7 +106,6 @@ private:
             HFunc(TEvPrivate::TEvAclModified, Handle);
             HFunc(TEvPrivate::TEvMigrationRead, Handle);
             HFunc(TEvPrivate::TEvMigrationWritten, Handle);
-            HFunc(TEvPrivate::TEvProducerSequenceStart, Handle);
         }
     }
 
@@ -129,11 +114,7 @@ private:
 
     void InitializeConsumerMembersTable();
     void InitializeConsumerGroupsTable();
-    void InitializeTransactionalProducersTable(i64 producerIdSequenceMinValue);
-    // For serverless: reads the max producer_id already used by this database in the old shared table and
-    // starts the freshly created serverless producer_id sequence well above it, so a re-initialized producer
-    // cannot reuse a (producer_id, epoch) that is still live in a PQ supportive partition.
-    void SendProducerSequenceStartQuery();
+    void InitializeTransactionalProducersTable();
     void SendCreateTableRequest(Ydb::Table::CreateTableRequest&& request, const TString& tableName);
     void SendEnableAutopartitioningRequest(const TString& tableName);
     void SendAlterTableRequest(Ydb::Table::AlterTableRequest&& request, const TString& tableName);
@@ -150,7 +131,6 @@ private:
     void Handle(TEvPrivate::TEvAclModified::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvProducerSequenceStart::TPtr& ev, const TActorContext& ctx);
     void ReplyIfRequired(const TActorContext& ctx);
 
     const TString DatabasePath;

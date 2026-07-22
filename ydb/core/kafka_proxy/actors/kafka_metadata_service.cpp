@@ -17,7 +17,6 @@
 namespace NKafka {
 
 using namespace NActors;
-static constexpr i64 PRODUCER_ID_SEQUENCE_GAP = 1000;
 
 void TKafkaMetadataService::Bootstrap(const NActors::TActorContext&) {
     Become(&TKafkaMetadataService::StateWork);
@@ -29,11 +28,7 @@ void TKafkaMetadataService::Bootstrap(const NActors::TActorContext&) {
             break;
         case ETables::TransactionalProducers:
             TablesToCreate = 1;
-            if (!SourceDatabasePath.empty() && SourceDatabasePath != DatabasePath) {
-                SendProducerSequenceStartQuery();
-            } else {
-                InitializeTransactionalProducersTable(/*producerIdSequenceMinValue*/ 1);
-            }
+            InitializeTransactionalProducersTable();
             break;
     }
 }
@@ -199,9 +194,9 @@ void TKafkaMetadataService::InitializeConsumerGroupsTable() {
     SendCreateTableRequest(std::move(request), "kafka_consumer_groups");
 }
 
-void TKafkaMetadataService::InitializeTransactionalProducersTable(i64 producerIdSequenceMinValue) {
+void TKafkaMetadataService::InitializeTransactionalProducersTable() {
     const TString tablePath = GetTablePath("kafka_transactional_producers");
-    KAFKA_LOG_D("Creating table " << tablePath << " with producer_id sequence starting at " << producerIdSequenceMinValue);
+    KAFKA_LOG_D("Creating table " << tablePath);
     Ydb::Table::CreateTableRequest request;
     request.set_session_id("");
     request.set_path(tablePath);
@@ -224,7 +219,7 @@ void TKafkaMetadataService::InitializeTransactionalProducersTable(i64 producerId
         // we need to use signed int, cause Kafka protocol uses signed int and we can't overflow it on client
         column.mutable_type()->set_type_id(Ydb::Type::INT64);
         column.mutable_from_sequence()->set_name("producer_id");
-        column.mutable_from_sequence()->set_min_value(producerIdSequenceMinValue);
+        column.mutable_from_sequence()->set_min_value(1);
     }
     {
         auto& column = *request.add_columns();
@@ -246,75 +241,6 @@ void TKafkaMetadataService::InitializeTransactionalProducersTable(i64 producerId
     }
 
     SendCreateTableRequest(std::move(request), "kafka_transactional_producers");
-}
-
-void TKafkaMetadataService::SendProducerSequenceStartQuery() {
-    const TString sourceTablePath = BuildTablePath(SourceDatabasePath, "kafka_transactional_producers");
-    KAFKA_LOG_D("Reading max producer_id for database " << DatabasePath << " from " << sourceTablePath);
-
-    Ydb::Scripting::ExecuteYqlRequest request;
-    request.set_script(TStringBuilder()
-        << "--!syntax_v1\n"
-        << "DECLARE $database AS Utf8;\n"
-        << "SELECT MAX(producer_id) AS max_producer_id FROM `" << sourceTablePath << "`\n"
-        << "WHERE database = $database;");
-    {
-        Ydb::TypedValue database;
-        database.mutable_type()->set_type_id(Ydb::Type::UTF8);
-        database.mutable_value()->set_text_value(DatabasePath);
-        (*request.mutable_parameters())["$database"] = std::move(database);
-    }
-
-    using TExecuteYqlRpc =
-        NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
-
-    auto* actorSystem = TActivationContext::ActorSystem();
-    const TActorId selfId = SelfId();
-
-    auto future = NKikimr::NRpcService::DoLocalRpc<TExecuteYqlRpc>(
-        std::move(request),
-        SourceDatabasePath,
-        NACLib::TSystemUsers::Metadata().SerializeAsString(),
-        actorSystem,
-        /*internalCall*/ true);
-
-    future.Subscribe([actorSystem, selfId](const NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse>& f) {
-        const auto& operation = f.GetValue().operation();
-        TString error;
-        // On any failure or an empty source table, start from 1 (same as a brand-new dedicated database).
-        i64 minValue = 1;
-        if (operation.status() != Ydb::StatusIds::SUCCESS) {
-            error = operation.DebugString();
-        } else {
-            Ydb::Scripting::ExecuteYqlResult result;
-            operation.result().UnpackTo(&result);
-            if (result.result_sets_size() > 0
-                    && result.result_sets(0).rows_size() > 0
-                    && result.result_sets(0).rows(0).items_size() > 0) {
-                const auto& item = result.result_sets(0).rows(0).items(0);
-                // MAX over an empty set returns NULL; only offset when there is an actual value.
-                if (item.value_case() == Ydb::Value::kInt64Value) {
-                    minValue = item.int64_value() + PRODUCER_ID_SEQUENCE_GAP;
-                }
-            }
-        }
-        actorSystem->Send(selfId, new TEvPrivate::TEvProducerSequenceStart(operation.status(), error, minValue));
-    });
-}
-
-void TKafkaMetadataService::Handle(TEvPrivate::TEvProducerSequenceStart::TPtr& ev, const TActorContext& ctx) {
-    const auto* msg = ev->Get();
-
-    if (msg->Status != Ydb::StatusIds::SUCCESS) {
-        LOG_WARN_S(ctx, NKikimrServices::KAFKA_PROXY,
-            "Failed to read max producer_id from the shared table for database '" << DatabasePath
-                << "': " << msg->Error << ". Starting the producer_id sequence from " << msg->MinValue << ".");
-    } else {
-        LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
-            "Starting the producer_id sequence for database '" << DatabasePath << "' at " << msg->MinValue);
-    }
-
-    InitializeTransactionalProducersTable(msg->MinValue);
 }
 
 void TKafkaMetadataService::SendCreateTableRequest(Ydb::Table::CreateTableRequest&& request, const TString& tableName) {
@@ -451,7 +377,8 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const 
         return;
     }
 
-    if ((msg->TableName == "kafka_consumer_groups" || msg->TableName == "kafka_consumer_members") && ShouldMigrate()) {
+    if ((msg->TableName == "kafka_consumer_groups" || msg->TableName == "kafka_consumer_members"
+            || msg->TableName == "kafka_transactional_producers") && ShouldMigrate()) {
         LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
             "Kafka metadata table '" << msg->TableName << "' autopartitioning enabled (status "
                 << Ydb::StatusIds::StatusCode_Name(status) << "), migrating rows from '"
@@ -671,8 +598,6 @@ bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status,
 }
 
 bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const TActorContext& ctx) {
-    // sourceDatabasePath is used only to read the max producer_id for picking the sequence start value; the producers
-    // table itself is still not migrated (its table name is absent from the TEvTableAltered migration trigger).
     return TryRequestMetadataTablesCreation(status, databasePath, sourceDatabasePath, TKafkaMetadataService::ETables::TransactionalProducers, ctx);
 }
 } // namespace NKafka

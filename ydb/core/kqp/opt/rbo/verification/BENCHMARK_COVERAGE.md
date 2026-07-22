@@ -42,16 +42,27 @@ snapshots, and construct the SMT obligation without invoking a solver:
 set -o pipefail
 RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*TPCH*' 2>&1 | tail -n 100
+  -F '*::TPCH' 2>&1 | tail -n 100
 
 RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*TPCDS*' 2>&1 | tail -n 100
+  -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-Set explicit solver mode to solve supported obligations with the pinned
-Z3 4.16.0 target declared by the benchmark test. The focused queries currently
-need a 60-second budget:
+The checked-in proof floor runs the six curated obligations with the pinned
+Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3 and
+TPC-DS q3, q52, q55, q93, and q96 directly from the policy, accepts only
+`VERIFIED_BOUNDED`, and ignores every ambient `RBO_COVERAGE_*` variable:
+
+```bash
+set -o pipefail
+./ya make --build relwithdebinfo -tA \
+  ydb/core/kqp/opt/rbo/verification/benchmark_ut \
+  -F '*ProofFloor*' 2>&1 | tail -n 100
+```
+
+For non-gating experiments, explicitly enable the same hermetic solver and
+choose any focused query set:
 
 ```bash
 set -o pipefail
@@ -60,7 +71,7 @@ RBO_COVERAGE_TIMEOUT_MS=60000 \
 RBO_COVERAGE_QUERIES=96 \
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*TPCDS*' 2>&1 | tail -n 100
+  -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
 `RBO_COVERAGE_QUERIES` accepts comma-separated IDs and inclusive ranges, for
@@ -70,22 +81,27 @@ to 10000. Solver use is deliberately explicit: absent, empty, or zero
 `RBO_COVERAGE_USE_SOLVER` selects formula-only mode. The value `1` selects the
 hermetic `contrib/tools/z3/z3` build output; every other value fails closed.
 
-Each suite writes the stable report names `tpch_coverage.json` or
-`tpcds_coverage.json` into the test output directory. The version-two report
-contains suite, bounds, solver presence, timeout, per-query timing and status,
-the status summary, grouped unsupported and optimizer-failure inventories, and
-the evaluated coverage policy. Counterexample, unknown, schema-mismatch, and
-solver-error rows also preserve the two snapshots and, when one was emitted,
-the SMT formula as test artifacts.
+Each dashboard suite writes the stable report names `tpch_coverage.json` or
+`tpcds_coverage.json`; proof-floor tests write `tpch_proof_floor.json` or
+`tpcds_proof_floor.json` into their test output directories. The version-three
+report contains suite, bounds, solver presence, timeout, per-query timing and
+status, the status summary, grouped unsupported and optimizer-failure
+inventories, and the evaluated coverage policy. Counterexample, unknown,
+schema-mismatch, and solver-error rows also preserve the two snapshots and,
+when one was emitted, the SMT formula as test artifacts.
+The nested policy-evaluation object has its own format identifier; it cannot be
+mistaken for the strict checked-in input-policy document.
 
-The checked-in policy is a monotonic formula-construction floor: TPCH requires
-q3, and TPC-DS requires q3, q48, q52, q55, q71, q88, q93, and q96. It is enforced
-only for a complete formula-only suite, so focused development and solver
-experiments do not pretend to measure corpus coverage. Required queries must
-remain `FORMULA_EMITTED`; newly supported queries are allowed without editing
-the floor. Policy parsing and evaluation fail closed, and the report records the
-required IDs, all formula-emitting IDs, enforcement mode, and every violation
-before the test fails.
+The checked-in policy has two monotonic contracts. The formula-construction
+floor requires TPCH q3 and TPC-DS q3, q48, q52, q55, q71, q88, q93, and q96; it
+is enforced only for a complete formula-only suite. The proof floor requires
+TPCH q3 and TPC-DS q3, q52, q55, q93, and q96; dedicated hermetic tests require
+each one to remain `VERIFIED_BOUNDED`. Arbitrary focused solver experiments are
+never mistaken for the proof floor, even when they happen to select the same
+IDs. Newly supported or proven queries are allowed without editing either
+floor. Policy parsing and evaluation fail closed, and the report records both
+required and observed ID sets, the explicit mode, each enforced floor, and
+every violation before the test fails.
 
 ## Status interpretation
 
@@ -103,8 +119,9 @@ before the test fails.
 
 The current test fails on `COUNTEREXAMPLE`, `SCHEMA_MISMATCH`, `SOLVER_ERROR`,
 `HARNESS_ERROR`, or an enforced coverage-policy violation. `UNKNOWN`,
-`UNSUPPORTED`, and `OPTIMIZER_FAILURE` remain visible coverage gaps when they do
-not regress a required formula-only query.
+`UNSUPPORTED`, and `OPTIMIZER_FAILURE` remain visible coverage gaps in dashboard
+or experimental runs, but each is a hard regression for a required proof-floor
+query.
 
 ## Last complete formula-only baseline
 
@@ -204,12 +221,12 @@ constant-cast gate and final `Double`; and q80 at initial `Interval` and a final
 OLAP non-callable. q91's final Decimal Sort exports, while its initial String
 comparison remains unsupported.
 
-## Focused formula and solver results
+## Curated proof floor and focused results
 
-- Focused solver runs returned `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3,
-  q52, q55, q93, and q96, each at two rows per referenced table and two tasks.
-  These are six bounded proofs for the modeled pre-physical semantics, not
-  unbounded SQL-equivalence claims.
+- The checked-in proof-floor tests return `VERIFIED_BOUNDED` for TPCH q3 and
+  TPC-DS q3, q52, q55, q93, and q96, each at two rows per referenced table and
+  two tasks. These are six bounded proofs for the modeled pre-physical
+  semantics, not unbounded SQL-equivalence claims.
 
 - TPC-DS q48 reaches the verifier after exact Decimal literal, domain,
   comparison-alignment, and integer constant-cast support. Its recorded result
@@ -235,9 +252,9 @@ comparison remains unsupported.
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
 
-No focused run has confirmed an optimizer correctness bug. The q88 candidate
-above was a verifier-modeling false positive; replay remains the confirmation
-boundary for any future symbolic counterexample.
+No proof-floor or focused run has confirmed an optimizer correctness bug. The
+q88 candidate above was a verifier-modeling false positive; replay remains the
+confirmation boundary for any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

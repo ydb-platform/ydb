@@ -18,12 +18,12 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The 2026-07-22 complete formula-only dashboard reaches TPCH q3 and TPC-DS q3,
-q48, q52, q55, q71, q88, q93, and q96: 9/121 workload queries. Focused solver
-runs return `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52, q55, q93, and
-q96. TPC-DS q48 has formula-construction coverage only, q71 reached the external
-solver process deadline, and q88 is `UNKNOWN`; no optimizer correctness bug has been
-confirmed. These results all retain the two-row-per-table/two-task and
-pre-physical-boundary qualifications described below.
+q48, q52, q55, q71, q88, q93, and q96: 9/121 workload queries. The checked-in
+solver proof floor requires `VERIFIED_BOUNDED` for TPCH q3 and TPC-DS q3, q52,
+q55, q93, and q96. TPC-DS q48 has formula-construction coverage only, q71
+reached the external solver process deadline, and q88 is `UNKNOWN`; no optimizer
+correctness bug has been confirmed. These results retain the two-row-per-table,
+two-task, pre-physical-boundary qualifications described below.
 `CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
 and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An

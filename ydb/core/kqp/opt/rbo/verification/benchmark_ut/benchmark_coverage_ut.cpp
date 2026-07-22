@@ -40,11 +40,27 @@ constexpr const char* TestCluster = "local_ut";
 constexpr ui64 RowBound = 2;
 constexpr ui64 TaskBound = 2;
 constexpr ui64 DefaultTimeoutMs = 10'000;
+constexpr ui64 ProofFloorTimeoutMs = 60'000;
 constexpr const char* CoverageReportFormat =
     "ydb-rbo-benchmark-coverage";
-constexpr ui64 CoverageReportVersion = 2;
+constexpr ui64 CoverageReportVersion = 3;
 constexpr const char* CoveragePolicyFormat =
     "ydb-rbo-benchmark-coverage-policy";
+constexpr ui64 CoveragePolicyVersion = 2;
+constexpr const char* CoveragePolicyEvaluationFormat =
+    "ydb-rbo-benchmark-coverage-policy-evaluation";
+constexpr ui64 CoveragePolicyEvaluationVersion = 1;
+
+enum class ECoverageRun {
+    Environment,
+    ProofFloor,
+};
+
+enum class ECoverageMode {
+    FormulaDashboard,
+    SolverExperiment,
+    ProofFloor,
+};
 
 struct TSuite {
     TString Name;
@@ -62,6 +78,7 @@ const TSuite Tpcds{
 struct TSuiteCoveragePolicy {
     ui32 QueryCount = 0;
     std::set<ui32> RequiredFormulaQueries;
+    std::set<ui32> RequiredVerifiedQueries;
 };
 
 struct TCoveragePolicy {
@@ -70,11 +87,23 @@ struct TCoveragePolicy {
 
 struct TPolicyEvaluation {
     bool Valid = true;
+    ECoverageMode Mode = ECoverageMode::FormulaDashboard;
     bool FullSelection = false;
-    bool Enforced = false;
+    bool FormulaFloorEnforced = false;
+    bool ProofFloorEnforced = false;
+    std::set<ui32> SelectedQueries;
     std::set<ui32> RequiredFormulaQueries;
     std::set<ui32> FormulaEmittedQueries;
+    std::set<ui32> RequiredVerifiedQueries;
+    std::set<ui32> VerifiedBoundedQueries;
     TVector<TString> Violations;
+};
+
+struct TCoverageRunConfig {
+    ECoverageMode Mode = ECoverageMode::FormulaDashboard;
+    std::set<ui32> Selected;
+    TMaybe<TString> Solver;
+    ui64 TimeoutMs = DefaultTimeoutMs;
 };
 
 TString CoveragePolicyPath() {
@@ -120,6 +149,39 @@ ui64 PolicyUint(
     return value.GetUIntegerSafe();
 }
 
+std::set<ui32> PolicyQueryIds(
+    const NJson::TJsonValue& value,
+    const TSuite& suite,
+    TStringBuf field,
+    TStringBuf context)
+{
+    if (!value.IsArray()) {
+        ythrow yexception()
+            << context << " " << field << " must be an array";
+    }
+
+    std::set<ui32> result;
+    ui32 previous = 0;
+    for (const auto& encodedId : value.GetArraySafe()) {
+        const ui64 id = PolicyUint(
+            encodedId,
+            TStringBuilder() << context << " " << field << " query id");
+        if (id < 1 || id > suite.QueryCount) {
+            ythrow yexception()
+                << context << " " << field << " query id " << id
+                << " is outside the corpus";
+        }
+        if (id <= previous) {
+            ythrow yexception()
+                << context << " " << field
+                << " query ids must be strictly increasing";
+        }
+        previous = static_cast<ui32>(id);
+        result.insert(previous);
+    }
+    return result;
+}
+
 TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
     NJson::TJsonValue root;
     if (!NJson::ReadJsonTree(text, &root, false)) {
@@ -135,7 +197,9 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
         ythrow yexception()
             << "coverage policy has unsupported format";
     }
-    if (PolicyUint(root["version"], "coverage policy version") != 1) {
+    if (PolicyUint(root["version"], "coverage policy version") !=
+        CoveragePolicyVersion)
+    {
         ythrow yexception()
             << "coverage policy has unsupported version";
     }
@@ -156,7 +220,11 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             << "coverage policy suite " << suite->Name;
         RequirePolicyKeys(
             encoded,
-            {"query_count", "required_formula_queries"},
+            {
+                "query_count",
+                "required_formula_queries",
+                "required_verified_queries",
+            },
             context);
         if (PolicyUint(encoded["query_count"], context + " query_count") !=
             suite->QueryCount)
@@ -164,31 +232,28 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             ythrow yexception()
                 << context << " query_count does not match the corpus";
         }
-        const auto& required = encoded["required_formula_queries"];
-        if (!required.IsArray()) {
-            ythrow yexception()
-                << context << " required_formula_queries must be an array";
-        }
-
         TSuiteCoveragePolicy suitePolicy;
         suitePolicy.QueryCount = suite->QueryCount;
-        ui32 previous = 0;
-        for (const auto& encodedId : required.GetArraySafe()) {
-            const ui64 id = PolicyUint(
-                encodedId,
-                context + " required query id");
-            if (id < 1 || id > suite->QueryCount) {
+        suitePolicy.RequiredFormulaQueries = PolicyQueryIds(
+            encoded["required_formula_queries"],
+            *suite,
+            "required_formula_queries",
+            context);
+        suitePolicy.RequiredVerifiedQueries = PolicyQueryIds(
+            encoded["required_verified_queries"],
+            *suite,
+            "required_verified_queries",
+            context);
+        if (suitePolicy.RequiredVerifiedQueries.empty()) {
+            ythrow yexception()
+                << context << " required_verified_queries must not be empty";
+        }
+        for (const ui32 queryId : suitePolicy.RequiredVerifiedQueries) {
+            if (!suitePolicy.RequiredFormulaQueries.contains(queryId)) {
                 ythrow yexception()
-                    << context << " required query id " << id
-                    << " is outside the corpus";
+                    << context << " required verified query q" << queryId
+                    << " is not a required formula query";
             }
-            if (id <= previous) {
-                ythrow yexception()
-                    << context
-                    << " required query ids must be strictly increasing";
-            }
-            previous = static_cast<ui32>(id);
-            suitePolicy.RequiredFormulaQueries.insert(previous);
         }
         policy.Suites.emplace(suite->Name, std::move(suitePolicy));
     }
@@ -220,7 +285,7 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     const TSuite& suite,
     const std::set<ui32>& selected,
     const TMap<ui32, TString>& statuses,
-    bool solverPresent)
+    ECoverageMode mode)
 {
     const auto suitePolicy = policy.Suites.find(suite.Name);
     if (suitePolicy == policy.Suites.end() ||
@@ -231,28 +296,61 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     }
 
     TPolicyEvaluation result;
+    result.Mode = mode;
+    result.SelectedQueries = selected;
     result.FullSelection = IsFullSelection(suite, selected);
-    result.Enforced = !solverPresent && result.FullSelection;
     result.RequiredFormulaQueries =
         suitePolicy->second.RequiredFormulaQueries;
+    result.RequiredVerifiedQueries =
+        suitePolicy->second.RequiredVerifiedQueries;
     for (const auto& [queryId, status] : statuses) {
         if (status == "FORMULA_EMITTED") {
             result.FormulaEmittedQueries.insert(queryId);
+        } else if (status == "VERIFIED_BOUNDED") {
+            result.VerifiedBoundedQueries.insert(queryId);
         }
     }
-    if (!result.Enforced) {
+
+    if (mode == ECoverageMode::SolverExperiment) {
         return result;
     }
-    for (const ui32 queryId : result.RequiredFormulaQueries) {
+
+    if (mode == ECoverageMode::FormulaDashboard) {
+        result.FormulaFloorEnforced = result.FullSelection;
+        if (!result.FormulaFloorEnforced) {
+            return result;
+        }
+        for (const ui32 queryId : result.RequiredFormulaQueries) {
+            const auto status = statuses.find(queryId);
+            if (status == statuses.end()) {
+                result.Violations.push_back(TStringBuilder()
+                    << suite.Name << " q" << queryId
+                    << " has no coverage outcome; expected FORMULA_EMITTED");
+            } else if (status->second != "FORMULA_EMITTED") {
+                result.Violations.push_back(TStringBuilder()
+                    << suite.Name << " q" << queryId
+                    << " regressed from FORMULA_EMITTED to " << status->second);
+            }
+        }
+        return result;
+    }
+
+    result.ProofFloorEnforced = true;
+    if (selected != result.RequiredVerifiedQueries) {
+        result.Violations.push_back(TStringBuilder()
+            << suite.Name
+            << " proof floor did not select exactly its required verified queries");
+    }
+    for (const ui32 queryId : result.RequiredVerifiedQueries) {
         const auto status = statuses.find(queryId);
         if (status == statuses.end()) {
             result.Violations.push_back(TStringBuilder()
                 << suite.Name << " q" << queryId
-                << " has no coverage outcome; expected FORMULA_EMITTED");
-        } else if (status->second != "FORMULA_EMITTED") {
+                << " has no proof outcome; expected VERIFIED_BOUNDED");
+        } else if (status->second != "VERIFIED_BOUNDED") {
             result.Violations.push_back(TStringBuilder()
                 << suite.Name << " q" << queryId
-                << " regressed from FORMULA_EMITTED to " << status->second);
+                << " regressed from VERIFIED_BOUNDED to " << status->second);
         }
     }
     return result;
@@ -467,6 +565,46 @@ std::set<ui32> SelectedQueries(const TSuite& suite) {
     return result;
 }
 
+TCoverageRunConfig ResolveCoverageRun(
+    const TCoveragePolicy& policy,
+    const TSuite& suite,
+    ECoverageRun run)
+{
+    TCoverageRunConfig result;
+    if (run == ECoverageRun::ProofFloor) {
+        const auto suitePolicy = policy.Suites.find(suite.Name);
+        if (suitePolicy == policy.Suites.end()) {
+            ythrow yexception()
+                << "coverage policy does not match suite " << suite.Name;
+        }
+        result.Mode = ECoverageMode::ProofFloor;
+        result.Selected = suitePolicy->second.RequiredVerifiedQueries;
+        result.Solver = BinaryPath("contrib/tools/z3/z3");
+        result.TimeoutMs = ProofFloorTimeoutMs;
+        return result;
+    }
+
+    result.Selected = SelectedQueries(suite);
+    result.Solver = CoverageSolver();
+    result.TimeoutMs = TimeoutMs();
+    result.Mode = result.Solver
+        ? ECoverageMode::SolverExperiment
+        : ECoverageMode::FormulaDashboard;
+    return result;
+}
+
+TStringBuf CoverageModeName(ECoverageMode mode) {
+    switch (mode) {
+        case ECoverageMode::FormulaDashboard:
+            return "formula_dashboard";
+        case ECoverageMode::SolverExperiment:
+            return "solver_experiment";
+        case ECoverageMode::ProofFloor:
+            return "proof_floor";
+    }
+    ythrow yexception() << "unknown coverage mode";
+}
+
 NJson::TJsonValue JsonIds(const TVector<ui32>& ids) {
     NJson::TJsonValue result(NJson::JSON_ARRAY);
     for (const ui32 id : ids) {
@@ -479,21 +617,26 @@ NJson::TJsonValue JsonIds(const std::set<ui32>& ids) {
     return JsonIds(TVector<ui32>(ids.begin(), ids.end()));
 }
 
-NJson::TJsonValue PolicyJson(
-    const TPolicyEvaluation& evaluation,
-    bool solverPresent)
+NJson::TJsonValue PolicyEvaluationJson(
+    const TPolicyEvaluation& evaluation)
 {
     NJson::TJsonValue result(NJson::JSON_MAP);
-    result["format"] = CoveragePolicyFormat;
-    result["version"] = 1;
+    result["format"] = CoveragePolicyEvaluationFormat;
+    result["version"] = CoveragePolicyEvaluationVersion;
     result["valid"] = evaluation.Valid;
-    result["mode"] = solverPresent ? "solver" : "formula_only";
+    result["mode"] = CoverageModeName(evaluation.Mode);
     result["full_selection"] = evaluation.FullSelection;
-    result["enforced"] = evaluation.Enforced;
+    result["formula_floor_enforced"] = evaluation.FormulaFloorEnforced;
+    result["proof_floor_enforced"] = evaluation.ProofFloorEnforced;
+    result["selected_queries"] = JsonIds(evaluation.SelectedQueries);
     result["required_formula_queries"] =
         JsonIds(evaluation.RequiredFormulaQueries);
     result["formula_emitted_queries"] =
         JsonIds(evaluation.FormulaEmittedQueries);
+    result["required_verified_queries"] =
+        JsonIds(evaluation.RequiredVerifiedQueries);
+    result["verified_bounded_queries"] =
+        JsonIds(evaluation.VerifiedBoundedQueries);
     NJson::TJsonValue violations(NJson::JSON_ARRAY);
     for (const auto& violation : evaluation.Violations) {
         violations.AppendValue(violation);
@@ -788,7 +931,10 @@ TOutcome ClassifyQuery(
         solver);
 }
 
-void RunCoverage(const TSuite& suite) {
+void RunCoverage(const TSuite& suite, ECoverageRun run) {
+    ECoverageMode mode = run == ECoverageRun::ProofFloor
+        ? ECoverageMode::ProofFloor
+        : ECoverageMode::FormulaDashboard;
     TMaybe<TString> solver;
     TMaybe<TCoveragePolicy> policy;
     std::set<ui32> selected;
@@ -825,10 +971,12 @@ void RunCoverage(const TSuite& suite) {
 
     try {
         policy = LoadCoveragePolicy();
-        timeoutMs = TimeoutMs();
+        const auto config = ResolveCoverageRun(*policy, suite, run);
+        mode = config.Mode;
+        timeoutMs = config.TimeoutMs;
         timeoutResolved = true;
-        selected = SelectedQueries(suite);
-        solver = CoverageSolver();
+        selected = config.Selected;
+        solver = config.Solver;
         auto kikimr = MakeRunner();
         CreateTables(kikimr, suite);
 
@@ -886,9 +1034,13 @@ void RunCoverage(const TSuite& suite) {
     }
 
     TPolicyEvaluation policyEvaluation;
+    policyEvaluation.Mode = mode;
     if (!policy) {
         policyEvaluation.Valid = false;
-        policyEvaluation.Enforced = true;
+        policyEvaluation.FormulaFloorEnforced =
+            mode == ECoverageMode::FormulaDashboard;
+        policyEvaluation.ProofFloorEnforced =
+            mode == ECoverageMode::ProofFloor;
         policyEvaluation.Violations = policyLoadViolations;
     } else {
         try {
@@ -897,15 +1049,21 @@ void RunCoverage(const TSuite& suite) {
                 suite,
                 selected,
                 statuses,
-                solver.Defined());
+                mode);
         } catch (const std::exception& error) {
             policyEvaluation.Valid = false;
-            policyEvaluation.Enforced = true;
+            policyEvaluation.FormulaFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard;
+            policyEvaluation.ProofFloorEnforced =
+                mode == ECoverageMode::ProofFloor;
             policyEvaluation.Violations.push_back(TStringBuilder()
                 << "coverage policy evaluation failed: " << error.what());
         } catch (...) {
             policyEvaluation.Valid = false;
-            policyEvaluation.Enforced = true;
+            policyEvaluation.FormulaFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard;
+            policyEvaluation.ProofFloorEnforced =
+                mode == ECoverageMode::ProofFloor;
             policyEvaluation.Violations.push_back(
                 "coverage policy evaluation failed: non-standard exception");
         }
@@ -943,9 +1101,12 @@ void RunCoverage(const TSuite& suite) {
     report["queries"] = std::move(rows);
     report["unsupported_inventory"] = std::move(unsupportedJson);
     report["optimizer_failure_inventory"] = std::move(optimizerJson);
-    report["policy"] = PolicyJson(policyEvaluation, solver.Defined());
+    report["policy"] = PolicyEvaluationJson(policyEvaluation);
 
-    const auto reportPath = GetOutputPath() / (suite.Slug + "_coverage.json");
+    const TString reportName = run == ECoverageRun::ProofFloor
+        ? suite.Slug + "_proof_floor.json"
+        : suite.Slug + "_coverage.json";
+    const auto reportPath = GetOutputPath() / reportName;
     TFileOutput(reportPath.GetPath()).Write(NJson::WriteJson(
         report,
         true,
@@ -971,8 +1132,14 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
             std::set<ui32>({3}));
         UNIT_ASSERT(
+            policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
+            std::set<ui32>({3}));
+        UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({3, 48, 52, 55, 71, 88, 93, 96}));
+        UNIT_ASSERT(
+            policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
+            std::set<ui32>({3, 52, 55, 93, 96}));
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1005,8 +1172,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
-            false);
-        UNIT_ASSERT(evaluation.Enforced);
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(evaluation.FormulaFloorEnforced);
+        UNIT_ASSERT(!evaluation.ProofFloorEnforced);
         UNIT_ASSERT(evaluation.Violations.empty());
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
@@ -1033,22 +1201,108 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
-            false);
-        UNIT_ASSERT(evaluation.Enforced);
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(evaluation.FormulaFloorEnforced);
+        UNIT_ASSERT(!evaluation.ProofFloorEnforced);
         UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 2);
         UNIT_ASSERT(evaluation.Violations[0].Contains(
             "q88 regressed from FORMULA_EMITTED to UNSUPPORTED"));
         UNIT_ASSERT(evaluation.Violations[1].Contains(
             "q96 has no coverage outcome"));
 
-        const auto report = PolicyJson(evaluation, false);
-        UNIT_ASSERT(report["enforced"].GetBooleanSafe());
+        const auto report = PolicyEvaluationJson(evaluation);
+        UNIT_ASSERT(report["formula_floor_enforced"].GetBooleanSafe());
+        UNIT_ASSERT(!report["proof_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             report["violations"].GetArraySafe().size(),
             2);
     }
 
-    Y_UNIT_TEST(PolicyDoesNotGateFocusedOrSolverRuns) {
+    Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
+        const auto policy = LoadCoveragePolicy();
+        const std::set<ui32> selected = {3, 52, 55, 93, 96};
+        const TMap<ui32, TString> statuses = {
+            {3, "VERIFIED_BOUNDED"},
+            {52, "VERIFIED_BOUNDED"},
+            {55, "VERIFIED_BOUNDED"},
+            {93, "VERIFIED_BOUNDED"},
+            {96, "VERIFIED_BOUNDED"},
+        };
+        const auto evaluation = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            ECoverageMode::ProofFloor);
+        UNIT_ASSERT(!evaluation.FormulaFloorEnforced);
+        UNIT_ASSERT(evaluation.ProofFloorEnforced);
+        UNIT_ASSERT(evaluation.Violations.empty());
+        UNIT_ASSERT(
+            evaluation.VerifiedBoundedQueries == selected);
+
+        const auto report = PolicyEvaluationJson(evaluation);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["format"].GetStringSafe(),
+            CoveragePolicyEvaluationFormat);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["version"].GetUIntegerSafe(),
+            CoveragePolicyEvaluationVersion);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["mode"].GetStringSafe(),
+            "proof_floor");
+        UNIT_ASSERT(report["proof_floor_enforced"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["verified_bounded_queries"].GetArraySafe().size(),
+            selected.size());
+    }
+
+    Y_UNIT_TEST(PolicyReportsEveryProofFloorRegression) {
+        const auto policy = LoadCoveragePolicy();
+        const TMap<ui32, TString> statuses = {
+            {3, "VERIFIED_BOUNDED"},
+            {52, "UNKNOWN"},
+            {55, "FORMULA_EMITTED"},
+            {93, "UNSUPPORTED"},
+        };
+        const auto evaluation = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            {3, 52, 55, 93, 96},
+            statuses,
+            ECoverageMode::ProofFloor);
+        UNIT_ASSERT(evaluation.ProofFloorEnforced);
+        UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 4);
+        UNIT_ASSERT(evaluation.Violations[0].Contains(
+            "q52 regressed from VERIFIED_BOUNDED to UNKNOWN"));
+        UNIT_ASSERT(evaluation.Violations[1].Contains(
+            "q55 regressed from VERIFIED_BOUNDED to FORMULA_EMITTED"));
+        UNIT_ASSERT(evaluation.Violations[2].Contains(
+            "q93 regressed from VERIFIED_BOUNDED to UNSUPPORTED"));
+        UNIT_ASSERT(evaluation.Violations[3].Contains(
+            "q96 has no proof outcome"));
+
+        auto optimizerFailureStatuses = statuses;
+        optimizerFailureStatuses[96] = "OPTIMIZER_FAILURE";
+        const auto optimizerFailure = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            {3, 52, 55, 93, 96},
+            optimizerFailureStatuses,
+            ECoverageMode::ProofFloor);
+        UNIT_ASSERT(optimizerFailure.Violations.back().Contains(
+            "q96 regressed from VERIFIED_BOUNDED to OPTIMIZER_FAILURE"));
+
+        const auto wrongSelection = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            {3, 52, 55, 93},
+            statuses,
+            ECoverageMode::ProofFloor);
+        UNIT_ASSERT(wrongSelection.Violations.front().Contains(
+            "did not select exactly"));
+    }
+
+    Y_UNIT_TEST(PolicyDoesNotGateFocusedOrSolverExperiments) {
         const auto policy = LoadCoveragePolicy();
         const TMap<ui32, TString> statuses;
         const auto focused = EvaluateCoveragePolicy(
@@ -1056,8 +1310,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             {3, 48, 52, 55, 71, 88, 93, 96},
             statuses,
-            false);
-        UNIT_ASSERT(!focused.Enforced);
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(!focused.FormulaFloorEnforced);
+        UNIT_ASSERT(!focused.ProofFloorEnforced);
         UNIT_ASSERT(focused.Violations.empty());
 
         std::set<ui32> selected;
@@ -1069,9 +1324,19 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
-            true);
-        UNIT_ASSERT(!solver.Enforced);
+            ECoverageMode::SolverExperiment);
+        UNIT_ASSERT(!solver.FormulaFloorEnforced);
+        UNIT_ASSERT(!solver.ProofFloorEnforced);
         UNIT_ASSERT(solver.Violations.empty());
+
+        const auto coincidentalProofSelection = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            {3, 52, 55, 93, 96},
+            statuses,
+            ECoverageMode::SolverExperiment);
+        UNIT_ASSERT(!coincidentalProofSelection.ProofFloorEnforced);
+        UNIT_ASSERT(coincidentalProofSelection.Violations.empty());
     }
 
     Y_UNIT_TEST(PolicySolverUsesHermeticBinaryAfterExplicitOptIn) {
@@ -1103,6 +1368,29 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
     }
 
+    Y_UNIT_TEST(ProofFloorConfigurationIsHermetic) {
+        const auto policy = LoadCoveragePolicy();
+        NTesting::TScopedEnvironment environment{{
+            {"RBO_COVERAGE_USE_SOLVER", "2"},
+            {"RBO_COVERAGE_QUERIES", "999"},
+            {"RBO_COVERAGE_TIMEOUT_MS", "0"},
+            {"RBO_Z3", "/ambient/z3"},
+        }};
+        const auto config = ResolveCoverageRun(
+            policy,
+            Tpcds,
+            ECoverageRun::ProofFloor);
+        UNIT_ASSERT(config.Mode == ECoverageMode::ProofFloor);
+        UNIT_ASSERT(
+            config.Selected == std::set<ui32>({3, 52, 55, 93, 96}));
+        UNIT_ASSERT(config.Solver);
+        UNIT_ASSERT_STRING_CONTAINS(
+            *config.Solver,
+            "contrib/tools/z3/z3");
+        UNIT_ASSERT_VALUES_UNEQUAL(*config.Solver, "/ambient/z3");
+        UNIT_ASSERT_VALUES_EQUAL(config.TimeoutMs, ProofFloorTimeoutMs);
+    }
+
     Y_UNIT_TEST(PolicyRejectsMalformedDocuments) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             DecodeCoveragePolicy("{"),
@@ -1114,6 +1402,23 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             TFileInput(CoveragePolicyPath()).ReadAll(),
             &encoded,
             true));
+        const auto baseline = encoded;
+
+        encoded["version"] = 1;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "unsupported version");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name].EraseValue(
+            "required_verified_queries");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "is missing field required_verified_queries");
+
+        encoded = baseline;
         encoded["unexpected"] = true;
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
@@ -1130,14 +1435,67 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
             yexception,
             "strictly increasing");
+
+        encoded = baseline;
+        NJson::TJsonValue duplicate(NJson::JSON_ARRAY);
+        duplicate.AppendValue(3);
+        duplicate.AppendValue(52);
+        duplicate.AppendValue(52);
+        encoded["suites"][Tpcds.Name]["required_verified_queries"] =
+            std::move(duplicate);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "strictly increasing");
+
+        encoded = baseline;
+        NJson::TJsonValue outside(NJson::JSON_ARRAY);
+        outside.AppendValue(100);
+        encoded["suites"][Tpcds.Name]["required_verified_queries"] =
+            std::move(outside);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "outside the corpus");
+
+        encoded = baseline;
+        NJson::TJsonValue notFormula(NJson::JSON_ARRAY);
+        notFormula.AppendValue(3);
+        notFormula.AppendValue(48);
+        encoded["suites"][Tpcds.Name]["required_verified_queries"] =
+            std::move(notFormula);
+        encoded["suites"][Tpcds.Name]["required_formula_queries"] =
+            NJson::TJsonValue(NJson::JSON_ARRAY);
+        encoded["suites"][Tpcds.Name]["required_formula_queries"]
+            .AppendValue(3);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "is not a required formula query");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name]["required_verified_queries"] =
+            NJson::TJsonValue(NJson::JSON_ARRAY);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "must not be empty");
     }
 
     Y_UNIT_TEST(TPCH) {
-        RunCoverage(Tpch);
+        RunCoverage(Tpch, ECoverageRun::Environment);
     }
 
     Y_UNIT_TEST(TPCDS) {
-        RunCoverage(Tpcds);
+        RunCoverage(Tpcds, ECoverageRun::Environment);
+    }
+
+    Y_UNIT_TEST(ProofFloorTpchCorpus) {
+        RunCoverage(Tpch, ECoverageRun::ProofFloor);
+    }
+
+    Y_UNIT_TEST(ProofFloorTpcdsCorpus) {
+        RunCoverage(Tpcds, ECoverageRun::ProofFloor);
     }
 }
 

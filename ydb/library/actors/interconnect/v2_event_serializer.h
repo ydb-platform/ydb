@@ -93,17 +93,19 @@ namespace NActors {
             TIntrusivePtr<TEventSerializedData> Buffer;
             std::unique_ptr<IEventBase> Event;
             TRcBuf Scratch;
+            ui64 EventReceivedTimestamp;
         };
         std::deque<TRefcountItem> RefcountItems;
         ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
         ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
 
-        THPTimer Timer;
+        ui64 Timestamp;
         ui64 SerializeBufferTime = 0;
         ui64 SerializeEventTime = 0;
-        ui64 OtherTime = 0;
         ui64 BytesCopied = 0;
         ui64 BytesAliased = 0;
+
+        const double Freq = 1e9 * NHPTimer::GetSeconds(1);
 
     public:
         TEventSerializer(bool checksumming);
@@ -116,19 +118,17 @@ namespace NActors {
         size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
 
         // notification issued when N produced bytes have been sent to the other party
-        void CommitProducedBytes(size_t numBytes);
+        void CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime = nullptr);
 
         void ResetCounters() {
             SerializeBufferTime = 0;
             SerializeEventTime = 0;
-            OtherTime = 0;
             BytesCopied = 0;
             BytesAliased = 0;
         }
 
         ui64 GetSerializeBufferTime() const { return SerializeBufferTime; }
         ui64 GetSerializeEventTime() const { return SerializeEventTime; }
-        ui64 GetOtherTime() const { return OtherTime; }
         ui64 GetBytesCopied() const { return BytesCopied; }
         ui64 GetBytesAliased() const { return BytesAliased; }
 
@@ -139,6 +139,8 @@ namespace NActors {
 
         size_t ProduceOutputStreamForQueue(TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
             std::deque<TContiguousSpan> *out, ui64 *bufferProduced);
+
+        ui64 UpdateTimestamp();
     };
 
     class TEventDeserializer {

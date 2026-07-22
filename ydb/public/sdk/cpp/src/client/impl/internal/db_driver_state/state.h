@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #include <memory>
+#include <mutex>
 
 namespace NYdb::inline Dev {
 

@@ -16,6 +16,8 @@
 #include <format>
 #include <functional>
 #include <string>
+#include <condition_variable>
+#include <mutex>
 #include <utility>
 
 namespace NYdb::inline Dev {

@@ -104,7 +104,6 @@ public:
             Params_, Params_.SystemServiceAccountCredentials->CreateProviderAsync(facility),
             facility);
     }
-
 private:
     TIamServiceParams Params_;
 };

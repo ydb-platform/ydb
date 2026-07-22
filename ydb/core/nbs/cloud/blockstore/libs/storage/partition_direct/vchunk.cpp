@@ -58,6 +58,8 @@ void TVChunk::Start()
 {
     // ActorSystem thread
 
+    LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
+
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]() mutable
         {
@@ -396,7 +398,6 @@ void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
     DirectBlockGroup->Register(weak_from_this());
 
     LOG_DEBUG(

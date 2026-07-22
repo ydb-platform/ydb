@@ -152,12 +152,6 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         return self.__http_proxy_port
 
     @property
-    def pgwire_port(self):
-        if self.__pgwire_port is None:
-            self.__pgwire_port = self.__allocate_port()
-        return self.__pgwire_port
-
-    @property
     def public_http_port(self):
         if self.__public_http_port is None:
             self.__public_http_port = self.__allocate_port()
@@ -193,7 +187,6 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__grpc_ssl_port,
             self.__ext_port,
             self.__public_http_port,
-            self.__pgwire_port,
             self.__kafka_api_port,
         )
 

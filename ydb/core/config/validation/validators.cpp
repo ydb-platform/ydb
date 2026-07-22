@@ -1,5 +1,6 @@
 #include "validators.h"
 
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -224,6 +225,14 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
     }
     if (config.HasBlobStorageConfig()) {
         const auto& blobStorageConfig = config.GetBlobStorageConfig();
+        if (blobStorageConfig.HasInferPDiskSlotCountSettings()) {
+            if (auto error = ValidateInferPDiskSlotCountSettings(
+                    blobStorageConfig.GetInferPDiskSlotCountSettings(),
+                    "BlobStorageConfig.InferPDiskSlotCountSettings")) {
+                msg.push_back(*error);
+                return EValidationResult::Error;
+            }
+        }
         for (ui32 hostConfigIndex = 0; hostConfigIndex < blobStorageConfig.DefineHostConfigSize(); ++hostConfigIndex) {
             const auto& hostConfig = blobStorageConfig.GetDefineHostConfig(hostConfigIndex);
             if (hostConfig.HasDefaultHostPDiskConfig() && !ValidatePDiskConfig(

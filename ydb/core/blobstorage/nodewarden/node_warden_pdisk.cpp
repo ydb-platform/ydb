@@ -2,6 +2,8 @@
 #include "node_warden_events.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
@@ -27,6 +29,24 @@ namespace NKikimr::NStorage {
         return slotCount > ui64(Max<ui32>())
             ? Max<ui32>()
             : static_cast<ui32>(slotCount);
+    }
+
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
+            ui64 unitSizeInBytes, ui32 maxSlots) {
+        Y_ABORT_UNLESS(driveSize);
+        Y_ABORT_UNLESS(unitSizeInBytes);
+
+        const double slotCount = lround(double(driveSize) / unitSizeInBytes);
+        ui32 slotSizeInUnits = 1u;
+
+        maxSlots = maxSlots ? maxSlots : 16;
+        while (lround(slotCount/slotSizeInUnits) > maxSlots) {
+            slotSizeInUnits *= 2;
+        }
+
+        // this branch has no SlotSizeInUnits support: the 2^N slot scaling is folded into the
+        // slot count, so the per-slot quota ends up ~unitSizeInBytes * 2^N as on mainline
+        pdiskConfig->ExpectedSlotCount = Max(1u, (ui32)lround(slotCount/slotSizeInUnits));
     }
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(
@@ -175,33 +195,55 @@ namespace NKikimr::NStorage {
             pdiskConfig->ExpectedSlotSize = 0;
         }
 
-        if (pdiskConfig->ExpectedSlotSize) {
-            pdiskConfig->ExpectedSlotCount = 0;
-
-            ui64 driveSize = 0;
-            TStringStream outDetails;
-            if (pdiskConfig->SectorMap) {
-                driveSize = pdiskConfig->SectorMap->DeviceSize;
-                outDetails << "drive size obtained from SectorMap";
-            } else if (std::optional<NPDisk::TDriveData> data = NPDisk::GetDriveData(path, &outDetails)) {
-                driveSize = data->Size;
+        std::optional<ui64> driveSize;
+        TString driveSizeDetails;
+        auto getDriveSize = [&] {
+            if (driveSize) {
+                return *driveSize;
             }
 
-            if (!driveSize) {
+            ui64 size = 0;
+            TStringStream outDetails;
+            if (pdiskConfig->SectorMap) {
+                size = pdiskConfig->SectorMap->DeviceSize;
+                outDetails << "drive size obtained from SectorMap";
+            } else if (std::optional<NPDisk::TDriveData> data = NPDisk::GetDriveData(path, &outDetails)) {
+                size = data->Size;
+            }
+            driveSizeDetails = outDetails.Str();
+            driveSize = size;
+            return size;
+        };
+
+        bool validInferSettings = true;
+        if (auto error = ValidateInferPDiskSlotCountSettings(
+                InferPDiskSlotCountSettings, "BlobStorageConfig.InferPDiskSlotCountSettings")) {
+            validInferSettings = false;
+            STLOG(PRI_ERROR, BS_NODE, NW114, "Invalid InferPDiskSlotCountSettings",
+                (PDiskId, pdiskID), (Path, path), (Error, *error));
+            if (configWarning && configWarning->empty()) {
+                *configWarning = *error;
+            }
+        }
+
+        auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType);
+        if (pdiskConfig->ExpectedSlotSize) {
+            pdiskConfig->ExpectedSlotCount = 0;
+            if (const ui64 size = getDriveSize(); !size) {
                 STLOG(PRI_ERROR, BS_NODE, NW115, "Unable to determine drive size for calculating PDisk slot count",
-                    (Path, path), (ExpectedSlotSize, pdiskConfig->ExpectedSlotSize), (Details, outDetails.Str()));
+                    (Path, path), (ExpectedSlotSize, pdiskConfig->ExpectedSlotSize), (Details, driveSizeDetails));
             } else {
                 pdiskConfig->ExpectedSlotCount = CalculateExpectedSlotCountFromSlotSize(
-                    driveSize, pdiskConfig->ExpectedSlotSize, pdiskConfig->MaxSlots);
+                    size, pdiskConfig->ExpectedSlotSize, pdiskConfig->MaxSlots);
                 if (!pdiskConfig->ExpectedSlotCount) {
                     const TString warning = TStringBuilder()
                         << "Drive is smaller than ExpectedSlotSize, slot count is not materialized"
                         << " ExpectedSlotSize# " << pdiskConfig->ExpectedSlotSize
-                        << " DriveSize# " << driveSize;
+                        << " DriveSize# " << size;
                     STLOG(PRI_ERROR, BS_NODE, NW118, "Drive is smaller than ExpectedSlotSize",
                         (PDiskId, pdiskID), (Path, path),
                         (ExpectedSlotSize, pdiskConfig->ExpectedSlotSize),
-                        (DriveSize, driveSize));
+                        (DriveSize, size));
                     if (configWarning && configWarning->empty()) {
                         *configWarning = warning;
                     }
@@ -210,8 +252,51 @@ namespace NKikimr::NStorage {
                     (Path, path),
                     (SlotCount, pdiskConfig->ExpectedSlotCount),
                     (ExpectedSlotSize, pdiskConfig->ExpectedSlotSize),
-                    (FromDriveSize, driveSize),
+                    (FromDriveSize, size),
                     (FromMaxSlots, pdiskConfig->MaxSlots));
+            }
+        } else if (validInferSettings && inferSettings.SlotSize) {
+            if (pdiskConfig->ExpectedSlotCount && !inferSettings.PreferInferredSettingsOverExplicit) {
+                STLOG(PRI_DEBUG, BS_NODE, NW102, "Skipped inferring PDisk slot count from slot size, using explicit settings",
+                    (Path, path),
+                    (SlotCount, pdiskConfig->ExpectedSlotCount),
+                    (FromSlotSize, inferSettings.SlotSize));
+            } else {
+                const ui64 size = getDriveSize();
+                if (!size) {
+                    STLOG(PRI_ERROR, BS_NODE, NW116, "Unable to determine drive size for calculating PDisk slot count",
+                        (Path, path), (SlotSize, inferSettings.SlotSize), (Details, driveSizeDetails));
+                } else {
+                    pdiskConfig->ExpectedSlotSize = inferSettings.SlotSize;
+                    pdiskConfig->ExpectedSlotCount = CalculateExpectedSlotCountFromSlotSize(
+                        size, inferSettings.SlotSize, inferSettings.MaxSlots);
+                    STLOG(PRI_DEBUG, BS_NODE, NW102, "Calculated PDisk slot count from inferred slot size",
+                        (Path, path),
+                        (SlotCount, pdiskConfig->ExpectedSlotCount),
+                        (SlotSize, inferSettings.SlotSize),
+                        (FromDriveSize, size),
+                        (FromMaxSlots, inferSettings.MaxSlots));
+                }
+            }
+        } else if (!validInferSettings || !inferSettings) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferring PDisk slot count not configured",
+                (Path, path), (SlotCount, pdiskConfig->ExpectedSlotCount));
+        } else if (pdiskConfig->ExpectedSlotCount != 0 && !inferSettings.PreferInferredSettingsOverExplicit) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Skipped inferring PDisk slot count, using explicit settings",
+                (Path, path), (SlotCount, pdiskConfig->ExpectedSlotCount));
+        } else {
+            const ui64 size = getDriveSize();
+            if (!size) {
+                STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
+                    (Path, path), (Details, driveSizeDetails));
+            } else {
+                InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots);
+                STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferred PDisk slot count",
+                    (Path, path),
+                    (SlotCount, pdiskConfig->ExpectedSlotCount),
+                    (FromDriveSize, size),
+                    (FromUnitSize, inferSettings.UnitSize),
+                    (FromMaxSlots, inferSettings.MaxSlots));
             }
         }
 
@@ -293,6 +378,7 @@ namespace NKikimr::NStorage {
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
         }
+        record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
         record.ExpectedSlotSize = pdiskConfig->ExpectedSlotSize;
 
         const ui32 pdiskID = pdisk.GetPDiskID();
@@ -581,7 +667,30 @@ namespace NKikimr::NStorage {
 
         auto processDisk = [&](const TServiceSetPDisk& pdisk) {
             const TPDiskKey key(pdisk);
-            if (!LocalPDisks.contains(key)) {
+            if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
+                TPDiskRecord& localPDisk = it->second;
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
+                    pdisk, &localPDisk.PDiskConfigWarning);
+                const ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                const ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
+                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                        newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW107, "SendChangeExpectedSlotCount",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (OldExpectedSlotCount, localPDisk.ExpectedSlotCount),
+                        (ExpectedSlotSize, newExpectedSlotSize),
+                        (OldExpectedSlotSize, localPDisk.ExpectedSlotSize));
+
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
+                        newExpectedSlotCount, newExpectedSlotSize));
+
+                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+                    localPDisk.ExpectedSlotSize = newExpectedSlotSize;
+                }
+                localPDisk.Record = pdisk;
+            } else {
                 StartLocalPDisk(pdisk, false);
             }
             pdiskToDelete.erase(key);

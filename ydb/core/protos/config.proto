@@ -342,6 +342,7 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
+    optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
  }
 
 message TSelfManagementConfig {

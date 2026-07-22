@@ -2088,6 +2088,18 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     }
 }
 
+void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
+    TGuard<TMutex> guard(StateMutex);
+    ExpectedSlotCount = request.ExpectedSlotCount;
+    ExpectedSlotSize = request.ExpectedSlotSize;
+    NormalizeExpectedSlotSettings();
+    Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks());
+
+    auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
+    Mon.ChangeExpectedSlotCount.CountResponse();
+    PCtx->ActorSystem->Send(request.Sender, result.release());
+}
+
 // Scheduler weight configuration
 
 void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
@@ -2739,6 +2751,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestContinueShred:
                 ProcessContinueShred(static_cast<TContinueShred&>(*req));
                 break;
+            case ERequestType::RequestChangeExpectedSlotCount:
+                ProcessChangeExpectedSlotCount(static_cast<TChangeExpectedSlotCount&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -3368,6 +3383,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+        case ERequestType::RequestChangeExpectedSlotCount:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -4001,6 +4017,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestConfigureScheduler:
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestContinueReadMetadata:
+        case ERequestType::RequestChangeExpectedSlotCount:
             return false;
 
         // Can't be processed in read-only mode.

@@ -81,6 +81,38 @@ class SmtTest(unittest.TestCase):
         with self.assertRaises(smt.SmtError):
             smt.div(smt.TRUE, 2)
 
+    def test_nonnegative_by_positive_symbolic_division_is_narrow_and_exact(self):
+        dividend = smt.symbol("dividend", smt.INT)
+        divisor = smt.symbol("divisor", smt.INT)
+        self.assertEqual(
+            smt.div_nonnegative_by_positive(dividend, divisor).render(),
+            "(div dividend divisor)",
+        )
+        self.assertEqual(
+            smt.div_nonnegative_by_positive(smt.int_value(17), smt.int_value(5)),
+            smt.int_value(3),
+        )
+        self.assertIs(
+            smt.div_nonnegative_by_positive(dividend, smt.ONE),
+            dividend,
+        )
+        for invalid_dividend, invalid_divisor in (
+            (smt.int_value(-1), divisor),
+            (dividend, smt.ZERO),
+            (dividend, smt.int_value(-1)),
+            (smt.TRUE, divisor),
+            (dividend, smt.TRUE),
+        ):
+            with self.subTest(
+                dividend=invalid_dividend,
+                divisor=invalid_divisor,
+            ):
+                with self.assertRaises(smt.SmtError):
+                    smt.div_nonnegative_by_positive(
+                        invalid_dividend,
+                        invalid_divisor,
+                    )
+
     def test_integer_arithmetic_is_typed_and_constant_folded(self):
         left = smt.symbol("left", smt.INT)
         right = smt.symbol("right", smt.INT)

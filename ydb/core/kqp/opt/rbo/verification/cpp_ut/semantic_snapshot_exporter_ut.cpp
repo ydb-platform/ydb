@@ -2364,6 +2364,296 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(integerExpression["right"]["value"].GetIntegerSafe(), 3);
     }
 
+    Y_UNIT_TEST(ExportsExactDecimalDivSignatureMatrix) {
+        struct TIntegerCase {
+            NUdf::EDataSlot Slot;
+            TStringBuf Type;
+        };
+        const TVector<TIntegerCase> integerCases = {
+            {NUdf::EDataSlot::Int8, "Int8"},
+            {NUdf::EDataSlot::Int16, "Int16"},
+            {NUdf::EDataSlot::Int32, "Int32"},
+            {NUdf::EDataSlot::Int64, "Int64"},
+            {NUdf::EDataSlot::Uint8, "Uint8"},
+            {NUdf::EDataSlot::Uint16, "Uint16"},
+            {NUdf::EDataSlot::Uint32, "Uint32"},
+            {NUdf::EDataSlot::Uint64, "Uint64"},
+        };
+
+        for (const auto& test : integerCases) {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalDiv",
+                    {
+                        TypedDecimalLiteral(ctx, "12.50", "5", "2", decimal),
+                        TypedLiteral(
+                            ctx,
+                            test.Type,
+                            "2",
+                            ScalarType(ctx, test.Slot)),
+                    },
+                    decimal));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "div");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["left"]["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), test.Type);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalDiv",
+                    {
+                        TypedDecimalLiteral(ctx, "12.50", "5", "2", decimal),
+                        TypedDecimalLiteral(ctx, "2.00", "5", "2", decimal),
+                    },
+                    decimal));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "div");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(expression["right"]["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["right"]["value"]["scaled"].GetStringSafe(),
+                "200");
+        }
+
+        for (const auto [leftNullable, rightNullable] : {
+                 std::pair{true, false},
+                 std::pair{false, true},
+                 std::pair{true, true},
+             })
+        {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            auto left = leftNullable
+                ? TypedMember(ctx, "a.x", optionalDecimal)
+                : TypedMember(ctx, "a.x", decimal);
+            auto right = rightNullable
+                ? TypedMember(ctx, "a.y", optionalDecimal)
+                : TypedMember(ctx, "a.y", decimal);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "DecimalDiv",
+                    {std::move(left), std::move(right)},
+                    optionalDecimal),
+                true);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "div");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(5,2)");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+    }
+
+    Y_UNIT_TEST(DecimalDivSignatureMatrixFailsClosed) {
+        enum class ECase {
+            GenericDivision,
+            NonDecimalResult,
+            NonCanonicalResult,
+            LeftTypeMismatch,
+            RightDecimalMismatch,
+            RightBool,
+            RightDate,
+            RightInterval,
+            ExcessResultNullability,
+            MissingResultNullability,
+            Unary,
+            Ternary,
+        };
+        struct TCase {
+            ECase Case;
+            TStringBuf Reason;
+        };
+        const TVector<TCase> cases = {
+            {ECase::GenericDivision, "Unsupported scalar callable /"},
+            {ECase::NonDecimalResult, "result is not Decimal"},
+            {ECase::NonCanonicalResult, "Unsupported scalar type Decimal(05,2)"},
+            {ECase::LeftTypeMismatch, "left operand must exactly match"},
+            {ECase::RightDecimalMismatch, "same Decimal type or an integer"},
+            {ECase::RightBool, "same Decimal type or an integer"},
+            {ECase::RightDate, "same Decimal type or an integer"},
+            {ECase::RightInterval, "Unsupported scalar type Interval"},
+            {ECase::ExcessResultNullability, "OR of operand nullability"},
+            {ECase::MissingResultNullability, "OR of operand nullability"},
+            {ECase::Unary, "unsupported arity 1"},
+            {ECase::Ternary, "unsupported arity 3"},
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto* decimal = DecimalType(ctx, "5", "2");
+            const auto* optionalDecimal = DecimalType(ctx, "5", "2", true);
+            const auto* otherDecimal = DecimalType(ctx, "6", "2");
+            TStringBuf callable = "DecimalDiv";
+            const TTypeAnnotationNode* resultType = decimal;
+            TExprNode::TListType children = {
+                TypedMember(ctx, "a.x", decimal),
+                TypedDecimalLiteral(ctx, "2.00", "5", "2", decimal),
+            };
+
+            switch (test.Case) {
+                case ECase::GenericDivision:
+                    callable = "/";
+                    break;
+                case ECase::NonDecimalResult:
+                    resultType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+                    break;
+                case ECase::NonCanonicalResult:
+                    resultType = DecimalType(ctx, "05", "2");
+                    break;
+                case ECase::LeftTypeMismatch:
+                    children[0] = TypedMember(ctx, "a.x", otherDecimal);
+                    break;
+                case ECase::RightDecimalMismatch:
+                    children[1] = TypedDecimalLiteral(
+                        ctx,
+                        "2.00",
+                        "6",
+                        "2",
+                        otherDecimal);
+                    break;
+                case ECase::RightBool:
+                    children[1] = TypedLiteral(
+                        ctx,
+                        "Bool",
+                        "true",
+                        ScalarType(ctx, NUdf::EDataSlot::Bool));
+                    break;
+                case ECase::RightDate:
+                    children[1] = TypedLiteral(
+                        ctx,
+                        "Date",
+                        "1",
+                        ScalarType(ctx, NUdf::EDataSlot::Date));
+                    break;
+                case ECase::RightInterval:
+                    children[1] = TypedLiteral(
+                        ctx,
+                        "Interval",
+                        "1",
+                        ScalarType(ctx, NUdf::EDataSlot::Interval));
+                    break;
+                case ECase::ExcessResultNullability:
+                    resultType = optionalDecimal;
+                    break;
+                case ECase::MissingResultNullability:
+                    children[0] = TypedMember(ctx, "a.x", optionalDecimal);
+                    break;
+                case ECase::Unary:
+                    children.pop_back();
+                    break;
+                case ECase::Ternary:
+                    children.push_back(
+                        TypedDecimalLiteral(ctx, "3.00", "5", "2", decimal));
+                    break;
+            }
+
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    callable,
+                    std::move(children),
+                    resultType),
+                true);
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(test.Case));
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, test.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(DecimalDivIsAllowedInsideAuditedOpaqueParents) {
+        TExportTestContext ctx;
+        const auto* decimal = DecimalType(ctx, "5", "2");
+        const auto expression = ExportMapExpression(
+            ctx,
+            "a",
+            TypedCallable(
+                ctx,
+                "If",
+                {
+                    TypedLiteral(
+                        ctx,
+                        "Bool",
+                        "true",
+                        ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                    TypedCallable(
+                        ctx,
+                        "DecimalDiv",
+                        {
+                            TypedMember(ctx, "a.x", decimal),
+                            TypedDecimalLiteral(ctx, "0", "5", "2", decimal),
+                        },
+                        decimal),
+                    TypedDecimalLiteral(ctx, "1", "5", "2", decimal),
+                },
+                decimal));
+
+        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_STRING_CONTAINS(
+            expression["fingerprint"].GetStringSafe(),
+            "DecimalDiv");
+        const auto& args = expression["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(args.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(args.front()["column"].GetStringSafe(), "a.x");
+    }
+
+    Y_UNIT_TEST(DecimalDivNDecimalOracleCoversRoundingAndSpecials) {
+        using namespace NYql::NDecimal;
+
+        const TDecimalDivisor<TInt128> decimalDivisor(5, 2);
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(100), TInt128(200)) == TInt128(50));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(100), TInt128(800)) == TInt128(12));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(300), TInt128(800)) == TInt128(38));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(-100), TInt128(800)) == TInt128(-12));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(-300), TInt128(800)) == TInt128(-38));
+        // Runtime division with a negative divisor truncates these non-ties
+        // toward zero: ideal nearest rounding would produce +67 and -67.
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(-200), TInt128(-300)) == TInt128(66));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(200), TInt128(-300)) == TInt128(-66));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(99999), TInt128(1)) == Inf());
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(100), TInt128(0)) == Inf());
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(-100), TInt128(0)) == -Inf());
+        UNIT_ASSERT(IsNan(decimalDivisor.Do(TInt128(0), TInt128(0))));
+        UNIT_ASSERT(IsNan(decimalDivisor.Do(Nan(), TInt128(100))));
+        UNIT_ASSERT(IsNan(decimalDivisor.Do(Inf(), Inf())));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(100), Inf()) == TInt128(0));
+        UNIT_ASSERT(decimalDivisor.Do(TInt128(100), -Inf()) == TInt128(0));
+        UNIT_ASSERT(decimalDivisor.Do(Inf(), TInt128(-100)) == -Inf());
+
+        // The exact widened quotient is the reserved TInt128 NaN code, but it
+        // was produced by finite operands and must saturate to positive Inf.
+        const TInt128 collisionLeft = (Inf() + TInt128(1)) / TInt128(11);
+        UNIT_ASSERT(IsNormal(collisionLeft));
+        UNIT_ASSERT(
+            MulAndDivNormalMultiplier(
+                collisionLeft,
+                TInt128(11),
+                TInt128(1)) == Inf());
+
+        const TDecimalDivisor<i8> integerDivisor;
+        UNIT_ASSERT(integerDivisor.Do(TInt128(-238973), i8(-128)) == TInt128(1866));
+        UNIT_ASSERT(integerDivisor.Do(TInt128(-238973), i8(-19)) == TInt128(12577));
+        UNIT_ASSERT(integerDivisor.Do(TInt128(-238973), i8(3)) == TInt128(-79658));
+        UNIT_ASSERT(integerDivisor.Do(TInt128(-238973), i8(0)) == -Inf());
+    }
+
     Y_UNIT_TEST(DecimalArithmeticTypeAndNullabilityMismatchesFailClosed) {
         {
             TExportTestContext ctx;

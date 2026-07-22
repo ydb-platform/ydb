@@ -1,5 +1,7 @@
 import unittest
+from unittest import mock
 
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import scalar as scalar_module
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr, parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
@@ -98,6 +100,92 @@ class IntegerArithmeticTest(unittest.TestCase):
         )
         self.assertEqual(actual.is_null, smt.TRUE)
         self.assertEqual(_ground(actual.value), 21)
+
+
+class DecimalDivisionDispatchTest(unittest.TestCase):
+    def test_same_decimal_and_every_integer_right_type_are_forwarded_exactly(self):
+        for right_type in ("Decimal(7,2)", *sorted(INTEGER_TYPES)):
+            left_value = smt.int_value(1_250)
+            right_value = smt.int_value(5)
+            divided_value = smt.int_value(250)
+            expression = _arithmetic(
+                "div",
+                "Decimal(7,2)",
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            )
+            with self.subTest(right_type=right_type):
+                with mock.patch.object(
+                    scalar_module.decimal,
+                    "divide",
+                    return_value=divided_value,
+                ) as divide:
+                    actual = Encoder(smt.Script()).evaluate(
+                        expression,
+                        {
+                            "left": Value("Decimal(7,2)", smt.FALSE, left_value),
+                            "right": Value(right_type, smt.FALSE, right_value),
+                        },
+                    )
+
+                divide.assert_called_once_with(
+                    left_value,
+                    right_value,
+                    "Decimal(7,2)",
+                    right_type,
+                )
+                self.assertEqual(actual.type, "Decimal(7,2)")
+                self.assertEqual(actual.is_null, smt.FALSE)
+                self.assertEqual(actual.value, divided_value)
+
+    def test_result_is_null_exactly_when_either_operand_is_null(self):
+        expression = _arithmetic(
+            "div",
+            "Decimal(7,2)",
+            Expr(kind="column", column="left"),
+            Expr(kind="column", column="right"),
+            nullable=True,
+        )
+        for left_is_null in (False, True):
+            for right_is_null in (False, True):
+                with self.subTest(
+                    left_is_null=left_is_null,
+                    right_is_null=right_is_null,
+                ):
+                    with mock.patch.object(
+                        scalar_module.decimal,
+                        "divide",
+                        return_value=smt.int_value(250),
+                    ):
+                        actual = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "left": Value(
+                                    "Decimal(7,2)",
+                                    smt.bool_value(left_is_null),
+                                    smt.int_value(1_250),
+                                ),
+                                "right": Value(
+                                    "Int32",
+                                    smt.bool_value(right_is_null),
+                                    smt.int_value(5),
+                                ),
+                            },
+                        )
+                    self.assertEqual(
+                        actual.is_null,
+                        smt.bool_value(left_is_null or right_is_null),
+                    )
+
+    def test_integer_division_cannot_enter_fixed_width_arithmetic(self):
+        expression = _arithmetic(
+            "div",
+            "Int64",
+            _literal("Int64", 10),
+            _literal("Int64", 2),
+        )
+        with self.assertRaisesRegex(AssertionError, "integer division is not part"):
+            Encoder(smt.Script()).evaluate(expression, {})
 
 
 class IntegerDomainTest(unittest.TestCase):

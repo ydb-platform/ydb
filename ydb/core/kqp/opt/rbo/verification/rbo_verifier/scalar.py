@@ -102,7 +102,7 @@ class Encoder:
                 null_safe=expression.kind == "eq" and expression.null_safe,
             )
 
-        if expression.kind in {"add", "sub", "mul"}:
+        if expression.kind in {"add", "sub", "mul", "div"}:
             assert expression.result_type is not None
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)
@@ -112,9 +112,16 @@ class Encoder:
                     value = decimal.add(left.value, right.value, expression.result_type)
                 elif expression.kind == "sub":
                     value = decimal.subtract(left.value, right.value, expression.result_type)
-                else:
-                    assert expression.kind == "mul"
+                elif expression.kind == "mul":
                     value = decimal.multiply(
+                        left.value,
+                        right.value,
+                        expression.result_type,
+                        right.type,
+                    )
+                else:
+                    assert expression.kind == "div"
+                    value = decimal.divide(
                         left.value,
                         right.value,
                         expression.result_type,
@@ -129,8 +136,10 @@ class Encoder:
                 raw = smt.add(left.value, right.value)
             elif expression.kind == "sub":
                 raw = smt.sub(left.value, right.value)
-            else:
+            elif expression.kind == "mul":
                 raw = smt.mul(left.value, right.value)
+            else:
+                raise AssertionError("integer division is not part of the semantic snapshot IR")
             return Value(
                 expression.result_type,
                 is_null,

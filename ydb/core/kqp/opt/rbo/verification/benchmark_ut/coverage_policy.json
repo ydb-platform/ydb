@@ -11,7 +11,7 @@
     },
     "TPCDS_YQL": {
       "query_count": 99,
-      "required_formula_queries": [3, 48, 52, 55, 71, 88, 93, 96],
+      "required_formula_queries": [3, 48, 52, 55, 61, 71, 88, 93, 96],
       "required_verified_queries": [3, 52, 55, 93, 96]
     }
   }

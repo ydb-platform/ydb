@@ -1097,6 +1097,62 @@ def _evaluate_ground_term(term, constants, function_value=None):
     raise AssertionError(f"non-ground SMT operation {term.operation!r}")
 
 
+class ConstructionAuditBoundTest(unittest.TestCase):
+    def test_database_row_bound_is_reported_as_unsupported(self):
+        snapshot = right_join(KEY_EQUALITY)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "database table requires 2 candidate rows.*1 row construction",
+            ):
+                build_logical_kernel_problem_for_tests(snapshot, snapshot, 2)
+
+    def test_relation_row_invariant_is_a_fail_closed_backup(self):
+        snapshot = right_join(KEY_EQUALITY)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        source = database.relations["A"]
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1):
+            with self.assertRaisesRegex(
+                RelationError,
+                "relation requires 2 candidate rows.*1 row construction",
+            ):
+                relation_model.Relation(source.columns, source.rows)
+
+    def test_join_matching_and_output_are_checked_before_construction(self):
+        snapshot = right_join(KEY_EQUALITY)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "join matching requires 4 candidate-row pairs.*3 pair construction",
+            ):
+                build_logical_kernel_problem_for_tests(snapshot, snapshot, 2)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 5):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "join output requires 6 candidate rows.*5 row construction",
+            ):
+                build_logical_kernel_problem_for_tests(snapshot, snapshot, 2)
+
+    def test_union_and_grouped_aggregate_fail_before_quadratic_expansion(self):
+        union = union_snapshot(True)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 3):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "union-all requires 4 candidate rows.*3 row construction",
+            ):
+                build_logical_kernel_problem_for_tests(union, union, 2)
+
+        aggregate = aggregate_stage_snapshot("count", True, False)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "grouped aggregate requires 4 candidate-row pairs.*3 pair construction",
+            ):
+                build_logical_kernel_problem_for_tests(aggregate, aggregate, 2)
+
+
 class AggregateConcreteDifferentialTest(unittest.TestCase):
     def test_void_count_input_implements_count_star(self):
         snapshot = count_star_snapshot()

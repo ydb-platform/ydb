@@ -461,7 +461,11 @@ NJson::TJsonValue Uint64LiteralExpr(const TExpression& expression, TStringBuf fi
 }
 
 bool IsIntegerType(TStringBuf type) {
-    return type.StartsWith("Int") || type.StartsWith("Uint");
+    static const THashSet<TString> Types = {
+        "Int8", "Int16", "Int32", "Int64",
+        "Uint8", "Uint16", "Uint32", "Uint64",
+    };
+    return Types.contains(type);
 }
 
 TString MetadataTypeName(const TKikimrColumnMetadata& column) {
@@ -779,12 +783,14 @@ TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node
             << callable
             << " left operand must exactly match its Decimal result type");
     }
+    const bool acceptsIntegerRight =
+        callable == "DecimalMul" || callable == "DecimalDiv";
     if (rightType != resultType &&
-        !(callable == "DecimalMul" && IsIntegerType(rightType)))
+        !(acceptsIntegerRight && IsIntegerType(rightType)))
     {
         Unsupported(TStringBuilder()
             << callable << " right operand must be "
-            << (callable == "DecimalMul"
+            << (acceptsIntegerRight
                 ? "the same Decimal type or an integer"
                 : "the same Decimal type"));
     }
@@ -833,7 +839,7 @@ void CheckOpaqueCallable(const TExprNode& node) {
         return;
     }
 
-    if (node.IsCallable("DecimalMul")) {
+    if (node.IsCallable({"DecimalMul", "DecimalDiv"})) {
         CheckDecimalArithmeticCallable(node);
         return;
     }
@@ -841,7 +847,8 @@ void CheckOpaqueCallable(const TExprNode& node) {
     // This is deliberately a positive list.  TExprNode exposes side-effect and
     // CSE-safety flags, but YQL has no generic totality contract for a callable.
     // Keep every accepted family small enough to audit and fail closed for UDFs,
-    // division, strict casts, Unwrap, and every other not-yet-reviewed form.
+    // generic division, strict casts, Unwrap, and every other not-yet-reviewed
+    // form. DecimalDiv is an explicitly audited total Decimal operation.
     if (name == "+" || name == "-" || name == "*") {
         if ((name == "+" || name == "-") &&
             ParseCanonicalDecimalType(ScalarTypeName(node)))
@@ -1372,15 +1379,14 @@ NJson::TJsonValue ExportExprNode(
         }
     }
 
-    if (node.IsCallable("DecimalMul")) {
+    if (node.IsCallable({"DecimalMul", "DecimalDiv"})) {
         const auto signature = CheckDecimalArithmeticCallable(node);
 
         // Retain the same closed-world node checks as opaque expressions while
         // giving the admitted Decimal arithmetic an exact verifier meaning.
         TOpaqueExpressionEncoder(rowArgument, visibleColumns).Validate(node);
 
-        TStringBuf kind;
-        kind = "mul";
+        const TStringBuf kind = node.IsCallable("DecimalMul") ? "mul" : "div";
         auto result = BinaryExpr(
             kind,
             ExportExprNode(*node.Child(0), rowArgument, visibleColumns),

@@ -360,6 +360,37 @@ def _ref_bounded_code(code, scalar_type):
     return decimal.INF if code > 0 else -decimal.INF
 
 
+def _trunc_fraction(value):
+    magnitude = abs(value.numerator) // value.denominator
+    return -magnitude if value < 0 else magnitude
+
+
+def _ref_ndecimal_divide(numerator, denominator):
+    """Literal concrete transcription of ``NDecimal::Div`` rounding.
+
+    This intentionally follows the C++ signed quotient/remainder control flow,
+    rather than the magnitude formulation used by the SMT kernel.
+    """
+
+    assert denominator
+    working_numerator = numerator
+    working_denominator = denominator
+    if working_denominator & 1:
+        working_numerator *= 2
+    else:
+        working_denominator //= 2
+
+    doubled = _trunc_fraction(Fraction(working_numerator, working_denominator))
+    remainder = working_numerator - doubled * working_denominator
+    if doubled & 1:
+        if remainder:
+            if remainder > 0:
+                doubled += 1
+        elif doubled & 2:
+            doubled += 1
+    return doubled // 2
+
+
 def _ref_add(left, right, scalar_type):
     if decimal.NAN_KIND in {left[0], right[0]}:
         return decimal.NAN
@@ -381,6 +412,29 @@ def _ref_arithmetic(kind, left, right, scalar_type):
         return _ref_add(left, right, scalar_type)
     if kind == "sub":
         return _ref_add(left, _ref_negate(right), scalar_type)
+    if kind == "div":
+        if decimal.NAN_KIND in {left[0], right[0]}:
+            return decimal.NAN
+        if right[0] == decimal.FINITE and right[1] == 0:
+            sign = _ref_sign(left)
+            if sign == 0:
+                return decimal.NAN
+            return decimal.INF if sign > 0 else -decimal.INF
+        if right[0] != decimal.FINITE:
+            return decimal.NAN if left[0] != decimal.FINITE else 0
+        if left[0] != decimal.FINITE:
+            sign = _ref_sign(left) * _ref_sign(right)
+            return decimal.INF if sign > 0 else -decimal.INF
+        factor = 10**scalar_type.scale
+        left_code = left[1] * factor
+        right_code = right[1] * factor
+        assert left_code.denominator == right_code.denominator == 1
+        scaled = _ref_ndecimal_divide(
+            left_code.numerator * factor,
+            right_code.numerator,
+        )
+        return _ref_bounded_code(scaled, scalar_type)
+
     assert kind == "mul"
     if decimal.NAN_KIND in {left[0], right[0]}:
         return decimal.NAN
@@ -478,12 +532,19 @@ class DecimalKernelTest(unittest.TestCase):
                 "mul": _compile_ground(
                     decimal.multiply(left_term, right_term, type_name, type_name)
                 ),
+                "div": _compile_ground(
+                    decimal.divide(left_term, right_term, type_name, type_name)
+                ),
             }
-            # Multiplication depends on scale and is exhausted for every type.
-            # Add/sub operate directly on scaled coefficients, so their SMT
-            # kernels depend only on precision; scale zero exhausts the exact
-            # same code domain once per precision without tripling this test.
-            kinds = ("add", "sub", "mul") if scalar_type.scale == 0 else ("mul",)
+            # Multiplication and division depend on scale and are exhausted for
+            # every type.  Add/sub operate directly on scaled coefficients, so
+            # their SMT kernels depend only on precision; scale zero exhausts
+            # the same code domain once per precision without tripling them.
+            kinds = (
+                ("add", "sub", "mul", "div")
+                if scalar_type.scale == 0
+                else ("mul", "div")
+            )
             for (left, left_ref), (right, right_ref) in product(domain, repeat=2):
                 for kind in kinds:
                     actual = evaluators[kind](left, right)
@@ -534,6 +595,43 @@ class DecimalKernelTest(unittest.TestCase):
                 self.assertEqual(result.type, decimal_type)
                 self.assertEqual(result.is_null, smt.FALSE)
                 self.assertEqual(_ground(result.value), 100 * integer)
+
+    def test_decimal_divide_integral_preserves_scale_for_every_integer_type(self):
+        scalar_type = "Decimal(35,2)"
+        cases = (
+            ("Int8", -2, -250),
+            ("Int16", 4, 125),
+            ("Int32", -4, -125),
+            ("Int64", 8, 62),
+            ("Uint8", 3, 167),
+            ("Uint16", 4, 125),
+            ("Uint32", 8, 62),
+            ("Uint64", (1 << 64) - 1, 0),
+        )
+        for integer_type, integer, expected in cases:
+            actual = decimal.divide(
+                smt.int_value(500),
+                smt.int_value(integer),
+                scalar_type,
+                integer_type,
+            )
+            with self.subTest(integer_type=integer_type):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_divide_rejects_unaudited_operand_shapes(self):
+        for result_type, right_type, message in (
+            ("Int32", "Int32", "not a Decimal type"),
+            ("Decimal(5,2)", "Decimal(6,2)", "same-type Decimal or integral"),
+            ("Decimal(5,2)", "Bool", "same-type Decimal or integral"),
+        ):
+            with self.subTest(result_type=result_type, right_type=right_type):
+                with self.assertRaisesRegex(ValueError, message):
+                    decimal.divide(
+                        smt.ONE,
+                        smt.ONE,
+                        result_type,
+                        right_type,
+                    )
 
     def test_arithmetic_specials_zero_and_precision_overflow_are_explicit(self):
         scalar_type = "Decimal(5,2)"
@@ -639,9 +737,136 @@ class DecimalKernelTest(unittest.TestCase):
             with self.subTest(left=left, right=right):
                 self.assertEqual(_ground(actual), expected)
 
+    def test_decimal_divide_ties_to_even_for_all_signs(self):
+        scalar_type = "Decimal(5,2)"
+        for left, right, expected in (
+            (1, 40, 2),
+            (7, 200, 4),
+            (-1, 40, -2),
+            (-7, 200, -4),
+            (1, -40, -2),
+            (7, -200, -4),
+        ):
+            actual = decimal.divide(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                scalar_type,
+            )
+            with self.subTest(left=left, right=right):
+                self.assertEqual(_ground(actual), expected)
+
+        for left, right, expected in (
+            (5, 2, 2),
+            (7, 2, 4),
+            (-5, 2, -2),
+            (-7, 2, -4),
+            (5, -2, -2),
+            (7, -2, -4),
+            (-5, -2, 2),
+            (-7, -2, 4),
+        ):
+            actual = decimal.divide(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                "Int8",
+            )
+            with self.subTest(left=left, integer_right=right):
+                self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_divide_matches_negative_divisor_runtime_asymmetry(self):
+        scalar_type = "Decimal(10,0)"
+        for left, right, expected in (
+            (-238_973, -128, 1_866),
+            (-238_973, -19, 12_577),
+            (238_973, -128, -1_866),
+            (238_973, -19, -12_577),
+        ):
+            self.assertEqual(_ref_ndecimal_divide(left, right), expected)
+            self.assertNotEqual(round(Fraction(left, right)), expected)
+            for right_type in (scalar_type, "Int16"):
+                actual = decimal.divide(
+                    smt.int_value(left),
+                    smt.int_value(right),
+                    scalar_type,
+                    right_type,
+                )
+                with self.subTest(
+                    left=left,
+                    right=right,
+                    right_type=right_type,
+                ):
+                    self.assertEqual(_ground(actual), expected)
+
+    def test_decimal_divide_specials_zero_overflow_and_nan_collision(self):
+        scalar_type = "Decimal(5,2)"
+        cases = (
+            (decimal.NAN, 1, decimal.NAN),
+            (1, decimal.NAN, decimal.NAN),
+            (0, 0, decimal.NAN),
+            (1, 0, decimal.INF),
+            (-1, 0, -decimal.INF),
+            (decimal.INF, 0, decimal.INF),
+            (-decimal.INF, 0, -decimal.INF),
+            (1, decimal.INF, 0),
+            (-1, -decimal.INF, 0),
+            (decimal.INF, decimal.INF, decimal.NAN),
+            (-decimal.INF, decimal.INF, decimal.NAN),
+            (decimal.INF, -1, -decimal.INF),
+            (-decimal.INF, -1, decimal.INF),
+            (99_999, 1, decimal.INF),
+            (-99_999, 1, -decimal.INF),
+        )
+        for left, right, expected in cases:
+            actual = decimal.divide(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                scalar_type,
+            )
+            with self.subTest(left=left, right=right):
+                self.assertEqual(_ground(actual), expected)
+
+        for left, right, expected in (
+            (decimal.NAN, 0, decimal.NAN),
+            (0, 0, decimal.NAN),
+            (1, 0, decimal.INF),
+            (-1, 0, -decimal.INF),
+            (decimal.INF, -2, -decimal.INF),
+            (-decimal.INF, -2, decimal.INF),
+        ):
+            actual = decimal.divide(
+                smt.int_value(left),
+                smt.int_value(right),
+                scalar_type,
+                "Int8",
+            )
+            with self.subTest(left=left, integer_right=right):
+                self.assertEqual(_ground(actual), expected)
+
+        # At scale 35 this finite ratio rounds to 10^35 + 1, the in-band
+        # NaN code.  NDecimal first normalizes the widened finite quotient to
+        # the global +Inf bound; the wrapper must not reinterpret it as NaN.
+        denominator = 8 * 10**34
+        exact = Fraction(denominator + 1, denominator) * decimal.INF
+        self.assertEqual(round(exact), decimal.NAN)
+        for left, expected in (
+            (denominator + 1, decimal.INF),
+            (-denominator - 1, -decimal.INF),
+        ):
+            actual = decimal.divide(
+                smt.int_value(left),
+                smt.int_value(denominator),
+                "Decimal(35,35)",
+                "Decimal(35,35)",
+            )
+            with self.subTest(nan_collision_left=left):
+                self.assertEqual(_ground(actual), expected)
+
     def test_decimal_arithmetic_is_strictly_null_propagating(self):
         scalar_type = "Decimal(7,2)"
-        for kind in ("add", "sub", "mul"):
+        for kind in ("add", "sub", "mul", "div"):
             expression = _arithmetic(
                 kind,
                 scalar_type,
@@ -670,6 +895,18 @@ class DecimalKernelTest(unittest.TestCase):
         self.assertIn("(mod ", result)
         self.assertNotIn("Real", result)
         self.assertNotIn("to_int", result)
+
+        division = decimal.divide(
+            smt.symbol("left", smt.INT),
+            smt.symbol("right", smt.INT),
+            "Decimal(5,2)",
+            "Decimal(5,2)",
+        ).render()
+        self.assertIn("(div ", division)
+        self.assertIn("(mod ", division)
+        self.assertIn("(ite (= (ite (< right 0) (- 0 right) right) 0) 1", division)
+        self.assertNotIn("Real", division)
+        self.assertNotIn("to_int", division)
 
     def test_decimal_integer_alignment_uses_integer_decimal_width(self):
         encoder = Encoder(smt.Script())
@@ -947,7 +1184,7 @@ class DecimalIrTest(unittest.TestCase):
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class DecimalVerificationTest(unittest.TestCase):
     def test_arithmetic_survives_normal_initial_to_stage_verification(self):
-        for kind in ("add", "sub", "mul"):
+        for kind in ("add", "sub", "mul", "div"):
             result = solve(
                 build_problem(
                     _arithmetic_snapshot(kind, staged=False),
@@ -978,6 +1215,21 @@ class DecimalVerificationTest(unittest.TestCase):
             with self.subTest(before=before, after=after):
                 self.assertEqual(result.status, "COUNTEREXAMPLE")
                 self.assertEqual(len(result.witness["A"]), 1)
+
+    def test_division_is_not_multiplication(self):
+        result = solve(
+            build_problem(
+                _arithmetic_snapshot("div", staged=False),
+                _arithmetic_snapshot("mul", staged=True),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertEqual(len(result.witness["A"]), 1)
 
     def test_decimal_integer_multiply_observes_the_integer_source_domain(self):
         integer = {"kind": "column", "column": "a.i"}

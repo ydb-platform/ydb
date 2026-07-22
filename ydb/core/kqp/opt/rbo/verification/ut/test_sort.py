@@ -16,6 +16,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Evaluator as RelationEvaluator,
     Outcome,
     Relation,
+    RelationError,
     RelationFamily,
     Row,
     compare_families,
@@ -1250,6 +1251,63 @@ class SortMutationTest(unittest.TestCase):
                     row_bound,
                 )
 
+    def test_sort_and_latent_sequence_pair_bounds_precede_large_allocations(self):
+        parsed = logical_sort([order_item("a.k1")])
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(
+                relation,
+                "factorial",
+                side_effect=AssertionError("factorial must not run"),
+            ),
+            patch.object(
+                relation,
+                "_fresh_ordinals",
+                side_effect=AssertionError("ordinals must not be allocated"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "sort construction requires 6 candidate-row pairs.*5 pair construction",
+            ):
+                build_logical_kernel_problem_for_tests(parsed, parsed, 4)
+
+        unordered_snapshot = parse_snapshot(snapshot([scan()], "scan"))
+        script = smt.Script()
+        database = Database(unordered_snapshot, 4, script)
+        scalar = ScalarEncoder(script)
+        unordered = RelationEvaluator(
+            unordered_snapshot,
+            database,
+            scalar,
+        ).root()
+        source = unordered.certain()
+        ordered = single(
+            Relation(
+                source.columns,
+                source.rows,
+                sequence=True,
+            )
+        )
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(
+                relation,
+                "factorial",
+                side_effect=AssertionError("factorial must not run"),
+            ),
+            patch.object(
+                relation,
+                "_fresh_ordinals",
+                side_effect=AssertionError("ordinals must not be allocated"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "latent sequence construction requires 6 candidate-row pairs.*5 pair construction",
+            ):
+                family_equal(ordered, unordered, scalar)
+
 
 class MergeEncodingTest(unittest.TestCase):
     COLUMNS = (
@@ -1316,6 +1374,69 @@ class MergeEncodingTest(unittest.TestCase):
                 ((0, 30), (0, 10), (0, 20)),
             },
         )
+
+    def test_merge_pair_bound_precedes_factorial_and_ordinal_allocation(self):
+        source = single(
+            Relation(
+                self.COLUMNS,
+                tuple(self._row(value) for value in range(4)),
+                sequence=True,
+                order=self.ORDER,
+            )
+        )
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(
+                relation,
+                "factorial",
+                side_effect=AssertionError("factorial must not run"),
+            ),
+            patch.object(
+                relation,
+                "_fresh_ordinals",
+                side_effect=AssertionError("ordinals must not be allocated"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "merge construction requires 6 candidate-row pairs.*5 pair construction",
+            ):
+                merge_family(
+                    source,
+                    self.ORDER,
+                    ((0, 1), (2, 3)),
+                    smt.Script(),
+                    "merge",
+                )
+
+        symbolic = single(
+            Relation(
+                self.COLUMNS,
+                tuple(self._row(value) for value in range(3)),
+                sequence=True,
+                order=self.ORDER,
+            )
+        )
+        with (
+            patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(
+                relation,
+                "_fresh_ordinals",
+                side_effect=AssertionError("ordinals must not be allocated"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "merge ordinal construction requires 9 candidate-row pairs.*5 pair construction",
+            ):
+                merge_family(
+                    symbolic,
+                    self.ORDER,
+                    ((0, 1, 2),),
+                    smt.Script(),
+                    "merge",
+                )
 
 
 class StageTopSortMergeTest(unittest.TestCase):

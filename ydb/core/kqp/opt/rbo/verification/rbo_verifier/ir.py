@@ -457,7 +457,7 @@ def _parse_expr(value: Any, path: str) -> Expr:
             null_safe=_bool(obj.get("null_safe", False), f"{path}.null_safe"),
         )
 
-    if kind in {"add", "sub", "mul"}:
+    if kind in {"add", "sub", "mul", "div"}:
         _keys(obj, {"kind", "left", "right", "type", "nullable"}, path)
         return Expr(
             kind=kind,
@@ -971,21 +971,23 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
             _fail(path, f"{expr.kind} requires integer, Date, or Decimal arguments")
         return ValueType(BOOL, False if expr.null_safe else left.nullable or right.nullable)
 
-    if expr.kind in {"add", "sub", "mul"}:
+    if expr.kind in {"add", "sub", "mul", "div"}:
         assert expr.result_type is not None and expr.nullable is not None
         left = _infer_expr(expr.args[0], columns, f"{path}.left")
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
         if decimal.is_type(expr.result_type):
             if left.name != expr.result_type:
                 _fail(path, f"Decimal {expr.kind} left operand must exactly match its result type")
-            right_is_integral_mul = expr.kind == "mul" and family(right.name) == "int"
-            if right.name != expr.result_type and not right_is_integral_mul:
+            right_may_be_integral = expr.kind in {"mul", "div"} and family(right.name) == "int"
+            if right.name != expr.result_type and not right_may_be_integral:
                 _fail(
                     path,
                     f"Decimal {expr.kind} right operand must exactly match its result type"
-                    + (" or be integral" if expr.kind == "mul" else ""),
+                    + (" or be integral" if expr.kind in {"mul", "div"} else ""),
                 )
         else:
+            if expr.kind == "div":
+                _fail(path, "div requires a Decimal result")
             if family(expr.result_type) != "int":
                 _fail(path, f"{expr.kind} requires an integer result")
             if left.name != expr.result_type or right.name != expr.result_type:

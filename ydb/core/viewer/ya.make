@@ -61,20 +61,20 @@ SRCS(
     viewer_bsgroupinfo.cpp
     viewer_capabilities.h
     viewer_check_access.h
-    viewer_cluster.h
+    viewer_cluster.cpp
     viewer_commit_offset.h
     viewer_compute.h
     viewer_config.h
     viewer_content.h
     viewer_counters.h
-    viewer_database_stats.h
+    viewer_database_stats.cpp
     viewer_describe_consumer.h
     viewer_describe.h
     viewer_describe_topic.h
     viewer_feature_flags.h
     viewer_topic_data.cpp
     viewer_graph.h
-    viewer_groups.h
+    viewer_groups.cpp
     viewer_healthcheck.h
     viewer_helper.h
     viewer_hiveinfo.h
@@ -85,22 +85,22 @@ SRCS(
     viewer_netinfo.h
     viewer_nodeinfo.cpp
     viewer_nodelist.h
-    viewer_nodes.h
+    viewer_nodes.cpp
     viewer_pdiskinfo.h
-    viewer_peers.h
+    viewer_peers.cpp
     viewer_pqconsumerinfo.h
     viewer_put_record.h
-    viewer_query.h
+    viewer_query.cpp
     viewer_render.h
     viewer_request.cpp
     viewer_request.h
     viewer_storage.h
-    viewer_storage_stats.h
+    viewer_storage_stats.cpp
     viewer_storage_usage.h
     viewer_sysinfo.h
     viewer_tabletcounters.h
     viewer_tabletinfo.h
-    viewer_tenantinfo.h
+    viewer_tenantinfo.cpp
     viewer_tenants.h
     viewer_topicinfo.h
     viewer_vdiskinfo.h

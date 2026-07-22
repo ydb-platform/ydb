@@ -285,7 +285,12 @@ SRCS(
     schemeshard_export_helpers.cpp
     schemeshard_export_flow_proposals.cpp
     schemeshard_identificators.cpp
-    schemeshard_impl.cpp
+    schemeshard_impl_lifecycle.cpp
+    schemeshard_impl_checks_persist_path.cpp
+    schemeshard_impl_persist_table.cpp
+    schemeshard_impl_persist_misc.cpp
+    schemeshard_impl_states.cpp
+    schemeshard_impl_handlers.cpp
     schemeshard_impl.h
     schemeshard_import.cpp
     schemeshard_import_helpers.cpp

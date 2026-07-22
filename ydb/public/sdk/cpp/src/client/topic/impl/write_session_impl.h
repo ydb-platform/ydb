@@ -440,7 +440,7 @@ private:
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     std::string PrevToken;
-    bool UpdateTokenInProgress = false;
+    std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.

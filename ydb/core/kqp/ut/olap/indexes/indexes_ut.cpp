@@ -161,6 +161,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(10));
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
         csController->WaitActualization(TDuration::Seconds(10));
@@ -2038,6 +2039,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(10));
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
         csController->WaitActualization(TDuration::Seconds(10));

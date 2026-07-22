@@ -39,6 +39,7 @@ SRCS(
 END()
 
 RECURSE(
+    deploy
     global
     ut
 )

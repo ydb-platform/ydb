@@ -1,5 +1,6 @@
 #include "kqp_has_full_scan_matcher.h"
 #include "kqp_has_path_matcher.h"
+#include "kqp_has_stream_matcher.h"
 #include "kqp_query_classifier.h"
 #include "kqp_workload_service.h"
 
@@ -69,7 +70,7 @@ public:
     }
 
     [[nodiscard]]
-    TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) override {
+    TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery, const TUserRequestContext& userRequestContext) override {
         Y_VALIDATE(ClassifierView, "Post compile classify without configuration");
         Y_VALIDATE(PreClassifyResult.has_value() && std::holds_alternative<TPendingCompilation>(*PreClassifyResult),
                "Post compile classify requires TPendingCompilation from pre-classification");
@@ -83,7 +84,7 @@ public:
                 continue;
             }
 
-            if (!MatchesDynamic(settings, preparedQuery)) {
+            if (!MatchesDynamic(settings, preparedQuery, userRequestContext)) {
                 continue;
             }
 
@@ -154,10 +155,10 @@ private:
     }
 
     ///
-    /// Check Predicate HasAppName
+    /// Check Predicate HasAppName — strict string equality.
     ///
-    static bool MatchesAppName(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TString& appName) {
-        return !predicate || predicate->Match(appName);
+    static bool MatchesAppName(const std::optional<TString>& expected, const TString& appName) {
+        return !expected || *expected == appName;
     }
 
     ///
@@ -179,7 +180,7 @@ private:
     }
 
     bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& settings) const {
-        return settings.HasFullScan.has_value() || settings.HasPath.has_value();
+        return settings.HasFullScan.has_value() || settings.HasPath.has_value() || settings.HasStream.has_value();
     }
 
     ///
@@ -188,9 +189,10 @@ private:
     /// - Involves SQL analysis, plan building, or computations.
     /// - Depends on actual query structure and execution characteristics.
     ///
-    bool MatchesDynamic(const NResourcePool::TClassifierSettings& settings, const TPreparedQueryHolder& preparedQuery) const {
+    bool MatchesDynamic(const NResourcePool::TClassifierSettings& settings, const TPreparedQueryHolder& preparedQuery, const TUserRequestContext& userRequestContext) const {
         return MatchesFullScan(settings.HasFullScan, preparedQuery.GetPhysicalQuery())
-            && MatchesPath(settings.HasPath, preparedQuery.GetQueryTables(), preparedQuery.GetPhysicalQuery());
+            && MatchesPath(settings.HasPath, preparedQuery.GetQueryTables(), preparedQuery.GetPhysicalQuery())
+            && MatchesStream(settings.HasStream, userRequestContext);
     }
 
     const TResourcePoolEntry* FindPool(const TString& poolId) const {

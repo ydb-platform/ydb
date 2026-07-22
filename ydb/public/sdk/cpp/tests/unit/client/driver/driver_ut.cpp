@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -123,6 +124,36 @@ namespace {
         std::shared_ptr<TDeferredAuthProvider> Provider_;
     };
 
+    class TCountingCredentialsProvider final : public ICredentialsProvider {
+    public:
+        std::string GetAuthInfo() const override {
+            return "token";
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+    };
+
+    class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
+    public:
+        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
+            : ProviderCount_(providerCount)
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            ++ProviderCount_;
+            return std::make_shared<TCountingCredentialsProvider>();
+        }
+
+        std::string GetClientIdentity() const override {
+            return "same-credentials";
+        }
+
+    private:
+        std::atomic_int& ProviderCount_;
+    };
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
@@ -164,6 +195,22 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
 }
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
+        std::atomic_int providerCount = 0;
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDatabase("/Root")
+                .SetDiscoveryMode(EDiscoveryMode::Off));
+
+        auto firstClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+        auto secondClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+
+        UNIT_ASSERT_VALUES_EQUAL(providerCount.load(), 1);
+    }
+
     Y_UNIT_TEST(InvalidRootCertificatePemFailsFast) {
         auto driver = TDriver(
             TDriverConfig()

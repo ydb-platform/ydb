@@ -3061,6 +3061,7 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithStringKey) {
 Y_UNIT_TEST(FulltextIndexCreateTableNonIntegerPkRequiresUniqueIndexFeature) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     featureFlags.SetEnableUniqConstraint(false);
     auto kikimr = Kikimr(std::move(featureFlags));
     auto db = kikimr.GetQueryClient();
@@ -3475,6 +3476,7 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
     // values would break the unique-index invariant.
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
     featureFlags.SetEnableUniqConstraint(true);
     featureFlags.SetEnableAddUniqueIndex(true);
     auto kikimr = Kikimr(std::move(featureFlags));

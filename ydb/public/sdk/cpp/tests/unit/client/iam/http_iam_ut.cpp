@@ -14,6 +14,20 @@
 using namespace NYdb;
 using namespace NYdb::NTest;
 
+TEST(IamCredentialsProviderFactory, NoArgProviderIsCachedAcrossFactoryInstances) {
+    TMetadataServer server;
+    server.SetStrictMode(false);
+    server.SetResponse(HTTP_OK, MakeTokenResponse("cached-token", 3600));
+
+    const TIamHost params = MakeMetadataParams(server.Port);
+    auto firstProvider = CreateIamCredentialsProviderFactory(params)->CreateProvider();
+    auto secondProvider = CreateIamCredentialsProviderFactory(params)->CreateProvider();
+
+    EXPECT_EQ(firstProvider, secondProvider);
+    EXPECT_EQ(firstProvider->GetAuthInfo(), "cached-token");
+    EXPECT_EQ(server.GetRequestCount(), 1);
+}
+
 TEST(IamCredentialsProvider, ExpiryFieldSupport) {
     TMetadataServer server;
     server.SetStrictMode(false);

@@ -29,6 +29,35 @@ constexpr std::chrono::milliseconds BACKOFF_MAX{10000};
 constexpr std::chrono::milliseconds PERIODIC_TICK{100};
 constexpr std::chrono::milliseconds MINIMUM_REFRESH_INTERVAL{100};
 
+// Implementation detail for the IAM factory templates below. Symbols in NDetail are not part of
+// the public YDB C++ SDK API and may change or be removed without notice.
+namespace NIam::NDetail {
+
+template <typename... TExtraValues>
+std::string MakeClientIdentity(
+    const char* factoryType,
+    const TIamEndpoint& params,
+    const TExtraValues&... extraValues)
+{
+    TStringBuilder identity;
+    const auto append = [&identity](const auto& value) {
+        const std::string serialized = TStringBuilder() << value;
+        identity << serialized.size() << ':' << serialized;
+    };
+
+    append(factoryType);
+    append(params.Endpoint);
+    append(params.RefreshPeriod);
+    append(params.RequestTimeout);
+    append(params.EnableSsl);
+    append(params.CaCerts);
+    (append(extraValues), ...);
+
+    return identity;
+}
+
+} // namespace NIam::NDetail
+
 // This file contains internal generic implementation of IAM credentials providers.
 // DO NOT USE THIS CLASS DIRECTLY. Use specialized factory methods for specific cases.
 template<typename TRequest, typename TResponse, typename TService>
@@ -459,14 +488,30 @@ public:
     // that don't have access to an ICoreFacility. Spins up a private TSimpleCoreFacility and ties
     // its lifetime to the returned provider via TOwningFacilityCredentialsProvider.
     TCredentialsProviderPtr CreateProvider() const final {
-        auto facility = CreateSimpleCoreFacility();
-        auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::weak_ptr<ICoreFacility>(facility));
-        return std::make_shared<TOwningFacilityCredentialsProvider>(std::move(facility), std::move(inner));
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                auto facility = CreateSimpleCoreFacility();
+                auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
+                    Params_, std::weak_ptr<ICoreFacility>(facility));
+                return std::make_shared<TOwningFacilityCredentialsProvider>(
+                    std::move(facility), std::move(inner));
+            });
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
+    }
+
+    std::string GetClientIdentity() const override final {
+        return NIam::NDetail::MakeClientIdentity(
+            "TIamJwtCredentialsProviderFactory",
+            Params_,
+            TService::service_full_name(),
+            Params_.JwtParams.AccountId,
+            Params_.JwtParams.KeyId,
+            Params_.JwtParams.PubKey,
+            Params_.JwtParams.PrivKey);
     }
 
 private:
@@ -480,14 +525,27 @@ public:
 
     // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
     TCredentialsProviderPtr CreateProvider() const final {
-        auto facility = CreateSimpleCoreFacility();
-        auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::weak_ptr<ICoreFacility>(facility));
-        return std::make_shared<TOwningFacilityCredentialsProvider>(std::move(facility), std::move(inner));
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                auto facility = CreateSimpleCoreFacility();
+                auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
+                    Params_, std::weak_ptr<ICoreFacility>(facility));
+                return std::make_shared<TOwningFacilityCredentialsProvider>(
+                    std::move(facility), std::move(inner));
+            });
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
+    }
+
+    std::string GetClientIdentity() const override final {
+        return NIam::NDetail::MakeClientIdentity(
+            "TIamOAuthCredentialsProviderFactory",
+            Params_,
+            TService::service_full_name(),
+            Params_.OAuthToken);
     }
 
 private:

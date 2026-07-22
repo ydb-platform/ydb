@@ -2,7 +2,7 @@ import copy
 import unittest
 from itertools import permutations, product
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
     SnapshotError,
@@ -37,6 +37,8 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import DATE, MAX_DATE
 
 ABSENT = object()
 UINT64_MAX = (1 << 64) - 1
+REFERENCE_DECIMAL_INF = 100_000_000_000_000_000_000_000_000_000_000_000
+REFERENCE_DECIMAL_NAN = REFERENCE_DECIMAL_INF + 1
 COLUMNS = ("a.k1", "a.k2", "a.payload")
 COLUMN_INDEX = {name: index for index, name in enumerate(COLUMNS)}
 
@@ -436,6 +438,66 @@ def _reference_sequences(rows, order):
     }
 
 
+def _decimal_order_key(value, precision):
+    bound = 10**precision
+    if value == -REFERENCE_DECIMAL_INF:
+        return (0, 0)
+    if -bound < value < bound:
+        return (1, value)
+    if value == REFERENCE_DECIMAL_INF:
+        return (2, 0)
+    if value == REFERENCE_DECIMAL_NAN:
+        return (3, 0)
+    raise AssertionError(f"illegal Decimal({precision},0) code {value}")
+
+
+def _compare_decimal_cells(left, right, ascending, nulls_first, precision):
+    if left is None or right is None:
+        return _compare_cells(left, right, ascending, nulls_first)
+    left_key = _decimal_order_key(left, precision)
+    right_key = _decimal_order_key(right, precision)
+    if left_key == right_key:
+        return 0
+    before = left_key < right_key if ascending else left_key > right_key
+    return -1 if before else 1
+
+
+def _decimal_reference_sequences(rows, order, precision):
+    present = tuple(row for row in rows if row is not ABSENT)
+
+    def compare_rows(left, right):
+        for item in order:
+            index = COLUMN_INDEX[item["column"]]
+            comparison = (
+                _compare_decimal_cells(
+                    left[index],
+                    right[index],
+                    item["ascending"],
+                    item["nulls_first"],
+                    precision,
+                )
+                if index == COLUMN_INDEX["a.k1"]
+                else _compare_cells(
+                    left[index],
+                    right[index],
+                    item["ascending"],
+                    item["nulls_first"],
+                )
+            )
+            if comparison:
+                return comparison
+        return 0
+
+    return {
+        permutation
+        for permutation in permutations(present)
+        if all(
+            compare_rows(permutation[index], permutation[index + 1]) <= 0
+            for index in range(len(permutation) - 1)
+        )
+    }
+
+
 def _logical_family(parsed, row_bound):
     script = smt.Script()
     database = Database(parsed, row_bound, script)
@@ -582,8 +644,14 @@ class SortIrTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, "Uint64 literal"):
                     parse_snapshot(value)
 
-    def test_text_and_decimal_ordering_fail_closed(self):
-        for scalar_type in ("String", "Utf8", "Decimal(5,2)"):
+    def test_decimal_ordering_is_admitted_and_text_fails_closed(self):
+        parsed = logical_sort(
+            [order_item("a.k1")],
+            key1_type="Decimal(5,2)",
+        )
+        self.assertEqual(parsed.tables[0].columns[0].type, "Decimal(5,2)")
+
+        for scalar_type in ("String", "Utf8"):
             value = snapshot(
                 [scan(), sort_node("sort", "scan", [order_item("a.k1")])],
                 "sort",
@@ -592,7 +660,7 @@ class SortIrTest(unittest.TestCase):
             with self.subTest(scalar_type=scalar_type):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only integer and Date ordering is modeled",
+                    f"ordering type '{scalar_type}' is unsupported",
                 ):
                     parse_snapshot(value)
 
@@ -696,6 +764,80 @@ class SortConcreteDifferentialTest(unittest.TestCase):
                     _sequences(family, constants),
                     _reference_sequences(rows, order),
                 )
+
+
+class DecimalSortConcreteDifferentialTest(unittest.TestCase):
+    def test_total_code_order_matches_independent_reference_exhaustively(self):
+        self.assertEqual(decimal.INF, REFERENCE_DECIMAL_INF)
+        self.assertEqual(decimal.NAN, REFERENCE_DECIMAL_NAN)
+
+        for precision in (1, 2):
+            bound = 10**precision
+            codes = tuple(range(-bound + 1, bound)) + (
+                -REFERENCE_DECIMAL_INF,
+                REFERENCE_DECIMAL_INF,
+                REFERENCE_DECIMAL_NAN,
+            )
+            for left, right in product(codes, repeat=2):
+                expected = _decimal_order_key(
+                    left,
+                    precision,
+                ) < _decimal_order_key(right, precision)
+                actual = _ground(
+                    decimal.sort_less(
+                        smt.int_value(left),
+                        smt.int_value(right),
+                    ),
+                    {},
+                )
+                self.assertEqual(actual, expected, (precision, left, right))
+
+    def test_sort_matches_special_null_and_tie_reference(self):
+        keys = (None, -decimal.INF, -1, 0, 1, decimal.INF, decimal.NAN)
+        for ascending, nulls_first in product((False, True), repeat=2):
+            order = [order_item("a.k1", ascending, nulls_first)]
+            parsed = logical_sort(order, key1_type="Decimal(2,0)")
+            database, family = _logical_family(parsed, 2)
+            slot_states = tuple(
+                (ABSENT,) + tuple((key, 0, slot) for key in keys)
+                for slot in range(2)
+            )
+            for rows in product(*slot_states):
+                with self.subTest(
+                    ascending=ascending,
+                    nulls_first=nulls_first,
+                    rows=rows,
+                ):
+                    constants = _database_constants(database, rows)
+                    self.assertEqual(
+                        _sequences(family, constants),
+                        _decimal_reference_sequences(rows, order, 2),
+                    )
+
+    def test_nan_ties_allow_both_orders_and_next_key_breaks_ties(self):
+        rows = (
+            (decimal.NAN, 1, 10),
+            (decimal.NAN, 0, 11),
+        )
+        one_key = [order_item("a.k1")]
+        parsed = logical_sort(one_key, key1_type="Decimal(2,0)")
+        database, family = _logical_family(parsed, 2)
+        constants = _database_constants(database, rows)
+        self.assertEqual(
+            _sequences(family, constants),
+            _decimal_reference_sequences(rows, one_key, 2),
+        )
+        self.assertEqual(len(_sequences(family, constants)), 2)
+
+        two_keys = [order_item("a.k1"), order_item("a.k2")]
+        parsed = logical_sort(two_keys, key1_type="Decimal(2,0)")
+        database, family = _logical_family(parsed, 2)
+        constants = _database_constants(database, rows)
+        self.assertEqual(
+            _sequences(family, constants),
+            _decimal_reference_sequences(rows, two_keys, 2),
+        )
+        self.assertEqual(len(_sequences(family, constants)), 1)
 
 
 class OrderedLimitTest(unittest.TestCase):
@@ -1027,6 +1169,61 @@ class StageTopSortMergeTest(unittest.TestCase):
         constants = _database_constants(
             database,
             ((0, 0, 0), (MAX_DATE - 1, 0, 1)),
+            router,
+            (False, False),
+        )
+        self.assertFalse(_ground(equality, constants))
+
+    def test_decimal_local_sort_and_merge_preserve_total_special_order(self):
+        decimal_type = "Decimal(2,0)"
+        keys = (
+            None,
+            -REFERENCE_DECIMAL_INF,
+            -1,
+            0,
+            1,
+            REFERENCE_DECIMAL_INF,
+            REFERENCE_DECIMAL_NAN,
+        )
+        for ascending, nulls_first in product((False, True), repeat=2):
+            order = [order_item("a.k1", ascending, nulls_first)]
+            staged = staged_top_sort_merge(order, key1_type=decimal_type)
+            script = smt.Script()
+            database = Database(staged, 2, script)
+            scalar = ScalarEncoder(script)
+            router = Router(script)
+            family = StageEvaluator(staged, database, scalar, router).root()
+            for key_pair, tasks in product(
+                product(keys, repeat=2),
+                product((False, True), repeat=2),
+            ):
+                rows = tuple(
+                    (key, 0, slot) for slot, key in enumerate(key_pair)
+                )
+                with self.subTest(
+                    ascending=ascending,
+                    nulls_first=nulls_first,
+                    rows=rows,
+                    tasks=tasks,
+                ):
+                    constants = _database_constants(database, rows, router, tasks)
+                    expected = {
+                        sequence[1:2]
+                        for sequence in _decimal_reference_sequences(rows, order, 2)
+                    }
+                    self.assertEqual(_sequences(family, constants), expected)
+
+        descending = [order_item("a.k1", False, False)]
+        mutated = staged_top_sort_merge(
+            self.ORDER,
+            partial_order=descending,
+            merge_order=descending,
+            key1_type=decimal_type,
+        )
+        database, router, equality = self._families(mutated, decimal_type)
+        constants = _database_constants(
+            database,
+            ((decimal.INF, 0, 0), (decimal.NAN, 0, 1)),
             router,
             (False, False),
         )

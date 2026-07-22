@@ -110,9 +110,9 @@ not regress a required formula-only query.
 
 This baseline was rerun on 2026-07-21 in formula-only mode; therefore its three
 successful entries mean `FORMULA_EMITTED`, not `VERIFIED_BOUNDED`.
-Later focused Decimal-arithmetic reruns updated the affected reasons below. All
-selected queries remained unsupported, so the complete-suite counts and query
-sets are unchanged.
+Later focused Decimal-arithmetic and ordering reruns updated the affected
+reasons below. All selected queries remained unsupported, so the complete-suite
+counts and query sets are unchanged.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -132,12 +132,18 @@ both an initial and final reason.
 | `StringContains` | q9 | - |
 | Type `Interval` | q1 | - |
 | Decimal constant cast source is not a non-null integer literal | q19 | - |
-| Sort outside integer/Date ordering | q3 | q3 |
 | Callable `Map` | q5, q6, q7, q8, q10, q12, q14 | q7, q8 |
 | OLAP `string_contains` | - | q9 |
 | Unsupported OLAP non-callable node | - | q1, q5, q6, q10, q12, q14 |
 | `KqpOlapApply` | - | q13 |
 | `IfPresent` | - | q19 |
+
+The remaining query passes both C++ export boundaries and fails in the trusted
+verifier:
+
+| Verifier-level unsupported reason | Queries |
+|---|---|
+| Decimal `sum` | q3 |
 
 Exact Date literals and ordering removed the previous Date blockers without
 changing the 0/22 formula count: these deeper scalar and OLAP blockers were
@@ -145,11 +151,12 @@ then exposed. Restricted static `IN` similarly removed the first blocker from
 q12 and q19, and exact Decimal comparison moved q19 to the narrower constant-
 cast gate, without yet changing the formula count.
 
-Exact Decimal arithmetic removes `DecimalMul` as the first blocker in focused
-reruns: q3 now reaches Decimal Sort at both boundaries; q5 reaches initial
-`Map` and a final OLAP non-callable; q8 reaches `Map` at both boundaries; and
-q10 reaches initial `Map` and a final OLAP non-callable. All four remain
-unsupported, so TPCH stays at 0/22 formulas.
+Exact Decimal arithmetic and ordering remove `DecimalMul` and the Decimal sort
+key as q3's first blockers; both snapshots now export and the verifier reaches
+unsupported Decimal `sum`. q5 reaches initial `Map` and a final OLAP
+non-callable; q8 reaches `Map` at both boundaries; and q10 reaches initial
+`Map` and a final OLAP non-callable. All four remain unsupported, so TPCH stays
+at 0/22 formulas.
 
 ### TPC-DS inventory
 
@@ -157,9 +164,9 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The reason matrix below covers exactly the other 67 unsupported queries. IDs
-can appear in both columns or under more than one reason because both snapshots
-are audited independently.
+The exporter matrix and verifier-level table below cover exactly the other 67
+unsupported queries. IDs can appear in both exporter columns or under more than
+one reason because both snapshots are audited independently.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
@@ -172,7 +179,7 @@ are audited independently.
 | Decimal constant cast source is not a non-null integer literal | q65 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | String `>=` comparison compatibility | q91 | - |
-| Sort outside integer/Date ordering | q3, q25, q29, q42, q46, q50, q52, q55, q64, q68, q71, q76, q93 | q3, q25, q29, q42, q46, q50, q52, q55, q64, q65, q71, q91, q93 |
+| String Sort ordering | q25, q29, q42, q46, q50, q64, q68, q76 | q25, q29, q42, q46, q50, q64, q65 |
 | Unsupported OLAP non-callable node | - | q5, q21, q37, q40, q76, q77, q80, q82 |
 | Callable `/` | q73, q78 | q78 |
 | Callable `Concat` | q84 | q84 |
@@ -183,6 +190,13 @@ are audited independently.
 | Type `Double` | q7, q13, q22, q26, q34, q85 | q7, q13, q22, q26, q75, q85 |
 | Type `Interval` | q37, q72, q77, q80, q82 | q72 |
 
+Five queries now pass both C++ export boundaries and fail in the trusted
+verifier:
+
+| Verifier-level unsupported reason | Queries |
+|---|---|
+| Decimal `sum` | q3, q52, q55, q71, q93 |
+
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
 comparison removed every old Decimal-comparison blocker: q48 now emits a
@@ -190,12 +204,14 @@ formula, while q13, q21, q28, q31, q37, q40, q43, q61, q65, q74, q82, q85,
 and q91 reach the deeper cast, scalar, OLAP, arithmetic, type, or ordering
 reasons shown above. The formula-only count is now 3/99.
 
-Focused arithmetic reruns remove the old `+`, `-`, and `DecimalMul` blockers
-without increasing formula coverage. q11 and q61 now stop at `DecimalDiv`;
-q64 and q93 at Decimal Sort; q65 at the initial Decimal constant-cast gate and
-final Decimal Sort; q75 at the initial constant-cast gate and final `Double`; and
-q80 at initial `Interval` and a final OLAP non-callable. TPC-DS therefore
-remains at 3/99 formulas (q48, q88, and q96).
+Focused arithmetic and ordering reruns remove the old `+`, `-`, `DecimalMul`,
+and Decimal sort-key blockers without increasing formula coverage. q3, q52,
+q55, q71, and q93 now stop at verifier-level Decimal `sum`; q11 and q61 at
+`DecimalDiv`; q64 at String Sort; q65 at the initial Decimal constant-cast gate
+and final String Sort; q75 at the initial constant-cast gate and final `Double`;
+and q80 at initial `Interval` and a final OLAP non-callable. q91's final Decimal
+Sort now exports, while its initial String comparison remains unsupported.
+TPC-DS therefore remains at 3/99 formulas (q48, q88, and q96).
 
 ## Focused formula and solver results
 

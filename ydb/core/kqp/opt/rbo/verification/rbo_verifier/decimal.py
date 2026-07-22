@@ -138,6 +138,19 @@ def compare(kind: str, left: smt.Term, right: smt.Term) -> smt.Term:
     return smt.and_(both_comparable, ordered)
 
 
+def sort_less(left: smt.Term, right: smt.Term) -> smt.Term:
+    """YDB's total Decimal order used by Sort, TopSort, and Merge.
+
+    MiniKQL's ``CompareValues<EDataSlot::Decimal>`` compares the signed
+    128-bit representation directly.  Unlike ordinary Decimal comparison,
+    NaN is therefore ordered after positive infinity instead of being
+    incomparable.  Legal snapshot values have the exact order
+    ``-Inf < finite < +Inf < NaN``.
+    """
+
+    return smt.lt(left, right)
+
+
 def add(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     """Exact same-type YQL Decimal addition."""
 

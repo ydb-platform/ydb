@@ -1245,7 +1245,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({65}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 15, 19, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 88, 90, 93, 96, 99}));
+            std::set<ui32>({3, 15, 19, 37, 40, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 42, 48, 52, 55, 90, 93, 96}));
@@ -1364,6 +1364,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, "FORMULA_EMITTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
+            {37, "FORMULA_EMITTED"},
+            {40, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
@@ -1375,6 +1377,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
+            {82, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
             {90, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
@@ -1396,7 +1399,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(!evaluation.FormulaEmittedQueries.contains(65));
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 15, 19, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 88, 90, 93, 96, 99}));
+            std::set<ui32>({1, 3, 15, 19, 37, 40, 42, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
 
         const auto report = PolicyEvaluationJson(evaluation);
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
@@ -1509,6 +1512,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, "FORMULA_EMITTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
+            {37, "FORMULA_EMITTED"},
+            {40, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
@@ -1520,6 +1525,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
+            {82, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
             {90, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},

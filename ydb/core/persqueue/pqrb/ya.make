@@ -12,6 +12,7 @@ SRCS(
     read_balancer__mlp_balancing.cpp
     read_balancer_app.cpp
     read_balancer.cpp
+    read_balancer_partition_location.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)

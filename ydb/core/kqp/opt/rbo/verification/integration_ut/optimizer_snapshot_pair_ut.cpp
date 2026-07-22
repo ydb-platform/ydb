@@ -779,6 +779,70 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesRestrictedSubstring) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        const TString query = R"(--!syntax_v1
+                SELECT Id, Substring(Bytes, 1, 5) AS Prefix
+                FROM `/Root/RboTextOrdered`;
+            )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto substringExpressions = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> opaque;
+            CollectExpressions(snapshot["plan"], "opaque", opaque);
+            TVector<const NJson::TJsonValue*> result;
+            for (const auto* expression : opaque) {
+                if ((*expression)["fingerprint"].GetStringSafe().Contains("Substring")) {
+                    result.push_back(expression);
+                }
+            }
+            return result;
+        };
+        const auto initialSubstrings = substringExpressions(initial);
+        const auto finalSubstrings = substringExpressions(final);
+        UNIT_ASSERT_VALUES_EQUAL(initialSubstrings.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalSubstrings.size(), 1);
+        const auto assertSubstring = [](const NJson::TJsonValue& expression) {
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "String");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            const auto& arguments = expression["args"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(arguments.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                arguments[0]["kind"].GetStringSafe(),
+                "column");
+        };
+        assertSubstring(*initialSubstrings[0]);
+        assertSubstring(*finalSubstrings[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*initialSubstrings[0])["fingerprint"].GetStringSafe(),
+            (*finalSubstrings[0])["fingerprint"].GetStringSafe());
+
+        const auto verdict = BuildVerificationProblem(results[0], results[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesExplicitIntegerArithmetic) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);

@@ -187,7 +187,11 @@ YQL does not expose a complete determinism-and-totality annotation. The v1 C++
 exporter therefore uses a reviewed positive list for opaque subtrees: integer
 `+`, `-`, and `*` forms that do not meet the structural gate; scalar
 comparisons; `Just` and `Coalesce`; `SafeCast`; and `Convert`
-only when YQL's cast analysis says it cannot fail. Unknown callables, UDF/PG
+only when YQL's cast analysis says it cannot fail. The exact workload form
+`Substring(Optional<String>, constant Uint32, constant Uint32)` is also
+admitted, including direct in-range integer-literal conversions in its two
+bound positions. Its constants remain in the canonical fingerprint and only
+the String input is an external UF argument. Unknown callables, UDF/PG
 calls, generic division, strict casts, `Unwrap`, free variables, position-aware
 or unordered nodes, and side-effecting/CSE-unsafe nodes fail closed.
 `DecimalDiv` is the one explicitly audited total division callable. Expanding
@@ -615,6 +619,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
   independence, nullability, and fail-closed safety gates.
+- The workload `Substring` form is admitted only for an optional String and two
+  constant `Uint32` bounds. Direct, exact integer-literal conversion to
+  `Uint32` is allowed only in those bound positions; type, range, arity, and
+  dynamic-bound mutations fail closed. A real-host obligation covers the
+  normalized converted-literal form.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;

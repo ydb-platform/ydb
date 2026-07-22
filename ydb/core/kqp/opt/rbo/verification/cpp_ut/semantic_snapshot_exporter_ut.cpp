@@ -4046,6 +4046,200 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsOnlyTheRestrictedTotalSubstringAsOpaque) {
+        struct TSubstringCase {
+            bool InputNullable = true;
+            bool ResultNullable = true;
+            bool DynamicStart = false;
+            bool StartNullable = false;
+            bool DynamicCount = false;
+            bool CountNullable = false;
+            bool ConvertBounds = false;
+            bool WideConvertedBounds = false;
+            bool Utf8 = false;
+            bool OmitCount = false;
+            NUdf::EDataSlot BoundSlot = NUdf::EDataSlot::Uint32;
+            TString Count = "5";
+        };
+
+        const auto exportSubstring = [](const TSubstringCase& test) {
+            TExportTestContext ctx;
+            const TString stringName = test.Utf8 ? "Utf8" : "String";
+            const TString boundName = test.BoundSlot == NUdf::EDataSlot::Uint32
+                ? "Uint32"
+                : "Int32";
+            const auto& table = AddTable(ctx, "/Root/Substring", {
+                {"s", stringName, !test.InputNullable},
+                {"start", boundName, !test.StartNullable},
+                {"count", boundName, !test.CountNullable},
+            });
+            auto read = MakeRead(ctx, table, "a", {"s", "start", "count"});
+            const auto stringSlot = test.Utf8
+                ? NUdf::EDataSlot::Utf8
+                : NUdf::EDataSlot::String;
+            const auto* inputType = ScalarType(
+                ctx, stringSlot, test.InputNullable);
+            const auto* resultType = ScalarType(
+                ctx, stringSlot, test.ResultNullable);
+            const auto* startType = ScalarType(
+                ctx, test.BoundSlot, test.StartNullable);
+            const auto* countType = ScalarType(
+                ctx, test.BoundSlot, test.CountNullable);
+            const auto boundLiteral = [&](TStringBuf value, const TTypeAnnotationNode* type) {
+                if (!test.ConvertBounds) {
+                    return TypedLiteral(ctx, boundName, value, type);
+                }
+                const auto sourceSlot = test.WideConvertedBounds
+                    ? NUdf::EDataSlot::Uint64
+                    : NUdf::EDataSlot::Int32;
+                const TStringBuf sourceName = test.WideConvertedBounds
+                    ? TStringBuf("Uint64")
+                    : TStringBuf("Int32");
+                const auto* sourceType = ScalarType(ctx, sourceSlot);
+                const auto* targetType = ScalarType(ctx, NUdf::EDataSlot::Uint32);
+                return TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(ctx, sourceName, value, sourceType),
+                        DataTypeDescriptor(ctx, "Uint32", targetType),
+                    },
+                    targetType);
+            };
+
+            TExprNode::TListType arguments;
+            arguments.push_back(TypedMember(ctx, "a.s", inputType));
+            arguments.push_back(test.DynamicStart
+                ? TypedMember(ctx, "a.start", startType)
+                : boundLiteral("1", startType));
+            if (!test.OmitCount) {
+                arguments.push_back(test.DynamicCount
+                    ? TypedMember(ctx, "a.count", countType)
+                    : boundLiteral(test.Count, countType));
+            }
+
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "Substring",
+                            std::move(arguments),
+                            resultType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto exactSnapshot = ParseSupported(exportSubstring({}));
+        const auto& exact = FindNode(exactSnapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT_VALUES_EQUAL(exact["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(exact["type"].GetStringSafe(), "String");
+        UNIT_ASSERT(exact["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            exact["fingerprint"].GetStringSafe(),
+            "Substring");
+        const auto& arguments = exact["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(arguments.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            arguments[0]["column"].GetStringSafe(),
+            "a.s");
+
+        TSubstringCase changedBound;
+        changedBound.Count = "6";
+        const auto changedSnapshot = ParseSupported(exportSubstring(changedBound));
+        const auto& changed = FindNode(changedSnapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            exact["fingerprint"].GetStringSafe(),
+            changed["fingerprint"].GetStringSafe());
+
+        TSubstringCase convertedBounds;
+        convertedBounds.ConvertBounds = true;
+        const auto convertedSnapshot = ParseSupported(exportSubstring(convertedBounds));
+        const auto& converted = FindNode(convertedSnapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+        UNIT_ASSERT_STRING_CONTAINS(
+            converted["fingerprint"].GetStringSafe(),
+            "Convert");
+        UNIT_ASSERT_VALUES_EQUAL(converted["args"].GetArraySafe().size(), 1);
+
+        TVector<TSubstringCase> rejected;
+        auto wrongArity = TSubstringCase{};
+        wrongArity.OmitCount = true;
+        rejected.push_back(wrongArity);
+        auto nonOptional = TSubstringCase{};
+        nonOptional.InputNullable = false;
+        nonOptional.ResultNullable = false;
+        rejected.push_back(nonOptional);
+        auto mismatchedResult = TSubstringCase{};
+        mismatchedResult.ResultNullable = false;
+        rejected.push_back(mismatchedResult);
+        auto utf8 = TSubstringCase{};
+        utf8.Utf8 = true;
+        rejected.push_back(utf8);
+        auto dynamicStart = TSubstringCase{};
+        dynamicStart.DynamicStart = true;
+        rejected.push_back(dynamicStart);
+        auto optionalStart = TSubstringCase{};
+        optionalStart.StartNullable = true;
+        rejected.push_back(optionalStart);
+        auto dynamicCount = TSubstringCase{};
+        dynamicCount.DynamicCount = true;
+        rejected.push_back(dynamicCount);
+        auto optionalCount = TSubstringCase{};
+        optionalCount.CountNullable = true;
+        rejected.push_back(optionalCount);
+        auto signedBound = TSubstringCase{};
+        signedBound.BoundSlot = NUdf::EDataSlot::Int32;
+        rejected.push_back(signedBound);
+        auto negativeConvertedBound = TSubstringCase{};
+        negativeConvertedBound.ConvertBounds = true;
+        negativeConvertedBound.Count = "-1";
+        rejected.push_back(negativeConvertedBound);
+        auto overflowingConvertedBound = TSubstringCase{};
+        overflowingConvertedBound.ConvertBounds = true;
+        overflowingConvertedBound.WideConvertedBounds = true;
+        overflowingConvertedBound.Count = "4294967296";
+        rejected.push_back(overflowingConvertedBound);
+
+        for (const auto& test : rejected) {
+            const auto result = exportSubstring(test);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Restricted Substring");
+        }
+
+        TExportTestContext standalone;
+        const auto* standaloneSource = ScalarType(
+            standalone, NUdf::EDataSlot::Int32);
+        const auto* standaloneTarget = ScalarType(
+            standalone, NUdf::EDataSlot::Uint32);
+        const auto standaloneConvert = ExportMapExpressionResult(
+            standalone,
+            "a",
+            TypedCallable(
+                standalone,
+                "Convert",
+                {
+                    TypedLiteral(
+                        standalone, "Int32", "1", standaloneSource),
+                    DataTypeDescriptor(
+                        standalone, "Uint32", standaloneTarget),
+                },
+                standaloneTarget));
+        UNIT_ASSERT(!standaloneConvert.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            standaloneConvert.UnsupportedReason,
+            "Opaque Convert may fail");
+    }
+
     Y_UNIT_TEST(OpaqueExpressionFingerprintIsAlphaStableAndKeepsOrderedUses) {
         TExportTestContext first;
         const auto* firstInt = ScalarType(first, NUdf::EDataSlot::Int32);

@@ -288,7 +288,6 @@ private:
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 
-    static constexpr TDuration PartitionsLocationRequestTimeout = TDuration::Seconds(5);
     static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
 
     struct TPartitionsLocationRequest {

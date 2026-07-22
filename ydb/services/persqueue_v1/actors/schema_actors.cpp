@@ -298,6 +298,17 @@ void TDescribeTopicActorImpl::CancelRequestTimeout(const TActorContext& ctx) {
     }
 }
 
+TDuration TDescribeTopicActorImpl::RemainingRequestTimeout() const {
+    if (!RequestStartTime) {
+        return RequestTimeout;
+    }
+    const auto now = TAppData::TimeProvider->Now();
+    if (now >= *RequestStartTime + RequestTimeout) {
+        return TDuration::Zero();
+    }
+    return *RequestStartTime + RequestTimeout - now;
+}
+
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
         TBase::StateWork(ev);
@@ -468,7 +479,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     }
     NTabletPipe::SendData(
         ctx, Tablets[BalancerTabletId].Pipe,
-        new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
+        new TEvPersQueue::TEvGetPartitionsLocation(partsVector, RemainingRequestTimeout())
     );
     ++RequestsInfly;
 }
@@ -820,6 +831,8 @@ bool TDescribeTopicActorImpl::ProcessTablets(
         Tablets[pi.GetTabletId()].Partitions.push_back(pi.GetPartitionId());
         Tablets[pi.GetTabletId()].TabletId = pi.GetTabletId();
     }
+
+    RequestStartTime = TAppData::TimeProvider->Now();
 
     for (auto& pair : Tablets) {
         RequestTablet(pair.second, ctx);

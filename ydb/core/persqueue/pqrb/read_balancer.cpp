@@ -652,12 +652,14 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
     TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev,
     const TActorContext& ctx
 ) {
+    const auto timeout = TDuration::MilliSeconds(ev->Get()->Record.GetTimeoutMs());
     PartitionsLocationQueue.push_back(TPartitionsLocationRequest{
         .Sender = ev->Sender,
         .Record = std::move(ev->Get()->Record),
-        .Deadline = TAppData::TimeProvider->Now() + PartitionsLocationRequestTimeout,
+        .Deadline = TAppData::TimeProvider->Now() + timeout,
     });
     PQ_LOG_D("Enqueue GetPartitionsLocation request, queueSize=" << PartitionsLocationQueue.size()
+            << " timeout=" << timeout
             << " deadline=" << PartitionsLocationQueue.back().Deadline);
     SchedulePartitionsLocationWakeup(ctx);
 }

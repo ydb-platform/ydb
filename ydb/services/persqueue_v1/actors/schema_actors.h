@@ -6,6 +6,8 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 
+#include <optional>
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
@@ -142,6 +144,9 @@ private:
     bool GotReadSessions = false;
     TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
     TActorId TimeoutTimerActorId;
+    std::optional<TInstant> RequestStartTime;
+
+    TDuration RemainingRequestTimeout() const;
 
 protected:
     ui64 BalancerTabletId = 0;

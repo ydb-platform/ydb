@@ -1242,6 +1242,12 @@ private:
 
         MaybeAutoBindRowIdSequence(*table->Metadata);
 
+        if (auto status = CompileGeneratedLambdas(*table->Metadata, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
+        }
+
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
         if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {
@@ -1291,6 +1297,13 @@ private:
             if (!column) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
                     << "Column '" << item->GetName() << "' does not exist in table '" << node.Table().Value() << "'."));
+                return TStatus::Error;
+            }
+
+            if (column->IsDefaultFromExpression()) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column " << item->GetName() << " is a GENERATED ALWAYS column and its value cannot be set explicitly"
+                    << " for table: " << table->Metadata->Name));
                 return TStatus::Error;
             }
 

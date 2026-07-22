@@ -1203,7 +1203,105 @@ TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withS
     return result;
 }
 
-TExprBase BuildUpdatedRows(const TExprBase& rows, const TCoLambda& update, const THashSet<TStringBuf>& updateColumns, const TPositionHandle pos, TExprContext& ctx) {
+TExprBase BuildGeneratedDependencyRow(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
+    const TStructExprType& updateStructType, const TExprBase& updateStruct, const TExprBase& rowArg,
+    const TPositionHandle pos, TExprContext& ctx)
+{
+    THashSet<TString> deps;
+    for (const auto* colMeta : generatedColumns) {
+        deps.insert(colMeta->DefaultExpression->Dependencies.begin(), colMeta->DefaultExpression->Dependencies.end());
+    }
+
+    TVector<TString> sortedDeps(deps.begin(), deps.end());
+    std::ranges::sort(sortedDeps);
+
+    TVector<TExprBase> members;
+    members.reserve(sortedDeps.size());
+
+    for (const auto& dep : sortedDeps) {
+        TCoAtom depAtom(ctx.NewAtom(pos, dep));
+
+        TExprBase valueSource = updateStructType.FindItem(dep)
+            ? updateStruct
+            : rowArg;
+
+        members.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(depAtom)
+                .Value<TCoMember>()
+                    .Struct(valueSource)
+                    .Name(depAtom)
+                    .Build()
+                .Done());
+    }
+
+    return Build<TCoAsStruct>(ctx, pos).Add(members).Done();
+}
+
+TVector<TExprBase> BuildUpdatedRowMembers(const TKikimrTableDescription& tableData, const THashSet<TStringBuf>& updateColumns,
+    const TStructExprType& updateStructType, const TExprBase& updateStruct, const TExprBase& rowArg,
+    const TPositionHandle pos, TExprContext& ctx)
+{
+    TVector<const TKikimrColumnMetadata*> generatedColumns;
+    THashSet<TStringBuf> generatedNames;
+
+    for (const auto* colMeta : CollectStoredGeneratedColumns(tableData)) {
+        if (updateColumns.contains(colMeta->Name)) {
+            generatedColumns.push_back(colMeta);
+            generatedNames.insert(colMeta->Name);
+        }
+    }
+
+    TVector<TExprBase> members;
+    members.reserve(updateColumns.size());
+
+    for (const auto& column : updateColumns) {
+        if (generatedNames.contains(column)) {
+            continue;
+        }
+
+        TCoAtom columnAtom(ctx.NewAtom(pos, column));
+
+        TExprBase valueSource = updateStructType.FindItem(column)
+            ? updateStruct
+            : rowArg;
+
+        members.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(columnAtom)
+                .Value<TCoMember>()
+                    .Struct(valueSource)
+                    .Name(columnAtom)
+                    .Build()
+                .Done());
+    }
+
+    if (!generatedColumns.empty()) {
+        auto dependencyRow = BuildGeneratedDependencyRow(generatedColumns, updateStructType, updateStruct, rowArg, pos, ctx);
+
+        for (const auto* colMeta : generatedColumns) {
+            YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
+                << " has no compiled expression");
+
+            auto value = Build<TExprApplier>(ctx, pos)
+                .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+                .With(0, dependencyRow)
+                .Done();
+
+            members.push_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name(TCoAtom(ctx.NewAtom(pos, colMeta->Name)))
+                    .Value(value)
+                    .Done());
+        }
+    }
+
+    return members;
+}
+
+TExprBase BuildUpdatedRows(const TExprBase& rows, const TCoLambda& update, const THashSet<TStringBuf>& updateColumns,
+    const TKikimrTableDescription& tableData, const TPositionHandle pos, TExprContext& ctx)
+{
     auto rowArg = Build<TCoArgument>(ctx, pos)
         .Name("row")
         .Done();
@@ -1213,25 +1311,8 @@ TExprBase BuildUpdatedRows(const TExprBase& rows, const TCoLambda& update, const
         .With(0, rowArg)
         .Done();
 
-    const auto& updateStructType = update.Ref().GetTypeAnn()->Cast<TStructExprType>();
-    TVector<TExprBase> updateTuples;
-    for (const auto& column : updateColumns) {
-        TCoAtom columnAtom(ctx.NewAtom(pos, column));
-
-        TExprBase valueSource = updateStructType->FindItem(column)
-            ? updateStruct
-            : TExprBase(rowArg);
-
-        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-            .Name(columnAtom)
-            .Value<TCoMember>()
-                .Struct(valueSource)
-                .Name(columnAtom)
-                .Build()
-            .Done();
-
-        updateTuples.push_back(tuple);
-    }
+    auto updateTuples = BuildUpdatedRowMembers(tableData, updateColumns,
+        *update.Ref().GetTypeAnn()->Cast<TStructExprType>(), updateStruct, rowArg, pos, ctx);
 
     return Build<TCoMap>(ctx, pos)
         .Input(rows)
@@ -1245,7 +1326,8 @@ TExprBase BuildUpdatedRows(const TExprBase& rows, const TCoLambda& update, const
 }
 
 TExprBase BuildUpdatedAndOldRows(const TExprBase& rows, const TCoLambda& update, const THashSet<TStringBuf>& updateColumns,
-    const THashSet<TStringBuf>& oldColumns, const TPositionHandle pos, TExprContext& ctx) {
+    const THashSet<TStringBuf>& oldColumns, const TKikimrTableDescription& tableData, const TPositionHandle pos, TExprContext& ctx)
+{
     auto rowArg = Build<TCoArgument>(ctx, pos)
         .Name("row")
         .Done();
@@ -1255,25 +1337,8 @@ TExprBase BuildUpdatedAndOldRows(const TExprBase& rows, const TCoLambda& update,
         .With(0, rowArg)
         .Done();
 
-    const auto& updateStructType = update.Ref().GetTypeAnn()->Cast<TStructExprType>();
-    TVector<TExprBase> updateTuples;
-    for (const auto& column : updateColumns) {
-        TCoAtom columnAtom(ctx.NewAtom(pos, column));
-
-        TExprBase valueSource = updateStructType->FindItem(column)
-            ? updateStruct
-            : TExprBase(rowArg);
-
-        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-            .Name(columnAtom)
-            .Value<TCoMember>()
-                .Struct(valueSource)
-                .Name(columnAtom)
-                .Build()
-            .Done();
-
-        updateTuples.push_back(tuple);
-    }
+    auto updateTuples = BuildUpdatedRowMembers(tableData, updateColumns,
+        *update.Ref().GetTypeAnn()->Cast<TStructExprType>(), updateStruct, rowArg, pos, ctx);
 
     TVector<TExprBase> oldTuples;
     for (const auto& column : oldColumns) {
@@ -1316,14 +1381,24 @@ TExprBase BuildUpdatedAndOldRows(const TExprBase& rows, const TCoLambda& update,
 }
 
 THashSet<TStringBuf> GetUpdateColumns(const TKikimrTableDescription& tableData, const TCoLambda& update) {
-    THashSet<TStringBuf> updateColumns;
+    const auto& updateStructType = update.Ref().GetTypeAnn()->Cast<TStructExprType>();
+
+    THashSet<TStringBuf> setColumns;
+    for (const auto& item : updateStructType->GetItems()) {
+        setColumns.emplace(item->GetName());
+    }
+
+    THashSet<TStringBuf> updateColumns = setColumns;
     for (const auto& keyColumn : tableData.Metadata->KeyColumnNames) {
         updateColumns.emplace(keyColumn);
     }
 
-    const auto& updateStructType = update.Ref().GetTypeAnn()->Cast<TStructExprType>();
-    for (const auto& item : updateStructType->GetItems()) {
-        updateColumns.emplace(item->GetName());
+    // A STORED generated column has to be rewritten whenever the SET clause touches one of its dependencies
+    for (const auto* colMeta : CollectStoredGeneratedColumns(tableData)) {
+        const auto& deps = colMeta->DefaultExpression->Dependencies;
+        if (std::any_of(deps.begin(), deps.end(), [&](const TString& dep) { return setColumns.contains(dep); })) {
+            updateColumns.emplace(colMeta->Name);
+        }
     }
 
     return updateColumns;
@@ -1421,6 +1496,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         rowsToUpdate,
         update.Update(),
         updateColumns,
+        tableData,
         update.Pos(),
         ctx);
 
@@ -1503,7 +1579,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect) {
-        auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
+        auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, tableData, update.Pos(), ctx);
         return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
@@ -1521,7 +1597,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     if (useStreamIndex) {
         const auto oldColumns = GetUpdateLookupColumns(tableData, updateColumns, update.ReturningColumns());
-        const auto updatedRows = BuildUpdatedAndOldRows(rowsToUpdate, update.Update(), updateColumns, oldColumns, update.Pos(), ctx);
+        const auto updatedRows = BuildUpdatedAndOldRows(rowsToUpdate, update.Update(), updateColumns, oldColumns, tableData, update.Pos(), ctx);
         return Build<TKqlUpsertRows>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
@@ -1538,7 +1614,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Done();
     }
 
-    auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
+    auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, tableData, update.Pos(), ctx);
 
     const auto& pk = tableData.Metadata->KeyColumnNames;
 
@@ -1606,7 +1682,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         bool needIndexTableUpdate = indexKeyColumnsUpdated || indexDataColumnsUpdated;
 
         if (needIndexTableUpdate) {
-            auto indexRows = BuildUpdatedRows(rowsToUpdate, update.Update(), indexTableColumns, update.Pos(), ctx);
+            auto indexRows = BuildUpdatedRows(rowsToUpdate, update.Update(), indexTableColumns, tableData, update.Pos(), ctx);
 
             TVector<TCoAtom> indexColumnsList;
             for (const auto& column : indexTableColumns) {

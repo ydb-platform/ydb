@@ -123,6 +123,92 @@ void CheckGeneratedColumnPersisted(const std::string& createTable, bool expectSt
     UNIT_ASSERT_C(found, "generated column v not found in describe");
 }
 
+constexpr const char* MultiGeneratedTableDDL = R"(
+    CREATE TABLE TestTable (
+        k Int32 NOT NULL,
+        a Int32,
+        b Int32,
+        c Int32,
+        d Int32,
+        g1 Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+        g2 Int32 GENERATED ALWAYS AS (COALESCE(b, 0) * 10 + COALESCE(c, 0)) STORED,
+        PRIMARY KEY (k)
+    );
+)";
+constexpr const char* MultiGeneratedSeed = R"(
+    UPSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 4), (2, 10, 20, 30, 40);
+)";
+constexpr const char* MultiGeneratedSelect = "SELECT k, a, b, c, d, g1, g2 FROM TestTable ORDER BY k;";
+constexpr const char* MultiGeneratedUntouchedRow = "[2;[10];[20];[30];[40];[30];[230]]";
+constexpr const char* MultiGeneratedSeed3 = R"(
+    UPSERT INTO TestTable (k, a, b, c, d) VALUES
+        (1, 1, 2, 3, 100),
+        (2, 4, 5, 6, 100),
+        (3, 7, 8, 9, 200);
+)";
+constexpr const char* MultiGeneratedControlRow = "[3;[7];[8];[9];[200];[15];[89]]";
+constexpr const char* MultiGeneratedStarOrderSelect = "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k < 3 ORDER BY k;";
+constexpr const char* IndexedGeneratedTableDDL = R"(
+    CREATE TABLE TestTable (
+        k Int32 NOT NULL,
+        a Int32,
+        b Int32,
+        g1 Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+        PRIMARY KEY (k),
+        INDEX idx_g1 GLOBAL ON (g1)
+    );
+)";
+
+class TGeneratedUpdateFixture {
+public:
+    explicit TGeneratedUpdateFixture(const std::string& createTable, const std::string& seed = "")
+        : Kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false))
+        , Db(Kikimr.GetQueryClient())
+        , Session(Db.GetSession().GetValueSync().GetSession())
+    {
+        Exec(createTable);
+        if (!seed.empty()) {
+            Exec(seed);
+        }
+    }
+
+    void Exec(const std::string& query) {
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
+    }
+
+    void Rejects(const std::string& query, const TString& expectedError) {
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), "expected the query to be rejected: " << query);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+    }
+
+    void Check(const std::string& query, const TString& expected) {
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    void CheckReturning(const std::string& update, const std::string& selectBack, const TString& expected) {
+        auto result = Session.ExecuteQuery(update, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << update << "\n" << result.GetIssues().ToString());
+        const TString returned = FormatResultSetYson(result.GetResultSet(0));
+
+        CompareYsonUnordered(expected, returned, TStringBuilder() << "unexpected RETURNING rows for: " << update);
+
+        auto after = Session.ExecuteQuery(selectBack, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(after.IsSuccess(), "query failed: " << selectBack << "\n" << after.GetIssues().ToString());
+
+        CompareYsonUnordered(returned, FormatResultSetYson(after.GetResultSet(0)),
+            TStringBuilder() << "RETURNING disagrees with a subsequent SELECT for: " << update);
+    }
+
+private:
+    TKikimrRunner Kikimr;
+    NYdb::NQuery::TQueryClient Db;
+    NYdb::NQuery::TSession Session;
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(GeneratedStored) {
@@ -1178,6 +1264,271 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             UNIT_ASSERT_C(!result.IsSuccess(), "dropping a dependency of a generated column must be rejected");
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "used by generated column");
         }
+    }
+
+    Y_UNIT_TEST(UpdateSetGeneratedRejected) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        fixture.Rejects("UPDATE TestTable SET g1 = 5 WHERE k = 1;", "cannot be set explicitly");
+        fixture.Rejects("UPDATE TestTable SET g2 = 5 WHERE k = 1;", "cannot be set explicitly");
+
+        // Nothing was written
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[2];[3];[4];[3];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetGeneratedWithDependencyRejected) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        fixture.Rejects("UPDATE TestTable SET a = 5, g1 = 5 WHERE k = 1;", "cannot be set explicitly");
+        fixture.Rejects("UPDATE TestTable SET d = 5, g2 = 5 WHERE k = 1;", "cannot be set explicitly");
+        fixture.Rejects("UPDATE TestTable SET g1 = 1, g2 = 2 WHERE k = 1;", "cannot be set explicitly");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[2];[3];[4];[3];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetOneDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = COALESCE(10, 0) + COALESCE(2, 0) = 12, g2 untouched (b, c unchanged) = 23
+        fixture.Exec("UPDATE TestTable SET a = 10 WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[10];[2];[3];[4];[12];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetAllDependencies) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = 5 + 6 = 11, g2 = 6*10 + 7 = 67
+        fixture.Exec("UPDATE TestTable SET a = 5, b = 6, c = 7 WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[5];[6];[7];[4];[11];[67]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetSharedDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
+        fixture.Exec("UPDATE TestTable SET b = 7 WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[7];[3];[4];[8];[73]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetIndependentDependencies) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = 4 + 2 = 6, g2 = 2*10 + 9 = 29
+        fixture.Exec("UPDATE TestTable SET a = 4, c = 9 WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[4];[2];[9];[4];[6];[29]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetNonDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        fixture.Exec("UPDATE TestTable SET d = 42 WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[2];[3];[42];[3];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateSetDependencyToNull) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = 1 + 0 = 1, g2 = 0*10 + 3 = 3
+        fixture.Exec("UPDATE TestTable SET b = NULL WHERE k = 1;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];#;[3];[4];[1];[3]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // Matches k=1 only. g1 = 10 + 2 = 12, g2 = 23
+        fixture.Exec("UPDATE TestTable SET a = 10 WHERE b = 2;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[10];[2];[3];[4];[12];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereGenerated) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 == 3 matches k=1 only. g1 = 10 + 2 = 12, g2 = 23
+        fixture.Exec("UPDATE TestTable SET a = 10 WHERE g1 = 3;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[10];[2];[3];[4];[12];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereGeneratedAndDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // g1 = 3 unchanged (a, b untouched), g2 = 2*10 + 9 = 29
+        fixture.Exec("UPDATE TestTable SET c = 9 WHERE g1 = 3 AND b = 2;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[2];[9];[4];[3];[29]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereGeneratedSetSharedDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        // WHERE sees the old g2 == 23; after the write g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
+        fixture.Exec("UPDATE TestTable SET b = 7 WHERE g2 = 23;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[7];[3];[4];[8];[73]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereGeneratedNoMatch) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+
+        fixture.Exec("UPDATE TestTable SET a = 10 WHERE g1 = 999;");
+
+        fixture.Check(MultiGeneratedSelect,
+            TStringBuilder() << "[[1;[1];[2];[3];[4];[3];[23]];" << MultiGeneratedUntouchedRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWithIndexOnGenerated) {
+        TGeneratedUpdateFixture fixture(IndexedGeneratedTableDDL);
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2);");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
+
+        // g1 = 10 + 2 = 12
+        fixture.Exec("UPDATE TestTable SET a = 10 WHERE k = 1;");
+
+        fixture.Check("SELECT k, a, b, g1 FROM TestTable ORDER BY k;", "[[1;[10];[2];[12]]]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 12;", "[[1;[12]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningStarNoGeneratedUpdate) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING *;",
+            MultiGeneratedStarOrderSelect,
+            "[[[1];[2];[3];[55];[3];[23];1];[[4];[5];[6];[55];[9];[56];2]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];[2];[3];[55];[3];[23]];[2;[4];[5];[6];[55];[9];[56]];" << MultiGeneratedControlRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningStarWithGeneratedUpdate) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 100 + b, g2 untouched
+        fixture.CheckReturning(
+            "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING *;",
+            MultiGeneratedStarOrderSelect,
+            "[[[100];[2];[3];[100];[102];[23];1];[[100];[5];[6];[100];[105];[56];2]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[100];[2];[3];[100];[102];[23]];[2;[100];[5];[6];[100];[105];[56]];"
+            << MultiGeneratedControlRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningAllColumnsListed) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // b feeds both: g1 = a + 50, g2 = 50*10 + c
+        fixture.CheckReturning(
+            "UPDATE TestTable SET b = 50 WHERE k < 3 RETURNING k, a, b, c, d, g1, g2;",
+            "SELECT k, a, b, c, d, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[1];[50];[3];[100];[51];[503]];[2;[4];[50];[6];[100];[54];[506]]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];[50];[3];[100];[51];[503]];[2;[4];[50];[6];[100];[54];[506]];"
+            << MultiGeneratedControlRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningGeneratedUpdated) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, g1;",
+            "SELECT k, g1 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[102]];[2;[105]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningGeneratedNotUpdated) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[3];[23]];[2;[9];[56]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningDependenciesUpdatedAndNot) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, a, b, g1;",
+            "SELECT k, a, b, g1 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[100];[2];[102]];[2;[100];[5];[105]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningOneOfTwoGenerated) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[102];[23]];[2;[105];[56]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningBothGeneratedSharedDependency) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET b = 50 WHERE k < 3 RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[51];[503]];[2;[54];[506]]]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningBothGeneratedIndependentDependencies) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET a = 100, c = 77 WHERE k < 3 RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[102];[97]];[2;[105];[127]]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[100];[2];[77];[100];[102];[97]];[2;[100];[5];[77];[100];[105];[127]];"
+            << MultiGeneratedControlRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateReturningNoGeneratedColumns) {
+        TGeneratedUpdateFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING k, d;",
+            "SELECT k, d FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[55]];[2;[55]]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[1];[2];[3];[55];[3];[23]];[2;[4];[5];[6];[55];[9];[56]];" << MultiGeneratedControlRow << "]");
+    }
+
+    Y_UNIT_TEST(UpdateWhereGeneratedWithIndex) {
+        TGeneratedUpdateFixture fixture(IndexedGeneratedTableDDL);
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 5, 5);");
+
+        fixture.Exec("UPDATE TestTable SET b = 7 WHERE g1 = 3;");
+
+        fixture.Check("SELECT k, a, b, g1 FROM TestTable ORDER BY k;", "[[1;[1];[7];[8]];[2;[5];[5];[10]]]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 8;", "[[1;[8]]]");
+        fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 10;", "[[2;[10]]]");
     }
 }
 

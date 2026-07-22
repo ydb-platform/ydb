@@ -1,13 +1,14 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
+#include "partition_direct_service.h"
 #include "read_request_executor.h"
 #include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -27,6 +28,7 @@ using namespace NThreading;
 
 TVChunk::TVChunk(
     NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
@@ -34,6 +36,7 @@ TVChunk::TVChunk(
     ui64 vChunkSize,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
+    , TraceService(traceService)
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
@@ -57,6 +60,8 @@ TVChunk::~TVChunk() = default;
 void TVChunk::Start()
 {
     // ActorSystem thread
+
+    LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
 
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]() mutable
@@ -396,7 +401,6 @@ void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
     DirectBlockGroup->Register(weak_from_this());
 
     LOG_DEBUG(
@@ -612,7 +616,7 @@ void TVChunk::DoFlush(bool force)
             DirectBlockGroup,
             route,
             std::move(hint),
-            PartitionDirectService->CreteRootSpan("Flush"));
+            TraceService->CreteRootSpan("Flush"));
         Inflight.push_back(flushExecutor);
 
         auto future = flushExecutor->GetFuture();
@@ -696,7 +700,7 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
             DirectBlockGroup,
             host,
             std::move(hint),
-            PartitionDirectService->CreteRootSpan("Erase"));
+            TraceService->CreteRootSpan("Erase"));
         Inflight.push_back(eraseExecutor);
 
         auto future = eraseExecutor->GetFuture();
@@ -982,6 +986,7 @@ void TVChunk::ApplyConfig()
         auto newCopier = Copiers[hostIndex] =
             std::make_shared<TDDiskDataCopier>(
                 ActorSystem,
+                TraceService,
                 PartitionDirectService,
                 VChunkConfig,
                 DirectBlockGroup,

@@ -123,8 +123,8 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
     }
 
     const auto read = CastOperator<TOpRead>(maybeRead);
-    // Currently supported only for cs.
-    return !read->GetRanges() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage;
+    const auto tableType = read->GetTableStorageType();
+    return !read->GetRanges() && (tableType == NYql::EStorageType::ColumnStorage || tableType == NYql::EStorageType::RowStorage);
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {

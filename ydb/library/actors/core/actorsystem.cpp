@@ -169,6 +169,9 @@ namespace NActors {
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
         }
+        for (auto& callback : SystemSetup->OnActorSystemCreated) {
+            callback(this);
+        }
     }
 
     TActorSystem::~TActorSystem() {

@@ -53,6 +53,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -138,6 +139,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -216,6 +218,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -260,6 +263,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -375,6 +379,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -485,6 +490,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -654,6 +660,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,
@@ -756,6 +763,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
             VChunkConfig,
             DirectBlockGroup,

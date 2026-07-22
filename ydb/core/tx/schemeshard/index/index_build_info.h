@@ -896,7 +896,7 @@ public:
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
@@ -1022,6 +1022,10 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
+    }
+
+    bool IsFinished() const override {
+        return IsDone();
     }
 
     bool IsCloseToCompletion() const {

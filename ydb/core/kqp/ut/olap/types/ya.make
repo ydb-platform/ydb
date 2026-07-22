@@ -39,6 +39,6 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
+GENERATE_ENUM_SERIALIZATION(column_type_test_enums.h)
 
 END()

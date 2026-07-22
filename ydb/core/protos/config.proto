@@ -548,6 +548,11 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     optional bool UseUring = 62 [default = false];
     optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
+    optional bool EnableInterconnectSessionV2 = 64 [default = false];
+    optional bool ChecksumInterconnectSessionV2 = 65 [default = false];
+    optional bool EnableSQPOLLv2 = 66 [default = true];
+    optional bool EnablePreserializeInV2 = 67 [default = false];
+    optional uint32 UringEngineThreadsV2 = 68 [default = 4];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -652,6 +657,7 @@ message TMonitoringConfig {
     optional bool RequireHealthcheckAuthentication = 22 [default = false];
     optional string MonitoringCaFile = 23;
     repeated string CompressContentTypes = 24; // by default most text types are compressed
+    optional bool ClientCertificateRequired = 25 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -3111,6 +3117,7 @@ message TClientCertificateAuthorization {
     repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
     optional bool RequestClientCertificate = 2 [default = false];
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
+    optional bool ClientCertificateRequired = 4 [default = false];
 }
 
 message TKafkaProxyConfig {

@@ -151,6 +151,19 @@ membership normalization admits only
 1..512 non-null exact-type items; generic dictionaries and `Contains` remain
 unsupported.
 
+Two reviewed optimizer-generated wrappers reuse those existing exact nodes.
+`Coalesce(comparison, false)` lowers to `if_present` only when the first child
+is one direct nullable ordinary comparison, the fallback is exact non-null
+`Bool(false)`, and the result is exact non-null `Bool`. Larger Boolean trees,
+other fallbacks, and different Optional shapes remain opaque. `Just(decimal)`
+lowers to `if(true, decimal, typed-null)` only when its child is a direct
+canonical Decimal literal or a complete integer-literal `SafeCast`/`Convert`
+to canonical Decimal, and its result is the matching `Optional<Decimal>`.
+The unreachable typed-NULL branch preserves the Optional schema while the
+constant-true condition preserves `Just` runtime presence. Both gates retain
+the full closed-world scalar safety validation and shared normalized-node,
+source-depth, and live-binding limits.
+
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
 
@@ -751,10 +764,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   separate non-gating q40 scaling experiment retains a 97,319,076-byte formula
   and reports `SOLVER_ERROR` after the external solver exceeds its 15.0-second
   deadline; that focused `ya` experiment fails on the status as designed. The
-  proof floor remains ten. Before restricted stored-String `Concat` was added,
-  TPC-DS q5, q80, and q84 stopped at that callable; other deeper blockers include
-  `Double` for q21, a noncanonical dynamic Date fold for q72, and verifier-side
-  Decimal-SUM headroom for q77.
+  proof floor remained ten at that milestone. Before restricted stored-String
+  `Concat` was added, TPC-DS q5, q80, and q84 stopped at that callable; other
+  deeper blockers include `Double` for q21, a noncanonical dynamic Date fold
+  for q72, and verifier-side Decimal-SUM headroom for q77.
 - Direct numeric Date/Interval normalization accepts only an exact non-null
   `Date` left operand and `Interval` right operand under an `Optional<Date>`
   `+` or `-`. It
@@ -809,13 +822,24 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   53/267 ms of preparation/verifier work, respectively. q12 passes the shift
   fold but remains unsupported on unordered scalar children at both snapshot
   boundaries. This raises TPCH formula coverage to 6/22 and total formula
-  coverage to 27/121 (22.3%). Focused solver experiments leave the proof floor
-  unchanged: q5 is `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier
-  work and the 65-second external-process watchdog, q10 is `UNKNOWN` after
-  142/74,871 ms, and q6/q14 produce symbolic counterexamples after 54/788 and
-  87/1,046 ms. Inspection indicates verifier false positives caused by
+  coverage to 27/121 (22.3%). At that milestone, focused solver experiments
+  left the proof floor unchanged: q5 was `SOLVER_ERROR` after 180/230,982 ms
+  of preparation/verifier work and the 65-second external-process watchdog,
+  q10 was `UNKNOWN` after 142/74,871 ms, and q6/q14 produced symbolic
+  counterexamples after 54/788 and 87/1,046 ms. Inspection indicates verifier
+  false positives caused by
   equivalent predicate/Decimal lowerings receiving distinct opaque forms;
-  neither is replay-confirmed or evidence of an optimizer bug.
+  neither was replay-confirmed or evidence of an optimizer bug.
+- Exact wrapper normalization resolves those q6/q14 verifier-modeling gaps
+  without globally erasing either wrapper. Only a nullable direct comparison
+  under exact `Coalesce(..., false)` becomes schema-preserving `if_present`, and
+  only a direct Decimal literal or complete integer-literal Decimal cast under
+  matching `Just` becomes `if(true, value, typed-null)`. Structural, type,
+  nullability, safety, source-depth, normalized-node, and live-binding tests
+  fail closed outside those forms. The policy-backed TPCH proof-floor run now
+  returns `VERIFIED_BOUNDED` for q6 after 72/749 ms and q14 after 97/33,152 ms
+  of preparation/verification. Their former candidates disappear under the
+  exact model, so both enter the proof floor and neither is an optimizer bug.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -903,7 +927,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
   the verifier, the 27-query formula floor must keep constructing SMT, and the
-  ten-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
+  twelve-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
@@ -926,16 +950,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   predicates, decoder recursion, and the unchanged 512-item `IN` and
   64-live-`IfPresent` limits. Opaque fingerprints retain their independent
   256-node/64-depth/64-KiB budget.
-- A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3 and
-  q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a fixed
-  60-second per-query budget. The complete current-code run recorded 131 ms of
-  preparation and 11,845 ms of verification for TPCH q3; focused q19 recorded
-  116 ms of preparation and 851 ms of verification; q42 recorded 95 ms of
+- A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
+  q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a
+  fixed 60-second per-query budget. The complete current-code TPCH run recorded
+  128/13,291 ms of preparation/verification for q3, 72/749 ms for q6,
+  97/33,152 ms for q14, and 110/902 ms for q19; q42 recorded 95 ms of
   preparation and 15,210 ms of verification. q48 recorded 179 ms of
   preparation and 2,997 ms of verification in a proof-floor run; that run also
   recorded 227 ms of q90 preparation and 7,299 ms of verification. These are
-  ten curated proofs (8.3% of the workload). q50 emits a formula but its solver
-  experiment ended `SOLVER_ERROR` after the external process exceeded its
+  twelve curated proofs (9.9% of the workload). q50 emits a formula but its
+  solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. q15, q61, q62, q76,
   q79, and q88 return `UNKNOWN` at the 60-second solver budget. q61's
   1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
@@ -945,8 +969,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   83,339 ms in the verifier/formula-emission phase of the complete run before a
   focused solver
   attempt reached the external process deadline. q76 is formula-covered but is
-  not one of the ten proofs. The Date additions q37 and q82 return `UNKNOWN` at
-  the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
+  not one of the twelve proofs. The Date additions q37 and q82 return `UNKNOWN`
+  at the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
   retained formulas are 4,201,832 and 2,841,844 bytes. A separate non-gating
   q40 scaling experiment used a 10-second solver budget, prepared in 178 ms,
   retained a 97,319,076-byte formula, and spent 104,804 ms in verifier
@@ -955,8 +979,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   on `SOLVER_ERROR` as designed; q40 is formula-covered but neither proved nor
   a counterexample. No optimizer correctness bug is confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
-  commands, complete formula-only baseline, proof-floor evidence, q79/q88
-  investigations, and explicit unsupported/optimizer-failure inventory.
+  commands, complete formula-only baseline, proof-floor evidence, q6/q14 and
+  q79/q88 investigations, and explicit unsupported/optimizer-failure inventory.
 
 ### M5: confirmation and localization — implemented for replayable single-result witnesses
 
@@ -981,7 +1005,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the ten curated workload proofs have separate
+- Formula construction and the twelve curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

@@ -129,7 +129,7 @@ namespace NFake {
             if (auto logl = Logger->Log(ELnLev::Info))
                 logl << "Starting storage for BS group " << group;
 
-            auto actor = Register(new NFake::TStorage(group));
+            auto actor = Register(new NFake::TStorageMock(group));
 
             Sys->RegisterLocalService(MakeBlobStorageProxyID(group), actor);
         }

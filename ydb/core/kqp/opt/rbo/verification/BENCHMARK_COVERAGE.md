@@ -97,18 +97,20 @@ than `ui64`, including Decimal cells, cannot be rounded during JSON re-encoding.
 The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
-The checked-in policy has two monotonic contracts. The formula-construction
-floor requires TPCH q3 and q19 plus TPC-DS q3, q15, q19, q42, q48, q50, q52,
-q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99; it is enforced only
-for a complete formula-only suite. The proof floor requires TPCH q3 and q19 plus
-TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96; dedicated hermetic tests
-require each one to remain `VERIFIED_BOUNDED`.
+The checked-in policy has three monotonic contracts. The verifier-entry floor
+requires TPC-DS q65 to keep passing both snapshot exporters and invoke the
+verifier; its current verifier-side `UNSUPPORTED` result does not count as a
+formula, while any later formula or proof still satisfies this depth floor. The
+formula-construction floor requires TPCH q3 and q19 plus TPC-DS q3, q15, q19,
+q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q88, q90, q93, q96, and q99.
+Both floors are enforced only for a complete formula-only suite. The proof floor
+requires TPCH q3 and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96;
+dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
-are allowed without editing either floor. Policy parsing and evaluation fail
-closed, and the report records both
-required and observed ID sets, the explicit mode, each enforced floor, and
-every violation before the test fails.
+are allowed without editing a floor. Policy parsing and evaluation fail closed,
+and the report records every required and observed ID set, the explicit mode,
+each enforced floor, and every violation before the test fails.
 
 ## Status interpretation
 
@@ -223,10 +225,10 @@ grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
-fails closed because aggregate `max` is not modeled. q65 now passes both exports
+rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
 and fails closed because aggregate `avg` is not modeled. The focused q68 run
-passed both snapshot exports and reached that Merge audit cap after 11,175 ms
-of verifier work.
+passed both snapshot exports and reached its Merge audit cap after 11,175 ms of
+verifier work.
 
 Restricted static `IN` with exact types or lossless common-integer equality has
 now moved all ten affected TPC-DS queries to deeper reasons. Exact Decimal
@@ -235,8 +237,9 @@ formula, while q13, q21, q28, q31, q37, q40, q43, q65, q74, q82, q85, and q91
 reach deeper cast, scalar, OLAP, construction, aggregate, type, or ordering
 reasons.
 
-Exact arithmetic, ordering, and SUM remove the old `+`, `-`, `DecimalMul`,
-`DecimalDiv`, Decimal sort-key, and Decimal aggregate blockers.
+Exact arithmetic, ordering, SUM, and Decimal-only MAX remove the old `+`, `-`,
+`DecimalMul`, `DecimalDiv`, Decimal sort-key, and modeled Decimal aggregate
+blockers.
 Occurrence-aware non-Merge StageGraph gathers compact mutually exclusive
 routing copies, and large Sort/Merge choices use bounded symbolic ordinals
 instead of factorial outcome expansion. That moves q3, q52, q55, q61, q71,
@@ -253,7 +256,8 @@ reaches verifier aggregate `avg`. Exact
 boundaries, q73 to `/` at both boundaries, q79 to the formerly opaque
 `Substring` at both boundaries, and q68 through both exports to the Merge
 construction cap. q31
-still reaches its construction cap and q74 reaches aggregate `max`. q5 now
+still reaches its construction cap, and exact Decimal MAX moves q74 to its
+65,536-pair join-matching cap. q5 now
 reaches initial `Interval` and final OLAP `just`; q75 reaches `Double` in both
 snapshots; and q80 reaches initial `Interval` and final OLAP `just`. Exact OLAP
 unary presence lowering then moves q76 through formula construction and raises
@@ -331,6 +335,17 @@ formula-construction count.
   passes both exports, then reports unmodeled aggregate `avg` after 231 ms of
   preparation and 255 ms of verifier work. No formula is emitted, so coverage
   remains 20/121 and the proof floor remains ten.
+
+- Decimal aggregate `max` is exact only when its input and output have the same
+  canonical Decimal type and phase-aware nullability. It ignores NULL and uses
+  MiniKQL `AggrMax`'s raw signed-code order, so NaN is greater than positive
+  infinity; the same scalar state combines associatively across intermediate
+  and final phases. Exhaustive special-value, grouped/global, all-NULL, split
+  task, wrong-shuffle, and fail-closed type tests cover the contract. Focused
+  q74 passes MAX and then rejects 65,536 join-matching pairs above the 16,384
+  construction cap after 463 ms of preparation and 375 ms of verifier work.
+  It emits no formula, so the 20/121 formula slice and ten-query proof floor are
+  unchanged.
 
 - TPC-DS q61 constructs a 1,572,871-byte SMT formula after exact
   `DecimalDiv` support. A focused solver run spent 955 ms preparing the query

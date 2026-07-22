@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import unittest
+from itertools import product
 from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -1153,6 +1154,89 @@ class SnapshotTest(unittest.TestCase):
                     "sum output type must be 'Decimal\\(35,2\\)'",
                 ):
                     parse_snapshot(malformed)
+
+    def test_decimal_max_requires_exact_type_and_phase_aware_nullability(self):
+        def snapshot_value(*, phase, grouped, input_nullable, output_nullable):
+            value = minimal_snapshot()
+            value["schema"]["tables"][0]["columns"][0].update(
+                type="Decimal(7,2)",
+                nullable=input_nullable,
+            )
+            keys = ["a.flag"] if grouped else []
+            value["plan"]["nodes"][-1] = {
+                "id": "aggregate",
+                "op": "aggregate",
+                "input": "scan",
+                "keys": keys,
+                "aggregates": [
+                    {
+                        "input": "a.k",
+                        "function": "max",
+                        "output": "result",
+                        "type": "Decimal(7,2)",
+                        "nullable": output_nullable,
+                        "distinct": False,
+                        "unwrap": False,
+                    }
+                ],
+                "phase": phase,
+                "distinct_all": False,
+            }
+            value["plan"]["root"] = "aggregate"
+            value["plan"]["output"] = keys + ["result"]
+            return value
+
+        for phase, grouped, input_nullable in product(
+            ("undefined", "intermediate", "final"),
+            (False, True),
+            (False, True),
+        ):
+            output_nullable = input_nullable or (
+                not grouped and phase != "intermediate"
+            )
+            with self.subTest(
+                phase=phase,
+                grouped=grouped,
+                input_nullable=input_nullable,
+            ):
+                parse_snapshot(
+                    snapshot_value(
+                        phase=phase,
+                        grouped=grouped,
+                        input_nullable=input_nullable,
+                        output_nullable=output_nullable,
+                    )
+                )
+                with self.assertRaisesRegex(SnapshotError, "max output nullability"):
+                    parse_snapshot(
+                        snapshot_value(
+                            phase=phase,
+                            grouped=grouped,
+                            input_nullable=input_nullable,
+                            output_nullable=not output_nullable,
+                        )
+                    )
+
+        wrong_type = snapshot_value(
+            phase="undefined",
+            grouped=False,
+            input_nullable=False,
+            output_nullable=True,
+        )
+        wrong_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Decimal(8,2)"
+        with self.assertRaisesRegex(SnapshotError, "must exactly match its Decimal input"):
+            parse_snapshot(wrong_type)
+
+        non_decimal = snapshot_value(
+            phase="undefined",
+            grouped=False,
+            input_nullable=False,
+            output_nullable=True,
+        )
+        non_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
+        non_decimal["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+        with self.assertRaisesRegex(SnapshotError, "only Decimal is modeled"):
+            parse_snapshot(non_decimal)
 
     def test_void_is_an_exact_non_nullable_count_input_expression(self):
         value = count_star_snapshot()

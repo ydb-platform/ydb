@@ -13,7 +13,8 @@ restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
 optional Decimal, exact Decimal semantics for comparison, integral casts,
-arithmetic, ordering, and `SUM`, plus the benchmark-dashboard parts of M4.
+arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
+parts of M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -37,6 +38,10 @@ ms of verification. q50 emits a formula but its solver experiment reached the
 q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. q76 is
 formula-covered, not part of the proof floor. None is evidence of an optimizer
 correctness bug.
+The complete formula dashboard also enforces a monotonic verifier-entry floor
+for TPC-DS q65: both snapshots must continue to export and reach the verifier.
+Its current unsupported `avg` result is deliberately not counted as a formula;
+later formula or proof results satisfy the same depth floor automatically.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -405,12 +410,16 @@ above, plus exact raw-code Sort/TopSort/Merge ordering. Generic division, casts
 outside the exact integral-`SafeCast` and constant normalization gates, and
 aggregate functions outside the modeled subset below remain unsupported.
 
-The aggregate subset covers grouped and scalar `count`, integer `sum`, and
-Decimal `sum`, including NULL grouping and inputs and optimizer-generated
-intermediate/final phases. Signed inputs widen to `Int64`, unsigned inputs widen
-to `Uint64`, and both integer sums use the runtime's exact 64-bit modular
-overflow. `sum(Decimal(p,s))` widens every input, partial state, and result to
-`Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
+The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
+`sum`, and Decimal-only `max`, including NULL grouping and inputs and
+optimizer-generated intermediate/final phases. Signed inputs widen to `Int64`,
+unsigned inputs widen to `Uint64`, and both integer sums use the runtime's exact
+64-bit modular overflow. `sum(Decimal(p,s))` widens every input, partial state,
+and result to `Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
+Decimal `AggrMax` keeps its input type and uses the runtime's raw signed
+128-bit-code order, `-Inf < finite < +Inf < NaN`; this is intentionally
+different from ordinary Decimal comparison. NULL inputs are ignored, and the
+same scalar state combines exactly across partial and final phases.
 
 Decimal `AggrAdd` saturates each intermediate result and is not associative when
 finite overflow is possible. The verifier therefore carries a conservative
@@ -429,8 +438,8 @@ it may pass through routing and relational operators, but every path must
 terminate in a non-distinct, non-unwrapped `count`. Inspecting, dropping, or
 exposing that unit fails closed. `Void` is not a catalog, literal, NULL, or
 opaque-result type.
-`distinct`, `DistinctAll`, `unwrap`, min/max, average, and variance currently
-return `UNSUPPORTED` rather than use an approximation.
+`distinct`, `DistinctAll`, `unwrap`, min, non-Decimal max, average, and variance
+currently return `UNSUPPORTED` rather than use an approximation.
 Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.

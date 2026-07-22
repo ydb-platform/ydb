@@ -404,7 +404,8 @@ Implementation sequence:
 16. M4: exact bounded String/Utf8 comparison, ordering, and hash compatibility;
 17. M4: exact all-pairs ordinary integral `DataCompare`;
 18. M4: exact direct String/Utf8-literal `SafeCast` to optional Decimal;
-19. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
+19. M4: exact same-type Decimal aggregate `max`;
+20. later: subplans, distinct expansion, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -735,14 +736,21 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
   `Decimal(35,s)` and is exact whenever its carried finite bound proves that
   saturating partial addition cannot overflow; unsafe bounds fail closed.
-  Casts outside that gate, generic division, non-core `IN`, and other aggregate
-  functions remain unsupported. Exhaustive cast, rational, ordering, and
-  aggregate references,
+  Same-type Decimal `max` ignores NULL and reduces the raw signed codes in the
+  runtime's total order, `-Inf < finite < +Inf < NaN`, with the same scalar
+  state in logical, intermediate, and final phases. Casts outside those gates,
+  generic division, non-core `IN`, and other aggregate functions remain
+  unsupported. Exhaustive cast, rational, ordering, and aggregate references,
   adversarial arithmetic and accumulator-overflow cases, signature and mutation
   tests, and green real-host Decimal filter, integral-cast, arithmetic, ordered,
   and aggregate obligations cover this boundary. TPC-DS q90 exercises two
   `Uint64` count expressions cast to `Decimal(15,4)` and is
   `VERIFIED_BOUNDED` at the standard two-row/two-task bound.
+- Exact Decimal-only `max` has independent raw-code, NULL, grouped/global,
+  split-state, wrong-shuffle, type, and phase-nullability tests. Focused TPC-DS
+  q74 passes its former aggregate blocker and reaches the 65,536-pair join
+  matching preflight after 463 ms of preparation and 375 ms of verifier work.
+  It changes neither the 20/121 formula slice nor the ten-query proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial plan compared its nullable `Int64` directly with
   `Int32` membership constants; the final plan used an opaque
@@ -776,6 +784,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
+- Its strict version-three input policy and independently versioned evaluation
+  enforce three monotonic depths: TPC-DS q65 must reach the verifier, the
+  twenty-query formula floor must keep constructing SMT, and the ten-query
+  hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
+  `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
+  satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
   2026-07-22 complete current-code formula-only dashboard emits TPCH q3 and q19

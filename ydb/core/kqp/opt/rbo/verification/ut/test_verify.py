@@ -377,14 +377,20 @@ def aggregate_stage_snapshot(
     input_type="Int64",
 ):
     decimal_sum_type = decimal.sum_type(input_type)
-    output_type = (
-        "Uint64"
-        if function == "count" or input_type.startswith("Uint")
-        else decimal_sum_type or "Int64"
+    if function == "count":
+        output_type = "Uint64"
+    elif function == "max":
+        output_type = input_type
+    elif input_type.startswith("Uint"):
+        output_type = "Uint64"
+    else:
+        output_type = decimal_sum_type or "Int64"
+    final_function = final_function or (
+        "sum" if staged and function == "count" else function
     )
-    final_function = final_function or ("sum" if staged else function)
     keys = ["a.k"] if grouped else []
-    logical_nullable = function == "sum" and (nullable_input or not grouped)
+    nullable_aggregate = function in {"max", "sum"}
+    logical_nullable = nullable_aggregate and (nullable_input or not grouped)
     aggregate = {
         "id": "aggregate",
         "op": "aggregate",
@@ -413,14 +419,14 @@ def aggregate_stage_snapshot(
         partial.update(id="partial", phase="intermediate")
         partial["aggregates"][0].update(
             output="_state",
-            nullable=(function == "sum" and nullable_input),
+            nullable=(nullable_aggregate and nullable_input),
         )
         final = copy.deepcopy(aggregate)
         final.update(id="final", input="partial", phase=final_phase)
         final["aggregates"][0].update(
             input="_state",
             function=final_function,
-            nullable=(function == "sum" and (nullable_input or not grouped)),
+            nullable=(nullable_aggregate and (nullable_input or not grouped)),
         )
         nodes = [copy.deepcopy(SCAN_A), partial, final]
         stages = [
@@ -1455,7 +1461,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     )
                     self.assertEqual(actual, expected, (rows, placements))
 
-    def test_decimal_sum_matches_independent_special_null_and_group_reference(self):
+    def test_decimal_aggregates_match_independent_special_null_and_group_reference(self):
         self.assertEqual(decimal.INF, REFERENCE_DECIMAL_INF)
         self.assertEqual(decimal.NAN, REFERENCE_DECIMAL_NAN)
         concrete_values = (
@@ -1466,7 +1472,8 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             REFERENCE_DECIMAL_INF,
             REFERENCE_DECIMAL_NAN,
         )
-        for grouped, nullable_input, nullable_key in product(
+        for function, grouped, nullable_input, nullable_key in product(
+            ("max", "sum"),
             (False, True),
             (False, True),
             (False, True),
@@ -1474,7 +1481,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             if not grouped and nullable_key:
                 continue
             snapshot = aggregate_stage_snapshot(
-                "sum",
+                function,
                 grouped,
                 False,
                 nullable_input=nullable_input,
@@ -1497,6 +1504,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             states = (None,) + tuple(product(keys, values))
             for rows in product(states, repeat=2):
                 with self.subTest(
+                    function=function,
                     grouped=grouped,
                     nullable_input=nullable_input,
                     nullable_key=nullable_key,
@@ -1506,10 +1514,10 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                         relation,
                         self._constants(database, rows),
                     )
-                    expected = self._decimal_reference_bag(grouped, rows)
+                    expected = self._decimal_reference_bag(function, grouped, rows)
                     self.assertEqual(actual, expected)
 
-    def test_split_decimal_sum_retains_headroom_across_partial_states(self):
+    def test_split_decimal_aggregates_match_across_partial_states(self):
         values = (
             None,
             -REFERENCE_DECIMAL_INF,
@@ -1519,12 +1527,16 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             REFERENCE_DECIMAL_INF,
             REFERENCE_DECIMAL_NAN,
         )
-        for grouped in (False, True):
+        for function, grouped, nullable_input in product(
+            ("max", "sum"),
+            (False, True),
+            (False, True),
+        ):
             snapshot = aggregate_stage_snapshot(
-                "sum",
+                function,
                 grouped,
                 True,
-                nullable_input=True,
+                nullable_input=nullable_input,
                 nullable_key=True,
                 input_type="Decimal(2,0)",
             )
@@ -1537,13 +1549,16 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 ScalarEncoder(script),
                 router,
             ).root().certain()
-            states = (None,) + tuple(product((None, 0, 1), values))
+            input_values = values if nullable_input else values[1:]
+            states = (None,) + tuple(product((None, 0, 1), input_values))
             for rows, placements in product(
                 product(states, repeat=2),
                 product((False, True), repeat=2),
             ):
                 with self.subTest(
+                    function=function,
                     grouped=grouped,
+                    nullable_input=nullable_input,
                     rows=rows,
                     placements=placements,
                 ):
@@ -1557,8 +1572,32 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                         constants,
                         self._hash_choice,
                     )
-                    expected = self._decimal_reference_bag(grouped, rows)
+                    expected = self._decimal_reference_bag(function, grouped, rows)
                     self.assertEqual(actual, expected)
+
+    def test_decimal_max_preserves_finite_bound_through_split_state(self):
+        for staged in (False, True):
+            snapshot = aggregate_stage_snapshot(
+                "max",
+                False,
+                staged,
+                nullable_input=True,
+                input_type="Decimal(3,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            scalar = ScalarEncoder(script)
+            evaluator = (
+                StageEvaluator(snapshot, database, scalar, Router(script))
+                if staged
+                else RelationEvaluator(snapshot, database, scalar)
+            )
+            relation = evaluator.root().certain()
+            self.assertEqual(len(relation.rows), 1)
+            self.assertEqual(
+                relation.rows[0].values["result"].decimal_finite_abs_bound,
+                999,
+            )
 
     def test_decimal_sum_fails_closed_when_finite_overflow_can_depend_on_order(self):
         snapshot = aggregate_stage_snapshot(
@@ -1647,7 +1686,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         return result
 
     @staticmethod
-    def _decimal_reference_bag(grouped, slots):
+    def _decimal_reference_bag(function, grouped, slots):
         rows = [row for row in slots if row is not None]
         groups = {}
         if grouped:
@@ -1661,6 +1700,11 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             non_null = [value for value in values if value is not None]
             if not non_null:
                 aggregate = None
+            elif function == "max":
+                # Decimal AggrMax compares the signed in-band codes directly.
+                aggregate = max(non_null)
+            elif function != "sum":
+                raise AssertionError(f"unsupported Decimal aggregate {function!r}")
             elif REFERENCE_DECIMAL_NAN in non_null:
                 aggregate = REFERENCE_DECIMAL_NAN
             elif (
@@ -1868,9 +1912,14 @@ class RestrictedModelSmokeTest(unittest.TestCase):
 
 
 class StageGraphRestrictedModelTest(unittest.TestCase):
-    def test_split_count_and_sum_match_logical_aggregation(self):
-        for function, grouped, nullable_input in product(
-            ("count", "sum"), (False, True), (False, True)
+    def test_split_aggregates_match_logical_aggregation(self):
+        cases = (
+            ("count", "Int64"),
+            ("sum", "Int64"),
+            ("max", "Decimal(2,0)"),
+        )
+        for (function, input_type), grouped, nullable_input in product(
+            cases, (False, True), (False, True)
         ):
             with self.subTest(
                 function=function,
@@ -1878,10 +1927,18 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                 nullable_input=nullable_input,
             ):
                 logical = aggregate_stage_snapshot(
-                    function, grouped, False, nullable_input=nullable_input
+                    function,
+                    grouped,
+                    False,
+                    nullable_input=nullable_input,
+                    input_type=input_type,
                 )
                 staged = aggregate_stage_snapshot(
-                    function, grouped, True, nullable_input=nullable_input
+                    function,
+                    grouped,
+                    True,
+                    nullable_input=nullable_input,
+                    input_type=input_type,
                 )
                 self.assertEqual(
                     stage_task_counts(staged),
@@ -1899,7 +1956,11 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
         self.assertIn("(mod ", build_problem(logical, staged, 1).formula())
 
     def test_wrong_grouped_aggregate_shuffle_key_has_a_two_row_witness(self):
-        for function in ("count", "sum"):
+        for function, input_type in (
+            ("count", "Int64"),
+            ("sum", "Int64"),
+            ("max", "Decimal(2,0)"),
+        ):
             with self.subTest(function=function):
                 logical = aggregate_stage_snapshot(
                     function,
@@ -1907,6 +1968,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                     False,
                     nullable_input=True,
                     nullable_key=True,
+                    input_type=input_type,
                 )
                 corrupted = aggregate_stage_snapshot(
                     function,
@@ -1915,6 +1977,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
                     nullable_input=True,
                     nullable_key=True,
                     shuffle_key="_state",
+                    input_type=input_type,
                 )
                 self.assertTrue(
                     _restricted_domain_has_model(
@@ -2247,9 +2310,14 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
-    def test_split_count_and_sum_are_bounded_equivalent(self):
-        for function, grouped, nullable_input in product(
-            ("count", "sum"), (False, True), (False, True)
+    def test_split_aggregates_are_bounded_equivalent(self):
+        cases = (
+            ("count", "Int64"),
+            ("sum", "Int64"),
+            ("max", "Decimal(2,0)"),
+        )
+        for (function, input_type), grouped, nullable_input in product(
+            cases, (False, True), (False, True)
         ):
             with self.subTest(
                 function=function,
@@ -2257,10 +2325,18 @@ class VerificationTest(unittest.TestCase):
                 nullable_input=nullable_input,
             ):
                 logical = aggregate_stage_snapshot(
-                    function, grouped, False, nullable_input=nullable_input
+                    function,
+                    grouped,
+                    False,
+                    nullable_input=nullable_input,
+                    input_type=input_type,
                 )
                 staged = aggregate_stage_snapshot(
-                    function, grouped, True, nullable_input=nullable_input
+                    function,
+                    grouped,
+                    True,
+                    nullable_input=nullable_input,
+                    input_type=input_type,
                 )
                 result = solve(
                     build_problem(logical, staged, 1, 10_000),
@@ -2286,7 +2362,11 @@ class VerificationTest(unittest.TestCase):
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_wrong_grouped_aggregate_shuffle_key_has_a_solver_counterexample(self):
-        for function in ("count", "sum"):
+        for function, input_type in (
+            ("count", "Int64"),
+            ("sum", "Int64"),
+            ("max", "Decimal(2,0)"),
+        ):
             with self.subTest(function=function):
                 logical = aggregate_stage_snapshot(
                     function,
@@ -2294,6 +2374,7 @@ class VerificationTest(unittest.TestCase):
                     False,
                     nullable_input=True,
                     nullable_key=True,
+                    input_type=input_type,
                 )
                 corrupted = aggregate_stage_snapshot(
                     function,
@@ -2302,6 +2383,7 @@ class VerificationTest(unittest.TestCase):
                     nullable_input=True,
                     nullable_key=True,
                     shuffle_key="_state",
+                    input_type=input_type,
                 )
                 result = solve(
                     build_problem(logical, corrupted, 2, 10_000),

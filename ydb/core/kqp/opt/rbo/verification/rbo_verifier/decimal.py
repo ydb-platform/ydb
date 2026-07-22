@@ -160,6 +160,27 @@ def sort_less(left: smt.Term, right: smt.Term) -> smt.Term:
     return smt.lt(left, right)
 
 
+def aggregate_max(
+    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
+) -> smt.Term:
+    """Reduce Decimal ``AggrMax`` inputs in YDB's raw signed-code order.
+
+    Aggregate MAX is deliberately different from ordinary Decimal comparison:
+    MiniKQL compares the signed 128-bit codes directly, so NaN is greater than
+    positive infinity.  Negative infinity is the identity over every legal
+    Decimal value; guards let the relational layer exclude NULL and absent rows.
+    """
+
+    result = smt.int_value(-INF)
+    for guard, value in guarded_values:
+        result = smt.ite(
+            guard,
+            smt.ite(smt.lt(value, result), result, value),
+            result,
+        )
+    return result
+
+
 def add(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     """Exact same-type YQL Decimal addition."""
 

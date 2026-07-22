@@ -16,6 +16,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/libs/openssl
     library/cpp/testing/common
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy

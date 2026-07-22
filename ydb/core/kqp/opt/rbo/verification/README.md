@@ -14,6 +14,10 @@ M4.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
+Version-four benchmark artifacts SHA-bind the exact initial and final
+snapshots, assembled query, and byte-exact raw verifier verdict. A separate
+all-candidates confirmation driver pins each saved solver database from that
+raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
@@ -431,7 +435,9 @@ Build the Ya-owned CLI with:
 
 ```bash
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/bin
+./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/confirm_bin
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/inspect_bin
+./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/replay_bin
 ./ya make --build relwithdebinfo ydb/core/kqp/opt/rbo/verification/prefix_capture/bin
 ./ya make --build relwithdebinfo contrib/tools/z3
 ```
@@ -507,6 +513,12 @@ Enabling the read-only observers without aliases is regression-tested to leave
 the normal SMT-LIB obligation byte-for-byte unchanged. Every trace carries
 SHA-256 digests of the complete normalized before/after snapshots; supplying
 `--query` also binds the exact query bytes and is mandatory for real replay.
+When tracing a saved verifier candidate, `--verifier-verdict verdict.json`
+constrains the rebuilt obligation to that verdict's decoded base-table rows.
+The inspector may resolve routing, opaque-function, and ordering choices, but
+cannot silently select a different database. If the saved database no longer
+makes the obligation satisfiable, the diagnostic status is
+`WITNESS_NOT_REPRODUCED`, not a global equivalence proof.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \
@@ -591,4 +603,54 @@ the external mutation boundary.
 ```bash
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/replay_ut 2>&1 | tail
+```
+
+## Automatic counterexample confirmation
+
+A version-four benchmark coverage report preserves the exact assembled query,
+both snapshots, and byte-exact raw verifier verdict, with SHA-256 bindings, for
+every symbolic counterexample. The raw verdict artifact is the authoritative
+witness source; the parsed verdict in the report contains metadata only and
+deliberately omits the witness so wide Decimal integers cannot be rounded by a
+JSON object round trip. `kqp_rbo_confirm` consumes one such report and processes
+every counterexample in query-ID order. For each candidate it validates and
+copies all four bound inputs, gives the raw verdict directly to the inspector
+to fix that exact database, and then invokes `kqp_rbo_replay` against explicit
+isolated targets:
+
+```bash
+ydb/core/kqp/opt/rbo/verification/confirm_bin/kqp_rbo_confirm \
+  /path/to/tpcds_coverage.json \
+  --inspector /path/to/kqp_rbo_inspect \
+  --solver /path/to/z3 \
+  --replay /path/to/kqp_rbo_replay \
+  --ydb /path/to/ydb \
+  --artifacts /new/path/tpcds_confirmation \
+  --baseline-endpoint grpc://baseline-host:2136 \
+  --baseline-database /Root/baseline \
+  --candidate-endpoint grpc://candidate-host:2136 \
+  --candidate-database /Root/candidate
+```
+
+The artifact directory must not already exist. It retains the source report,
+byte-exact copies of the four SHA-bound inputs and their digests, exact child
+commands/stdout/stderr, per-query results, and one versioned summary. The driver
+never stops after the first candidate. `NO_COUNTEREXAMPLES` and
+`ALL_NOT_REPRODUCED` exit zero; a fully processed
+`REAL_RESULT_DIVERGENCE` exits one; any missing witness, artifact violation,
+inspector inconsistency, nondeterminism, setup failure, or child protocol error
+makes the whole run `UNRESOLVED` and exits two. A confirmed divergence is the
+input to the separate transformation-prefix localizer; confirmation itself
+does not add rule-bisection machinery. Automatic replay currently accepts one
+top-level result query; a counterexample for multi-result TPC-DS q14, q23, or
+q39 fails closed as `UNRESOLVED` until replay gains an explicit multi-result
+contract.
+
+This command is the mandatory follow-up for every coverage
+`COUNTEREXAMPLE`. It is separate from recursive tests because it writes retained
+namespaces to user-supplied external YDB targets.
+
+```bash
+./ya make --build relwithdebinfo -tA \
+  ydb/core/kqp/opt/rbo/verification/confirmation_ut 2>&1 | tail
 ```

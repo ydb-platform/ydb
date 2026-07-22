@@ -83,12 +83,16 @@ hermetic `contrib/tools/z3/z3` build output; every other value fails closed.
 
 Each dashboard suite writes the stable report names `tpch_coverage.json` or
 `tpcds_coverage.json`; proof-floor tests write `tpch_proof_floor.json` or
-`tpcds_proof_floor.json` into their test output directories. The version-three
+`tpcds_proof_floor.json` into their test output directories. The version-four
 report contains suite, bounds, solver presence, timeout, per-query timing and
 status, the status summary, grouped unsupported and optimizer-failure
 inventories, and the evaluated coverage policy. Counterexample, unknown,
-schema-mismatch, and solver-error rows also preserve the two snapshots and,
-when one was emitted, the SMT formula as test artifacts.
+schema-mismatch, and solver-error rows also preserve the two snapshots, the
+exact assembled query sent to KQP, the byte-for-byte verifier verdict, SHA-256
+digests for those four inputs, and, when one was emitted, the SMT formula as
+test artifacts. The raw verdict artifact is authoritative for counterexample
+witnesses. The report's parsed verdict copy omits that witness so integers wider
+than `ui64`, including Decimal cells, cannot be rounded during JSON re-encoding.
 The nested policy-evaluation object has its own format identifier; it cannot be
 mistaken for the strict checked-in input-policy document.
 
@@ -122,6 +126,17 @@ The current test fails on `COUNTEREXAMPLE`, `SCHEMA_MISMATCH`, `SOLVER_ERROR`,
 `UNSUPPORTED`, and `OPTIMIZER_FAILURE` remain visible coverage gaps in dashboard
 or experimental runs, but each is a hard regression for a required proof-floor
 query.
+
+Every `COUNTEREXAMPLE` report is an input to the separate
+`kqp_rbo_confirm` command documented in [README.md](README.md). That command
+validates the version-four hashes for both snapshots, the query, and the
+byte-exact raw verifier verdict; fixes the inspector to the witness read
+directly from that authoritative raw artifact; and drives every replayable
+single-result candidate through isolated real-YDB replay. Multi-result TPC-DS
+q14, q23, and q39 currently fail closed as `UNRESOLVED`. A symbolic candidate
+is not a confirmed real-execution divergence before that result is
+`REAL_RESULT_DIVERGENCE`; attributing a reproduced divergence to the captured
+StageGraph remains a separate diagnostic step.
 
 ## Last complete formula-only baseline
 

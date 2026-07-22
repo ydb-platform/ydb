@@ -406,6 +406,33 @@ class ConcreteTraceTest(unittest.TestCase):
         after_values = _present_values(after["boundary"])
         self.assertNotEqual(before_values, after_values)
 
+    def test_saved_verifier_database_is_fixed_while_trace_choices_are_resolved(self):
+        witness = {"A": [{"x": 7}]}
+        result = prepare(
+            _logical(),
+            _staged(ZERO),
+            1,
+            10_000,
+            fixed_witness=witness,
+        ).solve(SOLVER, 10_000)
+        self.assertEqual(result["status"], "COUNTEREXAMPLE")
+        self.assertEqual(result["witness"], witness)
+        self.assertEqual(
+            _present_values(result["trace"]["before"]["boundary"]),
+            [(7,)],
+        )
+
+    def test_saved_database_without_the_mismatch_is_not_a_global_proof(self):
+        result = prepare(
+            _logical(),
+            _staged(ZERO),
+            1,
+            10_000,
+            fixed_witness={"A": [{"x": 0}]},
+        ).solve(SOLVER, 10_000)
+        self.assertEqual(result["status"], "WITNESS_NOT_REPRODUCED")
+        self.assertNotIn("trace", result)
+
     def test_nullable_opaque_string_is_decoded_from_the_trace_model(self):
         result = prepare(
             _logical(OPAQUE_STRING, "String", True),

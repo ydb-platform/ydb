@@ -5,6 +5,7 @@ PY_SRCS(
     cli.py
     plan.py
     trace.py
+    witness.py
 )
 
 PEERDIR(

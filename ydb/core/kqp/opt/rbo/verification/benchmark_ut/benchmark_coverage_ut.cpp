@@ -10,6 +10,8 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
+#include <openssl/sha.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/testing/common/env.h>
@@ -22,6 +24,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
+#include <util/string/hex.h>
 #include <util/string/split.h>
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
@@ -43,7 +46,7 @@ constexpr ui64 DefaultTimeoutMs = 10'000;
 constexpr ui64 ProofFloorTimeoutMs = 60'000;
 constexpr const char* CoverageReportFormat =
     "ydb-rbo-benchmark-coverage";
-constexpr ui64 CoverageReportVersion = 3;
+constexpr ui64 CoverageReportVersion = 4;
 constexpr const char* CoveragePolicyFormat =
     "ydb-rbo-benchmark-coverage-policy";
 constexpr ui64 CoveragePolicyVersion = 2;
@@ -659,6 +662,18 @@ bool ParseJson(const TString& text, NJson::TJsonValue& value) {
     return !text.empty() && NJson::ReadJsonTree(text, &value, false);
 }
 
+NJson::TJsonValue VerdictForCoverageReport(
+    NJson::TJsonValue verdict,
+    TStringBuf status)
+{
+    // NJson represents integer tokens outside ui64 as doubles. Keep the exact
+    // counterexample witness only in the byte-for-byte verifier artifact.
+    if (status == "COUNTEREXAMPLE") {
+        verdict.EraseValue("witness");
+    }
+    return verdict;
+}
+
 int ExpectedExit(TStringBuf status) {
     if (status == "FORMULA_EMITTED" || status == "VERIFIED_BOUNDED") {
         return 0;
@@ -702,6 +717,8 @@ TOutcome HarnessError(
 NJson::TJsonValue PreserveArtifacts(
     TStringBuf suiteSlug,
     ui32 queryId,
+    TStringBuf query,
+    TStringBuf verifierVerdict,
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     const TFsPath& formulaPath)
@@ -710,12 +727,32 @@ NJson::TJsonValue PreserveArtifacts(
         << suiteSlug << "_q" << queryId;
     NJson::TJsonValue artifacts(NJson::JSON_MAP);
 
-    const TString initialName = stem + ".initial.json";
-    const TString finalName = stem + ".final.json";
-    TFileOutput((GetOutputPath() / initialName).GetPath()).Write(initial.Json);
-    TFileOutput((GetOutputPath() / finalName).GetPath()).Write(final.Json);
-    artifacts["initial_snapshot"] = initialName;
-    artifacts["final_snapshot"] = finalName;
+    const auto preserveText = [&](
+        TStringBuf key,
+        const TString& name,
+        TStringBuf text)
+    {
+        unsigned char digest[SHA256_DIGEST_LENGTH];
+        if (!SHA256(
+                reinterpret_cast<const unsigned char*>(text.data()),
+                text.size(),
+                digest))
+        {
+            ythrow yexception() << "cannot hash diagnostic artifact " << name;
+        }
+        TFileOutput((GetOutputPath() / name).GetPath()).Write(text);
+        artifacts[TString(key)] = name;
+        artifacts[TStringBuilder() << key << "_sha256"] =
+            to_lower(HexEncode(digest, sizeof(digest)));
+    };
+
+    preserveText("initial_snapshot", stem + ".initial.json", initial.Json);
+    preserveText("final_snapshot", stem + ".final.json", final.Json);
+    preserveText("query", stem + ".query.yql", query);
+    preserveText(
+        "verifier_verdict",
+        stem + ".verdict.json",
+        verifierVerdict);
 
     if (formulaPath.Exists()) {
         const TString formulaName = stem + ".smt2";
@@ -728,6 +765,7 @@ NJson::TJsonValue PreserveArtifacts(
 TOutcome RunVerifier(
     TStringBuf suiteSlug,
     ui32 queryId,
+    TStringBuf query,
     ui64 prepareMs,
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
@@ -757,10 +795,12 @@ TOutcome RunVerifier(
     command.Run();
     const ui64 verifyMs = (TInstant::Now() - started).MilliSeconds();
 
+    const TString stdoutText = command.GetOutput();
+    const TString stderrText = command.GetError();
     NJson::TJsonValue stdoutVerdict;
     NJson::TJsonValue stderrVerdict;
-    const bool stdoutJson = ParseJson(command.GetOutput(), stdoutVerdict);
-    const bool stderrJson = ParseJson(command.GetError(), stderrVerdict);
+    const bool stdoutJson = ParseJson(stdoutText, stdoutVerdict);
+    const bool stderrJson = ParseJson(stderrText, stderrVerdict);
     if (!stdoutJson && !stderrJson) {
         return HarnessError(
             queryId,
@@ -769,8 +809,8 @@ TOutcome RunVerifier(
             TStringBuilder()
                 << "verifier returned no JSON; exit="
                 << command.GetExitCode().GetOrElse(-1)
-                << "; stdout=" << command.GetOutput()
-                << "; stderr=" << command.GetError());
+                << "; stdout=" << stdoutText
+                << "; stderr=" << stderrText);
     }
     if (stdoutJson && stderrJson) {
         return HarnessError(
@@ -782,6 +822,7 @@ TOutcome RunVerifier(
     NJson::TJsonValue verdict = stdoutJson
         ? std::move(stdoutVerdict)
         : std::move(stderrVerdict);
+    const TString& verifierVerdict = stdoutJson ? stdoutText : stderrText;
     if (!verdict.IsMap() || !verdict.Has("status") ||
         !verdict["status"].IsString())
     {
@@ -830,13 +871,20 @@ TOutcome RunVerifier(
     outcome.Json["prepare_ms"] = prepareMs;
     outcome.Json["verify_ms"] = verifyMs;
     outcome.Json["capture_count"] = 2;
-    outcome.Json["verdict"] = std::move(verdict);
+    outcome.Json["verdict"] = VerdictForCoverageReport(
+        std::move(verdict), status);
     if (status == "COUNTEREXAMPLE" || status == "UNKNOWN" ||
         status == "SCHEMA_MISMATCH" || status == "SOLVER_ERROR")
     {
         try {
             outcome.Json["artifacts"] = PreserveArtifacts(
-                suiteSlug, queryId, initial, final, formulaPath);
+                suiteSlug,
+                queryId,
+                query,
+                verifierVerdict,
+                initial,
+                final,
+                formulaPath);
         } catch (const std::exception& error) {
             outcome.Json["artifact_error"] = error.what();
         }
@@ -856,12 +904,13 @@ TOutcome ClassifyQuery(
     auto host = MakeHost(kikimr.GetTestServer(), moduleResolver, sink);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    const TString query = Query(suite, queryId);
     const TInstant started = TInstant::Now();
     // Literal folding and other preparation paths assume a real actor
     // activation context, just as the production KQP request path provides.
     const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
         host,
-        query = Query(suite, queryId),
+        query,
         settings
     ] {
         return host->SyncPrepareDataQuery(query, settings);
@@ -924,6 +973,7 @@ TOutcome ClassifyQuery(
     return RunVerifier(
         suite.Slug,
         queryId,
+        query,
         prepareMs,
         initial,
         final,
@@ -1147,7 +1197,101 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             CoverageReportFormat);
         UNIT_ASSERT_VALUES_EQUAL(
             report["version"].GetUIntegerSafe(),
-            CoverageReportVersion);
+            4);
+    }
+
+    Y_UNIT_TEST(DiagnosticArtifactsPreserveExactBytes) {
+        const TString initialJson = "{\"boundary\":\"initial\"}\n";
+        const TString finalJson = "{\"boundary\":\"final\"}\n";
+        const TString query = "SELECT 1;\r\n";
+        const TString verifierVerdict =
+            "{\"row_bound\":2,\"status\":\"COUNTEREXAMPLE\",\"task_bound\":2,"
+            "\"witness\":{\"table\":[{\"amount\":"
+            "99999999999999999999999999999999999}]}}\n";
+        const TString formula = "(check-sat)\n";
+        const TRBOSemanticSnapshotBoundaryResultV1 initial{
+            ERBOSemanticSnapshotBoundaryV1::Initial,
+            initialJson,
+            {},
+            {},
+        };
+        const TRBOSemanticSnapshotBoundaryResultV1 final{
+            ERBOSemanticSnapshotBoundaryV1::Final,
+            finalJson,
+            {},
+            {},
+        };
+        TTempDir tempDir;
+        const auto formulaPath = tempDir.Path() / "problem.smt2";
+        TFileOutput(formulaPath.GetPath()).Write(formula);
+
+        const auto artifacts = PreserveArtifacts(
+            "artifact_contract",
+            7,
+            query,
+            verifierVerdict,
+            initial,
+            final,
+            formulaPath);
+
+        UNIT_ASSERT_VALUES_EQUAL(artifacts.GetMapSafe().size(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["initial_snapshot"].GetStringSafe(),
+            "artifact_contract_q7.initial.json");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["final_snapshot"].GetStringSafe(),
+            "artifact_contract_q7.final.json");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["query"].GetStringSafe(),
+            "artifact_contract_q7.query.yql");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["verifier_verdict"].GetStringSafe(),
+            "artifact_contract_q7.verdict.json");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["formula"].GetStringSafe(),
+            "artifact_contract_q7.smt2");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["query_sha256"].GetStringSafe(),
+            "d3cd5042f97738960d802ad6b3a548dfa18152215118ba18f04493bc6944b0e4");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["initial_snapshot_sha256"].GetStringSafe(),
+            "8d8c42b4c53466a92ec001719137bef5542ccab67674ffd9aa6285ef5d67b444");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["final_snapshot_sha256"].GetStringSafe(),
+            "a9cc8a8d51463f3e4e115a4bde9e6e592f39c19cc3d1880ba1aeadd20f8b4d27");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["verifier_verdict_sha256"].GetStringSafe(),
+            "20e32d803d936b5149286a66dcde8f6841cff1ab1e2a3aad849fbe96334d199d");
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["initial_snapshot"].GetStringSafe()).GetPath()).ReadAll(),
+            initialJson);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["final_snapshot"].GetStringSafe()).GetPath()).ReadAll(),
+            finalJson);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["query"].GetStringSafe()).GetPath()).ReadAll(),
+            query);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["verifier_verdict"].GetStringSafe()).GetPath()).ReadAll(),
+            verifierVerdict);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["formula"].GetStringSafe()).GetPath()).ReadAll(),
+            formula);
+
+        NJson::TJsonValue parsedVerdict;
+        UNIT_ASSERT(ParseJson(verifierVerdict, parsedVerdict));
+        UNIT_ASSERT(parsedVerdict.Has("witness"));
+        const auto reportVerdict = VerdictForCoverageReport(
+            std::move(parsedVerdict), "COUNTEREXAMPLE");
+        UNIT_ASSERT(!reportVerdict.Has("witness"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            reportVerdict["status"].GetStringSafe(),
+            "COUNTEREXAMPLE");
     }
 
     Y_UNIT_TEST(PolicyAllowsMonotonicCoverageImprovements) {

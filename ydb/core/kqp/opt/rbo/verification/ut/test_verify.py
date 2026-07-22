@@ -2265,6 +2265,12 @@ class VerificationTest(unittest.TestCase):
         self.assertEqual(result.status, "COUNTEREXAMPLE")
         self.assertEqual(result.witness, {})
 
+    def test_zero_bound_catalog_retains_its_empty_table_witness(self):
+        problem = Problem(smt.Script(10_000), {"A": ()})
+        result = solve(problem, SOLVER, 0, 10_000)
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertEqual(result.witness, {"A": []})
+
     def test_string_escape_forms_remain_distinct(self):
         result = solve(
             build_logical_kernel_problem_for_tests(

@@ -39,6 +39,7 @@ private:
     using TPublicationInfoPtr = std::shared_ptr<TPublicationInfo>;
 
     TPublicationInfoPtr GetOrCreate(ui64 intPublicationId);
+    void EraseIfReconciled(ui64 intPublicationId, const TPublicationInfoPtr& info);
 
     TSpinLock MapLock_;
     std::unordered_map<ui64, TPublicationInfoPtr> Publications_;

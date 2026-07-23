@@ -39,7 +39,9 @@ struct TChannelFullInfo : public TChannelInfo {
 
 class TDataChunk {
 public:
-    TDataChunk() = default;
+    TDataChunk()
+        : Bytes(1) {
+    }
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, NDqProto::EDataTransportVersion transportVersion,
         NKikimr::NMiniKQL::EValuePackerVersion packerVersion, bool finished)
@@ -71,7 +73,7 @@ public:
     {}
 
     TDataChunk(NDqProto::TWatermark&& watermark)
-        : Bytes (1)
+        : Bytes(1)
         , Timestamp(TInstant::Now())
         , Watermark(std::move(watermark))
     {}

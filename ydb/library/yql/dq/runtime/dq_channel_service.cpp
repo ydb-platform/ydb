@@ -425,8 +425,9 @@ void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
 }
 
 TOutputDescriptor::~TOutputDescriptor() {
-    if (QuotaManager) {
-        QuotaManager->FreeQuota(WaitQueueBytes.load());
+    auto waitQueueBytes = WaitQueueBytes.load();
+    if (waitQueueBytes && QuotaManager) {
+        QuotaManager->FreeQuota(waitQueueBytes);
     }
 }
 
@@ -690,7 +691,7 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (Descriptor->QuotaManager) {
+    if (Quoted && Descriptor->QuotaManager) {
         Descriptor->QuotaManager->FreeQuota(Data.Bytes);
     }
 }
@@ -1007,16 +1008,14 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(data.Bytes)) {
-        descriptor->AbortChannelByMemoryLimit(data.Bytes);
-        return;
-    }
-
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
         if (!descriptor->WaitQueue.empty()) {
-
+            if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+                descriptor->AbortChannelByMemoryLimit(bytes);
+                return;
+            }
             descriptor->WaitQueue.push(std::move(data));
             descriptor->WaitQueueBytes += bytes;
             descriptor->WaitQueueSize++;
@@ -1035,11 +1034,17 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         std::lock_guard lock(Mutex);
         if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
+                auto quoted = !!descriptor->QuotaManager;
+                if (quoted && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+                    descriptor->AbortChannelByMemoryLimit(bytes);
+                    return;
+                }
                 descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
                 item->Leading = descriptor->Leading.exchange(false);
+                item->Quoted = quoted;
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
@@ -1054,6 +1059,10 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
+    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
+        return;
+    }
     if (descriptor->WaitQueue.empty()) {
         descriptor->WaitTimestamp = data.Timestamp;
         result = true;
@@ -1546,6 +1555,7 @@ now may need to send very last msg from terminated descriptor
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = waiter->SeqNo.fetch_add(1) + 1;
                 item->Leading = waiter->Leading.exchange(false);
+                item->Quoted = !!waiter->QuotaManager;
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
@@ -1792,40 +1802,62 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
 }
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
-    std::lock_guard lock(Mutex);
-    auto it = OutputDescriptors.find(info);
-    if (it != OutputDescriptors.end()) {
-        auto result = it->second;
-        if (bound) {
-            std::lock_guard lock(result->FlowControlMutex);
-            result->IsBound = true;
-            result->Info.SrcStageId = info.SrcStageId;
-            result->Info.DstStageId = info.DstStageId;
-            result->QuotaManager = quotaManager;
-            ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+
+    std::shared_ptr<TOutputDescriptor> result;
+    bool allocateWaitQueueBytes = false;
+
+    {
+        std::lock_guard lock(Mutex);
+
+        auto it = OutputDescriptors.find(info);
+        if (it != OutputDescriptors.end()) {
+            result = it->second;
+            if (bound) {
+                std::lock_guard lock(result->FlowControlMutex);
+                result->IsBound = true;
+                result->Info.SrcStageId = info.SrcStageId;
+                result->Info.DstStageId = info.DstStageId;
+                if (quotaManager) {
+                    allocateWaitQueueBytes = true;
+                }
+                ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            }
+        } else {
+            if (!bound && !leading) {
+                LOG_T(LogPrefix << "OD NOT FOUND, ChannelId=" << info.ChannelId
+                    << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                    << ", OD=" << OutputDescriptors.size());
+            } else {
+                result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks,
+                    Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
+                OutputDescriptors.emplace(info, result);
+                (*OutputBufferCount)++;
+                if (bound) {
+                    result->IsBound = true;
+                } else {
+                    UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+                }
+                LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
+                    << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
+                );
+            }
         }
-        return result;
     }
 
-    if (!bound && !leading) {
-        LOG_T(LogPrefix << "OD NOT FOUND, ChannelId=" << info.ChannelId
-            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
-            << ", OD=" << OutputDescriptors.size());
-        return {};
+    if (allocateWaitQueueBytes) {
+        std::lock_guard lock(result->WaitQueueMutex);
+        auto waitQueueBytes = result->WaitQueueBytes.load();
+        if (waitQueueBytes) {
+            if (!quotaManager->AllocateQuota(waitQueueBytes)) {
+                result->AbortChannelByMemoryLimit(waitQueueBytes);
+                quotaManager = nullptr;
+            }
+        }
+
+        std::lock_guard lock1(Mutex);
+        result->QuotaManager = quotaManager;
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks,
-        Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
-    OutputDescriptors.emplace(info, result);
-    (*OutputBufferCount)++;
-    if (bound) {
-        result->IsBound = true;
-    } else {
-        UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
-    }
-    LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
-        << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
-    );
     return result;
 }
 
@@ -1839,12 +1871,16 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            if (result->QuotaManager) {
-                result->QuotaManager->FreeQuota(result->QueueBytes);
-            }
-            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes)) {
-                result->AbortChannelByMemoryLimit(result->QueueBytes);
-                quotaManager = nullptr;
+            auto queueBytes = result->QueueBytes.load();
+            if (queueBytes) {
+                if (result->QuotaManager) {
+                    // be prepared for per node quota manager
+                    result->QuotaManager->FreeQuota(queueBytes);
+                }
+                if (quotaManager && !quotaManager->AllocateQuota(queueBytes)) {
+                    result->AbortChannelByMemoryLimit(queueBytes);
+                    quotaManager = nullptr;
+                }
             }
             result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});

@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yaml_config/validator/validator.h>
 #include <ydb/library/yaml_config/validator/validator_builder.h>
+#include <util/string/builder.h>
 
 namespace NKikimr {
 
@@ -316,6 +317,34 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         Y_ENSURE(HasOnlyThisIssues(v.Validate(yaml), {
             {"/domains_config/state_storage/0/ring", "nto_select must not be greater, than node array size"}
         }));
+    }
+
+    Y_UNIT_TEST(HarmonizerNeedyCpuWindowSeconds) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeConfig = [](ui32 windowSeconds, TStringBuf executorType) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: User\n"
+                << "    threads: 1\n"
+                << "    max_threads: 2\n"
+                << "    harmonizer_needy_cpu_window_seconds: " << windowSeconds << "\n"
+                << "    type: " << executorType << "\n"
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        for (ui32 windowSeconds : {1, 30, 32}) {
+            UNIT_ASSERT_C(Valid(validator.Validate(makeConfig(windowSeconds, "BASIC"))), "window: " << windowSeconds);
+        }
+        for (ui32 windowSeconds : {0, 33}) {
+            UNIT_ASSERT_C(!validator.Validate(makeConfig(windowSeconds, "BASIC")).Ok(), "window: " << windowSeconds);
+        }
+        UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
 }
 

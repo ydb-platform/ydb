@@ -287,36 +287,8 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
     auto eventPtr = ev->Release();
-<<<<<<< HEAD
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status));
+    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status) << " " << eventPtr->Message);
     TopicNamesToResponses[eventPtr->TopicPath] = eventPtr;
-=======
-
-    YDB_LOG_DEBUG("Create topics actor. Topic's response received",
-        {LogPrefix()},
-        {"path", eventPtr->Path},
-        {"status", std::to_string(eventPtr->Status)},
-        {"errorMessage", eventPtr->ErrorMessage});
-
-    EKafkaErrors status;
-    switch(eventPtr->Status) {
-        case Ydb::StatusIds::SCHEME_ERROR:
-            status = INVALID_REQUEST;
-            break;
-        case Ydb::StatusIds::ALREADY_EXISTS:
-            status = TOPIC_ALREADY_EXISTS;
-            break;
-        default:
-            status = ConvertErrorCode(eventPtr->Status);
-    }
-
-    auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-    response->TopicPath = eventPtr->Path;
-    response->Status = status;
-    response->Message = std::move(eventPtr->ErrorMessage);
-
-    TopicNamesToResponses[eventPtr->Path] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());
->>>>>>> 9defd6908c3 (Fix Kafka Metadata broker list and ControllerId consistency (#47591))
     InflyTopics--;
     if (InflyTopics == 0) {
         Reply(ctx);

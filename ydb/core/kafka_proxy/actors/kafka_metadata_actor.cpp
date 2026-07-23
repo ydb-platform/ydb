@@ -327,10 +327,6 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
     }
 }
 
-<<<<<<< HEAD
-void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
-    auto Respond = [&] {
-=======
 void TKafkaMetadataActor::EnsureBrokersAndController() {
     // Unknown topics used to return brokers=[]; AdminClient then cannot CreateTopics.
     // NeedAllNodes also requires the full discovered broker set.
@@ -360,33 +356,9 @@ void TKafkaMetadataActor::EnsureBrokersAndController() {
     Response->ControllerId = Response->Brokers.front().NodeId;
 }
 
-void TKafkaMetadataActor::ApplyPendingTopicResponses() {
-    while (!PendingTopicResponses.empty()) {
-        auto& [index, ev] = *PendingTopicResponses.begin();
-        auto& topic = Response->Topics[index];
-        if (!WithProxy) {
-            auto topicNodes = CheckTopicNodes(ev.Get());
-            if (topicNodes.empty()) {
-                // Already tried YDB discovery. Throw error
-                YDB_LOG_ERROR("Could not discovery kafka port for topic",
-                    {LogPrefix()},
-                    {"topicName", topic.Name});
-                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            } else {
-                AddTopicResponse(topic, ev.Get(), topicNodes);
-            }
-        } else {
-            AddTopicResponse(topic, ev.Get(), {});
-        }
-        PendingTopicResponses.erase(PendingTopicResponses.begin());
-    }
-}
-
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     auto Respond = [&] {
         EnsureBrokersAndController();
-        CancelRequestTimeout();
->>>>>>> 9defd6908c3 (Fix Kafka Metadata broker list and ControllerId consistency (#47591))
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
     };
@@ -403,7 +375,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-<<<<<<< HEAD
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
         auto& topic = Response->Topics[index];
@@ -422,59 +393,11 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         PendingTopicResponses.erase(PendingTopicResponses.begin());
     }
 
-    if (NeedAllNodes) {
-        for (const auto& [id, nodeInfo] : Nodes)
-            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
-    }
-
     Respond();
 }
 
 TString TKafkaMetadataActor::LogPrefix() const {
     return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
-=======
-    ApplyPendingTopicResponses();
-    Respond();
-}
-
-void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
-    TimeoutTimerActorId = {};
-    YDB_LOG_ERROR("Metadata request timed out",
-        {LogPrefix()},
-        {"correlationId", CorrelationId},
-        {"pendingResponses", PendingResponses});
-    RespondWithTimeout(ctx);
-}
-
-void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
-    ApplyPendingTopicResponses();
-    EnsureBrokersAndController();
-
-    ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
-    for (auto& topic : Response->Topics) {
-        // Keep already completed topics (success or earlier error); fail only unfinished ones.
-        if (topic.ErrorCode == EKafkaErrors::NONE_ERROR && topic.Partitions.empty()) {
-            topic.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
-        }
-    }
-
-    CancelRequestTimeout();
-    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
-    Die(ctx);
-}
-
-void TKafkaMetadataActor::CancelRequestTimeout() {
-    if (TimeoutTimerActorId) {
-        Send(TimeoutTimerActorId, new TEvents::TEvPoison());
-        TimeoutTimerActorId = {};
-    }
-}
-
-NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {
-    return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "TKafkaMetadataActor"},
-        {"selfId", SelfId()});
->>>>>>> 9defd6908c3 (Fix Kafka Metadata broker list and ControllerId consistency (#47591))
 }
 
 } // namespace NKafka

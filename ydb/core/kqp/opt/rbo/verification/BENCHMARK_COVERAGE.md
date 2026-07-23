@@ -147,6 +147,28 @@ is not a confirmed real-execution divergence before that result is
 `REAL_RESULT_DIVERGENCE`; attributing a reproduced divergence to the captured
 StageGraph remains a separate diagnostic step.
 
+The current verifier can also make query errors part of an obligation: error
+matches error, successful relations are compared only on success, and
+error-versus-success is a mismatch. Inspector traces label those outcomes
+explicitly. Version one does not distinguish error categories, codes, or text.
+The external replay protocol is not yet error-aware and therefore fails closed
+rather than treating an error trace as a replayed divergence.
+
+For every failure, retain the exact query, both snapshots, byte-exact raw
+verdict, SHA-256 bindings, and SMT formula when emitted. Inspection,
+confirmation, and localization append the pinned witness, operator/stage
+trace, child streams, retained YDB namespaces, and transformation-prefix
+captures. Verifier/model changes remain separate from optimizer changes; an
+optimizer fix lands atomically with its focused regression. Semantic and
+finding notes may be updated with that fix, but numerical coverage reports
+change only after a complete corpus rerun. The repository does not need an
+intentionally red commit because the preserved repro and a pre-fix run against
+the parent revision record the failure.
+
+If real-host replay exposes a verifier-model error, retain the case as a model
+regression and still audit the optimizer independently: a model bug and a real
+execution divergence can coexist.
+
 ## Latest measured formula coverage
 
 The latest complete formula-only dashboards were rerun on 2026-07-23 after the
@@ -160,6 +182,12 @@ fifteen-query proof floor remains green in the fresh run reported below.
 `FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
 checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry and
 formula construction.
+
+These measurements predate commits `b2cd6e3c5bb` and `f930f1352e7`, which add
+the explicit error algebra, exact serialized `EnsureAtMostOne`, and general
+uncorrelated scalar outcomes. No fresh complete dashboard is claimed here, so
+the tables and q54 reasons below intentionally remain the recorded
+static-proof inventory rather than inferred new coverage.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
@@ -222,18 +250,19 @@ A separate non-gating 60-second solver run returned `UNKNOWN` after
 159/63,937 ms; this is neither a proof nor a counterexample. q7 and q8 now
 reach their deeper generic `Map` exporter blocker and remain unsupported.
 
-Exact uncorrelated scalar subplans that are statically at most one row now move
-q11 and q15 through formula construction. In the fresh complete dashboard they
+At the recorded static-proof milestone, exact uncorrelated scalar subplans
+known to be at most one row moved q11 and q15 through formula construction. In
+that complete dashboard they
 spent 176/558 and 152/462 ms in preparation/verification. Their post-hardening
 proof-floor rows return `VERIFIED_BOUNDED` after 158/6,585 and 199/2,750 ms.
-The current complete TPCH dashboard is 10/22 formulas after 2,754/6,017 ms,
+The recorded complete TPCH dashboard is 10/22 formulas after 2,754/6,017 ms,
 and both queries remain in the proof floor.
 
-For staged plans the exporter validates task counts before admitting physical
-properties. An `EnsureAtMostOne` proof may cross into a producer stage only
-when that stage has exactly one inferred task, and every further crossing
-repeats the same check. Multi-task producers and structurally unbounded
-one-task producers fail closed.
+For the recorded staged plans, the then-current exporter validated task counts
+before admitting physical properties. An `EnsureAtMostOne` proof could cross
+into a producer stage only when that stage had exactly one inferred task. The
+current implementation instead serializes and evaluates every marker exactly,
+as described above.
 
 ### TPC-DS inventory
 
@@ -241,8 +270,8 @@ The 28 optimizer-preparation failures were q12, q14, q17, q20, q23, q27, q33,
 q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63, q67,
 q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 35 of the 40
-currently known unsupported queries. IDs can appear in both exporter columns or
+The exporter matrix below covers the recorded boundary failures among 35 of
+the 40 unsupported queries in that complete run. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
 The five queries that pass export and fail closed inside the verifier are listed
 after the matrix.
@@ -286,10 +315,11 @@ construction after 687/30,318 ms in the focused run. That complete TPC-DS
 dashboard was 31/99 formulas, 39 unsupported queries, and 29 optimizer failures
 after 68,255/249,242 ms of preparation/verifier work. The current post-hardening
 rerun retains all 31 formulas and records 40 unsupported queries and 28
-optimizer failures after 54,058/178,875 ms. q9 now prepares successfully and
+optimizer failures after 54,058/178,875 ms. q9 prepared successfully and
 exposes final Read range/ordering semantics, moving it from optimizer failure
 to unsupported without changing formula coverage. q24 reaches the independent
-`Unsupported scalar callable Map` blocker at both boundaries. q54's initial
+`Unsupported scalar callable Map` blocker at both boundaries. In that run,
+q54's initial
 scalar binding is not statically at most one row, and its final `Limit` has
 physical properties that logical snapshot v1 cannot represent.
 
@@ -455,7 +485,7 @@ leaked intermediate state, and broken direct lineage. Focused C++ exporter
 tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
-The current dashboards therefore emit TPCH q1, q3, q5, q6, q10, q11, q12, q14,
+The recorded dashboards therefore emit TPCH q1, q3, q5, q6, q10, q11, q12, q14,
 q15, and q19 (10/22) plus the preceding TPC-DS set with q65 added (31/99), for
 41/121 formulas (33.9%). They record 49 unsupported and 31 optimizer-failure
 queries after q9 moved between those categories.
@@ -479,18 +509,18 @@ proof floor to fifteen obligations.
   112/5,049, 101/4,726, 192/4,006, 99/4,599, 116/4,194, 280/8,542,
   102/2,319, and 117/508 ms, respectively.
 
-- Exact uncorrelated scalar subplans that are statically at most one row move
+- At the recorded static-proof milestone, exact uncorrelated scalar subplans
+  known to be at most one row moved
   TPCH q11 and q15 through both snapshot boundaries. Their final
   `EnsureAtMostOne` checks cross serial UnionAll boundaries whose aggregate
-  producer stages have exactly one task, so the task-aware structural proof
-  establishes that the physical checks are inert. The focused
-  `*ProvenAtMostOneMarker*` matrix passes 3/3 and the full exporter suite passes
-  161/161: marker-off and marker-on snapshots are byte-identical for the safe
-  case, a graph-valid two-task producer rejects only with the marker enabled,
-  and a grouped aggregate confirms that one task does not itself prove
-  cardinality. A mutation that changes the scalar aggregate input from `a.x` to
-  `a.k` returns `COUNTEREXAMPLE` with a concrete bounded witness, exercising
-  the same subplan proof path rather than only decoder/exporter acceptance.
+  producer stages have exactly one task, so the then-current task-aware
+  structural proof established that the physical checks were inert. The
+  current `*AtMostOneMarker*` matrix instead passes 3/3 by requiring marker
+  serialization directly, across multi-task producers, and across single-task
+  producers; the current full `cpp_ut` passes 165/165. A mutation that changes
+  the scalar aggregate input from `a.x` to `a.k` returns `COUNTEREXAMPLE` with
+  a concrete bounded witness, exercising the subplan proof path rather than
+  only decoder/exporter acceptance.
 
 - Before exact direct literal-to-Date normalization, focused 60-second solver
   runs returned `COUNTEREXAMPLE` for q5 after 1,576/10,150 ms and q77 after
@@ -843,11 +873,12 @@ uncorrelated.
 Catalog capture validates the ordered subplan registry and includes tables
 reachable only from subplan roots. The exact initial-boundary slice now records
 each scalar binding's root, selected output, type/nullability, empty dependency
-list, and explicit Project/Filter consumers. It admits only uncorrelated plans
-statically known to produce at most one row: `EmptySource`, eligible ungrouped
-aggregation, a literal `Limit <= 1`, and Project/Filter/Sort wrappers. Zero rows
-produce typed NULL, one row produces the selected value, and every other shape
-or nondeterministic direct outcome fails closed.
+list, and explicit Project/Filter consumers. At that milestone it admitted
+only uncorrelated plans statically known to produce at most one row:
+`EmptySource`, eligible ungrouped aggregation, a literal `Limit <= 1`, and
+Project/Filter/Sort wrappers. Zero rows produced typed NULL, one row produced
+the selected value, and every other shape or nondeterministic direct outcome
+failed closed.
 
 This moves q11/q15 from the TPCH catalog blocker through formula construction
 and into the checked-in proof floor. It does not move TPC-DS: q24 reaches
@@ -855,15 +886,40 @@ and into the checked-in proof floor. It does not move TPC-DS: q24 reaches
 non-statically-single-row initial scalar binding plus a final `Limit` with
 physical properties outside logical snapshot v1.
 
-The next milestone is general uncorrelated scalar subplans with an explicit
-query-error outcome for more than one row. Restricted relational `EXISTS`,
-dynamic `IN`, and correlated forms remain separate milestones.
-Solver/formula-size work then targets reproducible promotion of supported
-`UNKNOWN` obligations into the proof floor.
+At the time of that complete dashboard, the next milestone was general
+uncorrelated scalar subplans with an explicit query-error outcome for more than
+one row. Commits `b2cd6e3c5bb` and `f930f1352e7` introduced that support
+without changing the recorded dashboard above: zero rows yield typed NULL, one
+yields the value, and more than one generates a cardinality-error term. Commit
+`1aaf281c07a` gives enumerated latent-sequence alternatives a stable scoped
+decision, keeping one scalar choice correlated across consumers.
+
+Only the current binding's newly generated more-than-one-row error is gated by
+the presence of a row in its immediate Project/Filter consumer. Once that row
+exists, even a dead scalar-expression branch demands the binding. An error
+inherited from evaluating the subplan root remains observable; an empty
+enclosing consumer does not gate it a second time. Intrinsic errors already
+raised inside that root are eager too. Model commit `125962c87df` keeps
+inherited `Outcome.error` separate from the binding-local
+`cardinality_error`. Production commit `9e50d234264` correctly gates one
+binding's direct cardinality check. CBO could then commute the order-sensitive
+synthetic Cross, letting physical Cross drain an empty right outer input before
+the inherited scalar error. Commit `cab0dd1e89c` marks both synthetic Crosses
+`PreserveInputOrder`, makes BuildInitial/Expand CBO respect the barriers while
+optimizing both sides, and prevents filter absorption through them.
+Restricted relational `EXISTS`, dynamic `IN`, and correlated forms remain
+separate milestones. Solver/formula-size work then targets reproducible
+promotion of supported `UNKNOWN` obligations into the proof floor.
+
+The post-fix direct order-sensitive join rules pass 2/2,
+`KqpRboYql::ExpressionSubquery` passes 1/1, the full `cpp_ut` passes 165/165,
+and the affected Python verifier/inspector/bisect/replay/confirmation gates
+pass 507/507. These focused results do not alter the historical dashboard
+metrics above.
 
 ### Confirmed subplan optimizer defects
 
-The subplan audit also produced five production optimizer findings,
+The subplan audit also produced seven production optimizer findings,
 independently of the solver dashboard:
 
 - With a nonempty inner table, `WHERE NOT flag AND EXISTS (subquery)` returned
@@ -888,6 +944,41 @@ independently of the solver dashboard:
   returning optional NULL. Commit `52a1d7c4084` aligns the virtual binding,
   empty branch, and present branch types and retains aggregate, singleton,
   computed, zero-row, and multirow real-YDB regressions.
+- A multirow scalar raised `PRECONDITION_FAILED` under new RBO even when its
+  outer consumer produced no rows; legacy execution correctly returned an
+  empty result. The direct scalar-cardinality check ran eagerly in an
+  independent producer. Commit `9e50d234264` bounds the scalar input, gates
+  that check with one outer row, and safely renames colliding outer/scalar IUs.
+  At that production-fix checkpoint, `ScalarSubplanEvaluationTest` passed
+  14/14, and `KqpRboYql::ExpressionSubquery` passed 1/1 with the empty-consumer
+  and same-IU regressions plus the existing scalar-cardinality cases. The
+  prerequisite shared-input fix is separate in `a51c2459ad5`; its two direct
+  Limit-pushdown tests pass 2/2 for shared Read and Sort inputs.
+
+The seventh finding is both a verifier-model correction and a confirmed
+optimizer defect. In a reliable warmed paired real-host probe,
+`nested_empty_outer.sql` gives its inner scalar a nonempty immediate consumer
+and more than one row while leaving the top-level consumer empty. Legacy
+execution raises `PRECONDITION_FAILED` with “More than one row in a scalar
+subquery”. Before the fix, two warmed default-CBO new-RBO runs instead
+deterministically exited successfully with an empty result JSON beginning
+`{"columns":[{"name":"value",...}]}`. Commits `125962c87df` and
+`1aaf281c07a` correct the model and shared choices, exposing the mismatch.
+
+CBO had commuted the order-sensitive synthetic Cross, and physical Cross drains
+its right input first; the empty outer input could therefore suppress the
+inherited scalar error. Optimizer commit `cab0dd1e89c` installs the
+`PreserveInputOrder` barriers described above. Its direct rules pass 2/2, the
+real-host regression passes 1/1, full `cpp_ut` passes 165/165, and the affected
+Python gates pass 507/507. Defect seven is fixed.
+
+An additional legacy probe with intrinsic
+`Ensure(foo.id, false, "inner scalar error")` in the scalar producer also
+raised `PRECONDITION_FAILED` despite the empty top-level consumer, confirming
+the same eager contract beyond nested cardinality checks.
+
+The focused inherited-error/empty-consumer model regression preserves the
+corrected distinction.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

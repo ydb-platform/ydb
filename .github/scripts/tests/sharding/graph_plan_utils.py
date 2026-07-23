@@ -48,6 +48,34 @@ DEFAULT_SIZE_WEIGHTS = {
 WEIGHT_MODE_TIMEOUT_BUDGET = "timeout_budget"
 WEIGHT_MODE_HISTORY = "history"
 DEFAULT_WEIGHT_MODE = WEIGHT_MODE_HISTORY
+DEFAULT_THREADS = 52
+
+
+def cpu_slots(node: dict[str, Any], threads: int = DEFAULT_THREADS) -> int:
+    """Ya scheduler slots for a test node: ``requirements.cpu`` (``all`` → threads)."""
+    slots_cap = max(int(threads), 1)
+    req = node.get("requirements") if isinstance(node.get("requirements"), dict) else {}
+    raw = req.get("cpu", 1)
+    if raw is None:
+        return 1
+    if isinstance(raw, str) and raw.strip().lower() == "all":
+        return slots_cap
+    try:
+        cpu = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    if cpu < 1:
+        return 1
+    return min(cpu, slots_cap)
+
+
+def scale_weight_by_cpu(
+    weight: float,
+    node: dict[str, Any],
+    threads: int = DEFAULT_THREADS,
+) -> float:
+    """Convert duration/timeout seconds into slot-seconds for LPT packing."""
+    return float(weight) * float(cpu_slots(node, threads))
 
 
 def validate_graph(graph: dict[str, Any]) -> None:
@@ -354,8 +382,9 @@ def _plan_uid_weights_timeout_budget(
     *,
     size_weights: dict[str, float],
     size_by_uid: dict[str, str] | None = None,
+    threads: int = DEFAULT_THREADS,
 ) -> tuple[dict[str, float], dict[str, Any]]:
-    """Default: weight = N_work_units * timeout(size)."""
+    """Weight = N_work_units * timeout(size) * cpu_slots."""
     result_set = set(uids)
     per_uid: dict[str, float] = {}
     source_counts: Counter[str] = Counter()
@@ -375,7 +404,7 @@ def _plan_uid_weights_timeout_budget(
             nodes_by_uid=nodes_by_uid,
             result_set=result_set,
         )
-        weight = float(units) * float(timeout)
+        weight = scale_weight_by_cpu(float(units) * float(timeout), node, threads)
         per_uid[uid] = weight
         total_units += units
         source_counts[f"timeout_{size}"] += 1
@@ -393,6 +422,8 @@ def _plan_uid_weights_timeout_budget(
         "history_weight": 0.0,
         "fallback_weight": round(sum(per_uid.values()), 1),
         "size_weights": {k: float(v) for k, v in sorted(size_weights.items())},
+        "threads": int(threads),
+        "cpu_scaled": True,
     }
     return per_uid, stats
 
@@ -404,8 +435,9 @@ def _plan_uid_weights_history(
     *,
     size_weights: dict[str, float],
     size_by_uid: dict[str, str] | None = None,
+    threads: int = DEFAULT_THREADS,
 ) -> tuple[dict[str, float], dict[str, Any]]:
-    """Opt-in history mode: longest suite_folder prefix match on test nodes."""
+    """History mode: longest suite_folder prefix match, then * cpu_slots."""
     path_by_uid: dict[str, str | None] = {}
     size_by_resolved: dict[str, str] = {}
     match_by_uid: dict[str, tuple[float, str, str | None]] = {}
@@ -447,7 +479,11 @@ def _plan_uid_weights_history(
             and suite is not None
             and owner_size_by_suite.get(suite) == size
         ):
-            weight = p90 / max(history_uid_counts[suite], 1)
+            weight = scale_weight_by_cpu(
+                p90 / max(history_uid_counts[suite], 1),
+                node,
+                threads,
+            )
             per_uid[uid] = weight
             history_weight += weight
             source_counts["history"] += 1
@@ -455,12 +491,13 @@ def _plan_uid_weights_history(
 
         if path_by_uid[uid] is None:
             missing_path += 1
-        weight, fb_source = fallback_weight_for_node(
+        base_weight, fb_source = fallback_weight_for_node(
             uid,
             node,
             size_weights=size_weights,
             size_by_uid=size_by_uid,
         )
+        weight = scale_weight_by_cpu(base_weight, node, threads)
         per_uid[uid] = weight
         fallback_weight += weight
         source_counts[fb_source] += 1
@@ -476,6 +513,8 @@ def _plan_uid_weights_history(
         "history_weight": round(history_weight, 1),
         "fallback_weight": round(fallback_weight, 1),
         "size_weights": {k: float(v) for k, v in sorted(size_weights.items())},
+        "threads": int(threads),
+        "cpu_scaled": True,
     }
     return per_uid, stats
 
@@ -488,8 +527,9 @@ def plan_uid_weights(
     size_weights: dict[str, float] | None = None,
     size_by_uid: dict[str, str] | None = None,
     weight_mode: str = DEFAULT_WEIGHT_MODE,
+    threads: int = DEFAULT_THREADS,
 ) -> tuple[dict[str, float], dict[str, Any]]:
-    """Weight result UIDs for LPT packing.
+    """Weight result UIDs for LPT packing (slot-seconds: duration * cpu).
 
     Default ``history``: longest suite_folder prefix match on test nodes; p90
     from nightly regression jobs goes to the heaviest SIZE at that key. Other
@@ -497,6 +537,9 @@ def plan_uid_weights(
 
     Opt-in ``timeout_budget``: ``N * timeout(size)`` where N is the number of
     chunk ``run_test`` deps outside ``graph.result`` (else 1).
+
+    Both modes multiply by ``requirements.cpu`` (``all`` → ``threads``) so pack
+    load approximates ya slot occupancy; wall estimate remains max_load/threads.
     """
     weights_cfg = dict(DEFAULT_SIZE_WEIGHTS)
     if size_weights:
@@ -510,12 +553,14 @@ def plan_uid_weights(
             duration_p90,
             size_weights=weights_cfg,
             size_by_uid=size_by_uid,
+            threads=threads,
         )
     return _plan_uid_weights_timeout_budget(
         uids,
         nodes_by_uid,
         size_weights=weights_cfg,
         size_by_uid=size_by_uid,
+        threads=threads,
     )
 
 
@@ -527,6 +572,7 @@ def uid_weights(
     default_weight: float = 600.0,
     size_weights: dict[str, float] | None = None,
     size_by_uid: dict[str, str] | None = None,
+    threads: int = DEFAULT_THREADS,
 ) -> dict[str, float]:
     """Compatibility wrapper around :func:`plan_uid_weights`."""
     weights_cfg = dict(size_weights or DEFAULT_SIZE_WEIGHTS)
@@ -539,6 +585,7 @@ def uid_weights(
         size_weights=weights_cfg,
         size_by_uid=size_by_uid,
         weight_mode=DEFAULT_WEIGHT_MODE,
+        threads=threads,
     )
     return weights
 
@@ -551,6 +598,7 @@ def component_weight(
     default_weight: float = 600.0,
     size_weights: dict[str, float] | None = None,
     size_by_uid: dict[str, str] | None = None,
+    threads: int = DEFAULT_THREADS,
 ) -> tuple[float, dict[str, float]]:
     """Sum planned weights for UIDs in a component (same rules as packing)."""
     weights_cfg = dict(size_weights or DEFAULT_SIZE_WEIGHTS)
@@ -564,6 +612,7 @@ def component_weight(
         duration_p90,
         size_weights=weights_cfg,
         size_by_uid=size_by_uid,
+        threads=threads,
     )
     per_path: dict[str, float] = defaultdict(float)
     for uid, weight in per_uid.items():

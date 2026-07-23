@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Choose shard count from estimated test work and time of day.
 
-Estimated single-job duration D (minutes) is derived from the total suite
-weight (seconds of summed test runtime) divided by the test thread count:
+Estimated single-job duration D (minutes) is derived from total pack weight
+(slot-seconds: duration * requirements.cpu) divided by the test thread count:
     D = total_weight_sec / (60 * threads)
 
 Profiles (by estimated single-job minutes D):
@@ -75,7 +75,11 @@ def estimate_single_job_minutes(total_weight_sec: float, threads: int) -> float:
 
 
 def estimate_critical_path_minutes(shard_weights_sec: list[float], threads: int) -> float:
-    """Wall-clock lower bound for parallel shards: slowest shard / threads."""
+    """Wall-clock lower bound: slowest shard slot-seconds / threads.
+
+    Shard weights are duration * requirements.cpu (see plan_uid_weights); dividing
+    by test-threads matches ya's slot scheduler under perfect packing.
+    """
     if not shard_weights_sec:
         return 0.0
     return estimate_single_job_minutes(max(shard_weights_sec), threads)

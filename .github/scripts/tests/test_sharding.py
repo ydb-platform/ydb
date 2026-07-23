@@ -29,6 +29,7 @@ from graph_plan_utils import (  # noqa: E402
     WEIGHT_MODE_HISTORY,
     WEIGHT_MODE_TIMEOUT_BUDGET,
     assign_result_uids_to_shards,
+    cpu_slots,
     extract_node_path,
     load_graph,
     plan_uid_weights,
@@ -845,6 +846,88 @@ class FilterGraphForShardTest(unittest.TestCase):
         self.assertEqual(without_large["support-peer"], 60.0)
         self.assertEqual(stats_small["history_uid_count"], 1)
         self.assertLess(sum(without_large.values()), sum(with_large.values()))
+
+    def test_cpu_slots_reads_any_requirement_value(self):
+        # Any positive int from requirements.cpu; "all" and values > threads → threads.
+        cases = [
+            ({}, 1),
+            ({"requirements": {"cpu": 1}}, 1),
+            ({"requirements": {"cpu": 2}}, 2),
+            ({"requirements": {"cpu": 3}}, 3),
+            ({"requirements": {"cpu": 4}}, 4),
+            ({"requirements": {"cpu": 8}}, 8),
+            ({"requirements": {"cpu": "16"}}, 16),
+            ({"requirements": {"cpu": 52}}, 52),
+            ({"requirements": {"cpu": 100}}, 52),
+            ({"requirements": {"cpu": "all"}}, 52),
+            ({"requirements": {"cpu": 0}}, 1),
+            ({"requirements": {"cpu": "nope"}}, 1),
+        ]
+        for node, expected in cases:
+            self.assertEqual(cpu_slots(node, threads=52), expected, msg=node)
+
+    def test_plan_uid_weights_scales_by_any_cpu(self):
+        nodes = {
+            "test-2cpu": {
+                "uid": "test-2cpu",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/a"},
+                "requirements": {"cpu": 2},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
+            },
+            "test-8cpu": {
+                "uid": "test-8cpu",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/b"},
+                "requirements": {"cpu": 8},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
+            },
+            "test-all-cpu": {
+                "uid": "test-all-cpu",
+                "node-type": "test",
+                "target_properties": {"module_dir": "ydb/tests/c"},
+                "requirements": {"cpu": "all"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
+            },
+        }
+        history = {
+            "ydb/tests/a": 100.0,
+            "ydb/tests/b": 100.0,
+            "ydb/tests/c": 100.0,
+        }
+        weights, stats = plan_uid_weights(
+            ["test-2cpu", "test-8cpu", "test-all-cpu"],
+            nodes,
+            history,
+            weight_mode=WEIGHT_MODE_HISTORY,
+            threads=52,
+        )
+        self.assertEqual(weights["test-2cpu"], 200.0)
+        self.assertEqual(weights["test-8cpu"], 800.0)
+        self.assertEqual(weights["test-all-cpu"], 100.0 * 52)
+        self.assertTrue(stats["cpu_scaled"])
+        self.assertEqual(stats["threads"], 52)
+
+        budget, _ = plan_uid_weights(
+            ["test-2cpu", "test-8cpu"],
+            nodes,
+            {},
+            weight_mode=WEIGHT_MODE_TIMEOUT_BUDGET,
+            threads=52,
+        )
+        self.assertEqual(budget["test-2cpu"], 1200.0)
+        self.assertEqual(budget["test-8cpu"], 4800.0)
+
+    def test_critical_path_uses_slot_seconds_over_threads(self):
+        # 5200 slot-seconds on 52 threads -> 100/60 minutes.
+        self.assertAlmostEqual(estimate_critical_path_minutes([5200.0], 52), 100.0 / 60.0)
+        plan = {
+            "shards": [{"id": 0, "balance_weight": 5200.0}],
+            "total_weight": 5200.0,
+        }
+        enrich_plan_timing_estimate(plan, 52)
+        self.assertEqual(plan["estimate_threads"], 52)
+        self.assertAlmostEqual(plan["estimated_critical_path_min"], round(100.0 / 60.0, 1))
 
     def test_split_graph_result_balances_large_connected_component(self):
         graph = {

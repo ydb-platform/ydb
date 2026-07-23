@@ -104,6 +104,7 @@ def build_plan(
         size_weights=size_weights,
         size_by_uid=size_by_uid,
         weight_mode=weight_mode,
+        threads=threads,
     )
     total_weight = sum(per_uid.values())
     buckets, loads = bin_pack_uids(per_uid, shard_count)
@@ -284,6 +285,7 @@ def main() -> int:
         size_weights=size_weights,
         size_by_uid=size_by_uid,
         weight_mode=args.weight_mode,
+        threads=args.threads,
     )
     total_weight = sum(preview_weights.values())
 

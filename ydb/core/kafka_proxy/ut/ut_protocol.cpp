@@ -2824,52 +2824,73 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         topicFullPath << "/Root/" << topic;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            CreateTopic(pqClient, topicFullPath, 1, {"consumer1"}, /*retention_sec = */ 1);
+        CreateTopic(pqClient, topicFullPath, 1, {"consumer1"}, /*retention_sec = */ 1);
 
-            NYdb::NTopic::TWriteSessionSettings wSSettings{topicFullPath, "producer1", ""};
-            wSSettings.Codec(NTopic::ECodec::RAW);
-            auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
+        NYdb::NTopic::TWriteSessionSettings wSSettings{topicFullPath, "producer1", ""};
+        wSSettings.Codec(NTopic::ECodec::RAW);
+        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
 
-            WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
-            WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
-            Sleep(TDuration::Seconds(15));
-
-            NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
-            rSSettings.AppendTopics({topicFullPath});
-            auto readSession = pqClient.CreateReadSession(rSSettings);
-            for (ui32 triesCount = 3; triesCount != 0;) {
-                auto results = Read(readSession, false);
-                if (results.empty()) {
-                    triesCount--;
-                    Sleep(TDuration::MilliSeconds(250));
-                    continue;
+        auto waitStartOffsetAtLeast = [&](ui64 minStartOffset, TDuration timeout, const TString& stage) {
+            const auto deadline = TInstant::Now() + timeout;
+            std::optional<ui64> lastStartOffset;
+            while (TInstant::Now() < deadline) {
+                auto describe = pqClient.DescribeTopic(
+                    topicFullPath,
+                    NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+                UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+                const auto& partitions = describe.GetTopicDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                const auto& stats = partitions[0].GetPartitionStats();
+                UNIT_ASSERT(stats.has_value());
+                lastStartOffset = stats->GetStartOffset();
+                Cerr << "===[" << stage << "] startOffset=" << *lastStartOffset
+                     << " endOffset=" << stats->GetEndOffset() << Endl;
+                if (*lastStartOffset >= minStartOffset) {
+                    return;
                 }
-                for (auto& dataEvent : results) {
-                    for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_GE(msg.GetOffset(), 1);
-                        break;
-                    }
-                }
+                Sleep(TDuration::MilliSeconds(500));
             }
-            auto msg = client.AlterConfigs(
-                {TTopicConfig(topic, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}})});
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
-            WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
-            for (ui32 triesCount = 30; triesCount != 0;) {
-                auto results = Read(readSession, false);
-                if (results.empty()) {
-                    triesCount--;
-                    Sleep(TDuration::MilliSeconds(500));
-                    continue;
+            UNIT_ASSERT_C(
+                false,
+                TStringBuilder() << "Timed out waiting for startOffset >= " << minStartOffset
+                                 << " at stage " << stage
+                                 << ", last startOffset="
+                                 << (lastStartOffset ? ToString(*lastStartOffset) : "n/a"));
+        };
+
+        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
+        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
+        waitStartOffsetAtLeast(1, TDuration::Seconds(60), "retention");
+
+        auto msg = client.AlterConfigs(
+            {TTopicConfig(topic, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}})});
+        UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+        WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
+        waitStartOffsetAtLeast(2, TDuration::Seconds(60), "compaction");
+
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        rSSettings.AppendTopics({topicFullPath});
+        auto readSession = pqClient.CreateReadSession(rSSettings);
+        bool seenMessage = false;
+        for (ui32 triesCount = 30; triesCount != 0 && !seenMessage; --triesCount) {
+            auto results = Read(readSession, false);
+            if (results.empty()) {
+                Sleep(TDuration::MilliSeconds(500));
+                continue;
+            }
+            for (auto& dataEvent : results) {
+                for (const auto& message : dataEvent.GetMessages()) {
+                    UNIT_ASSERT_GT(message.GetOffset(), 1);
+                    seenMessage = true;
+                    break;
                 }
-                for (auto& dataEvent : results) {
-                    for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_GT(msg.GetOffset(), 1);
-                        break;
-                    }
+                if (seenMessage) {
+                    break;
                 }
             }
         }
+        UNIT_ASSERT_C(seenMessage, "No messages read after compaction gap");
+    }
 
     Y_UNIT_TEST(DescribeConfigsScenario) {
         TInsecureTestServer testServer("2");

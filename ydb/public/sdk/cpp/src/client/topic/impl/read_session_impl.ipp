@@ -3069,6 +3069,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
     {
         std::lock_guard lock(session->Lock);
         while (!Tasks.empty()) {
+            if (auto* hook = NTesting::CleanupPopHook().load(std::memory_order_acquire)) {
+                (*hook)();
+            }
             const auto& task = Tasks.front();
             sourceSize += task.AddedDataSize();
             messagesCount += task.AddedMessagesCount();
@@ -3153,6 +3156,9 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
     i64 used = 0;
 
     while (availableMemory > 0 && !Tasks.empty()) {
+        if (auto* hook = NTesting::StartTasksPopHook().load(std::memory_order_acquire)) {
+            (*hook)();
+        }
         auto& task = Tasks.front();
 
         used += task.GetEstimatedDecompressedSize();

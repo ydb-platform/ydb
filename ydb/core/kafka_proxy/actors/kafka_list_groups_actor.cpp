@@ -27,19 +27,20 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 }
 
 void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
         Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
     } else {
         Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
     }
-    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-        KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+        YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+            {LogPrefix()});
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
         Die(ctx);
         return;
     }
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         } else {
             StartKqpSession(ctx);
@@ -125,7 +126,7 @@ void TKafkaListGroupsActor::Die(const TActorContext &ctx) {
 }
 
 TString TKafkaListGroupsActor::GetMetadataDatabasePath() const {
-    return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {

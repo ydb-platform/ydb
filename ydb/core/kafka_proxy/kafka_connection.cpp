@@ -126,7 +126,7 @@ public:
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
-            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
+            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
         }
 
         MtlsAuthStage = NO_CERT_YET;
@@ -576,8 +576,9 @@ protected:
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
         if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
-                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-            KAFKA_LOG_I("EnableServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.");
+                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
+                {LogPrefix()});
             CloseConnection = true;
         }
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
@@ -632,10 +633,8 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
-        KAFKA_LOG_D("event->ResourceDatabasePath=" << event->ResourceDatabasePath);
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
-        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
-        KAFKA_LOG_D("Context->InitialServerlessTransactionsFlagValue=" << Context->InitialServerlessTransactionsFlagValue.value());
+        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},

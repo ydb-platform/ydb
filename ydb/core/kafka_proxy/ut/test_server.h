@@ -43,7 +43,7 @@ struct TTestServerSettings {
     bool EnableQuoting = true;
     bool CheckACL = false;
     bool HideAuthenticationFailureReasons = false;
-    bool EnableServerlessTransactions = false;
+    bool EnableKafkaServerlessTransactions = false;
 };
 
 template <class TKikimr, bool secure>
@@ -55,7 +55,7 @@ public:
 
     TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
                 bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true,
-                bool checkACL = false, bool enableServerlessTransactions = false);
+                bool checkACL = false, bool EnableKafkaServerlessTransactions = false);
 
 public:
     std::unique_ptr<TKikimr> KikimrServer;

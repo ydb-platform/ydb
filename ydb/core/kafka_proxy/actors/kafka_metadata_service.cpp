@@ -14,6 +14,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 namespace NKafka {
 
 using namespace NActors;
@@ -43,7 +45,7 @@ TString TKafkaMetadataService::GetTablePath(const TString& tableName) const {
 
 void TKafkaMetadataService::InitializeConsumerMembersTable() {
     const TString tablePath = GetTablePath("kafka_consumer_members");
-    KAFKA_LOG_D("Creating table " << tablePath);
+    YDB_LOG_DEBUG("Creating table " << tablePath, {LogPrefix()});
     Ydb::Table::CreateTableRequest request;
     request.set_session_id("");
     request.set_path(tablePath);
@@ -127,7 +129,7 @@ void TKafkaMetadataService::InitializeConsumerMembersTable() {
 
 void TKafkaMetadataService::InitializeConsumerGroupsTable() {
     const TString tablePath = GetTablePath("kafka_consumer_groups");
-    KAFKA_LOG_D("Creating table " << tablePath);
+    YDB_LOG_DEBUG("Creating table " << tablePath, {LogPrefix()});
     Ydb::Table::CreateTableRequest request;
     request.set_session_id("");
     request.set_path(tablePath);
@@ -196,7 +198,7 @@ void TKafkaMetadataService::InitializeConsumerGroupsTable() {
 
 void TKafkaMetadataService::InitializeTransactionalProducersTable() {
     const TString tablePath = GetTablePath("kafka_transactional_producers");
-    KAFKA_LOG_D("Creating table " << tablePath);
+    YDB_LOG_DEBUG("Creating table " << tablePath, {LogPrefix()});
     Ydb::Table::CreateTableRequest request;
     request.set_session_id("");
     request.set_path(tablePath);
@@ -266,7 +268,7 @@ void TKafkaMetadataService::SendCreateTableRequest(Ydb::Table::CreateTableReques
 
 void TKafkaMetadataService::SendEnableAutopartitioningRequest(const TString& tableName) {
     const TString tablePath = GetTablePath(tableName);
-    KAFKA_LOG_D("Enabling autopartitioning for table " << tablePath);
+    YDB_LOG_DEBUG("Enabling autopartitioning for table " << tablePath, {LogPrefix()});
     Ydb::Table::AlterTableRequest request;
     request.set_session_id("");
     request.set_path(tablePath);
@@ -302,7 +304,7 @@ void TKafkaMetadataService::SendAlterTableRequest(Ydb::Table::AlterTableRequest&
 
 void TKafkaMetadataService::SendReadOnlyAclRequest(const TString& tableName) {
     const TString tablePath = GetTablePath(tableName);
-    KAFKA_LOG_D("Setting read-only ACL for table " << tablePath);
+    YDB_LOG_DEBUG("Setting read-only ACL for table " << tablePath, {LogPrefix()});
 
     Ydb::Scheme::ModifyPermissionsRequest request;
     request.set_path(tablePath);
@@ -383,7 +385,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const 
             "Kafka metadata table '" << msg->TableName << "' autopartitioning enabled (status "
                 << Ydb::StatusIds::StatusCode_Name(status) << "), migrating rows from '"
                 << BuildTablePath(SourceDatabasePath, msg->TableName) << "'");
-        SendMigrationReadRequest(msg->TableName);
+        SendMigrationReadRequest(msg->TableName, ctx);
         return;
     }
 
@@ -415,9 +417,9 @@ TString TKafkaMetadataService::YqlType(const Ydb::Type& type) {
     }
 }
 
-void TKafkaMetadataService::SendMigrationReadRequest(const TString& tableName) {
+void TKafkaMetadataService::SendMigrationReadRequest(const TString& tableName, const TActorContext& ctx) {
     const TString sourceTablePath = BuildTablePath(SourceDatabasePath, tableName);
-    KAFKA_LOG_D("Reading rows to migrate from " << sourceTablePath);
+    LOG_DEBUG_S(ctx, NKikimrServices::KAFKA_PROXY,"Reading rows to migrate from " << sourceTablePath);
 
     Ydb::Scripting::ExecuteYqlRequest request;
     request.set_script(TStringBuilder()
@@ -465,7 +467,7 @@ void TKafkaMetadataService::SendMigrationReadRequest(const TString& tableName) {
 void TKafkaMetadataService::SendMigrationUpsertRequest(const TString& tableName, const Ydb::ResultSet& resultSet) {
     const TString targetTablePath = GetTablePath(tableName);
     const ui64 rowCount = resultSet.rows_size();
-    KAFKA_LOG_D("Upserting " << rowCount << " migrated rows into " << targetTablePath);
+    YDB_LOG_DEBUG("Upserting " << rowCount << " migrated rows into " << targetTablePath, {LogPrefix()});
 
     TStringBuilder structFields;
     TStringBuilder columnNames;
@@ -575,7 +577,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvAclModified::TPtr& ev, const T
 
 void TKafkaMetadataService::ReplyIfRequired(const TActorContext& ctx) {
     if (ProcessedRequests == TablesToCreate) {
-        KAFKA_LOG_I("All metadata tables are created for database " << DatabasePath);
+        LOG_DEBUG_S(ctx, NKikimrServices::KAFKA_PROXY, "All metadata tables are created for database " << DatabasePath);
         Die(ctx);
     }
 }
@@ -583,7 +585,7 @@ void TKafkaMetadataService::ReplyIfRequired(const TActorContext& ctx) {
 static bool TryRequestMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath,
                                              const TString& sourceDatabasePath, TKafkaMetadataService::ETables tables,
                                              const TActorContext& ctx) {
-    if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() || status != Ydb::StatusIds::SCHEME_ERROR) {
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() || status != Ydb::StatusIds::SCHEME_ERROR) {
         return false;
     }
 

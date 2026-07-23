@@ -244,14 +244,14 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
     if (!GroupsToFetch.empty()) {
-        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, std::make_shared<TOffsetFetchResponseData>(), EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
             Die(ctx);
             return;
         }
         // if topics were not specified for some groups,
         // topics for such groups will be retrieved from the table
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
             Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
         } else {
             Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
@@ -689,7 +689,7 @@ void NKafka::TKafkaOffsetFetchActor::Die(const TActorContext &ctx) {
 }
 
 TString NKafka::TKafkaOffsetFetchActor::GetMetadataDatabasePath() const {
-    return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 }

@@ -122,7 +122,7 @@ private:
     void SendModifyPermissionsRequest(Ydb::Scheme::ModifyPermissionsRequest&& request, const TString& tableName);
 
     bool ShouldMigrate() const;
-    void SendMigrationReadRequest(const TString& tableName);
+    void SendMigrationReadRequest(const TString& tableName, const TActorContext& ctx);
     void SendMigrationUpsertRequest(const TString& tableName, const Ydb::ResultSet& resultSet);
     static TString YqlType(const Ydb::Type& type);
 

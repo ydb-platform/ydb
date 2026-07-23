@@ -56,9 +56,10 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
-            if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-                KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-                SendResponseFail(EKafkaErrors::INVALID_TXN_STATE, "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+                YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+                {LogPrefix()});
+                SendResponseFail(EKafkaErrors::INVALID_TXN_STATE, "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
                 Die(ctx);
                 return;
             }
@@ -68,14 +69,14 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+            if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
                 Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             } else {
                 Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
             }
             YDB_LOG_DEBUG("Bootstrapping actor for transactional producer. Sending init table request to KQP",
                 {LogPrefix()});
-            if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
                 Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             } else {
                 Kqp->SendCreateSessionRequest(ctx);
@@ -406,7 +407,7 @@ namespace NKafka {
     }
 
     TString TKafkaInitProducerIdActor::GetMetadataDatabasePath() const {
-        return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
+        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
     }
 
     NActors::NStructuredLog::TStructuredMessage TKafkaInitProducerIdActor::LogPrefix() {

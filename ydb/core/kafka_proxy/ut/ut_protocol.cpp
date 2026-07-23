@@ -4964,14 +4964,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
         };
 
-        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableKafkaServerlessTransactions());
         runTransaction(kafkaClient, TStringBuilder() << "tx-producer-flag-off-" << RandomNumber<ui64>(), 2, {"out-key-1", "out-val-1"});
 
-        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableServerlessTransactions(true);
-        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaServerlessTransactions(true);
+        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableKafkaServerlessTransactions());
 
         auto initProducerIdResp = kafkaClient.InitProducerId(TStringBuilder() << "tx-producer-flag-on-" << RandomNumber<ui64>(), 30000);
-        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::INVALID_TXN_STATE);
 
         auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -4996,7 +4996,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             CreateTopic(pqClient, topicName, minActivePartitions, {group});
         }
 
-        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableKafkaServerlessTransactions());
 
         TKafkaTestClient clientA(testServer.Port);
         clientA.PlainAuthenticateToKafka("ouruser@/Root", "ourUserPassword");
@@ -5007,8 +5007,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableServerlessTransactions(true);
-        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaServerlessTransactions(true);
+        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableKafkaServerlessTransactions());
 
         UNIT_ASSERT_VALUES_EQUAL(
             clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode,

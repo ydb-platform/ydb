@@ -205,12 +205,24 @@ Y_UNIT_TEST(SecretOperations) {
         {// create with more than one setting
          "use plato; create secret `secret-name` with (value=\"secret_value\",inherit_permissions=fALSe);\n",
          "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value', inherit_permissions = FALSE);\n"},
+        {// create if not exists
+         "use plato; create secret if not exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE SECRET IF NOT EXISTS `secret-name` WITH (value = 'secret_value');\n"},
+        {// create or replace
+         "use plato; create or replace secret `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE OR REPLACE SECRET `secret-name` WITH (value = 'secret_value');\n"},
         {// alter
          "use plato; alter secret `secret-name` with (value=\"secret_value\");\n",
          "USE plato;\n\nALTER SECRET `secret-name` WITH (value = 'secret_value');\n"},
+        {// alter if exists
+         "use plato; alter secret if exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nALTER SECRET IF EXISTS `secret-name` WITH (value = 'secret_value');\n"},
         {// drop
          "use plato; drop secret `secret-name`;\n",
          "USE plato;\n\nDROP SECRET `secret-name`;\n"},
+        {// drop if exists
+         "use plato; drop secret if exists `secret-name`;\n",
+         "USE plato;\n\nDROP SECRET IF EXISTS `secret-name`;\n"},
     };
 
     TSetup setup;

@@ -2229,29 +2229,47 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore66: {
-            // create_secret_stmt: CREATE SECRET object_ref WITH (k=v,...);
+            // create_secret_stmt: CREATE (OR REPLACE)? SECRET (IF NOT EXISTS)? object_ref WITH (k=v,...);
             Ctx_.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core66().GetRule_create_secret_stmt1();
             Ctx_.Token(node.GetToken1());
             const TPosition stmBeginPos = Ctx_.Pos();
+
+            bool replaceIfExists = false;
+            if (node.HasBlock2()) { // OR REPLACE
+                replaceIfExists = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(node.GetBlock2().GetToken1().GetId(), OR) &&
+                    IS_TOKEN(node.GetBlock2().GetToken2().GetId(), REPLACE));
+            }
+
+            bool existingOk = false;
+            if (node.HasBlock4()) { // IF NOT EXISTS
+                existingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(node.GetBlock4().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock4().GetToken2().GetId(), NOT) &&
+                    IS_TOKEN(node.GetBlock4().GetToken3().GetId(), EXISTS));
+            }
+
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref3().HasBlock1()) {
+            if (node.GetRule_object_ref5().HasBlock1()) {
                 if (!ClusterExpr(
-                        node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                        node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
                         /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
                     return false;
                 }
             }
 
             TString objectId;
-            if (!ParseSecretId(node.GetRule_object_ref3().GetRule_id_or_at2(), objectId)) {
+            if (!ParseSecretId(node.GetRule_object_ref5().GetRule_id_or_at2(), objectId)) {
                 return false;
             }
 
             TSecretParameters secretParams;
             if (!ParseSecretSettings(
                     stmBeginPos,
-                    node.GetRule_with_secret_settings4(),
+                    node.GetRule_with_secret_settings6(),
                     secretParams,
                     TSecretParameters::EOperationMode::Create)) {
                 return false;
@@ -2264,33 +2282,44 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                     secretParams,
                     context,
-                    Ctx_.Scoped));
+                    Ctx_.Scoped,
+                    replaceIfExists,
+                    existingOk));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore67: {
-            // alter_secret_stmt: ALTER SECRET object_ref WITH (k=v,...);
+            // alter_secret_stmt: ALTER SECRET (IF EXISTS)? object_ref WITH (k=v,...);
             Ctx_.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core67().GetRule_alter_secret_stmt1();
             Ctx_.Token(node.GetToken1());
             const TPosition stmBeginPos = Ctx_.Pos();
+
+            bool missingOk = false;
+            if (node.HasBlock3()) { // IF EXISTS
+                missingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS));
+            }
+
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref3().HasBlock1()) {
+            if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(
-                        node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                        node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
                         /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
                     return false;
                 }
             }
 
             TString objectId;
-            if (!ParseSecretId(node.GetRule_object_ref3().GetRule_id_or_at2(), objectId)) {
+            if (!ParseSecretId(node.GetRule_object_ref4().GetRule_id_or_at2(), objectId)) {
                 return false;
             }
 
             TSecretParameters secretParams;
             if (!ParseSecretSettings(
                     stmBeginPos,
-                    node.GetRule_with_secret_settings4(),
+                    node.GetRule_with_secret_settings5(),
                     secretParams,
                     TSecretParameters::EOperationMode::Alter)) {
                 return false;
@@ -2303,26 +2332,36 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                     secretParams,
                     context,
-                    Ctx_.Scoped));
+                    Ctx_.Scoped,
+                    missingOk));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore68: {
-            // drop_secret_stmt: DROP SECRET object_ref;
+            // drop_secret_stmt: DROP SECRET (IF EXISTS)? object_ref;
             Ctx_.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core68().GetRule_drop_secret_stmt1();
             Ctx_.Token(node.GetToken1());
             const TPosition pos = Ctx_.Pos();
+
+            bool missingOk = false;
+            if (node.HasBlock3()) { // IF EXISTS
+                missingOk = true;
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(node.GetBlock3().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS));
+            }
+
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref3().HasBlock1()) {
+            if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(
-                        node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                        node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
                         /*allowWildcard=*/false, context.ServiceId, context.Cluster)) {
                     return false;
                 }
             }
 
             TString objectId;
-            if (!ParseSecretId(node.GetRule_object_ref3().GetRule_id_or_at2(), objectId)) {
+            if (!ParseSecretId(node.GetRule_object_ref4().GetRule_id_or_at2(), objectId)) {
                 return false;
             }
 
@@ -2332,7 +2371,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     Ctx_.Pos(),
                     BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                     context,
-                    Ctx_.Scoped));
+                    Ctx_.Scoped,
+                    missingOk));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore69: {

@@ -6230,6 +6230,345 @@ Y_UNIT_TEST(DropSecretIncorrect) {
     }
 }
 
+Y_UNIT_TEST(CreateSecretIfNotExists) {
+    UNIT_ASSERT(SqlToYql(R"sql(
+            USE plato;
+            CREATE SECRET IF NOT EXISTS `secret-name` WITH (VALUE = "secret-value");
+        )sql")
+                    .IsOk());
+}
+
+Y_UNIT_TEST(CreateSecretIfNotExistsCorrect) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE SECRET IF NOT EXISTS `secret-name` WITH (VALUE = "secret-value");
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_if_not_exists");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateSecretOrReplace) {
+    UNIT_ASSERT(SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET `secret-name` WITH (VALUE = "secret-value");
+        )sql")
+                    .IsOk());
+}
+
+Y_UNIT_TEST(CreateSecretOrReplaceCorrect) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET `secret-name` WITH (VALUE = "secret-value");
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_or_replace");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateSecretOrReplaceWithInheritPermissions) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET `secret-name` WITH (VALUE = "secret-value", INHERIT_PERMISSIONS = TRUE);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_or_replace");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"("inherit_permissions" '"1")");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateSecretIfNotExistsWithExpression) {
+    const auto res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $foo AS String;
+            CREATE SECRET IF NOT EXISTS `secret-name` WITH (VALUE = $foo);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_if_not_exists");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateSecretOrReplaceWithExpression) {
+    const auto res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $foo AS String;
+            CREATE OR REPLACE SECRET `secret-name` WITH (VALUE = $foo);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_or_replace");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterSecretIfExists) {
+    UNIT_ASSERT(SqlToYql(R"sql(
+            USE ydb;
+            ALTER SECRET IF EXISTS `secret-name` WITH (VALUE = "secret-value");
+        )sql")
+                    .IsOk());
+}
+
+Y_UNIT_TEST(AlterSecretIfExistsCorrect) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER SECRET IF EXISTS `secret-name` WITH (VALUE = "secret-value");
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter_if_exists");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterSecretIfExistsWithExpression) {
+    const auto res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $foo AS String;
+            ALTER SECRET IF EXISTS `secret-name` WITH (VALUE = $foo);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter_if_exists");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(DropSecretIfExists) {
+    UNIT_ASSERT(SqlToYql(R"sql(
+            USE plato;
+            DROP SECRET IF EXISTS `secret-name`;
+        )sql")
+                    .IsOk());
+}
+
+Y_UNIT_TEST(DropSecretIfExistsCorrect) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            DROP SECRET IF EXISTS `secret-name`;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'drop_if_exists");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(DropSecretIfExistsWithTablePathPrefix) {
+    UNIT_ASSERT(SqlToYql(R"sql(
+            USE plato;
+            PRAGMA TablePathPrefix = "/PathPrefix";
+            DROP SECRET IF EXISTS `secret-name`;
+        )sql")
+                    .IsOk());
+}
+
+Y_UNIT_TEST(CreateSecretOrReplaceAndIfNotExists) {
+    // Both OR REPLACE and IF NOT EXISTS are allowed together; OR REPLACE takes priority
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET IF NOT EXISTS `secret-name` WITH (VALUE = "secret-value");
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create_or_replace");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateSecretIfNotExistsIncorrect) {
+    { // no value
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE SECRET IF NOT EXISTS `secret-name` WITH (INHERIT_PERMISSIONS = FALSE);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:13: Error: Parameter VALUE must be set\n");
+    }
+    { // temporal object in secret name
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE SECRET IF NOT EXISTS @tmp WITH (VALUE = "abc");
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:42: Error: '@' is not allowed prefix for secret name\n");
+    }
+    { // empty secret name
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE SECRET IF NOT EXISTS `` WITH (INHERIT_PERMISSIONS = FALSE);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:41: Error: Empty secret name\n");
+    }
+}
+
+Y_UNIT_TEST(CreateSecretOrReplaceIncorrect) {
+    { // no value
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET `secret-name` WITH (INHERIT_PERMISSIONS = FALSE);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:13: Error: Parameter VALUE must be set\n");
+    }
+    { // value is not a string
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET `secret-name` WITH (VALUE = true);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:66: Error: Unsupported type for parameter: VALUE. String was expected\n");
+    }
+    { // temporal object in secret name
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE OR REPLACE SECRET @tmp WITH (VALUE = "abc");
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:39: Error: '@' is not allowed prefix for secret name\n");
+    }
+}
+
+Y_UNIT_TEST(AlterSecretIfExistsIncorrect) {
+    { // no value
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER SECRET IF EXISTS `secret-name`;
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+#if ANTLR_VER == 3
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:48: Error: Unexpected token ';' : syntax error...\n\n");
+#else
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:48: Error: mismatched input ';' expecting WITH\n");
+#endif
+    }
+    { // inherit_permissions is set
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER SECRET IF EXISTS `secret-name` WITH (VALUE = "value", INHERIT_PERMISSIONS = FALSE);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:13: Error: parameter INHERIT_PERMISSIONS is not supported for alter operation\n");
+    }
+    { // temporal object in secret name
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER SECRET IF EXISTS @tmp WITH (VALUE = "abc");
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:37: Error: '@' is not allowed prefix for secret name\n");
+    }
+}
+
+Y_UNIT_TEST(DropSecretIfExistsIncorrect) {
+    { // temporal object in secret name
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            DROP SECRET IF EXISTS @tmp;
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:36: Error: '@' is not allowed prefix for secret name\n");
+    }
+    { // WITH is not allowed for drop
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            DROP SECRET IF EXISTS `secret-name` WITH (VALUE = "abc");
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+#if ANTLR_VER == 3
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:48: Error: Unexpected token 'WITH' : cannot match to any predicted input...\n\n");
+#else
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:48: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
+#endif
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(SqlParsingOnly)
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

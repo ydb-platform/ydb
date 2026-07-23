@@ -1831,18 +1831,22 @@ TNodePtr BuildCreateSecret(
     const TString& objectId,
     const TSecretParameters& secretParams,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped);
+    TScopedStatePtr scoped,
+    bool replaceIfExists = false,
+    bool existingOk = false);
 TNodePtr BuildAlterSecret(
     TPosition pos,
     const TString& objectId,
     const TSecretParameters& secretParams,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped);
+    TScopedStatePtr scoped,
+    bool missingOk = false);
 TNodePtr BuildDropSecret(
     TPosition pos,
     const TString& objectId,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped);
+    TScopedStatePtr scoped,
+    bool missingOk = false);
 
 template <class TContainer>
 TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

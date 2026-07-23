@@ -4556,13 +4556,19 @@ public:
         TString objectId,
         TSecretParameters params,
         const TObjectOperatorContext& context,
-        TScopedStatePtr scoped)
+        TScopedStatePtr scoped,
+        bool replaceIfExists = false,
+        bool existingOk = false,
+        bool missingOk = false)
         : TBase(pos)
         , Pos_(pos)
         , ObjectId_(std::move(objectId))
         , Params_(std::move(params))
         , Context_(context)
         , Scoped_(std::move(scoped))
+        , ReplaceIfExists_(replaceIfExists)
+        , ExistingOk_(existingOk)
+        , MissingOk_(missingOk)
     {
     }
 
@@ -4581,6 +4587,16 @@ public:
 
 protected:
     virtual TString GetMode() = 0;
+
+    TString GetCreateMode() const {
+        if (ReplaceIfExists_) {
+            return "create_or_replace";
+        }
+        if (ExistingOk_) {
+            return "create_if_not_exists";
+        }
+        return "create";
+    }
 
 private:
     TPtr BuildOptions() {
@@ -4617,6 +4633,9 @@ protected:
     const TSecretParameters Params_;
     const TObjectOperatorContext Context_;
     TScopedStatePtr Scoped_;
+    const bool ReplaceIfExists_ = false;
+    const bool ExistingOk_ = false;
+    const bool MissingOk_ = false;
 };
 
 class TCreateSecretNode: public TSecretNode {
@@ -4628,18 +4647,20 @@ public:
         const TString& objectId,
         const TSecretParameters& params,
         const TObjectOperatorContext& context,
-        TScopedStatePtr scoped)
-        : TBase(pos, objectId, params, context, scoped)
+        TScopedStatePtr scoped,
+        bool replaceIfExists,
+        bool existingOk)
+        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, false)
     {
     }
 
 protected:
     TString GetMode() override {
-        return "create";
+        return GetCreateMode();
     }
 
     TPtr DoClone() const final {
-        return new TCreateSecretNode(Pos_, ObjectId_, Params_, Context_, Scoped_);
+        return new TCreateSecretNode(Pos_, ObjectId_, Params_, Context_, Scoped_, ReplaceIfExists_, ExistingOk_);
     }
 };
 
@@ -4648,8 +4669,10 @@ TNodePtr BuildCreateSecret(
     const TString& objectId,
     const TSecretParameters& secretParams,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped) {
-    return new TCreateSecretNode(pos, objectId, secretParams, context, scoped);
+    TScopedStatePtr scoped,
+    bool replaceIfExists,
+    bool existingOk) {
+    return new TCreateSecretNode(pos, objectId, secretParams, context, scoped, replaceIfExists, existingOk);
 }
 
 class TAlterSecretNode: public TSecretNode {
@@ -4661,18 +4684,19 @@ public:
         const TString& objectId,
         const TSecretParameters& params,
         const TObjectOperatorContext& context,
-        TScopedStatePtr scoped)
-        : TBase(pos, objectId, params, context, scoped)
+        TScopedStatePtr scoped,
+        bool missingOk)
+        : TBase(pos, objectId, params, context, scoped, false, false, missingOk)
     {
     }
 
 protected:
     TString GetMode() override {
-        return "alter";
+        return MissingOk_ ? "alter_if_exists" : "alter";
     }
 
     TPtr DoClone() const final {
-        return new TAlterSecretNode(Pos_, ObjectId_, Params_, Context_, Scoped_);
+        return new TAlterSecretNode(Pos_, ObjectId_, Params_, Context_, Scoped_, MissingOk_);
     }
 };
 
@@ -4681,8 +4705,9 @@ TNodePtr BuildAlterSecret(
     const TString& objectId,
     const TSecretParameters& secretParams,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped) {
-    return new TAlterSecretNode(pos, objectId, secretParams, context, scoped);
+    TScopedStatePtr scoped,
+    bool missingOk) {
+    return new TAlterSecretNode(pos, objectId, secretParams, context, scoped, missingOk);
 }
 
 class TDropSecretNode: public TSecretNode {
@@ -4693,18 +4718,19 @@ public:
         TPosition pos,
         const TString& objectId,
         const TObjectOperatorContext& context,
-        TScopedStatePtr scoped)
-        : TBase(pos, objectId, TSecretParameters{}, context, scoped)
+        TScopedStatePtr scoped,
+        bool missingOk)
+        : TBase(pos, objectId, TSecretParameters{}, context, scoped, false, false, missingOk)
     {
     }
 
 protected:
     TPtr DoClone() const final {
-        return new TDropSecretNode(Pos_, ObjectId_, Context_, Scoped_);
+        return new TDropSecretNode(Pos_, ObjectId_, Context_, Scoped_, MissingOk_);
     }
 
     TString GetMode() override {
-        return "drop";
+        return MissingOk_ ? "drop_if_exists" : "drop";
     }
 };
 
@@ -4712,8 +4738,9 @@ TNodePtr BuildDropSecret(
     TPosition pos,
     const TString& objectId,
     const TObjectOperatorContext& context,
-    TScopedStatePtr scoped) {
-    return new TDropSecretNode(pos, objectId, context, scoped);
+    TScopedStatePtr scoped,
+    bool missingOk) {
+    return new TDropSecretNode(pos, objectId, context, scoped, missingOk);
 }
 
 } // namespace NSQLTranslationV1

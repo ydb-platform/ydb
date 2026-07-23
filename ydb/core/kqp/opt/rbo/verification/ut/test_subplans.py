@@ -9,7 +9,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator,
-    RelationError,
+    family_equal,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder as ScalarEncoder,
@@ -149,6 +149,178 @@ def _global_decimal_sum_snapshot():
     return raw
 
 
+def _scan_scalar_snapshot():
+    raw = _base_snapshot()
+    raw["schema"]["tables"] = [
+        {
+            "name": "A",
+            "columns": [
+                {"name": "x", "type": "Int64", "nullable": False}
+            ],
+            "unique_keys": [],
+        }
+    ]
+    raw["plan"]["nodes"][2:] = [
+        {
+            "id": "sub_scan",
+            "op": "scan",
+            "table": "A",
+            "columns": [{"source": "x", "output": "sub.value"}],
+            "predicate": None,
+            "pushed_limit": None,
+        }
+    ]
+    raw["plan"]["subplans"][0]["root"] = "sub_scan"
+    return raw
+
+
+def _lowered_scalar_snapshot(*, checked, empty_outer=False):
+    nodes = [{"id": "main_source", "op": "empty_source"}]
+    outer = "main_source"
+    if empty_outer:
+        nodes.append(
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": outer,
+                "predicate": _literal("Bool", False),
+            }
+        )
+        outer = "empty_outer"
+    nodes.extend(
+        [
+            {
+                "id": "sub_scan",
+                "op": "scan",
+                "table": "A",
+                "columns": [{"source": "x", "output": "sub.value"}],
+                "predicate": None,
+                "pushed_limit": None,
+            },
+            {
+                "id": "checked",
+                "op": "limit",
+                "input": "sub_scan",
+                "count": _literal("Uint64", 2),
+                "offset": None,
+                "phase": "undefined",
+                "ensure_at_most_one": checked,
+            },
+            {"id": "fallback_source", "op": "empty_source"},
+            {
+                "id": "fallback",
+                "op": "project",
+                "input": "fallback_source",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "sub.value",
+                        "expression": {"kind": "null", "type": "Int64"},
+                    }
+                ],
+            },
+            {
+                "id": "value_or_null",
+                "op": "union_all",
+                "inputs": [
+                    {"node": "checked", "columns": ["sub.value"]},
+                    {"node": "fallback", "columns": ["sub.value"]},
+                ],
+                "output": ["sub.value"],
+                "ordered": True,
+            },
+            {
+                "id": "first",
+                "op": "limit",
+                "input": "value_or_null",
+                "count": _literal("Uint64", 1),
+                "offset": None,
+                "phase": "undefined",
+            },
+            {
+                "id": "cross",
+                "op": "join",
+                "left": outer,
+                "right": "first",
+                "kind": "cross",
+                "predicate": _literal("Bool", True),
+            },
+            {
+                "id": "result",
+                "op": "project",
+                "input": "cross",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "result",
+                        "expression": {
+                            "kind": "column",
+                            "column": "sub.value",
+                        },
+                    }
+                ],
+            },
+        ]
+    )
+    return {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": _scan_scalar_snapshot()["schema"],
+        "plan": {
+            "nodes": nodes,
+            "root": "result",
+            "output": ["result"],
+            "subplans": [],
+        },
+        "stage_graph": None,
+    }
+
+
+def _ground(term, constants):
+    if term.operation == "symbol":
+        return constants[term.atom]
+    if term.operation in {"bool", "int"}:
+        return term.atom
+    if term.operation == "not":
+        return not _ground(term.arguments[0], constants)
+    if term.operation == "and":
+        return all(_ground(argument, constants) for argument in term.arguments)
+    if term.operation == "or":
+        return any(_ground(argument, constants) for argument in term.arguments)
+    if term.operation == "=":
+        return _ground(term.arguments[0], constants) == _ground(
+            term.arguments[1],
+            constants,
+        )
+    if term.operation == "<":
+        return _ground(term.arguments[0], constants) < _ground(
+            term.arguments[1],
+            constants,
+        )
+    if term.operation == "ite":
+        branch = (
+            term.arguments[1]
+            if _ground(term.arguments[0], constants)
+            else term.arguments[2]
+        )
+        return _ground(branch, constants)
+    if term.operation == "+":
+        return sum(_ground(argument, constants) for argument in term.arguments)
+    raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
+
+
+def _database_constants(database, present, values=(10, 20)):
+    constants = {}
+    for row, is_present, value in zip(
+        database.witness["A"],
+        present,
+        values,
+    ):
+        constants[row.present.atom] = is_present
+        constants[row.cells["x"].value.atom] = value
+    return constants
+
+
 class ScalarSubplanEvaluationTest(unittest.TestCase):
     def test_present_scalar_value_is_injected_only_into_expression_scope(self):
         evaluator, relation = _evaluate(_base_snapshot())
@@ -158,7 +330,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
         self.assertEqual(result.type, "Int64")
         self.assertEqual(result.is_null, smt.FALSE)
         self.assertEqual(result.value, smt.int_value(7))
-        self.assertEqual(set(evaluator.scalar_subplan_values), {BINDING})
+        self.assertEqual(set(evaluator.scalar_subplan_families), {BINDING})
 
     def test_nullable_scalar_value_remains_null(self):
         raw = _base_snapshot({"kind": "null", "type": "Int64"})
@@ -202,7 +374,76 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
         self.assertEqual(result.is_null, smt.FALSE)
         self.assertEqual(result.value, smt.int_value(14))
         self.assertEqual(observed.count("sub_value"), 1)
-        self.assertEqual(len(evaluator.scalar_subplan_values), 1)
+        self.assertEqual(len(evaluator.scalar_subplan_families), 1)
+
+    def test_nondeterministic_binding_is_shared_across_consumers(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"][1]["columns"] = [
+            {
+                "output": "first",
+                "expression": {"kind": "column", "column": BINDING},
+            }
+        ]
+        raw["plan"]["nodes"].extend(
+            [
+                {
+                    "id": "sub_one",
+                    "op": "limit",
+                    "input": "sub_scan",
+                    "count": _literal("Uint64", 1),
+                    "offset": None,
+                    "phase": "undefined",
+                },
+                {
+                    "id": "main_second",
+                    "op": "project",
+                    "input": "main_project",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": "eq",
+                                "left": {"kind": "column", "column": "first"},
+                                "right": {"kind": "column", "column": BINDING},
+                            },
+                        }
+                    ],
+                },
+            ]
+        )
+        raw["plan"]["root"] = "main_second"
+        raw["plan"]["output"] = ["result"]
+        raw["plan"]["subplans"][0]["root"] = "sub_one"
+        raw["plan"]["subplans"][0]["consumers"] = [
+            "main_project",
+            "main_second",
+        ]
+
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        family = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        constants = _database_constants(database, (True, True))
+        enabled = [
+            outcome
+            for outcome in family.outcomes
+            if _ground(outcome.enabled, constants)
+        ]
+
+        self.assertEqual(len(enabled), 2)
+        for outcome in enabled:
+            self.assertFalse(_ground(outcome.error, constants))
+            self.assertTrue(
+                _ground(
+                    outcome.relation.rows[0].values["result"].value,
+                    constants,
+                )
+            )
 
     def test_global_aggregate_preserves_null_and_decimal_proof_metadata(self):
         raw = _global_decimal_sum_snapshot()
@@ -309,6 +550,188 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                 self.assertEqual(result.is_null, smt.bool_value(expected_null))
                 if not expected_null:
                     self.assertEqual(result.value, smt.int_value(7))
+
+    def test_general_scalar_observes_null_value_and_multirow_error(self):
+        raw = _scan_scalar_snapshot()
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        family = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        self.assertEqual(len(family.outcomes), 1)
+        outcome = family.outcomes[0]
+        result = outcome.relation.rows[0].values["result"]
+
+        for present, error, is_null, value in (
+            ((False, False), False, True, None),
+            ((True, False), False, False, 10),
+            ((False, True), False, False, 20),
+            ((True, True), True, False, None),
+        ):
+            constants = _database_constants(database, present)
+            with self.subTest(present=present):
+                self.assertEqual(_ground(outcome.error, constants), error)
+                if not error:
+                    self.assertEqual(_ground(result.is_null, constants), is_null)
+                    if value is not None:
+                        self.assertEqual(_ground(result.value, constants), value)
+
+    def test_scalar_error_is_suppressed_without_a_consumer_input_row(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"].insert(
+            1,
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": "main_source",
+                "predicate": _literal("Bool", False),
+            },
+        )
+        raw["plan"]["nodes"][2]["input"] = "empty_outer"
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        outcome = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().outcomes[0]
+
+        self.assertFalse(
+            _ground(
+                outcome.error,
+                _database_constants(database, (True, True)),
+            )
+        )
+
+    def test_scalar_error_is_consumer_eager_across_dead_if_branch(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"][1]["columns"][0]["expression"] = {
+            "kind": "if",
+            "condition": _literal("Bool", False),
+            "then": {"kind": "column", "column": BINDING},
+            "else": _literal("Int64", 7),
+            "type": "Int64",
+            "nullable": True,
+        }
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        outcome = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().outcomes[0]
+
+        self.assertTrue(
+            _ground(
+                outcome.error,
+                _database_constants(database, (True, True)),
+            )
+        )
+
+    def test_checked_scalar_lowering_matches_a_demanded_initial_binding(self):
+        before = parse_snapshot(_scan_scalar_snapshot())
+        after = parse_snapshot(_lowered_scalar_snapshot(checked=True))
+        script = smt.Script()
+        database = Database(before, 2, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            Evaluator(
+                before,
+                database,
+                scalar,
+                choice_scope="before",
+            ).root(),
+            Evaluator(
+                after,
+                database,
+                scalar,
+                choice_scope="after",
+            ).root(),
+            scalar,
+        )
+
+        for present in (
+            (False, False),
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            with self.subTest(present=present):
+                self.assertTrue(
+                    _ground(equality, _database_constants(database, present))
+                )
+
+    def test_dropped_check_and_eager_empty_outer_are_counterexamples(self):
+        before = parse_snapshot(_scan_scalar_snapshot())
+
+        def equal_to(raw_after):
+            script = smt.Script()
+            database = Database(before, 2, script)
+            scalar = ScalarEncoder(script)
+            equality = family_equal(
+                Evaluator(
+                    before,
+                    database,
+                    scalar,
+                    choice_scope="before",
+                ).root(),
+                Evaluator(
+                    parse_snapshot(raw_after),
+                    database,
+                    scalar,
+                    choice_scope="after",
+                ).root(),
+                scalar,
+            )
+            return _ground(
+                equality,
+                _database_constants(database, (True, True)),
+            )
+
+        self.assertFalse(
+            equal_to(_lowered_scalar_snapshot(checked=False))
+        )
+
+        empty_before_raw = _scan_scalar_snapshot()
+        empty_before_raw["plan"]["nodes"].insert(
+            1,
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": "main_source",
+                "predicate": _literal("Bool", False),
+            },
+        )
+        empty_before_raw["plan"]["nodes"][2]["input"] = "empty_outer"
+        empty_before = parse_snapshot(empty_before_raw)
+        script = smt.Script()
+        database = Database(empty_before, 2, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            Evaluator(empty_before, database, scalar).root(),
+            Evaluator(
+                parse_snapshot(
+                    _lowered_scalar_snapshot(
+                        checked=True,
+                        empty_outer=True,
+                    )
+                ),
+                database,
+                scalar,
+            ).root(),
+            scalar,
+        )
+        self.assertFalse(
+            _ground(
+                equality,
+                _database_constants(database, (True, True)),
+            )
+        )
 
 
 class ScalarSubplanValidationTest(unittest.TestCase):
@@ -535,7 +958,7 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         ):
             parse_snapshot(raw)
 
-    def test_static_shape_rejects_scan_join_union_and_intermediate_aggregate(self):
+    def test_general_scalar_shapes_pass_schema_validation(self):
         raw = _base_snapshot()
         raw["schema"]["tables"] = [
             {
@@ -556,13 +979,11 @@ class ScalarSubplanValidationTest(unittest.TestCase):
                 "pushed_limit": None,
             }
         ]
-        with self.assertRaisesRegex(SnapshotError, "at most one row"):
-            parse_snapshot(raw)
+        parse_snapshot(raw)
 
         raw = _global_decimal_sum_snapshot()
         raw["plan"]["nodes"][-1]["phase"] = "intermediate"
-        with self.assertRaisesRegex(SnapshotError, "at most one row"):
-            parse_snapshot(raw)
+        parse_snapshot(raw)
 
         raw = _base_snapshot()
         raw["plan"]["nodes"].append(
@@ -576,8 +997,7 @@ class ScalarSubplanValidationTest(unittest.TestCase):
             }
         )
         raw["plan"]["subplans"][0]["root"] = "sub_limit"
-        with self.assertRaisesRegex(SnapshotError, "at most one row"):
-            parse_snapshot(raw)
+        parse_snapshot(raw)
 
         for operation in ("join", "union_all"):
             with self.subTest(operation=operation):
@@ -658,10 +1078,9 @@ class ScalarSubplanValidationTest(unittest.TestCase):
                             },
                         ]
                     )
-                with self.assertRaisesRegex(SnapshotError, "at most one row"):
-                    parse_snapshot(raw)
+                parse_snapshot(raw)
 
-    def test_limit_one_shape_with_runtime_choices_fails_closed(self):
+    def test_limit_one_shape_preserves_runtime_choices(self):
         raw = _base_snapshot()
         raw["schema"]["tables"] = [
             {
@@ -708,11 +1127,11 @@ class ScalarSubplanValidationTest(unittest.TestCase):
             Database(snapshot, 2, script),
             ScalarEncoder(script),
         )
-        with self.assertRaisesRegex(
-            RelationError,
-            "conditional relation outcomes",
-        ):
-            evaluator.root()
+        family = evaluator.root()
+        self.assertGreater(len(family.outcomes), 1)
+        self.assertTrue(
+            all(outcome.decisions for outcome in family.outcomes)
+        )
 
 
 if __name__ == "__main__":

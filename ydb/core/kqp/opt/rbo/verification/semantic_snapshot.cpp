@@ -318,169 +318,12 @@ void ValidateSnapshotTopology(TOpRoot& root) {
     }
 }
 
-std::optional<ui64> ExactUint64LiteralValue(const TExpression& expression) {
-    if (!expression.Node || !expression.Node->IsLambda() ||
-        expression.Node->ChildrenSize() != 2)
-    {
-        return std::nullopt;
-    }
-    const auto* arguments = expression.Node->Child(0);
-    if (!arguments->IsArguments() || arguments->ChildrenSize() != 1 ||
-        !arguments->Child(0)->IsArgument())
-    {
-        return std::nullopt;
-    }
-    const auto* body = expression.GetExpressionBody().Get();
-    if (!body || !body->IsCallable("Uint64") || body->ChildrenSize() != 1 ||
-        !body->Child(0)->IsAtom())
-    {
-        return std::nullopt;
-    }
-    ui64 value = 0;
-    if (!TryFromString<ui64>(body->Child(0)->Content(), value)) {
-        return std::nullopt;
-    }
-    return value;
-}
-
-enum class EAtMostOneProofMode {
-    ScalarSubplan,
-    HarmlessCheckInput,
-};
-
-bool ProvesAtMostOne(
-    IOperator& op,
-    EAtMostOneProofMode mode,
-    THashSet<const IOperator*>& visiting,
-    std::optional<int> requiredStage,
-    const TVector<ui32>* stageTaskCounts)
-{
-    if (requiredStage && op.Props.StageId != requiredStage) {
-        // EnsureAtMostOne executes independently in each consumer task.
-        // TStageGraphExporter validates the exact logical boundary and its
-        // closed set of connection kinds before exposing these task counts.
-        // A structurally at-most-one stream from one producer task can
-        // therefore contribute at most one row to each consumer task.
-        if (mode != EAtMostOneProofMode::HarmlessCheckInput ||
-            !stageTaskCounts || !op.Props.StageId ||
-            *op.Props.StageId < 0 ||
-            static_cast<size_t>(*op.Props.StageId) >= stageTaskCounts->size() ||
-            stageTaskCounts->at(*op.Props.StageId) != 1)
-        {
-            return false;
-        }
-        requiredStage = op.Props.StageId;
-    }
-    if (!visiting.insert(&op).second) {
-        return false;
-    }
-    const auto finish = [&](bool result) {
-        visiting.erase(&op);
-        return result;
-    };
-
-    switch (op.GetKind()) {
-        case EOperator::EmptySource:
-            return finish(true);
-
-        case EOperator::Aggregate: {
-            auto& aggregate = static_cast<TOpAggregate&>(op);
-            return finish(
-                !aggregate.IsDistinctAll() &&
-                aggregate.GetKeyColumns().empty() &&
-                aggregate.GetAggregationPhase() != EOpPhase::Intermediate);
-        }
-
-        case EOperator::Limit: {
-            auto& limit = static_cast<TOpLimit&>(op);
-            const auto count = ExactUint64LiteralValue(limit.GetLimitCond());
-            if (!count) {
-                return finish(false);
-            }
-            if (*count <= 1) {
-                return finish(true);
-            }
-            const auto& children = op.GetChildren();
-            return finish(
-                mode == EAtMostOneProofMode::HarmlessCheckInput &&
-                children.size() == 1 &&
-                ProvesAtMostOne(
-                    *children.front(),
-                    mode,
-                    visiting,
-                    requiredStage,
-                    stageTaskCounts));
-        }
-
-        case EOperator::Map:
-        case EOperator::Filter:
-        case EOperator::Sort: {
-            const auto& children = op.GetChildren();
-            return finish(
-                children.size() == 1 &&
-                ProvesAtMostOne(
-                    *children.front(),
-                    mode,
-                    visiting,
-                    requiredStage,
-                    stageTaskCounts));
-        }
-
-        default:
-            return finish(false);
-    }
-}
-
-bool IsStaticallyAtMostOne(IOperator& op) {
-    THashSet<const IOperator*> visiting;
-    return ProvesAtMostOne(
-        op,
-        EAtMostOneProofMode::ScalarSubplan,
-        visiting,
-        std::nullopt,
-        nullptr);
-}
-
-bool IsHarmlessAtMostOneCheckInput(
-    IOperator& op,
-    std::optional<int> requiredStage,
-    const TVector<ui32>* stageTaskCounts)
-{
-    THashSet<const IOperator*> visiting;
-    return ProvesAtMostOne(
-        op,
-        EAtMostOneProofMode::HarmlessCheckInput,
-        visiting,
-        requiredStage,
-        stageTaskCounts);
-}
-
-void CheckSnapshotProperties(
-    IOperator& op,
-    bool stageGraphPresent,
-    const TVector<ui32>* stageTaskCounts)
-{
-    if (stageGraphPresent && !stageTaskCounts) {
-        Unsupported("StageGraph task counts are required for property validation");
-    }
+void CheckSnapshotProperties(IOperator& op, bool stageGraphPresent) {
     const auto& props = op.Props;
     const bool joinPhysicalProps = props.JoinAlgo || props.UseBlockHashJoin ||
         props.LeftShuffleBy || props.RightShuffleBy;
-    bool harmlessAtMostOneCheck = false;
-    if (props.EnsureAtMostOne && op.GetKind() == EOperator::Limit) {
-        const auto& children = op.GetChildren();
-        const auto requiredStage =
-            stageGraphPresent ? props.StageId : std::nullopt;
-        harmlessAtMostOneCheck =
-            children.size() == 1 &&
-            (!stageGraphPresent || props.StageId.has_value()) &&
-            IsHarmlessAtMostOneCheckInput(
-                *children.front(),
-                requiredStage,
-                stageTaskCounts);
-    }
     if ((!stageGraphPresent && props.StageId) || props.Algorithm || props.OrderEnforcer ||
-        (props.EnsureAtMostOne && !harmlessAtMostOneCheck) ||
+        (props.EnsureAtMostOne && op.GetKind() != EOperator::Limit) ||
         (joinPhysicalProps && (!stageGraphPresent || op.GetKind() != EOperator::Join)))
     {
         Unsupported(TStringBuilder()
@@ -4754,7 +4597,7 @@ public:
     NJson::TJsonValue Export() {
         ValidateSnapshotTopology(Root);
         PrepareSubplans();
-        CheckSnapshotProperties(Root, false, nullptr);
+        CheckSnapshotProperties(Root, false);
         if (Root.ColumnOrder.empty()) {
             Unsupported("Root output order must not be empty");
         }
@@ -4791,12 +4634,12 @@ public:
         return NodeOrder;
     }
 
-    void ValidateStageProperties(const TVector<ui32>& stageTaskCounts) const {
+    void ValidateStageProperties() const {
         if (!StageGraphPresent) {
             Unsupported("Stage properties require a StageGraph");
         }
         for (auto* op : NodeOrder) {
-            CheckSnapshotProperties(*op, true, &stageTaskCounts);
+            CheckSnapshotProperties(*op, true);
         }
     }
 
@@ -4867,12 +4710,6 @@ private:
                     << "Scalar subplan binding " << binding
                     << " is correlated");
             }
-            if (!IsStaticallyAtMostOne(*roots[index])) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " is not statically at most one row");
-            }
-
             const auto resultIUs = GetSubplanResultIUs(roots[index]);
             if (resultIUs.size() != 1) {
                 Unsupported(TStringBuilder()
@@ -5148,7 +4985,7 @@ private:
         }
         Visiting.erase(op.Get());
         if (!StageGraphPresent) {
-            CheckSnapshotProperties(*op, false, nullptr);
+            CheckSnapshotProperties(*op, false);
         }
 
         const TString id = TStringBuilder() << "n" << Ids.size();
@@ -5508,6 +5345,7 @@ private:
                     ? Uint64LiteralExpr(*offset, "Limit offset")
                     : NJson::TJsonValue(NJson::JSON_NULL);
                 node["phase"] = Phase(limit.GetLimitPhase());
+                node["ensure_at_most_one"] = limit.Props.EnsureAtMostOne;
                 return node;
             }
 
@@ -5905,13 +5743,6 @@ public:
         result["edges"] = std::move(Edges);
         result["assumptions"] = JsonArray();
         return result;
-    }
-
-    const TVector<ui32>& GetTaskCounts() const {
-        if (TaskCounts.size() != StageCount) {
-            Unsupported("StageGraph task counts are unavailable");
-        }
-        return TaskCounts;
     }
 
 private:
@@ -6620,7 +6451,7 @@ TString SerializeSnapshot(
             planExporter.GetNodeOrder(),
             planExporter.GetRootId());
         snapshot["stage_graph"] = stageGraphExporter.Export();
-        planExporter.ValidateStageProperties(stageGraphExporter.GetTaskCounts());
+        planExporter.ValidateStageProperties();
     } else {
         snapshot["stage_graph"] = NJson::TJsonValue(NJson::JSON_NULL);
     }

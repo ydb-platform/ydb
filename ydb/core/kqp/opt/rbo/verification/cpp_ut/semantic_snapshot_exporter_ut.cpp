@@ -9577,6 +9577,16 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(node["offset"]["type"].GetStringSafe(), "Uint64");
         UNIT_ASSERT_VALUES_EQUAL(node["offset"]["value"].GetUIntegerSafe(), 1);
         UNIT_ASSERT_VALUES_EQUAL(node["phase"].GetStringSafe(), "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["ensure_at_most_one"].GetBooleanSafe(),
+            false);
+
+        limit->Props.EnsureAtMostOne = true;
+        const auto checked =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(checked, "limit")["ensure_at_most_one"].GetBooleanSafe(),
+            true);
     }
 
     Y_UNIT_TEST(ExportsEveryLimitPhaseNullOffsetAndUint64Max) {
@@ -10936,6 +10946,12 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {{"value", "Int64", false}});
         auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
         auto innerRead = MakeRead(ctx, innerTable, "inner", {"value"});
+        SetOutputType(ctx, *outerRead, {
+            {"outer.k", NUdf::EDataSlot::Int32, true},
+        });
+        SetOutputType(ctx, *innerRead, {
+            {"inner.value", NUdf::EDataSlot::Int64, false},
+        });
         TOpRoot root(outerRead, TPositionHandle(), {"outer.k"});
 
         const TInfoUnit binding("scalar");
@@ -10963,7 +10979,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!snapshot.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             snapshot.UnsupportedReason,
-            "not statically at most one row");
+            "has no consumer");
     }
 
     Y_UNIT_TEST(ExportsExactUncorrelatedScalarSubplanDescriptors) {
@@ -11079,6 +11095,20 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             Strings(plan["output"]),
             TVector<TString>{"outer.k"});
+
+        auto& entry = root.PlanProps.Subplans.PlanMap.at(binding);
+        entry.Plan = innerRead;
+        const auto generalSnapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& generalDescriptor =
+            generalSnapshot["plan"]["subplans"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            generalDescriptor["output"]["column"].GetStringSafe(),
+            "inner.value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            generalDescriptor["root"].GetStringSafe(),
+            FindNode(generalSnapshot, "scan")["id"].GetStringSafe());
+        entry.Plan = scalarAggregate;
 
         auto sharedPredicate = predicate.GetExpressionBody();
         for (size_t level = 0; level < 32; ++level) {
@@ -11321,7 +11351,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "not statically at most one row");
+            "has no consumer");
         entry.Plan = scalarAggregate;
 
         auto collidingProject = MakeIntrusive<TOpMap>(
@@ -11543,7 +11573,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "is reachable below distinct subplan binding");
     }
 
-    Y_UNIT_TEST(ProvenAtMostOneMarkerIsAdmittedOnlyAsANoop) {
+    Y_UNIT_TEST(AtMostOneMarkerIsSerializedOnEveryLimit) {
         TExportTestContext ctx;
         const auto& table = AddTable(
             ctx,
@@ -11590,8 +11620,21 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto supported =
             ExportSemanticSnapshotV1(root, ctx.RboCtx);
         UNIT_ASSERT_C(supported.IsSupported(), supported.UnsupportedReason);
+        const auto supportedSnapshot = ParseSupported(supported);
+        size_t checkedCount = 0;
+        for (const auto& node :
+            supportedSnapshot["plan"]["nodes"].GetArraySafe())
+        {
+            if (node["op"].GetStringSafe() == "limit" &&
+                node["ensure_at_most_one"].GetBooleanSafe())
+            {
+                ++checkedCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(checkedCount, 2);
 
         checkedLimit->SetInput(read);
+        root.RecomputeOutputIUsSubtree();
         SetOutputType(ctx, *checkedLimit, {
             {"a.value", NUdf::EDataSlot::Int64, true},
         });
@@ -11599,12 +11642,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {"a.value", NUdf::EDataSlot::Int64, true},
         });
         root.ColumnOrder = {"a.value"};
-        auto rejected =
+        auto represented =
             ExportSemanticSnapshotV1(root, ctx.RboCtx);
-        UNIT_ASSERT(!rejected.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            rejected.UnsupportedReason,
-            "physical properties");
+        UNIT_ASSERT_C(represented.IsSupported(), represented.UnsupportedReason);
 
         checkedLimit->SetInput(aggregate);
         checkedLimit->Props.EnsureAtMostOne = false;
@@ -11614,14 +11654,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TVector<TMapElement>{});
         map->Props.EnsureAtMostOne = true;
         TOpRoot mapRoot(map, pos, {"result"});
-        rejected = ExportSemanticSnapshotV1(mapRoot, ctx.RboCtx);
+        auto rejected = ExportSemanticSnapshotV1(mapRoot, ctx.RboCtx);
         UNIT_ASSERT(!rejected.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             rejected.UnsupportedReason,
             "physical properties");
     }
 
-    Y_UNIT_TEST(ProvenAtMostOneMarkerRejectsMultiTaskProducerStage) {
+    Y_UNIT_TEST(AtMostOneMarkerIsSerializedAcrossMultiTaskProducerStage) {
         TExportTestContext ctx;
         const auto& table = AddTable(
             ctx,
@@ -11681,14 +11721,15 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         checkedLimit->Props.EnsureAtMostOne = true;
         const auto result =
             ExportSemanticSnapshotV1(root, ctx.RboCtx);
-        UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT(result.Json.empty());
-        UNIT_ASSERT_STRING_CONTAINS(
-            result.UnsupportedReason,
-            "physical properties");
+        UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+        UNIT_ASSERT_UNEQUAL(result.Json, baseline.Json);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(ParseSupported(result), "limit")
+                ["ensure_at_most_one"].GetBooleanSafe(),
+            true);
     }
 
-    Y_UNIT_TEST(ProvenAtMostOneMarkerCrossesSingleTaskProducerStage) {
+    Y_UNIT_TEST(AtMostOneMarkerIsSerializedAcrossSingleTaskProducerStage) {
         TExportTestContext ctx;
         const auto& table = AddTable(
             ctx,
@@ -11751,7 +11792,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto result =
             ExportSemanticSnapshotV1(root, ctx.RboCtx);
         UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
-        UNIT_ASSERT_VALUES_EQUAL(result.Json, baseline.Json);
+        UNIT_ASSERT_UNEQUAL(result.Json, baseline.Json);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(ParseSupported(result), "limit")
+                ["ensure_at_most_one"].GetBooleanSafe(),
+            true);
 
         auto groupedAggregate = MakeIntrusive<TOpAggregate>(
             read,
@@ -11785,11 +11830,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         checkedLimit->Props.EnsureAtMostOne = true;
         const auto groupedResult =
             ExportSemanticSnapshotV1(root, ctx.RboCtx);
-        UNIT_ASSERT(!groupedResult.IsSupported());
-        UNIT_ASSERT(groupedResult.Json.empty());
-        UNIT_ASSERT_STRING_CONTAINS(
-            groupedResult.UnsupportedReason,
-            "physical properties");
+        UNIT_ASSERT_C(
+            groupedResult.IsSupported(),
+            groupedResult.UnsupportedReason);
+        UNIT_ASSERT_UNEQUAL(groupedResult.Json, groupedBaseline.Json);
     }
 
     Y_UNIT_TEST(MalformedSubplanRegistryFailsCatalogCaptureClosed) {

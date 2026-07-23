@@ -50,8 +50,15 @@ def scan(pushed_limit=None):
     }
 
 
-def limit(node_id, input_id, count, offset=None, phase="undefined"):
-    return {
+def limit(
+    node_id,
+    input_id,
+    count,
+    offset=None,
+    phase="undefined",
+    ensure_at_most_one=None,
+):
+    result = {
         "id": node_id,
         "op": "limit",
         "input": input_id,
@@ -59,6 +66,9 @@ def limit(node_id, input_id, count, offset=None, phase="undefined"):
         "offset": None if offset is None else uint64(offset),
         "phase": phase,
     }
+    if ensure_at_most_one is not None:
+        result["ensure_at_most_one"] = ensure_at_most_one
+    return result
 
 
 def pass_project(node_id, output):
@@ -174,7 +184,13 @@ def column_scan_with_pushed_limit(count):
     )
 
 
-def staged_limits(intermediate_count, final_count):
+def staged_limits(
+    intermediate_count,
+    final_count,
+    *,
+    intermediate_ensure=False,
+    final_ensure=False,
+):
     nodes = [scan()]
     source_root = "scan"
     source_nodes = ["scan"]
@@ -185,6 +201,7 @@ def staged_limits(intermediate_count, final_count):
                 "scan",
                 intermediate_count,
                 phase="intermediate",
+                ensure_at_most_one=intermediate_ensure,
             )
         )
         source_root = "partial"
@@ -206,7 +223,15 @@ def staged_limits(intermediate_count, final_count):
         }
         root = source_root
     else:
-        nodes.append(limit("final", source_root, final_count, phase="final"))
+        nodes.append(
+            limit(
+                "final",
+                source_root,
+                final_count,
+                phase="final",
+                ensure_at_most_one=final_ensure,
+            )
+        )
         graph = {
             "root_stage": "root",
             "stages": [
@@ -321,6 +346,23 @@ class LimitIrTest(unittest.TestCase):
                 self.assertEqual(parsed.count.value, count)
                 self.assertEqual(parsed.offset.value, offset)
                 self.assertEqual(parsed.phase, phase)
+                self.assertFalse(parsed.ensure_at_most_one)
+
+        checked = parse_snapshot(
+            snapshot(
+                [
+                    scan(),
+                    limit(
+                        "limit",
+                        "scan",
+                        2,
+                        ensure_at_most_one=True,
+                    ),
+                ],
+                "limit",
+            )
+        ).plan.nodes[-1]
+        self.assertTrue(checked.ensure_at_most_one)
 
     def test_limit_shape_and_literal_contract_fail_closed(self):
         base = snapshot([scan(), limit("limit", "scan", 1)], "limit")
@@ -362,6 +404,11 @@ class LimitIrTest(unittest.TestCase):
             "column": "a.value",
         }
         mutations.append((bad_offset, "Uint64 literal"))
+
+        for malformed in (0, 1, "true", None):
+            bad_marker = copy.deepcopy(base)
+            bad_marker["plan"]["nodes"][1]["ensure_at_most_one"] = malformed
+            mutations.append((bad_marker, "expected a Boolean"))
 
         for value, message in mutations:
             with self.subTest(message=message, value=value):
@@ -491,6 +538,76 @@ class LimitOutcomeTest(unittest.TestCase):
         scalar = ScalarEncoder(smt.Script())
 
         self.assertFalse(_ground(family_equal(left, right, scalar), {}))
+
+    def test_ensure_at_most_one_checks_the_post_limit_relation(self):
+        cases = (
+            (1, None, (True, True), False),
+            (2, None, (True, True), True),
+            (2, 1, (True, True), False),
+            (2, 1, (True, True, True), True),
+        )
+        for count, offset, present, expected_error in cases:
+            parsed = parse_snapshot(
+                snapshot(
+                    [
+                        scan(),
+                        limit(
+                            "checked",
+                            "scan",
+                            count,
+                            offset,
+                            ensure_at_most_one=True,
+                        ),
+                    ],
+                    "checked",
+                )
+            )
+            script = smt.Script()
+            database = Database(parsed, len(present), script)
+            family = RelationEvaluator(
+                parsed,
+                database,
+                ScalarEncoder(script),
+            ).root()
+            constants = _constants(database, present)
+            enabled_errors = {
+                _ground(outcome.error, constants)
+                for outcome in family.outcomes
+                if _ground(outcome.enabled, constants)
+            }
+            with self.subTest(count=count, offset=offset, present=present):
+                self.assertEqual(enabled_errors, {expected_error})
+
+    def test_dropping_ensure_at_most_one_is_observable(self):
+        checked = parse_snapshot(
+            snapshot(
+                [
+                    scan(),
+                    limit(
+                        "limit",
+                        "scan",
+                        2,
+                        ensure_at_most_one=True,
+                    ),
+                ],
+                "limit",
+            )
+        )
+        unchecked = parse_snapshot(
+            snapshot([scan(), limit("limit", "scan", 2)], "limit")
+        )
+        script = smt.Script()
+        database = Database(checked, 2, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            RelationEvaluator(checked, database, scalar).root(),
+            RelationEvaluator(unchecked, database, scalar).root(),
+            scalar,
+        )
+
+        self.assertFalse(
+            _ground(equality, _constants(database, (True, True)))
+        )
 
     def test_ordered_union_limit_prefers_left_branch_and_uses_right_fallback(self):
         for omit_left, expected in ((False, 10), (True, 20)):
@@ -914,6 +1031,41 @@ class LimitOutcomeTest(unittest.TestCase):
 
 
 class StageLimitOutcomeTest(unittest.TestCase):
+    def test_ensure_at_most_one_is_checked_in_each_stage_task(self):
+        def errors(parsed, tasks):
+            script = smt.Script()
+            database = Database(parsed, 2, script)
+            router = Router(script)
+            family = StageEvaluator(
+                parsed,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root()
+            constants = _constants(database, (True, True))
+            for slot, task in enumerate(tasks):
+                constants[router.source_task("A", slot).atom] = task
+            return {
+                _ground(outcome.error, constants)
+                for outcome in family.outcomes
+                if _ground(outcome.enabled, constants)
+            }
+
+        local = staged_limits(
+            2,
+            None,
+            intermediate_ensure=True,
+        )
+        gathered = staged_limits(
+            None,
+            2,
+            final_ensure=True,
+        )
+
+        self.assertEqual(errors(local, (False, True)), {False})
+        self.assertEqual(errors(local, (False, False)), {True})
+        self.assertEqual(errors(gathered, (False, True)), {True})
+
     def test_pushed_scan_limit_is_applied_independently_after_partitioning(self):
         parsed = column_scan_with_pushed_limit(1)
         script = smt.Script()

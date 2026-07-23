@@ -243,7 +243,8 @@ class OperatorRendererTest(unittest.TestCase):
             (
                 ir.Limit("limit", "scan", _u64(2), None, "final"),
                 'node "limit" limit input="scan" '
-                'count=literal(type="Uint64", value=2) offset=none phase=final',
+                'count=literal(type="Uint64", value=2) offset=none phase=final '
+                'ensure_at_most_one=false',
             ),
             (
                 ir.Sort("sort", "scan", order, _u64(5), "intermediate"),

@@ -149,6 +149,7 @@ class Limit:
     count: Expr
     offset: Expr | None
     phase: str
+    ensure_at_most_one: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -781,7 +782,12 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         )
 
     if operation == "limit":
-        _keys(obj, {"id", "op", "input", "count", "offset", "phase"}, path)
+        _keys(
+            obj,
+            {"id", "op", "input", "count", "offset", "phase"},
+            path,
+            {"ensure_at_most_one"},
+        )
         phase = _string(obj["phase"], f"{path}.phase")
         if phase not in OPERATOR_PHASES:
             _fail(f"{path}.phase", f"unsupported limit phase {phase!r}")
@@ -795,6 +801,10 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 else _parse_uint64_literal(obj["offset"], f"{path}.offset")
             ),
             phase=phase,
+            ensure_at_most_one=_bool(
+                obj.get("ensure_at_most_one", False),
+                f"{path}.ensure_at_most_one",
+            ),
         )
 
     if operation == "sort":
@@ -1941,46 +1951,6 @@ def _node_expression_columns(node: PlanNode) -> frozenset[str]:
     return result
 
 
-def _static_row_upper_bound(
-    node_id: str,
-    nodes: Mapping[str, PlanNode],
-    memo: dict[str, int | None],
-) -> int | None:
-    """Conservatively prove a finite relational cardinality from plan shape."""
-
-    if node_id in memo:
-        return memo[node_id]
-    node = nodes[node_id]
-    # Cycles have already been rejected by schema inference.  Seed the memo so
-    # this helper remains total if it is reused independently.
-    memo[node_id] = None
-    if isinstance(node, EmptySource):
-        result: int | None = 1
-    elif isinstance(node, Scan):
-        result = None
-    elif isinstance(node, (Project, Filter, Sort)):
-        result = _static_row_upper_bound(node.input, nodes, memo)
-    elif isinstance(node, Limit):
-        assert type(node.count.value) is int
-        result = node.count.value if node.count.value <= 1 else None
-    elif isinstance(node, Aggregate):
-        result = (
-            1
-            if (
-                not node.keys
-                and not node.distinct_all
-                and node.phase != "intermediate"
-            )
-            else None
-        )
-    elif isinstance(node, (Join, UnionAll)):
-        result = None
-    else:
-        raise AssertionError(f"unknown node class {type(node).__name__}")
-    memo[node_id] = result
-    return result
-
-
 def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     """Validate references and types, returning every node's output schema."""
 
@@ -2372,7 +2342,6 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         for subplan in snapshot.plan.subplans
     }
     subplan_roots = {subplan.root for subplan in snapshot.plan.subplans}
-    static_bounds: dict[str, int | None] = {}
     all_bindings = frozenset(
         subplan.binding for subplan in snapshot.plan.subplans
     )
@@ -2435,16 +2404,6 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             _fail(
                 f"{path}.consumers",
                 "scalar subplan consumers must be reachable from the main root",
-            )
-        upper_bound = _static_row_upper_bound(
-            subplan.root,
-            nodes,
-            static_bounds,
-        )
-        if upper_bound is None or upper_bound > 1:
-            _fail(
-                f"{path}.root",
-                "scalar subplan is not statically known to produce at most one row",
             )
     _validate_average_state_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)

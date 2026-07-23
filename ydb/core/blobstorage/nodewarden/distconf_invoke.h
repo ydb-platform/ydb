@@ -86,6 +86,7 @@ namespace NKikimr::NStorage {
         THashSet<TVDiskID> PendingVDiskIds;
         TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         std::optional<TBlobStorageGroupInfo::TGroupVDisks> SuccessfulVDisks;
+        std::optional<TResult::TReassignGroupDisk> ReassignGroupDiskResult;
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);

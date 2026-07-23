@@ -122,6 +122,12 @@ private:
         TFileInput fi(File);
         bool seekable = TFileStat(File).IsFile();
         EventsQ.Push(TReadSessionEvent::TStartPartitionSessionEvent(Session, /*committedOffset*/0, /*endOffset*/(seekable ? File.GetLength() : 0)));
+        while (!StartFuture.IsReady()) {
+            StartFuture.Wait(FILE_POLL_PERIOD);
+            if (EventsQ.IsStopped()) {
+                return;
+            }
+        }
         auto start = StartFuture.GetValueSync();
         if (start.Offset && seekable) {
             auto target = *start.Offset;

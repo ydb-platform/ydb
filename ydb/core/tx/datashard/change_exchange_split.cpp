@@ -22,35 +22,28 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplitCdcPartitionWorker]"
-                << "[" << SrcTabletId << "]"
-                << "[" << PartitionId << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ChangeExchangeSplitCdcPartitionWorker"},
+            {"selfId", SelfId()},
+            {"srcTabletId", SrcTabletId},
+            {"partitionId", PartitionId});
     }
 
     void Ack() {
-        YDB_LOG_INFO("Sending split acknowledgment",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_INFO("Sending split acknowledgment");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Leave() {
-        YDB_LOG_INFO("Leaving CDC partition split worker",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_INFO("Leaving CDC partition split worker");
         Send(Parent, new TEvents::TEvGone());
         PassAway();
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         const auto& response = ev->Get()->Record;
@@ -74,21 +67,20 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId && ev->Get()->Status != NKikimrProto::OK) {
-            YDB_LOG_WARN("PersQueue pipe connection failed",
-                {"logPrefix", GetLogPrefix()});
+            YDB_LOG_WARN("PersQueue pipe connection failed");
             Leave();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
-            YDB_LOG_WARN("PersQueue pipe disconnected",
-                {"logPrefix", GetLogPrefix()});
+            YDB_LOG_WARN("PersQueue pipe disconnected");
             Leave();
         }
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         if (PipeClient) {
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
         }
@@ -112,6 +104,8 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
+
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = {
             .RetryLimitCount = 6,
@@ -143,6 +137,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -157,7 +152,6 @@ private:
     const ui64 TabletId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId PipeClient;
 
@@ -167,20 +161,15 @@ class TCdcWorker
     : public TActorBootstrapped<TCdcWorker>
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplitCdcWorker]"
-                << "[" << SrcTabletId << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "CdcWorker"},
+            {"selfId", SelfId()},
+            {"srcTabletId", SrcTabletId});
     }
 
     void Ack() {
-        YDB_LOG_INFO("Sending split acknowledgment",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_INFO("Sending split acknowledgment");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
@@ -214,14 +203,12 @@ class TCdcWorker
 
     void LogCritAndRetry(const TString& error) {
         YDB_LOG_CRIT("Critical error during change exchange operation, retrying",
-            {"logPrefix", GetLogPrefix()},
             {"errorMessage", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
         YDB_LOG_WARN("Recoverable error during change exchange operation, retrying",
-            {"logPrefix", GetLogPrefix()},
             {"errorMessage", error});
         Retry();
     }
@@ -271,6 +258,7 @@ class TCdcWorker
     }
 
     STATEFN(StateResolveCdcStream) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
@@ -283,7 +271,6 @@ class TCdcWorker
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
             {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
@@ -309,8 +296,7 @@ class TCdcWorker
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_NOTICE("Auto-acknowledging split: CDC stream is planned to drop",
-                {"logPrefix", GetLogPrefix()});
+            YDB_LOG_NOTICE("Auto-acknowledging split: CDC stream is planned to drop");
             return Ack();
         }
 
@@ -332,6 +318,7 @@ class TCdcWorker
     }
 
     STATEFN(StateResolveTopic) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
@@ -344,7 +331,6 @@ class TCdcWorker
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
             {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
@@ -385,7 +371,6 @@ class TCdcWorker
                 Workers.erase(it);
             } else {
                 YDB_LOG_TRACE("Registering CDC partition split worker",
-                    {"logPrefix", GetLogPrefix()},
                     {"partitionId", partitionId});
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
@@ -400,7 +385,6 @@ class TCdcWorker
 
             if (worker) {
                 YDB_LOG_TRACE("Stopping stale CDC partition split worker",
-                    {"logPrefix", GetLogPrefix()},
                     {"partitionId", partitionId});
 
                 Send(worker, new TEvents::TEvPoisonPill());
@@ -413,7 +397,6 @@ class TCdcWorker
         }
 
         YDB_LOG_INFO("Waiting for split workers to finish",
-            {"logPrefix", GetLogPrefix()},
             {"pendingWorkerCount", Pending.size()});
 
         Workers = std::move(workers);
@@ -421,24 +404,22 @@ class TCdcWorker
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         return StateBase(ev);
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Split acknowledgment from unknown worker",
-                {"logPrefix", GetLogPrefix()},
                 {"workerActorId", ev->Sender});
             return;
         }
 
         YDB_LOG_NOTICE("Received split acknowledgment",
-            {"logPrefix", GetLogPrefix()},
             {"workerActorId", it->first},
             {"partitionId", it->second});
 
@@ -452,19 +433,16 @@ class TCdcWorker
 
     void Handle(TEvents::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Unknown split worker disconnected",
-                {"logPrefix", GetLogPrefix()},
                 {"workerActorId", ev->Sender});
             return;
         }
 
         YDB_LOG_INFO("Split worker disconnected",
-            {"logPrefix", GetLogPrefix()},
             {"workerActorId", it->first},
             {"partitionId", it->second});
 
@@ -501,10 +479,12 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         ResolveCdcStream();
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvSplitAck, Handle);
             hFunc(TEvents::TEvGone, Handle);
@@ -517,7 +497,6 @@ private:
     const TPathId PathId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
-    mutable TMaybe<TString> LogPrefix;
 
     THashMap<ui32, TActorId> Workers;
     THashMap<TActorId, ui32> Pending;
@@ -537,15 +516,11 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         }
     };
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplit]"
-                << "[" << DataShard.TabletId << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ChangeExchangeSplit"},
+            {"selfId", SelfId()},
+            {"srcTabletId", DataShard.TabletId});
     }
 
     TActorId RegisterWorker(const TPathId& pathId, EWorkerType type) const {
@@ -564,27 +539,23 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     }
 
     void Ack() {
-        YDB_LOG_INFO("Sending split acknowledgment",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_INFO("Sending split acknowledgment");
         Send(DataShard.ActorId, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Split acknowledgment from unknown worker",
-                {"logPrefix", GetLogPrefix()},
                 {"workerActorId", ev->Sender});
             return;
         }
 
         YDB_LOG_NOTICE("Received split acknowledgment",
-            {"logPrefix", GetLogPrefix()},
             {"workerActorId", ev->Sender});
 
         Workers.at(it->second).ActorId = TActorId();
@@ -623,9 +594,9 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         if (!Workers) {
-            YDB_LOG_NOTICE("Auto-acknowledging split: no active workers",
-                {"logPrefix", GetLogPrefix()});
+            YDB_LOG_NOTICE("Auto-acknowledging split: no active workers");
             return Ack();
         }
 
@@ -634,7 +605,6 @@ public:
             auto& worker = kv.second;
 
             YDB_LOG_DEBUG("Register worker",
-                {"logPrefix", GetLogPrefix()},
                 {"pathId", pathId});
             Pending.emplace(RegisterWorker(pathId, worker), pathId);
         }
@@ -643,6 +613,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvSplitAck, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -652,7 +623,6 @@ public:
 private:
     const TDataShardId DataShard;
     const TVector<ui64> DstDataShards;
-    mutable TMaybe<TString> LogPrefix;
 
     THashMap<TPathId, TWorker> Workers;
     THashMap<TActorId, TPathId> Pending;

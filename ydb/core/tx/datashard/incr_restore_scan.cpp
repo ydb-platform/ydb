@@ -27,18 +27,15 @@ class TIncrementalRestoreScan
     using TBuffer = NStreamScan::TBuffer;
     using TChange = IDataShardChangeCollector::TChange;
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TIncrementalRestoreScan]"
-                << "[" << TxId << "]"
-                << SourcePathId
-                << TargetPathId
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TIncrementalRestoreScan"},
+            {"txId", TxId},
+            {"sourcePathId", SourcePathId},
+            {"targetPathId", TargetPathId},
+            {"selfId", SelfId()});
     }
+
 public:
     explicit TIncrementalRestoreScan(
             TActorId parent,

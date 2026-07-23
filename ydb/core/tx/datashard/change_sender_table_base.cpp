@@ -11,16 +11,14 @@
 namespace NKikimr::NDataShard {
 
 class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TableChangeSenderShard]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << "[" << ShardId << "]"
-                << SelfId() /* contains brackets */ << " ";
-        }
 
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TableChangeSenderShard"},
+            {"tabletId", DataShard.TabletId},
+            {"generation", DataShard.Generation},
+            {"sharId", ShardId},
+            {"selfId", SelfId()});
     }
 
     /// GetProxyServices
@@ -31,6 +29,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     STATEFN(StateGetProxyServices) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateGetProxyServices"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
         default:
@@ -40,7 +40,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
@@ -54,6 +53,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     STATEFN(StateHandshake) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateHandshake"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation, Handle);
             hFunc(TEvChangeExchange::TEvStatus, Handshake);
@@ -65,7 +66,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation::TPtr& ev) {
         if (ev->Cookie != LeaseConfirmationCookie) {
             YDB_LOG_WARN("Readonly lease confirmation cookie mismatch",
-                {"logPrefix", GetLogPrefix()},
                 {"expectedCookie", LeaseConfirmationCookie},
                 {"actualCookie", ev->Cookie});
             return;
@@ -80,7 +80,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handshake",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -90,7 +89,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             return Ready();
         default:
             YDB_LOG_ERROR("Change exchange handshake failed",
-                {"logPrefix", GetLogPrefix()},
                 {"statusCode", static_cast<ui32>(record.GetStatus())},
                 {"reasonCode", static_cast<ui32>(record.GetReason())});
             return Leave();
@@ -105,6 +103,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     /// WaitingRecords
 
     STATEFN(StateWaitingRecords) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWaitingRecords"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
         default:
@@ -128,7 +128,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
@@ -198,6 +197,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     /// WaitingStatus
 
     STATEFN(StateWaitingStatus) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWaitingStatus"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvStatus, Handle);
         default:
@@ -207,7 +208,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handle(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -218,7 +218,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         // TODO: REJECT?
         default:
             YDB_LOG_ERROR("Change record apply failed",
-                {"logPrefix", GetLogPrefix()},
                 {"statusCode", static_cast<ui32>(record.GetStatus())},
                 {"reasonCode", static_cast<ui32>(record.GetReason())});
             return Leave();
@@ -238,7 +237,6 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         Delay = Min(2 * Delay, MaxDelay);
 
         YDB_LOG_NOTICE("Retrying change sender connection",
-            {"logPrefix", GetLogPrefix()},
             {"retryAttempt", Attempt},
             {"retryDelay", Delay});
 
@@ -326,6 +324,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
@@ -341,7 +341,6 @@ private:
     const ui64 ShardId;
     const TPathId TargetTablePathId;
     const TMap<TTag, TTag> TagMap; // from main to index
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
     ui64 LeaseConfirmationCookie;

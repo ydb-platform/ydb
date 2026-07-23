@@ -20,7 +20,7 @@ using namespace NTable;
         TDerived* AsDerived() { \
             return static_cast<TDerived*>(this); \
         } \
-        TStringBuf GetLogPrefix() const { \
+        NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const { \
             return AsDerived()->GetLogPrefix(); \
         }
 

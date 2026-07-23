@@ -589,6 +589,28 @@ def _choices_json(
 def _scope_json(scope: str) -> dict[str, Any]:
     if scope in {"before:logical", "after:logical"}:
         return {"kind": "logical"}
+    invocation, separator, row = scope.rpartition(":row:")
+    if separator and row.isdigit():
+        parent, marker, invocation_id = invocation.partition(
+            ":correlated_scalar:"
+        )
+        binding, outcome_separator, outer_outcome = invocation_id.rpartition(
+            ":outcome:"
+        )
+        if (
+            marker
+            and parent
+            and binding
+            and outcome_separator
+            and outer_outcome.isdigit()
+        ):
+            return {
+                "kind": "correlated_scalar_invocation",
+                "parent": _scope_json(parent),
+                "binding": binding,
+                "outer_outcome": int(outer_outcome),
+                "row": int(row),
+            }
     if scope.startswith("stage:"):
         stage, separator, task = scope[len("stage:") :].rpartition(":task:")
         if separator and stage and task.isdigit():
@@ -602,6 +624,7 @@ def _node_kind(node: ir.PlanNode) -> str:
         ir.Scan: "scan",
         ir.Project: "project",
         ir.Filter: "filter",
+        ir.OuterBind: "outer_bind",
         ir.Limit: "limit",
         ir.Sort: "sort",
         ir.Aggregate: "aggregate",

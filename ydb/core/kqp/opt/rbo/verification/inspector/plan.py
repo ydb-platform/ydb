@@ -212,6 +212,12 @@ def render_node(node: ir.PlanNode) -> str:
             prefix + f"filter input={_quote(node.input)} "
             f"predicate={render_expression(node.predicate)}"
         )
+    if isinstance(node, ir.OuterBind):
+        return (
+            prefix + f"outer_bind input={_quote(node.input)} "
+            f"dependency={_quote(node.dependency)} "
+            f"type={_quote(node.type)} nullable={_boolean(node.nullable)}"
+        )
     if isinstance(node, ir.Limit):
         return (
             prefix + f"limit input={_quote(node.input)} "
@@ -297,11 +303,14 @@ def _subplan(subplan: ir.Subplan) -> str:
             f"type={_quote(subplan.output.type)}, "
             f"nullable={_boolean(subplan.output.nullable)}}}"
         )
+        dependencies = (
+            () if subplan.dependency is None else (subplan.dependency,)
+        )
         return (
             f"subplan binding={_quote(subplan.binding)} kind=scalar "
             f"root={_quote(subplan.root)} output={output} "
             f"type={_quote(subplan.output.type)} nullable=true "
-            f"dependencies=[] "
+            f"dependencies={_list(dependencies, _quote)} "
             f"consumers={_list(subplan.consumers, _quote)}"
         )
     if isinstance(subplan, ir.ExistsSubplan):

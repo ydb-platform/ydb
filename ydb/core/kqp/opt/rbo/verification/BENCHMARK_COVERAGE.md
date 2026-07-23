@@ -108,9 +108,10 @@ requires TPCH q1 and TPC-DS q5, q65, and q80 to keep passing both snapshot
 exporters and invoke the verifier. All four now satisfy the stronger formula
 floor. Any later formula or proof still satisfies every weaker floor. The
 formula-construction floor requires TPCH q1, q3, q4, q5, q6, q10, q11, q12,
-q14, q15, q19, and q22 plus TPC-DS q3, q5, q10, q15, q19, q25, q29, q37, q40,
-q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77,
-q79, q80, q82, q88, q90, q91, q93, q96, and q99.
+q14, q15, q17, q19, and q22 plus TPC-DS q1, q3, q5, q10, q15, q19, q25, q29,
+q30, q32, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68,
+q69, q71, q76, q77, q79, q80, q81, q82, q88, q90, q91, q92, q93, q96, and
+q99.
 Both floors are enforced only for a complete formula-only suite. The proof
 floor requires TPCH q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS
 q3, q42, q48, q52, q55, q69, q90, q93, and q96;
@@ -177,54 +178,50 @@ execution divergence can coexist.
 ## Latest measured formula coverage
 
 The latest complete formula-only dashboards were rerun on 2026-07-23 after the
-restricted relational `EXISTS` milestone and auditability consolidation.
-Together they emitted the 45-query floor below and recorded an outcome for
-every workload entry. The eighteen-query proof floor remains green in the fresh
-run reported below.
+equality-correlated scalar milestone. Together they emitted the 51-query floor
+below and recorded an outcome for every workload entry. The eighteen-query
+proof floor is unchanged as policy and its post-correlation rerun is green:
+TPCH passes 9/9 and TPC-DS passes 9/9, all `VERIFIED_BOUNDED`.
 `FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
 checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry and
 formula construction.
 
-The only status changes are the four new formula rows: TPCH q4/q22 and TPC-DS
-q10/q69. TPC-DS q35 passes the new subplan gate but remains `UNSUPPORTED` on
-`Double` at both boundaries.
-TPC-DS q54 remains an initial-export failure on
-`Invalid Map rename source _yql_source_5.segment`. No current row reports
-generic `Unsupported operator AddDependencies`; former cases now have precise
-correlated-scalar, multi-dependency-`EXISTS`, or deeper scalar reasons.
+The six new formula rows are TPCH q17 and TPC-DS q1, q30, q32, q81, and q92.
+TPC-DS q6 passes the correlation gate and now fails closed on `DistinctAll`.
+Its q30 and q81 neighbors construct formulas in about 174,386 ms and
+218,726 ms, respectively; formula construction is not a solver proof.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 12 (q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, q22) | 7 | 3 | 22 |
-| TPCDS_YQL | 33 (q3, q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, q99) | 38 | 28 | 99 |
+| TPCH_YQL | 13 (q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q17, q19, q22) | 6 | 3 | 22 |
+| TPCDS_YQL | 38 (q1, q3, q5, q10, q15, q19, q25, q29, q30, q32, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q81, q82, q88, q90, q91, q92, q93, q96, q99) | 33 | 28 | 99 |
 
-Complete preparation/verification totals were 2,811/7,940 ms for TPCH and
-54,643/176,453 ms for TPC-DS, or 57,454/184,393 ms together.
-The retained formula-report SHA-256 values are
+The preceding relational-`EXISTS` complete run spent 2,811/7,940 ms for TPCH
+and 54,643/176,453 ms for TPC-DS, or 57,454/184,393 ms together.
+Its retained formula-report SHA-256 values are
 `5d84a01f3aa2bba0be86415a176e7ba4f01f194c4d80c842d778a78fb5c93fe8`
 for TPCH and
 `67d99fb092ef0d6686f2a9d838f9bb9a35e6b4935fad3459283461e0286e7198`
-for TPC-DS.
+for TPC-DS. Those timings and hashes are historical evidence and do not label
+the new 51-query classification.
 
-The supported formula slice is 45/121 queries (37.2%), with 45 unsupported
+The supported formula slice is 51/121 queries (42.1%), with 39 unsupported
 queries and 31 optimizer-preparation failures. This is a useful end-to-end
-pre-physical optimizer sample. Fifty queries (41.3%) reach the verifier: the 45
-formula rows plus five verifier-side resource preflight failures. This remains
-a bounded and feature-limited slice rather than a claim about the remaining 76
-workload entries or larger inputs. Formula construction is not a bounded proof.
+pre-physical optimizer sample, not a claim about the remaining 70 workload
+entries or larger inputs. Formula construction is not a bounded proof.
 
 ### TPCH inventory
 
 Optimizer preparation failed for q16, q18, and q20 on unsupported PG
-semantics. Seven queries fail closed at a snapshot boundary as follows; a
+semantics. Six queries fail closed at a snapshot boundary as follows; a
 query can have both an initial and final reason.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
-| Correlated scalar subplan | q2, q17 | - |
 | `EXISTS` does not have exactly one outer dependency | q21 | - |
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
+| Scalar callable `EndsWith` | q2 | - |
 | Callable `Map` | q7, q8 | q7, q8 |
 | OLAP `ends_with` | - | q2 |
 | OLAP `string_contains` | - | q9 |
@@ -237,8 +234,13 @@ preparation/verification. The focused report SHA-256 is
 `95e09e9db85590bc94bbecc15a8644da7603ad2ec5f8165bb39a87121586e0ed`.
 Neither row is a solver proof.
 
+Exact equality-correlated scalar aggregation moves q17 through formula
+construction. q2 also passes the initial correlation gate but remains
+unsupported on the deeper initial scalar `EndsWith` and final OLAP
+`ends_with` expressions. Neither classification is a solver proof.
+
 Exact Date literals and ordering removed the previous Date blockers and exposed
-the deeper scalar and OLAP reasons above. Restricted static `IN` similarly
+the deeper OLAP reasons above. Restricted static `IN` similarly
 removed the first blocker from q12 and q19. A later exact same-member String
 membership/complement gate removes q12's composite-Boolean blocker.
 Exact Decimal comparison, non-null integral `SafeCast`, scoped unary
@@ -289,15 +291,14 @@ The 28 optimizer-preparation failures were q12, q14, q17, q20, q23, q27, q33,
 q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63, q67,
 q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the recorded boundary failures among 33 of
-the 38 unsupported queries in that complete run. IDs can appear in both exporter columns or
-under more than one reason because both snapshots are audited independently.
-The five queries that pass export and fail closed inside the verifier are listed
-after the matrix.
+The exporter matrix below covers the recorded boundary failures among 27 of
+the 33 unsupported queries in the current complete run. IDs can appear in both
+exporter columns or under more than one reason because both snapshots are
+audited independently. The six queries that pass export and fail closed inside
+the verifier are listed after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
-| Correlated scalar subplan | q1, q6, q30, q32, q81, q92 | - |
 | `EXISTS` does not have exactly one outer dependency | q16, q94 | - |
 | Scalar callable `Map` | q24 | q24 |
 | Invalid Map rename source `_yql_source_5.segment` | q54 | - |
@@ -316,7 +317,9 @@ after the matrix.
 | Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 | Join inputs share an IU | - | q16, q94 |
 
-After both snapshots export, q4 rejects a 20,736-pair join match above the
+After both snapshots export, q6 rejects
+`DistinctAll aggregate semantics are not modeled`. q4 rejects a 20,736-pair
+join match above the
 16,384-pair construction bound after 2,173/426 ms of
 preparation/verification. q64 rejects an 8,192-row join output above the
 4,096-row relation bound after 9,094/669 ms. q11 and q74 reach an
@@ -334,9 +337,15 @@ The subsequent exact Decimal AVG milestone moves q65 through formula
 construction after 687/30,318 ms in the focused run. That complete TPC-DS
 dashboard was 31/99 formulas, 39 unsupported queries, and 29 optimizer failures
 after 68,255/249,242 ms of preparation/verifier work. The current post-audit
-rerun emits 33/99 formulas and records 38 unsupported queries and 28 optimizer
-failures after 54,643/176,453 ms. q10 and q69 are the relational-`EXISTS`
-formulas.
+relational-`EXISTS` rerun emitted 33/99 formulas and recorded 38 unsupported
+queries and 28 optimizer failures after 54,643/176,453 ms. q10 and q69 were
+the new relational-`EXISTS` formulas at that checkpoint.
+
+The later equality-correlated scalar run emits 38/99 formulas, with 33
+unsupported and 28 optimizer failures. It adds q1, q30, q32, q81, and q92;
+q30 and q81 spend about 174,386 ms and 218,726 ms in formula construction.
+q6 now fails at the deeper `DistinctAll` gate. None of these formula-only
+results is a bounded proof.
 q9 remains unsupported on final Read range/ordering semantics, q24 reaches
 `Unsupported scalar callable Map` at both boundaries, and q54 fails initial
 export with `Invalid Map rename source _yql_source_5.segment`.
@@ -510,24 +519,28 @@ leaked intermediate state, and broken direct lineage. Focused C++ exporter
 tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
-The current dashboards emit 12/22 TPCH and 33/99 TPC-DS formulas, for 45/121
-(37.2%). They record 45 unsupported and 31 optimizer-failure queries. The
-relational `EXISTS` milestone adds TPCH q4/q22 and TPC-DS q10/q69; TPCH q4/q22
-and TPC-DS q69 now also belong to the proof floor.
+The current dashboards emit 13/22 TPCH and 38/99 TPC-DS formulas, for 51/121
+(42.1%). They record 39 unsupported and 31 optimizer-failure queries. The
+equality-correlated scalar milestone adds TPCH q17 and TPC-DS q1, q30, q32,
+q81, and q92. The preceding relational `EXISTS` milestone added TPCH q4/q22
+and TPC-DS q10/q69; TPCH q4/q22 and TPC-DS q69 belong to the required proof
+floor.
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
 159/63,937 ms. Focused q65 emits a formula after 687/30,318 ms. The proof floor
-contains the eighteen obligations described below.
+contains the eighteen obligations described below and is confirmed after the
+correlation slice.
 
 ## Curated proof floor and focused results
 
-- The latest complete proof-floor run returns `VERIFIED_BOUNDED` for TPCH q3,
+- The checked-in proof floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3, q42, q48, q52,
   q55, q69, q90, q93, and q96, each at two rows per referenced table and two
   tasks. These are eighteen bounded proofs (14.9% of the workload) for the
   modeled pre-physical semantics, not unbounded SQL-equivalence claims. The
-  canonical-first exact-branch portfolio's fresh TPCH run spent 1,145/56,389
-  ms and the TPC-DS run spent 1,446/36,036 ms in
+  post-correlation rerun passes 9/9 TPCH and 9/9 TPC-DS obligations, all
+  `VERIFIED_BOUNDED`. In the preceding retained canonical-first exact-branch
+  run, TPCH spent 1,145/56,389 ms and TPC-DS spent 1,446/36,036 ms in
   preparation/verification. Their retained SHA-256 values are
   `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`
   and
@@ -563,7 +576,7 @@ contains the eighteen obligations described below.
   structural proof established that the physical checks were inert. The
   current `*AtMostOneMarker*` matrix instead passes 3/3 by requiring marker
   serialization directly, across multi-task producers, and across single-task
-  producers; the current full `cpp_ut` passes 167/167. A mutation that changes
+  producers; the current full `cpp_ut` passes 169/169. A mutation that changes
   the scalar aggregate input from `a.x` to `a.k` returns `COUNTEREXAMPLE` with
   a concrete bounded witness, exercising the subplan proof path rather than
   only decoder/exporter acceptance.
@@ -846,7 +859,7 @@ contains the eighteen obligations described below.
 - At that milestone TPC-DS q71 constructed a 118,276,852-byte SMT formula and
   recorded 83,339 ms in its verifier/formula-emission phase. A focused solver
   attempt reached the external solver-process deadline without producing a
-  verdict. The current full formula-only dashboard records 329/1,437 ms of
+  verdict. The current full formula-only dashboard records 367/1,522 ms of
   preparation/formula construction; no new solver result is claimed, so q71 is
   not a bounded proof.
 
@@ -974,17 +987,38 @@ final side is still the ordinary StageGraph; no special equivalence path is
 introduced.
 
 Focused gates pass 11/11 in Python, 4/4 in C++, and 4/4 through the real host;
-the current full suites pass 446/446 verifier, 167/167 C++, 43/43 inspector,
-and 26/26 integration tests. The complete dashboards add TPCH q4/q22 and
-TPC-DS q10/q69, producing the 45-query formula floor above. q35 reaches
-`Double`, q54 remains the invalid Map rename, and the proof floor now includes
-TPCH q4/q22 and TPC-DS q69. No new counterexample is claimed.
+current full validation passes 463/463 verifier, 169/169 C++, 45/45 inspector,
+37/37 replay, and 27/27 integration tests. Those dashboards added TPCH q4/q22
+and TPC-DS q10/q69. q35 reached `Double`, q54 remained the invalid Map rename,
+and the proof floor added TPCH q4/q22 and TPC-DS q69. No new counterexample was
+claimed.
 
-The auditability consolidation is complete. The next milestone is exact proof
-scaling and decomposition before another semantic family. Correlated scalar,
-dynamic `IN`, multiple dependencies, and broader `EXISTS` remain later work;
-solver/formula-size work promotes supported queries only after reproducible
-`VERIFIED_BOUNDED` results.
+Equality-correlated scalar aggregation admits one dependency and one Project
+or Filter consumer. The no-fanout root path is
+`Project* -> Aggregate -> Project* -> Filter -> outer_bind`, with exactly one
+ungrouped, phase-`undefined`, non-`DistinctAll` Aggregate. The explicit typed
+`outer_bind` appends one outer value to the closed inner input for each
+invocation. Exactly one Filter conjunct is a strict non-null-safe direct
+outer-column/inner-column equality; residual conjuncts are inner-only.
+
+Each present outer row evaluates the full scalar root once: zero rows yield
+typed NULL, one yields the selected value, and more than one raises the scalar
+cardinality error. Invocation errors are gated by the row's presence, and
+repeated expression references share its binding value. Limit, Sort, scan
+`pushed_limit`, ordered `UnionAll`, `EnsureAtMostOne`, nested or staged
+bindings, and per-invocation choice families fail closed. All invocations reuse
+one validated plan context and share one cumulative 16,384-pair
+outer/closed-inner construction budget. The final side remains the ordinary
+StageGraph. A real-host Decimal-AVG left-join case returns
+`VERIFIED_BOUNDED`.
+
+The auditability consolidation and exact solver portfolio are complete.
+Equality-correlated scalar aggregation raises the formula floor to 51 queries.
+The next semantic milestone is exact `DistinctAll` aggregation, beginning with
+TPC-DS q6. Dynamic `IN`, multiple dependencies, and broader correlations
+remain later work; solver/formula-size work promotes supported queries only
+after reproducible `VERIFIED_BOUNDED` results. The required eighteen-query
+proof floor is green after its post-correlation rerun.
 
 ### Confirmed subplan optimizer defects
 

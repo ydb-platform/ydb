@@ -18,6 +18,7 @@ from .ir import (
     Filter,
     Join,
     Limit,
+    OuterBind,
     PlanNode,
     Project,
     Scan,
@@ -178,11 +179,38 @@ class _SubplanPartial:
     relations: tuple[Relation, ...]
     inherited_errors: tuple[smt.Term, ...]
     cardinality_errors: tuple[smt.Term, ...]
+    row_bindings: tuple[Mapping[str, Value], ...]
+    correlated_errors: tuple[smt.Term, ...]
     decisions: tuple[tuple[str, int], ...]
     choices: tuple[BoundedChoice, ...]
 
 
 NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
+
+
+@dataclass(frozen=True, slots=True)
+class _EvaluatorContext:
+    """Validated immutable plan metadata shared by scalar invocations."""
+
+    snapshot: Snapshot
+    nodes: Mapping[str, PlanNode]
+    schemas: Mapping[str, Mapping[str, Column]]
+    subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
+    scalar_outer_binds: Mapping[str, OuterBind]
+
+
+@dataclass(slots=True)
+class _CorrelatedPairBudget:
+    """One cumulative construction budget for every correlated invocation."""
+
+    count: int = 0
+
+    def charge(self, count: int) -> None:
+        self.count += count
+        _require_relation_row_pairs(
+            self.count,
+            "correlated scalar evaluation",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,32 +389,73 @@ class Evaluator:
         choice_scope: str = "logical",
         defer_pushed_limits: bool = False,
         node_observer: NodeObserver | None = None,
+        outer_bindings: Mapping[str, Value] | None = None,
+        _context: _EvaluatorContext | None = None,
+        _correlated_pair_budget: _CorrelatedPairBudget | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.database = database
         self.scalar = scalar
-        self.nodes = snapshot.plan.node_map()
-        self.schemas = validate_snapshot(snapshot)
-        _reject_correlated_limit_fanout(snapshot)
+        if _context is None:
+            schemas = validate_snapshot(snapshot)
+            _reject_correlated_limit_fanout(snapshot)
+            nodes = snapshot.plan.node_map()
+            subplans_by_consumer = {
+                node_id: tuple(
+                    subplan
+                    for subplan in snapshot.plan.subplans
+                    if node_id in subplan.consumers
+                )
+                for node_id in {
+                    consumer
+                    for subplan in snapshot.plan.subplans
+                    for consumer in subplan.consumers
+                }
+            }
+            scalar_outer_binds = {
+                subplan.binding: next(
+                    node
+                    for node in snapshot.plan.nodes
+                    if (
+                        isinstance(node, OuterBind)
+                        and node.id in _descendants(nodes, subplan.root)
+                    )
+                )
+                for subplan in snapshot.plan.subplans
+                if (
+                    isinstance(subplan, ScalarSubplan)
+                    and subplan.dependency is not None
+                )
+            }
+            _context = _EvaluatorContext(
+                snapshot,
+                nodes,
+                schemas,
+                subplans_by_consumer,
+                scalar_outer_binds,
+            )
+        elif _context.snapshot is not snapshot:
+            raise RelationError(
+                "an evaluator context may only be shared by one snapshot"
+            )
+        self._context = _context
+        self.nodes = _context.nodes
+        self.schemas = _context.schemas
         self.cache: dict[str, RelationFamily] = dict(node_overrides or {})
         self.edge_inputs = edge_inputs or {}
         self.choice_scope = choice_scope
         self.defer_pushed_limits = defer_pushed_limits
         self.node_observer = node_observer
+        self.outer_bindings = outer_bindings or {}
         self.observed_nodes: set[str] = set()
-        self.subplans_by_consumer = {
-            node_id: tuple(
-                subplan
-                for subplan in snapshot.plan.subplans
-                if node_id in subplan.consumers
-            )
-            for node_id in {
-                consumer
-                for subplan in snapshot.plan.subplans
-                for consumer in subplan.consumers
-            }
-        }
+        self.subplans_by_consumer = _context.subplans_by_consumer
         self.subplan_families: dict[str, SubplanFamily] = {}
+        self.scalar_outer_binds = _context.scalar_outer_binds
+        self._correlated_pair_budget = (
+            _correlated_pair_budget
+            if _correlated_pair_budget is not None
+            else _CorrelatedPairBudget()
+        )
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -466,6 +535,39 @@ class Evaluator:
                 )
             return family
 
+        if isinstance(node, OuterBind):
+            value = self.outer_bindings.get(node.id)
+            if value is None:
+                raise RelationError(
+                    f"outer_bind {node.id!r} was evaluated outside a "
+                    "correlated scalar invocation"
+                )
+            if value.type != node.type:
+                raise RelationError(
+                    f"outer_bind {node.id!r} expected {node.type!r}, "
+                    f"got {value.type!r}"
+                )
+            source = self._input(node.id, 0, node.input)
+            column = Column(node.dependency, node.type, node.nullable)
+            return map_family(
+                source,
+                lambda relation: Relation(
+                    relation.columns + (column,),
+                    tuple(
+                        Row(
+                            row.present,
+                            dict(row.values) | {node.dependency: value},
+                            row.occurrence,
+                            row.partition_facts,
+                        )
+                        for row in relation.rows
+                    ),
+                    sequence=relation.sequence,
+                    order=relation.order,
+                    ordinals=relation.ordinals,
+                ),
+            )
+
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
@@ -480,14 +582,14 @@ class Evaluator:
                             {
                                 projection.output: self.scalar.evaluate(
                                     projection.expression,
-                                    dict(row.values) | bindings(row),
+                                    dict(row.values) | bindings(row_index, row),
                                 )
                                 for projection in node.columns
                             },
                             row.occurrence,
                             row.partition_facts,
                         )
-                        for row in relation.rows
+                        for row_index, row in enumerate(relation.rows)
                     ),
                     sequence=relation.sequence,
                     order=_projected_order(relation.order, node),
@@ -509,7 +611,7 @@ class Evaluator:
                                 self.scalar.is_true(
                                     self.scalar.evaluate(
                                         node.predicate,
-                                        dict(row.values) | bindings(row),
+                                        dict(row.values) | bindings(row_index, row),
                                     )
                                 ),
                             ),
@@ -517,7 +619,7 @@ class Evaluator:
                             row.occurrence,
                             row.partition_facts,
                         )
-                        for row in relation.rows
+                        for row_index, row in enumerate(relation.rows)
                     ),
                     sequence=relation.sequence,
                     order=relation.order,
@@ -1049,7 +1151,7 @@ class Evaluator:
         node_id: str,
         source: RelationFamily,
         transform: Callable[
-            [Relation, Callable[[Row], Mapping[str, Value]]],
+            [Relation, Callable[[int, Row], Mapping[str, Value]]],
             Relation,
         ],
     ) -> RelationFamily:
@@ -1057,28 +1159,62 @@ class Evaluator:
         if not subplans:
             return map_family(
                 source,
-                lambda relation: transform(relation, lambda _row: {}),
+                lambda relation: transform(
+                    relation,
+                    lambda _index, _row: {},
+                ),
             )
 
+        correlated_scalars = tuple(
+            subplan
+            for subplan in subplans
+            if (
+                isinstance(subplan, ScalarSubplan)
+                and subplan.dependency is not None
+            )
+        )
+        uncorrelated_subplans = tuple(
+            subplan
+            for subplan in subplans
+            if subplan not in correlated_scalars
+        )
         binding_families: list[SubplanFamily] = []
-        for subplan in subplans:
+        for subplan in uncorrelated_subplans:
             family = self.subplan_families.get(subplan.binding)
             if family is None:
                 family = self._evaluate_subplan(subplan)
                 self.subplan_families[subplan.binding] = family
             binding_families.append(family)
 
-        partials = [
-            _SubplanPartial(
-                enabled=outcome.enabled,
-                relations=(outcome.relation,),
-                inherited_errors=(outcome.error,),
-                cardinality_errors=(),
-                decisions=outcome.decisions,
-                choices=outcome.choices,
+        partials: list[_SubplanPartial] = []
+        for outer_outcome_index, outcome in enumerate(source.outcomes):
+            row_bindings: list[dict[str, Value]] = [
+                {} for _row in outcome.relation.rows
+            ]
+            correlated_errors: list[smt.Term] = []
+            for subplan in correlated_scalars:
+                values, errors = self._evaluate_correlated_scalar_rows(
+                    subplan,
+                    outcome.relation,
+                    outer_outcome_index,
+                    outcome.enabled,
+                )
+                for row_index, value in enumerate(values):
+                    row_bindings[row_index][subplan.binding] = value
+                correlated_errors.extend(errors)
+            partials.append(
+                _SubplanPartial(
+                    enabled=outcome.enabled,
+                    relations=(outcome.relation,),
+                    inherited_errors=(outcome.error,),
+                    cardinality_errors=(),
+                    row_bindings=tuple(row_bindings),
+                    correlated_errors=tuple(correlated_errors),
+                    decisions=outcome.decisions,
+                    choices=outcome.choices,
+                )
             )
-            for outcome in source.outcomes
-        ]
+
         for binding_family in binding_families:
             expanded: list[_SubplanPartial] = []
             for partial in partials:
@@ -1102,6 +1238,8 @@ class Evaluator:
                             + (outcome.error,),
                             cardinality_errors=partial.cardinality_errors
                             + (subplan_outcome.cardinality_error,),
+                            row_bindings=partial.row_bindings,
+                            correlated_errors=partial.correlated_errors,
                             decisions=merged,
                             choices=_merge_choices(
                                 partial.choices,
@@ -1123,24 +1261,33 @@ class Evaluator:
             exists_pairs = sum(
                 len(partial.relations[0].rows)
                 * len(partial.relations[index].rows)
-                for index, subplan in enumerate(subplans, start=1)
+                for index, subplan in enumerate(
+                    uncorrelated_subplans,
+                    start=1,
+                )
                 if isinstance(subplan, ExistsSubplan)
             )
             _require_relation_row_pairs(exists_pairs, "EXISTS evaluation")
 
-            def bindings(row: Row) -> Mapping[str, Value]:
-                return {
+            def bindings(row_index: int, row: Row) -> Mapping[str, Value]:
+                values = {
                     subplan.binding: self._subplan_value(
                         subplan,
                         row,
                         partial.relations[index],
                     )
-                    for index, subplan in enumerate(subplans, start=1)
+                    for index, subplan in enumerate(
+                        uncorrelated_subplans,
+                        start=1,
+                    )
                 }
+                values.update(partial.row_bindings[row_index])
+                return values
 
-            # A consumer row demands this binding's own cardinality check,
-            # including through a dead scalar-expression branch. Errors already
-            # produced inside the subplan remain observable without that row.
+            # An uncorrelated binding's local cardinality check is demanded by
+            # any consumer row, including through a dead expression branch.
+            # Its inherited errors remain eager. Correlated invocation errors
+            # above are already gated by their particular outer row.
             demanded = smt.or_(
                 *(row.present for row in partial.relations[0].rows)
             )
@@ -1150,6 +1297,7 @@ class Evaluator:
                     transform(partial.relations[0], bindings),
                     smt.or_(
                         *partial.inherited_errors,
+                        *partial.correlated_errors,
                         *(
                             smt.and_(demanded, error)
                             for error in partial.cardinality_errors
@@ -1168,6 +1316,10 @@ class Evaluator:
         subplan: Subplan,
     ) -> SubplanFamily:
         if isinstance(subplan, ScalarSubplan):
+            if subplan.dependency is not None:
+                raise RelationError(
+                    "a correlated scalar subplan must be evaluated per outer row"
+                )
             return self._evaluate_scalar_subplan(subplan)
         assert isinstance(subplan, ExistsSubplan)
         return SubplanFamily(
@@ -1205,12 +1357,139 @@ class Evaluator:
             matches.append(match)
         return Value("Bool", smt.FALSE, smt.or_(*matches))
 
+    def _evaluate_correlated_scalar_rows(
+        self,
+        subplan: ScalarSubplan,
+        outer: Relation,
+        outer_outcome_index: int,
+        outer_outcome_enabled: smt.Term,
+    ) -> tuple[tuple[Value, ...], tuple[smt.Term, ...]]:
+        outer_bind = self.scalar_outer_binds[subplan.binding]
+        closed = self.node(outer_bind.input)
+        closed_outcome = self._deterministic_correlated_outcome(
+            subplan,
+            closed.outcomes,
+            "closed input",
+        )
+        self._correlated_pair_budget.charge(
+            len(outer.rows) * len(closed_outcome.relation.rows),
+        )
+
+        values: list[Value] = []
+        errors: list[smt.Term] = []
+        for row_index, outer_row in enumerate(outer.rows):
+            if outer_row.present == smt.FALSE:
+                values.append(self.scalar.null(subplan.output.type))
+                errors.append(smt.FALSE)
+                continue
+            assert subplan.dependency is not None
+            child = Evaluator(
+                self.snapshot,
+                self.database,
+                self.scalar,
+                node_overrides={outer_bind.input: closed},
+                choice_scope=(
+                    f"{self.choice_scope}:correlated_scalar:"
+                    f"{subplan.binding}:outcome:{outer_outcome_index}:"
+                    f"row:{row_index}"
+                ),
+                outer_bindings={
+                    outer_bind.id: outer_row.values[subplan.dependency],
+                },
+                node_observer=self._invocation_observer(
+                    smt.and_(outer_outcome_enabled, outer_row.present)
+                ),
+                _context=self._context,
+                _correlated_pair_budget=self._correlated_pair_budget,
+            )
+            scalar_family = self._scalarize_subplan(
+                subplan,
+                child.node(subplan.root),
+            )
+            scalar_outcome = self._deterministic_correlated_outcome(
+                subplan,
+                tuple(item.outcome for item in scalar_family.outcomes),
+                "result",
+            )
+            scalarized = scalar_family.outcomes[0]
+            values.append(
+                scalarized.outcome.relation.rows[0].values[subplan.binding]
+            )
+            errors.append(
+                smt.and_(
+                    outer_row.present,
+                    smt.or_(
+                        scalar_outcome.error,
+                        scalarized.cardinality_error,
+                    ),
+                )
+            )
+        return tuple(values), tuple(errors)
+
+    def _invocation_observer(
+        self,
+        invocation_enabled: smt.Term,
+    ) -> NodeObserver | None:
+        """Hide diagnostic node outcomes for invocations absent in a witness."""
+
+        observer = self.node_observer
+        if observer is None:
+            return None
+
+        def observe(
+            scope: str,
+            node: str,
+            family: RelationFamily,
+        ) -> None:
+            observer(
+                scope,
+                node,
+                RelationFamily(
+                    tuple(
+                        Outcome(
+                            smt.and_(invocation_enabled, outcome.enabled),
+                            outcome.relation,
+                            outcome.error,
+                            outcome.decisions,
+                            outcome.choices,
+                        )
+                        for outcome in family.outcomes
+                    )
+                ),
+            )
+
+        return observe
+
+    @staticmethod
+    def _deterministic_correlated_outcome(
+        subplan: ScalarSubplan,
+        outcomes: tuple[Outcome, ...],
+        description: str,
+    ) -> Outcome:
+        if (
+            len(outcomes) != 1
+            or outcomes[0].enabled != smt.TRUE
+            or outcomes[0].decisions
+            or outcomes[0].choices
+        ):
+            raise RelationError(
+                f"correlated scalar subplan {subplan.binding!r} "
+                f"{description} has per-invocation relational choices"
+            )
+        return outcomes[0]
+
     def _evaluate_scalar_subplan(
         self,
         subplan: ScalarSubplan,
     ) -> SubplanFamily:
+        return self._scalarize_subplan(subplan, self.node(subplan.root))
+
+    def _scalarize_subplan(
+        self,
+        subplan: ScalarSubplan,
+        family: RelationFamily,
+    ) -> SubplanFamily:
         binding = subplan.binding
-        family = self.node(subplan.root)
         column = Column(binding, subplan.output.type, True)
         outcomes: list[SubplanOutcome] = []
         for outcome in family.outcomes:
@@ -1556,6 +1835,21 @@ def single(relation: Relation) -> RelationFamily:
     return RelationFamily((Outcome(smt.TRUE, relation, smt.FALSE),))
 
 
+def _descendants(
+    nodes: Mapping[str, PlanNode],
+    root: str,
+) -> frozenset[str]:
+    reached: set[str] = set()
+    pending = [root]
+    while pending:
+        node_id = pending.pop()
+        if node_id in reached:
+            continue
+        reached.add(node_id)
+        pending.extend(plan_node_inputs(nodes[node_id]))
+    return frozenset(reached)
+
+
 def _reject_correlated_limit_fanout(snapshot: Snapshot) -> None:
     """Fail closed when two Limit branches observe one latent stream order."""
 
@@ -1573,7 +1867,7 @@ def _reject_correlated_limit_fanout(snapshot: Snapshot) -> None:
             node = nodes[node_id]
             if isinstance(node, Sort):
                 result = True
-            elif isinstance(node, (Project, Filter, Limit)):
+            elif isinstance(node, (Project, Filter, OuterBind, Limit)):
                 result = has_sequence(node.input)
             else:
                 result = False

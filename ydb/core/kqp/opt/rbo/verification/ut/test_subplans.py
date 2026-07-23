@@ -1,8 +1,10 @@
 import copy
 import unittest
+from dataclasses import replace
 from itertools import product
+from unittest import mock
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     SnapshotError,
     parse_snapshot,
@@ -10,6 +12,8 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator,
+    Outcome,
+    RelationFamily,
     RelationError,
     family_equal,
 )
@@ -293,6 +297,187 @@ def _exists_snapshot(
     }
 
 
+def _correlated_scalar_snapshot(function="count"):
+    if function not in {"avg", "count", "sum"}:
+        raise AssertionError(f"unknown correlated aggregate {function!r}")
+    input_type = "Decimal(7,2)" if function == "avg" else "Int64"
+    output_type = (
+        "Decimal(7,2)"
+        if function == "avg"
+        else "Uint64" if function == "count" else "Int64"
+    )
+    output_nullable = function in {"avg", "sum"}
+    aggregate = {
+        "input": "inner.v",
+        "function": function,
+        "output": "aggregate.value",
+        "type": output_type,
+        "nullable": output_nullable,
+        "distinct": False,
+        "unwrap": False,
+    }
+    if function == "avg":
+        aggregate["state"] = {
+            "sum_type": "Decimal(35,2)",
+            "count_type": "Uint64",
+            "nullable": True,
+        }
+    return {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "Outer",
+                    "columns": [
+                        {"name": "k", "type": "Int64", "nullable": True},
+                    ],
+                    "unique_keys": [],
+                },
+                {
+                    "name": "Inner",
+                    "columns": [
+                        {"name": "k", "type": "Int64", "nullable": True},
+                        {"name": "v", "type": input_type, "nullable": True},
+                    ],
+                    "unique_keys": [],
+                },
+            ]
+        },
+        "plan": {
+            "nodes": [
+                {
+                    "id": "outer_scan",
+                    "op": "scan",
+                    "table": "Outer",
+                    "columns": [{"source": "k", "output": "outer.k"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "main_project",
+                    "op": "project",
+                    "input": "outer_scan",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "outer.k",
+                            "expression": {
+                                "kind": "column",
+                                "column": "outer.k",
+                            },
+                        },
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": "column",
+                                "column": BINDING,
+                            },
+                        },
+                    ],
+                },
+                {
+                    "id": "inner_scan",
+                    "op": "scan",
+                    "table": "Inner",
+                    "columns": [
+                        {"source": "k", "output": "inner.k"},
+                        {"source": "v", "output": "inner.v"},
+                    ],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "outer_bind",
+                    "op": "outer_bind",
+                    "input": "inner_scan",
+                    "dependency": "outer.k",
+                    "type": "Int64",
+                    "nullable": True,
+                },
+                {
+                    "id": "correlation_filter",
+                    "op": "filter",
+                    "input": "outer_bind",
+                    "predicate": _equality("outer.k", "inner.k"),
+                },
+                {
+                    "id": "inner_project",
+                    "op": "project",
+                    "input": "correlation_filter",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "inner.k",
+                            "expression": {
+                                "kind": "column",
+                                "column": "inner.k",
+                            },
+                        },
+                        {
+                            "output": "inner.v",
+                            "expression": {
+                                "kind": "column",
+                                "column": "inner.v",
+                            },
+                        },
+                        {
+                            "output": "outer.k",
+                            "expression": {
+                                "kind": "column",
+                                "column": "outer.k",
+                            },
+                        },
+                    ],
+                },
+                {
+                    "id": "scalar_aggregate",
+                    "op": "aggregate",
+                    "input": "inner_project",
+                    "keys": [],
+                    "aggregates": [aggregate],
+                    "phase": "undefined",
+                    "distinct_all": False,
+                },
+                {
+                    "id": "scalar_result",
+                    "op": "project",
+                    "input": "scalar_aggregate",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "sub.value",
+                            "expression": {
+                                "kind": "column",
+                                "column": "aggregate.value",
+                            },
+                        }
+                    ],
+                },
+            ],
+            "root": "main_project",
+            "output": ["outer.k", "result"],
+            "subplans": [
+                {
+                    "binding": BINDING,
+                    "kind": "scalar",
+                    "root": "scalar_result",
+                    "output": {
+                        "column": "sub.value",
+                        "type": output_type,
+                        "nullable": output_nullable,
+                    },
+                    "type": output_type,
+                    "nullable": True,
+                    "dependencies": ["outer.k"],
+                    "consumers": ["main_project"],
+                }
+            ],
+        },
+        "stage_graph": None,
+    }
+
+
 def _lowered_scalar_snapshot(*, check_mode, empty_outer=False):
     if check_mode not in {"gated", "eager", "none"}:
         raise AssertionError(f"unknown scalar check mode {check_mode!r}")
@@ -475,6 +660,26 @@ def _ground(term, constants):
         return _ground(branch, constants)
     if term.operation == "+":
         return sum(_ground(argument, constants) for argument in term.arguments)
+    if term.operation == "-":
+        return _ground(term.arguments[0], constants) - _ground(
+            term.arguments[1],
+            constants,
+        )
+    if term.operation == "*":
+        return _ground(term.arguments[0], constants) * _ground(
+            term.arguments[1],
+            constants,
+        )
+    if term.operation == "div":
+        return _ground(term.arguments[0], constants) // _ground(
+            term.arguments[1],
+            constants,
+        )
+    if term.operation == "mod":
+        return _ground(term.arguments[0], constants) % _ground(
+            term.arguments[1],
+            constants,
+        )
     raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
 
 
@@ -502,6 +707,40 @@ def _exists_constants(database, outer, inner):
             cell = row.cells[name]
             constants[cell.is_null.atom] = value is None
             constants[cell.value.atom] = 0 if value is None else value
+    return constants
+
+
+def _correlated_constants(
+    database,
+    outer,
+    inner,
+    *,
+    outer_present=(True, True),
+    inner_present=(True, True),
+):
+    constants = {}
+
+    def bind_cell(cell, value):
+        if cell.is_null.operation == "symbol":
+            constants[cell.is_null.atom] = value is None
+        if cell.value.operation == "symbol":
+            constants[cell.value.atom] = 0 if value is None else value
+
+    for row, present, key in zip(
+        database.witness["Outer"],
+        outer_present,
+        outer,
+    ):
+        constants[row.present.atom] = present
+        bind_cell(row.cells["k"], key)
+    for row, present, (key, value) in zip(
+        database.witness["Inner"],
+        inner_present,
+        inner,
+    ):
+        constants[row.present.atom] = present
+        bind_cell(row.cells["k"], key)
+        bind_cell(row.cells["v"], value)
     return constants
 
 
@@ -1201,6 +1440,616 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                         _database_constants(database, present),
                     )
                 )
+
+
+class CorrelatedScalarSubplanEvaluationTest(unittest.TestCase):
+    @staticmethod
+    def _evaluate(raw, row_bound=2):
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, row_bound, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        return evaluator, database, evaluator.root()
+
+    @staticmethod
+    def _results(family, constants):
+        self_or_outcome = family.outcomes[0]
+        return [
+            (
+                _ground(row.values["result"].is_null, constants),
+                _ground(row.values["result"].value, constants),
+            )
+            for row in self_or_outcome.relation.rows
+            if _ground(row.present, constants)
+        ]
+
+    def test_count_is_evaluated_per_outer_row_with_strict_null_equality(self):
+        evaluator, database, family = self._evaluate(
+            _correlated_scalar_snapshot()
+        )
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(set(evaluator.scalar_outer_binds), {BINDING})
+
+        cases = (
+            (
+                (1, 2),
+                ((1, 7), (2, 8)),
+                [(False, 1), (False, 1)],
+            ),
+            (
+                (1, 3),
+                ((1, 7), (2, 8)),
+                [(False, 1), (False, 0)],
+            ),
+            (
+                (None, 1),
+                ((None, 9), (2, 8)),
+                [(False, 0), (False, 0)],
+            ),
+        )
+        for outer, inner, expected in cases:
+            with self.subTest(outer=outer, inner=inner):
+                constants = _correlated_constants(database, outer, inner)
+                self.assertFalse(
+                    _ground(family.outcomes[0].error, constants)
+                )
+                self.assertEqual(self._results(family, constants), expected)
+
+    def test_decimal_avg_is_evaluated_per_outer_row(self):
+        _, database, family = self._evaluate(
+            _correlated_scalar_snapshot("avg")
+        )
+        constants = _correlated_constants(
+            database,
+            (1, 2),
+            ((1, 100), (1, 300)),
+        )
+        outcome = family.outcomes[0]
+        rows = [
+            row
+            for row in outcome.relation.rows
+            if _ground(row.present, constants)
+        ]
+        self.assertFalse(_ground(outcome.error, constants))
+        self.assertFalse(_ground(rows[0].values["result"].is_null, constants))
+        self.assertEqual(
+            _ground(rows[0].values["result"].value, constants),
+            200,
+        )
+        self.assertTrue(_ground(rows[1].values["result"].is_null, constants))
+
+    def test_repeated_binding_use_shares_one_row_value(self):
+        raw = _correlated_scalar_snapshot()
+        main = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "main_project"
+        )
+        main["columns"][1]["expression"] = {
+            "kind": "add",
+            "left": {"kind": "column", "column": BINDING},
+            "right": {"kind": "column", "column": BINDING},
+            "type": "Uint64",
+            "nullable": True,
+        }
+        _, database, family = self._evaluate(raw)
+        constants = _correlated_constants(
+            database,
+            (1, 2),
+            ((1, 7), (2, 8)),
+        )
+        self.assertEqual(
+            self._results(family, constants),
+            [(False, 2), (False, 2)],
+        )
+
+    def test_correlated_inherited_error_is_row_gated_even_in_dead_branch(self):
+        raw = _correlated_scalar_snapshot()
+        main = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "main_project"
+        )
+        main["columns"][1]["expression"] = {
+            "kind": "if",
+            "condition": _literal("Bool", False),
+            "then": {"kind": "column", "column": BINDING},
+            "else": _literal("Uint64", 7),
+            "type": "Uint64",
+            "nullable": True,
+        }
+
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        closed = evaluator.node("inner_scan")
+        closed_outcome = closed.outcomes[0]
+        evaluator.cache["inner_scan"] = RelationFamily(
+            (
+                Outcome(
+                    closed_outcome.enabled,
+                    closed_outcome.relation,
+                    smt.TRUE,
+                    closed_outcome.decisions,
+                    closed_outcome.choices,
+                ),
+            )
+        )
+        family = evaluator.root()
+        for outer_present, expected_error in (
+            ((False, False), False),
+            ((True, False), True),
+        ):
+            with self.subTest(outer_present=outer_present):
+                constants = _correlated_constants(
+                    database,
+                    (1, 2),
+                    ((1, 7), (2, 8)),
+                    outer_present=outer_present,
+                )
+                self.assertEqual(
+                    _ground(family.outcomes[0].error, constants),
+                    expected_error,
+                )
+
+    def test_per_invocation_relational_alternatives_fail_closed(self):
+        snapshot = parse_snapshot(_correlated_scalar_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        closed = evaluator.node("inner_scan")
+        evaluator.cache["inner_scan"] = RelationFamily(
+            (closed.outcomes[0], closed.outcomes[0])
+        )
+        with self.assertRaisesRegex(
+            RelationError,
+            "closed input has per-invocation relational choices",
+        ):
+            evaluator.root()
+
+    def test_correlated_sum_matches_grouped_left_join_lowering(self):
+        initial_raw = _correlated_scalar_snapshot("sum")
+        final_raw = {
+            "format": initial_raw["format"],
+            "version": initial_raw["version"],
+            "schema": copy.deepcopy(initial_raw["schema"]),
+            "plan": {
+                "nodes": [
+                    copy.deepcopy(initial_raw["plan"]["nodes"][0]),
+                    copy.deepcopy(initial_raw["plan"]["nodes"][2]),
+                    {
+                        "id": "grouped",
+                        "op": "aggregate",
+                        "input": "inner_scan",
+                        "keys": ["inner.k"],
+                        "aggregates": [
+                            {
+                                "input": "inner.v",
+                                "function": "sum",
+                                "output": "grouped.value",
+                                "type": "Int64",
+                                "nullable": True,
+                                "distinct": False,
+                                "unwrap": False,
+                            }
+                        ],
+                        "phase": "undefined",
+                        "distinct_all": False,
+                    },
+                    {
+                        "id": "decorrelated",
+                        "op": "join",
+                        "left": "outer_scan",
+                        "right": "grouped",
+                        "kind": "left",
+                        "predicate": _equality("outer.k", "inner.k"),
+                    },
+                    {
+                        "id": "result",
+                        "op": "project",
+                        "input": "decorrelated",
+                        "ordered": False,
+                        "columns": [
+                            {
+                                "output": "outer.k",
+                                "expression": {
+                                    "kind": "column",
+                                    "column": "outer.k",
+                                },
+                            },
+                            {
+                                "output": "result",
+                                "expression": {
+                                    "kind": "column",
+                                    "column": "grouped.value",
+                                },
+                            },
+                        ],
+                    },
+                ],
+                "root": "result",
+                "output": ["outer.k", "result"],
+                "subplans": [],
+            },
+            "stage_graph": None,
+        }
+
+        initial = parse_snapshot(initial_raw)
+        final = parse_snapshot(final_raw)
+        script = smt.Script()
+        database = Database(initial, 2, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            Evaluator(
+                initial,
+                database,
+                scalar,
+                choice_scope="initial",
+            ).root(),
+            Evaluator(
+                final,
+                database,
+                scalar,
+                choice_scope="final",
+            ).root(),
+            scalar,
+        )
+        for outer, inner in (
+            ((1, 2), ((1, 5), (2, 7))),
+            ((1, 3), ((1, 5), (1, 7))),
+            ((None, 1), ((None, 5), (2, 7))),
+        ):
+            with self.subTest(outer=outer, inner=inner):
+                self.assertTrue(
+                    _ground(
+                        equality,
+                        _correlated_constants(database, outer, inner),
+                    )
+                )
+
+    def test_correlated_pair_construction_is_bounded(self):
+        with self.assertRaisesRegex(
+            RelationError,
+            "correlated scalar evaluation requires 16641 candidate-row pairs",
+        ):
+            self._evaluate(_correlated_scalar_snapshot(), row_bound=129)
+
+    def test_correlated_pair_budget_is_cumulative_across_outer_outcomes(self):
+        snapshot = parse_snapshot(_correlated_scalar_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 91, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        outer = evaluator.node("outer_scan").outcomes[0]
+        absent_outer = replace(
+            outer,
+            relation=replace(
+                outer.relation,
+                rows=tuple(
+                    replace(row, present=smt.FALSE)
+                    for row in outer.relation.rows
+                ),
+            ),
+        )
+        evaluator.cache["outer_scan"] = RelationFamily(
+            (absent_outer, absent_outer)
+        )
+        with self.assertRaisesRegex(
+            RelationError,
+            "correlated scalar evaluation requires 16562 candidate-row pairs",
+        ):
+            evaluator.root()
+
+    def test_correlated_invocations_share_one_validated_plan_context(self):
+        snapshot = parse_snapshot(_correlated_scalar_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        with mock.patch.object(
+            relation,
+            "validate_snapshot",
+            wraps=relation.validate_snapshot,
+        ) as validate:
+            Evaluator(snapshot, database, ScalarEncoder(script)).root()
+        self.assertEqual(validate.call_count, 1)
+
+    def test_correlated_invocation_scopes_distinguish_outer_outcomes_and_rows(self):
+        snapshot = parse_snapshot(_correlated_scalar_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        events = []
+        evaluator = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+            choice_scope="before:logical",
+            node_observer=lambda *event: events.append(event),
+        )
+        outer = evaluator.node("outer_scan")
+        disabled = Outcome(
+            smt.FALSE,
+            outer.outcomes[0].relation,
+            outer.outcomes[0].error,
+            outer.outcomes[0].decisions,
+            outer.outcomes[0].choices,
+        )
+        evaluator.cache["outer_scan"] = RelationFamily(
+            (outer.outcomes[0], disabled)
+        )
+        evaluator.root()
+        invocations = [
+            (scope, family)
+            for scope, node, family in events
+            if node == "outer_bind"
+        ]
+        self.assertEqual(
+            [scope for scope, _family in invocations],
+            [
+                f"before:logical:correlated_scalar:"
+                f"{BINDING}:outcome:0:row:0",
+                f"before:logical:correlated_scalar:"
+                f"{BINDING}:outcome:0:row:1",
+                f"before:logical:correlated_scalar:"
+                f"{BINDING}:outcome:1:row:0",
+                f"before:logical:correlated_scalar:"
+                f"{BINDING}:outcome:1:row:1",
+            ],
+        )
+        self.assertTrue(
+            all(
+                outcome.enabled == smt.FALSE
+                for _scope, family in invocations[2:]
+                for outcome in family.outcomes
+            )
+        )
+
+
+class CorrelatedScalarSubplanValidationTest(unittest.TestCase):
+    def test_real_project_aggregate_project_filter_shape_is_admitted(self):
+        # The exporter renders an untouched Map input as an identity projection.
+        # That is passive dataflow, not an optimizer expression use.
+        parse_snapshot(_correlated_scalar_snapshot())
+
+    def test_dependency_outer_bind_and_consumer_contracts_are_exact(self):
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["subplans"][0]["dependencies"] = []
+        with self.assertRaisesRegex(SnapshotError, "uncorrelated scalar root"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["subplans"][0]["dependencies"] = ["outer.other"]
+        with self.assertRaisesRegex(SnapshotError, "disagrees with outer_bind"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["nodes"][3]["nullable"] = False
+        with self.assertRaisesRegex(SnapshotError, "consumer input"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "second_outer_bind",
+                "op": "outer_bind",
+                "input": "inner_scan",
+                "dependency": "outer.other",
+                "type": "Int64",
+                "nullable": True,
+            }
+        )
+        raw["plan"]["nodes"][3]["input"] = "second_outer_bind"
+        with self.assertRaisesRegex(SnapshotError, "exactly one outer_bind"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "second_consumer",
+                "op": "project",
+                "input": "main_project",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "result2",
+                        "expression": {
+                            "kind": "column",
+                            "column": BINDING,
+                        },
+                    }
+                ],
+            }
+        )
+        raw["plan"]["root"] = "second_consumer"
+        raw["plan"]["output"] = ["result2"]
+        raw["plan"]["subplans"][0]["consumers"].append("second_consumer")
+        with self.assertRaisesRegex(SnapshotError, "exactly one consumer"):
+            parse_snapshot(raw)
+
+    def test_dependency_may_only_feed_the_correlation_filter(self):
+        raw = _correlated_scalar_snapshot()
+        aggregate = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "scalar_aggregate"
+        )
+        aggregate["aggregates"][0]["input"] = "outer.k"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "may not aggregate its outer dependency",
+        ):
+            parse_snapshot(raw)
+
+        for output, expression in (
+            (
+                "renamed.dependency",
+                {"kind": "column", "column": "outer.k"},
+            ),
+            (
+                "computed.dependency",
+                {
+                    "kind": "add",
+                    "left": {"kind": "column", "column": "outer.k"},
+                    "right": _literal("Int64", 0),
+                    "type": "Int64",
+                    "nullable": True,
+                },
+            ),
+        ):
+            with self.subTest(output=output):
+                raw = _correlated_scalar_snapshot()
+                project = next(
+                    node for node in raw["plan"]["nodes"]
+                    if node["id"] == "inner_project"
+                )
+                project["columns"].append(
+                    {
+                        "output": output,
+                        "expression": expression,
+                    }
+                )
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "only in the correlation Filter",
+                ):
+                    parse_snapshot(raw)
+
+    def test_outer_bind_may_not_fan_out_into_the_main_plan(self):
+        raw = _correlated_scalar_snapshot()
+        main_project = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "main_project"
+        )
+        raw["plan"]["nodes"].append(
+            {
+                "id": "main_union",
+                "op": "union_all",
+                "inputs": [
+                    {"node": "outer_scan", "columns": ["outer.k"]},
+                    {
+                        "node": "correlation_filter",
+                        "columns": ["outer.k"],
+                    },
+                ],
+                "output": ["outer.k"],
+                "ordered": False,
+            }
+        )
+        main_project["input"] = "main_union"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "outer_bind may not be reachable from the main plan",
+        ):
+            parse_snapshot(raw)
+
+    def test_aggregate_path_and_row_selection_contracts_are_exact(self):
+        raw = _correlated_scalar_snapshot()
+        aggregate = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "scalar_aggregate"
+        )
+        aggregate["keys"] = ["inner.k"]
+        with self.assertRaisesRegex(SnapshotError, "must be ungrouped"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        aggregate = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "scalar_aggregate"
+        )
+        aggregate["phase"] = "final"
+        with self.assertRaisesRegex(SnapshotError, "undefined"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        raw["plan"]["nodes"].insert(
+            3,
+            {
+                "id": "inner_limit",
+                "op": "limit",
+                "input": "inner_scan",
+                "count": _literal("Uint64", 1),
+                "offset": None,
+                "phase": "undefined",
+            },
+        )
+        outer_bind = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "outer_bind"
+        )
+        outer_bind["input"] = "inner_limit"
+        with self.assertRaisesRegex(SnapshotError, "row selection"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        inner_scan = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "inner_scan"
+        )
+        inner_scan["pushed_limit"] = _literal("Uint64", 1)
+        with self.assertRaisesRegex(SnapshotError, "row selection"):
+            parse_snapshot(raw)
+
+    def test_correlation_requires_one_plain_outer_inner_equality(self):
+        for predicate, message in (
+            (
+                _equality("outer.k", "inner.k", null_safe=True),
+                "non-null-safe column equality",
+            ),
+            (
+                {
+                    "kind": "and",
+                    "args": [
+                        _equality("outer.k", "inner.k"),
+                        _equality("outer.k", "inner.k"),
+                    ],
+                },
+                "exactly one dependency-bearing conjunct",
+            ),
+            (
+                {
+                    "kind": "eq",
+                    "left": {
+                        "kind": "add",
+                        "left": {
+                            "kind": "column",
+                            "column": "outer.k",
+                        },
+                        "right": _literal("Int64", 0),
+                        "type": "Int64",
+                        "nullable": True,
+                    },
+                    "right": {
+                        "kind": "column",
+                        "column": "inner.k",
+                    },
+                },
+                "non-null-safe column equality",
+            ),
+        ):
+            with self.subTest(message=message):
+                raw = _correlated_scalar_snapshot()
+                correlation_filter = next(
+                    node for node in raw["plan"]["nodes"]
+                    if node["id"] == "correlation_filter"
+                )
+                correlation_filter["predicate"] = predicate
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_outer_bind_object_is_strict(self):
+        raw = _correlated_scalar_snapshot()
+        outer_bind = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "outer_bind"
+        )
+        del outer_bind["type"]
+        with self.assertRaisesRegex(SnapshotError, "missing fields: type"):
+            parse_snapshot(raw)
+
+        raw = _correlated_scalar_snapshot()
+        outer_bind = next(
+            node for node in raw["plan"]["nodes"]
+            if node["id"] == "outer_bind"
+        )
+        outer_bind["surprise"] = True
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: surprise"):
+            parse_snapshot(raw)
 
 
 class ExistsSubplanEvaluationTest(unittest.TestCase):

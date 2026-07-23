@@ -76,6 +76,9 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     }
 
     auto join = CastOperator<TOpJoin>(filter->GetInput());
+    if (join->PreserveInputOrder) {
+        return input;
+    }
 
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;

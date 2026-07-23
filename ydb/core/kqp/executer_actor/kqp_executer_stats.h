@@ -1,10 +1,11 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
 
-#include <ydb/core/kqp/common/kqp_user_trace_data.h>
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -450,11 +451,16 @@ public:
 
     bool CollectStatsByLongTasks = false;
 
-    // When set, task stats are additionally retained in TraceTaskStats so the user-facing channel
+    // When set, task stats are additionally retained in UserFacingTaskStats so the user-facing channel
     // can emit a span per task. Gated on the user channel being active. ComputeActors (and the
     // plan/SVG it feeds) keeps the longest-task-only behavior regardless.
-    bool CollectTraceTaskStats = false;
-    TUserTraceTaskStats TraceTaskStats;
+    bool CollectUserFacingTaskStats = false;
+    TUserFacingTraceTaskStats UserFacingTaskStats;
+
+    // exportMode overrides StatsMode (the collection mode) for this export — used to keep
+    // client-facing stats at the client-requested depth when collection was escalated for tracing.
+    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
@@ -501,7 +507,6 @@ public:
     void UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
         NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void UpdateNodeStats(ui32 nodeId, const NYql::NDqProto::TEvNodeState& state);
-    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();

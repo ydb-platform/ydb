@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/kqp_stats.pb.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -1265,12 +1267,32 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
-                if (CollectTraceTaskStats) {
-                    auto& stageTasks = TraceTaskStats[taskStats.GetStageId()];
+                if (CollectUserFacingTaskStats) {
+                    auto& stageTasks = UserFacingTaskStats[taskStats.GetStageId()];
                     if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
                         taskIt->second.CopyFrom(stats);
-                    } else if (stageTasks.size() < MaxUserTraceTasksPerStage) {
+                    } else if (stageTasks.size() < MaxUserFacingTraceTasksPerStage) {
                         stageTasks[taskId].CopyFrom(stats);
+                    } else if (taskDuration > TDuration::Zero()) {
+                        // Over the cap keep top-N by duration, not first-come: the tasks worth
+                        // showing are the stragglers, and they report last. Evict the shortest
+                        // retained task when a longer one arrives; a still-running task loses
+                        // now (zero duration) but is reconsidered on its final report.
+                        auto durationOf = [](const std::pair<const ui64, NYql::NDqProto::TDqComputeActorStats>& entry) -> ui64 {
+                            for (const auto& t : entry.second.GetTasks()) {
+                                if (t.GetTaskId() == entry.first && t.GetFinishTimeMs() >= t.GetStartTimeMs()
+                                        && t.GetStartTimeMs() != 0) {
+                                    return t.GetFinishTimeMs() - t.GetStartTimeMs();
+                                }
+                            }
+                            return 0;
+                        };
+                        auto minIt = std::min_element(stageTasks.begin(), stageTasks.end(),
+                            [&](const auto& a, const auto& b) { return durationOf(a) < durationOf(b); });
+                        if (minIt != stageTasks.end() && taskDuration.MilliSeconds() > durationOf(*minIt)) {
+                            stageTasks.erase(minIt);
+                            stageTasks[taskId].CopyFrom(stats);
+                        }
                     }
                 }
             }
@@ -1516,8 +1538,10 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     metrics->OutputBytes = outputBytes;
 }
 
-void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
-    switch (StatsMode) {
+void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode) {
+    const auto mode = exportMode.value_or(StatsMode);
+    switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
@@ -1610,11 +1634,13 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 for (auto& [id, m] : stageStat.Mkql) {
                     ExportAggStats(m, (*stageStats.MutableMkql())[id]);
                 }
-                for (auto& [id, caStats] : stageStat.ComputeActors) {
-                    stageStats.AddComputeActors()->Swap(&caStats);
+                // Copy, not swap: the export must stay non-destructive — it can run twice
+                // (client-mode export for the response, collection-mode export for the trace).
+                for (const auto& [id, caStats] : stageStat.ComputeActors) {
+                    stageStats.AddComputeActors()->CopyFrom(caStats);
                 }
 
-                if (CollectProfileStats(StatsMode)) {
+                if (CollectProfileStats(mode)) {
                     auto it = ShardsCountByNode.find(stageId.StageId);
                     if (it != ShardsCountByNode.end()) {
                         NKqpProto::TKqpStageExtraStats extraStats;
@@ -1628,7 +1654,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
             }
 
-            if (CollectProfileStats(StatsMode)) {
+            if (CollectProfileStats(mode)) {
                 for (auto& [nodeId, nodeStat] : NodeStats) {
                     auto& nodeStats = *stats.AddNodes();
                     nodeStats.SetNodeId(nodeId);

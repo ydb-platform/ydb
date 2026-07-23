@@ -15,7 +15,7 @@
 namespace NKikimr {
 
 using namespace Tests;
-using namespace NWilson;    
+using namespace NWilson;
 
 Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
@@ -104,6 +104,20 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         // The user tree is pruned: engine internals (ComputeActor) live in the dev tree only.
         UNIT_ASSERT_C(!userRoot->BFSFindOne("ComputeActor"), "user tree leaked engine internals");
+
+        // db.query.text is sanitized: literals become '?' placeholders, no user data leaks.
+        bool queryTextChecked = false;
+        for (const auto& span : uploader->Spans) {
+            for (const auto& attr : span.attributes()) {
+                if (attr.key() == "db.query.text") {
+                    const TString& text = attr.value().string_value();
+                    UNIT_ASSERT_C(!text.Contains("100"), "literal leaked into db.query.text: " << text);
+                    UNIT_ASSERT_C(text.Contains("?"), "db.query.text not parameterized: " << text);
+                    queryTextChecked = true;
+                }
+            }
+        }
+        UNIT_ASSERT_C(queryTextChecked, "db.query.text attribute missing");
     }
 
     Y_UNIT_TEST(UserChannelOffProducesNoUserTree) {

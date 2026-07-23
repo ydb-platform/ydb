@@ -2,15 +2,20 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
-#include <ydb/core/kqp/common/kqp_user_trace_data.h>
-#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <util/generic/utility.h>
 #include <util/string/builder.h>
 
 // The single renderer of the user-facing trace. Everything the user sees is built here, at reply
 // time, from data the engine merely recorded: session timings (queue/compile), the executer's
-// phase timeline and per-task retention (TUserTraceExecutionData), and the finalized stats.
+// phase timeline and per-task retention (TUserFacingTraceExecutionData), and the finalized stats.
 //
 //   root (SQL verb [+ table])
 //   ├── Queued
@@ -34,7 +39,7 @@ NWilson::TSpan MakePhase(const NWilson::TTraceId& parentId, TInstant start, TIns
         return {};
     }
     NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
-        parentId, parentId.Span(TWilsonKqp::KqpSession), start, end,
+        parentId, parentId.Span(parentId.GetVerbosity()), start, end,
         NWilson::NTraceProto::Status::STATUS_CODE_OK, name);
     for (const auto& [key, value] : attrs) {
         span.Attribute(key, value);
@@ -109,7 +114,7 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
                 continue;
             }
             NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
-                stageParent, stageParent.Span(TWilsonKqp::KqpSession),
+                stageParent, stageParent.Span(stageParent.GetVerbosity()),
                 TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
                 NWilson::NTraceProto::Status::STATUS_CODE_OK,
                 TStringBuilder() << "Task " << task.GetTaskId());
@@ -143,13 +148,33 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
             if (spilledBytes > 0) {
                 span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytes));
             }
+            ui64 affectedShards = 0;
+            for (const auto& table : task.GetTables()) {
+                affectedShards += table.GetAffectedPartitions();
+            }
+            if (affectedShards > 0) {
+                span.Attribute("ydb.affected_shards", static_cast<i64>(affectedShards));
+            }
+            // Shard read retries explain latency the timings alone don't: each retry is a full
+            // re-resolve + re-read of a shard. Reported by the read actor (ReadRetriesCount) and
+            // the scan path (ScanTaskExtraStats).
+            if (task.HasExtra()) {
+                NKqpProto::TKqpTaskExtraStats extra;
+                if (task.GetExtra().UnpackTo(&extra)) {
+                    const ui64 retries = extra.GetReadRetriesCount()
+                        + extra.GetScanTaskExtraStats().GetRetriesCount();
+                    if (retries > 0) {
+                        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
+                    }
+                }
+            }
             span.End();
         }
     }
 }
 
 void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqExecutionStats& stats,
-        const TUserTraceTaskStats& taskStats) {
+        const TUserFacingTraceTaskStats& taskStats) {
     for (const auto& stage : stats.GetStages()) {
         // Stage start/finish are offsets from BaseTimeMs (absolute epoch ms); base 0 => untimed stage.
         const ui64 base = stage.GetBaseTimeMs();
@@ -159,7 +184,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
             continue;
         }
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
-            parent, parent.Span(TWilsonKqp::KqpSession),
+            parent, parent.Span(parent.GetVerbosity()),
             TInstant::MilliSeconds(base + startMs), TInstant::MilliSeconds(base + finishMs),
             NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage));
         if (!span) {
@@ -203,7 +228,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
             const auto& stageTasks = stageTasksIt->second;
             // Set only when the cap was actually hit — a task that never reported stats is
             // simply absent, not truncated.
-            if (stageTasks.size() >= MaxUserTraceTasksPerStage
+            if (stageTasks.size() >= MaxUserFacingTraceTasksPerStage
                     && stage.GetTotalTasksCount() > stageTasks.size()) {
                 span.Attribute("ydb.tasks_truncated",
                     static_cast<i64>(stage.GetTotalTasksCount() - stageTasks.size()));
@@ -214,9 +239,8 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
     }
 }
 
-void RenderExecution(const NWilson::TTraceId& rootId, const NYql::NDqProto::TDqExecutionStats& stats,
-        const TUserTraceExecutionData& trace) {
-    const TUserTraceTimeline& tl = trace.Timeline;
+void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExecutionData& trace) {
+    const TUserFacingTraceTimeline& tl = trace.Timeline;
     NWilson::TSpan executeSpan = MakePhase(rootId, tl.Execute.Start, tl.Execute.End, "Execute");
     if (!executeSpan) {
         return;
@@ -224,13 +248,13 @@ void RenderExecution(const NWilson::TTraceId& rootId, const NYql::NDqProto::TDqE
     const NWilson::TTraceId executeId = executeSpan.GetTraceId();
 
     struct TPhaseName {
-        EUserTracePhase Phase;
+        EUserFacingTracePhase Phase;
         const char* Name;
     };
     static constexpr TPhaseName preparePhases[] = {
-        {EUserTracePhase::ResolveTables, "ResolveTables"},
-        {EUserTracePhase::ResolveShards, "ResolveShards"},
-        {EUserTracePhase::Snapshot, "Snapshot"},
+        {EUserFacingTracePhase::ResolveTables, "ResolveTables"},
+        {EUserFacingTracePhase::ResolveShards, "ResolveShards"},
+        {EUserFacingTracePhase::Snapshot, "Snapshot"},
     };
     TInstant prepareStart = TInstant::Max();
     TInstant prepareEnd = TInstant::Zero();
@@ -250,11 +274,11 @@ void RenderExecution(const NWilson::TTraceId& rootId, const NYql::NDqProto::TDqE
     }
 
     NWilson::TSpan runSpan;
-    if (const auto& run = tl.Phase(EUserTracePhase::RunTasks)) {
+    if (const auto& run = tl.Phase(EUserFacingTracePhase::RunTasks)) {
         runSpan = MakePhase(executeId, run.Start, run.End, "Run");
     }
     const NWilson::TTraceId runId = runSpan ? runSpan.GetTraceId() : NWilson::TTraceId{};
-    EmitStageSpans(runSpan ? runId : executeId, stats, trace.TaskStats);
+    EmitStageSpans(runSpan ? runId : executeId, trace.ExecStats, trace.TaskStats);
     if (runSpan) {
         runSpan.End();
     }
@@ -271,14 +295,19 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
     ui64 waitUs = 0;
     ui64 spilledBytes = 0;
     double maxSkew = 0.0;
+    // Row/byte totals come from the client-visible stats (exported unconditionally, and they
+    // also cover executions the trace didn't record, e.g. literal ones); everything deeper
+    // comes from the trace's own export — the client one is capped at the requested mode.
     for (const auto& e : state.QueryStats.Executions) {
-        cpuUs += e.GetCpuTimeUs();
         for (const auto& table : e.GetTables()) {
             rowsRead += table.GetReadRows();
             rowsWritten += table.GetWriteRows();
             bytesRead += table.GetReadBytes();
         }
-        for (const auto& stage : e.GetStages()) {
+    }
+    for (const auto& trace : state.QueryStats.UserFacingTraces) {
+        cpuUs += trace.ExecStats.GetCpuTimeUs();
+        for (const auto& stage : trace.ExecStats.GetStages()) {
             const TStageSignals signals = CollectStageSignals(stage);
             waitUs += signals.WaitUs;
             spilledBytes += signals.SpilledBytes;
@@ -311,7 +340,11 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
 
     if (state.ContinueTime != TInstant::Zero() && state.ContinueTime > state.StartTime) {
         const TString poolId = state.UserRequestContext ? state.UserRequestContext->PoolId : TString();
-        EmitPhase(parentId, state.StartTime, state.ContinueTime, "Queued", {{"ydb.pool_id", poolId}});
+        if (poolId) {
+            EmitPhase(parentId, state.StartTime, state.ContinueTime, "Queued", {{"ydb.pool_id", poolId}});
+        } else {
+            EmitPhase(parentId, state.StartTime, state.ContinueTime, "Queued");
+        }
     }
 
     // On a cache hit no compilation happened: no span, only the root attribute.
@@ -322,11 +355,8 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
         userSpan.Attribute("ydb.compile.cache_hit", true);
     }
 
-    // UserTraces[i] belongs to Executions[i]: the two stay index-aligned because they are only
-    // ever appended as a pair (ProcessExecuterResult).
-    const auto& userTraces = state.QueryStats.UserTraces;
-    for (size_t i = 0; i < state.QueryStats.Executions.size() && i < userTraces.size(); ++i) {
-        RenderExecution(parentId, state.QueryStats.Executions[i], userTraces[i]);
+    for (const auto& trace : state.QueryStats.UserFacingTraces) {
+        RenderExecution(parentId, trace);
     }
 }
 
@@ -380,8 +410,12 @@ TString RootNameFromQuery(const NKqpProto::TKqpPhyQuery& query) {
                         && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     if (sink.GetInternalSink().GetSettings().UnpackTo(&settings)) {
-                        writeVerb = writeVerb ? writeVerb : SinkVerb(settings.GetType());
-                        note(writeTable, multiWrite, settings.GetTable().GetPath());
+                        // An unrecognized sink mode contributes neither verb nor table — noting
+                        // its table without a verb would mislabel the query as a read.
+                        if (const char* verb = SinkVerb(settings.GetType())) {
+                            writeVerb = writeVerb ? writeVerb : verb;
+                            note(writeTable, multiWrite, settings.GetTable().GetPath());
+                        }
                     }
                 }
             }
@@ -421,6 +455,40 @@ TString RootNameFromQuery(const NKqpProto::TKqpPhyQuery& query) {
     return {};
 }
 
+// db.query.text must not carry user data (it feeds the user-facing channel and literals are
+// PII): literals become '?' placeholders per OTel db semconv, comments are dropped. On lexer
+// failure returns empty — the raw text is never exposed.
+TString SanitizeQueryText(const TString& text) {
+    // Credential-bearing queries (CREATE USER ... PASSWORD, secrets) are hidden entirely, same
+    // as the query logs do — even their parameterized shape shouldn't reach the trace.
+    TString protectedText;
+    if (NKikimr::ProtectQueryForLoggingIfSensitive(text, protectedText)) {
+        return protectedText;
+    }
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    for (const bool ansi : {false, true}) {
+        auto lexer = NSQLTranslationV1::MakeLexer(lexers, ansi);
+        NSQLTranslation::TParsedTokenList tokens;
+        NYql::TIssues issues;
+        if (!NSQLTranslation::Tokenize(*lexer, text, {}, tokens, issues, /*maxErrors*/ 1)) {
+            continue;
+        }
+        TStringBuilder out;
+        for (const auto& token : tokens) {
+            if (token.Name == "STRING_VALUE" || token.Name == "DIGITS"
+                    || token.Name == "INTEGER_VALUE" || token.Name == "REAL" || token.Name == "BLOB") {
+                out << '?';
+            } else if (token.Name != "COMMENT" && token.Name != "EOF") {
+                out << token.Content;
+            }
+        }
+        return out;
+    }
+    return {};
+}
+
 TString FallbackRootName(const TKqpQueryState& state) {
     TString name = NKikimrKqp::EQueryAction_Name(state.GetAction());
     constexpr TStringBuf prefix = "QUERY_ACTION_";
@@ -451,7 +519,7 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
     }
     const TString rootName = state.UserFacingRootName ? state.UserFacingRootName : FallbackRootName(state);
     NWilson::TSpan userSpan = NWilson::TSpan::ConstructTerminated(
-        traceId, traceId.Span(TWilsonKqp::KqpSession),
+        traceId, traceId.Span(traceId.GetVerbosity()),
         state.StartTime, TInstant::Now(),
         NWilson::NTraceProto::Status::STATUS_CODE_OK, rootName);
     if (!userSpan) {
@@ -463,7 +531,9 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
         userSpan.Attribute("db.namespace", AppData()->TenantName);
     }
     userSpan.Attribute("db.operation.name", NKikimrKqp::EQueryAction_Name(state.GetAction()));
-    userSpan.Attribute("db.query.text", state.RequestEv->GetQuery()); // TODO: parameterize (raw text is PII)
+    if (const TString sanitized = SanitizeQueryText(state.RequestEv->GetQuery())) {
+        userSpan.Attribute("db.query.text", sanitized);
+    }
     BuildPhases(userSpan, state);
     userSpan.Attribute("db.response.status_code", statusCode);
     if (success) {

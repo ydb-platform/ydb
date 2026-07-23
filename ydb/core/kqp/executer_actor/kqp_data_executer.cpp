@@ -867,7 +867,7 @@ private:
         if (ForceAcquireSnapshot()) {
             // Span created before the send so the snapshot acquisition (scheme cache + coordinator
             // round-trips inside long-tx-service) nests under it via the propagated trace id.
-            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EUserTracePhase::Snapshot, NWilson::EFlags::NONE);
+            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EUserFacingTracePhase::Snapshot, NWilson::EFlags::NONE);
 
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
@@ -943,7 +943,7 @@ private:
             return;
         }
 
-        ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterRunTasks, "RunTasks", EUserTracePhase::RunTasks);
+        ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterRunTasks, "RunTasks", EUserFacingTracePhase::RunTasks);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

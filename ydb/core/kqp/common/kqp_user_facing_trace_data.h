@@ -17,15 +17,15 @@ namespace NKikimr::NKqp {
 
 // stageId -> taskId -> compute actor stats snapshot. Deliberately separate from the exported
 // stats proto — a trace-sampled query must produce the same plan as an unsampled one.
-using TUserTraceTaskStats = std::unordered_map<ui32, std::unordered_map<ui64, NYql::NDqProto::TDqComputeActorStats>>;
+using TUserFacingTraceTaskStats = std::unordered_map<ui32, std::unordered_map<ui64, NYql::NDqProto::TDqComputeActorStats>>;
 
-// Cap on retained tasks per stage (first-come): bounds executer memory on wide OLAP stages;
-// the stage span gets ydb.tasks_truncated when hit.
-constexpr size_t MaxUserTraceTasksPerStage = 128;
+// Cap on retained tasks per stage (top-N by duration once full — stragglers matter most);
+// bounds executer memory on wide OLAP stages, the stage span gets ydb.tasks_truncated when hit.
+constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
 
 // Operational phases the executer passes through. The renderer decides presentation: which are
 // grouped under "Prepare", and their user-facing names.
-enum class EUserTracePhase : size_t {
+enum class EUserFacingTracePhase : size_t {
     ResolveTables = 0,
     ResolveShards,
     Snapshot,
@@ -33,7 +33,7 @@ enum class EUserTracePhase : size_t {
     Count,
 };
 
-struct TUserTraceTimeline {
+struct TUserFacingTraceTimeline {
     struct TWindow {
         TInstant Start;
         TInstant End;
@@ -44,19 +44,22 @@ struct TUserTraceTimeline {
     };
 
     TWindow Execute;
-    std::array<TWindow, static_cast<size_t>(EUserTracePhase::Count)> Phases;
+    std::array<TWindow, static_cast<size_t>(EUserFacingTracePhase::Count)> Phases;
 
-    TWindow& Phase(EUserTracePhase phase) {
+    TWindow& Phase(EUserFacingTracePhase phase) {
         return Phases[static_cast<size_t>(phase)];
     }
-    const TWindow& Phase(EUserTracePhase phase) const {
+    const TWindow& Phase(EUserFacingTracePhase phase) const {
         return Phases[static_cast<size_t>(phase)];
     }
 };
 
-struct TUserTraceExecutionData {
-    TUserTraceTimeline Timeline;
-    TUserTraceTaskStats TaskStats;
+struct TUserFacingTraceExecutionData {
+    TUserFacingTraceTimeline Timeline;
+    TUserFacingTraceTaskStats TaskStats;
+    // Stats exported at collection depth for the trace; the response's stats stay at the
+    // client-requested mode and must not be used for rendering.
+    NYql::NDqProto::TDqExecutionStats ExecStats;
 };
 
 } // namespace NKikimr::NKqp

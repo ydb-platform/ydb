@@ -20,6 +20,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/core/tx/schemeshard
     ydb/services/workload_manager/service
+    yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
 )
 
 YQL_LAST_ABI_VERSION()

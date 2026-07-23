@@ -43,9 +43,6 @@ items:
   href: vectorsearch/index.md
   include:
     mode: link
-<<<<<<< HEAD
-    path: vectorsearch/toc-vectorsearch.yaml
-=======
     path: vectorsearch/toc-vectorsearch.yaml
 - name: SQL dialect conversion
   href: sql-translation/index.md
@@ -64,4 +61,3 @@ items:
     path: spring/toc-spring.yaml
 - name: SQL Dialect Converter to YQL
   href: sql-dialect-converter.md
->>>>>>> 933933bf907 (Auto-translate docs from PR #44184 (#47237))

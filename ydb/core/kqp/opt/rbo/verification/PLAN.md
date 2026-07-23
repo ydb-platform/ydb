@@ -1063,10 +1063,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `Coalesce(And(member != literal, member != literal), false)`, with both leaves
   comparing the same direct `Optional<String>` member with a non-null `String`
   literal. It reuses schema-preserving `if_present`; broader Boolean trees
-  remain opaque. The fresh complete TPCH dashboard records q12 as
+  remain opaque. At that milestone the complete TPCH dashboard recorded q12 as
   `FORMULA_EMITTED` after 109/5,343 ms of preparation/verifier work; an earlier
-  focused formula run recorded 108/5,816 ms. Focused and policy-floor solver
-  runs return `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms,
+  focused formula run recorded 108/5,816 ms. Focused and then-current
+  policy-floor solver runs returned `VERIFIED_BOUNDED` after 108/38,880 and
+  106/40,602 ms,
   respectively. At that milestone TPCH formula coverage was 7/22, total
   formula coverage was 28/121 (23.1%), TPCH had five proofs, and the workload
   proof floor was 13/121 (10.7%). No proof produced a candidate, so replay was
@@ -1259,8 +1260,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements reran on 2026-07-23 before the explicit general scalar-error
-  commits. They emit TPCH q1, q3, q5,
+  measurements reran on 2026-07-23 after the general scalar-error and
+  bounded-choice hardening. They emit TPCH q1, q3, q5,
   q6, q10, q11, q12, q14, q15, and q19 (10/22) and TPC-DS q3, q5, q15, q19,
   q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68,
   q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99 (31/99),
@@ -1268,21 +1269,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer-failure results; TPC-DS has 40 unsupported and 28
   optimizer-failure results, for 49 unsupported and 31 optimizer failures
   across both suites. Complete preparation/verification totals are
-  2,754/6,017 ms for TPCH and 54,058/178,875 ms for TPC-DS, or
-  56,812/184,892 ms together. Within TPC-DS, q9 is the sole category change
-  from the preceding complete run: preparation now succeeds and exposes
-  unsupported final Read range/ordering semantics, moving it from optimizer
-  failure to unsupported without changing formula coverage. Formula emission
-  confirms end-to-end model coverage at two rows per referenced table and two
-  tasks; it is not a proof by itself. TPCH q7 and q8 now reach the deeper
-  generic `Map` exporter blocker and remain unsupported.
+  2,928/6,655 ms for TPCH and 66,719/192,475 ms for TPC-DS, or
+  69,647/199,130 ms together. Status membership is unchanged from the
+  preceding complete dashboard. The refreshed reasons include TPC-DS q54's
+  initial `Invalid Map rename source _yql_source_5.segment`; q54 remains
+  unsupported and emits no formula. Formula emission confirms end-to-end model
+  coverage at two rows per referenced table and two tasks; it is not a proof
+  by itself. TPCH q7 and q8 reach the generic `Map` exporter blocker and remain
+  unsupported.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
   construction blockers are q4's 20,736-pair join match, q64's 8,192-row join
-  output, and TPC-DS q11/q31/q74's 8,386,560-pair Sort constructions. q1, q5,
-  q25, q29, q46, q65, q68, q77, q80, and q91 now construct complete formulas
-  instead of stopping at their historical aggregate, Sort, or Merge gates.
+  output, q11/q74's 8,126,496-pair Sort constructions, and q31's
+  8,386,560-pair Sort construction. q1, q5, q25, q29, q46, q65, q68, q77,
+  q80, and q91 now construct complete formulas instead of stopping at their
+  historical aggregate, Sort, or Merge gates.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
   at 1,024 normalized occurrences and depth 128. Independent C++ and Python
   checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG
@@ -1292,28 +1294,28 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
   q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
-  q93, and q96
-  with a fixed 60-second per-query budget. The latest TPCH run recorded
-  116/3,168 ms of preparation/verification for q3, 61/775 ms for q6,
-  158/6,585 ms for q11, 88/2,085 ms for q12, 91/34,457 ms for q14,
-  199/2,750 ms for q15, and 118/872 ms for q19. The latest TPC-DS run recorded
-  112/5,049 ms for q3, 101/4,726 ms for q42, 192/4,006 ms for q48,
-  99/4,599 ms for q52, 116/4,194 ms for q55, 280/8,542 ms for q90,
-  102/2,319 ms for q93, and 117/508 ms for q96.
-  These are
-  fifteen curated proofs (12.4% of the workload). q50 emits a formula but its
+  q93, and q96 with a fixed 60-second per-query budget. The latest TPCH run
+  recorded
+  99/2,823 ms of preparation/verification for q3, 61/710 ms for q6,
+  175/7,265 ms for q11, 103/1,739 ms for q12, 86/31,035 ms for q14,
+  177/7,058 ms for q15, and 117/913 ms for q19. The latest TPC-DS run recorded
+  126/4,589 ms for q3, 101/5,068 ms for q42, 194/4,051 ms for q48,
+  100/4,289 ms for q52, 97/3,987 ms for q55, 280/8,201 ms for q90,
+  109/2,252 ms for q93, and 115/496 ms for q96. These are fifteen curated proofs
+  (12.4% of the workload). q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. TPC-DS q15, q61, q62,
   q76, q79, and q88 return `UNKNOWN` at the 60-second solver budget. q43 likewise
   returns `UNKNOWN` after 147/69,391 ms. q61's
   1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
-  verification. Focused q76 formula construction recorded 391 ms of
-  preparation and 14,169 ms of verification; its solver experiment recorded 419
-  ms and 88,305 ms before `UNKNOWN`. q71's 118,276,852-byte formula recorded
-  83,339 ms in the verifier/formula-emission phase of the complete run before a
-  focused solver
-  attempt reached the external process deadline. q76 is formula-covered but is
-  not one of the fifteen proofs. The Date additions q37 and q82 return `UNKNOWN`
+  verification. The fresh q76 dashboard row records 437/3,846 ms; its preserved
+  focused formula run recorded 391/14,169 ms, and its solver experiment recorded
+  419/88,305 ms before `UNKNOWN`. At the earlier scaling milestone, q71's
+  118,276,852-byte formula recorded 83,339 ms in the verifier/formula-emission
+  phase before a focused solver attempt reached the external process deadline.
+  The fresh q71 dashboard row records 412/1,678 ms; no new solver result is
+  inferred. q76 is formula-covered but is not one of the fifteen proofs. The
+  Date additions q37 and q82 return `UNKNOWN`
   at the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
   retained formulas are 4,201,832 and 2,841,844 bytes. A separate non-gating
   q40 scaling experiment used a 10-second solver budget, prepared in 178 ms,
@@ -1411,9 +1413,8 @@ multi-task-producer, and single-task-producer serialization. After the model
 and optimizer corrections, the full `cpp_ut` passes 165/165 and the affected
 Python verifier/inspector/bisect/replay/confirmation gates pass 507/507.
 TPC-DS q24 still reaches the independent blocker, `Unsupported scalar callable
-Map`. The recorded q54 dashboard reasons belong to the preceding static-proof
-snapshot; no fresh full-dashboard metric is claimed for the general
-implementation.
+Map`. In the fresh complete dashboard, q54 fails initial export with
+`Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
 
 Exact relational `EXISTS`, restricted dynamic `IN`, and correlated forms remain
 separate later slices. Every slice must preserve output type/nullability, empty

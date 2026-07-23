@@ -6,25 +6,34 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Expr,
     SnapshotError,
+    SortOrder,
     parse_snapshot,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Column,
     Database,
     Evaluator as RelationEvaluator,
+    BoundedChoice,
     Outcome,
+    PartitionFact,
     Relation,
     RelationError,
     RelationFamily,
     Row,
     Value,
     combine_families,
+    compare_families,
     family_equal,
     limit_family,
     map_family,
+    merge_family,
     single,
+    sort_family,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder as ScalarEncoder
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    DecimalAverageState,
+    Encoder as ScalarEncoder,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
     Evaluator as StageEvaluator,
     Router,
@@ -290,7 +299,92 @@ def _ground(term, constants):
         return _ground(term.arguments[0], constants) % _ground(
             term.arguments[1], constants
         )
+    if term.operation in {"forall", "exists"}:
+        variables = term.arguments[:-1]
+        body = term.arguments[-1]
+        domains = tuple(
+            _quantifier_domain(variable, body)
+            for variable in variables
+        )
+        values = (
+            _ground(
+                body,
+                constants
+                | dict(zip(
+                    (variable.atom for variable in variables),
+                    assignment,
+                )),
+            )
+            for assignment in product(*domains)
+        )
+        return (
+            all(values)
+            if term.operation == "forall"
+            else any(values)
+        )
     raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
+
+
+def _quantifier_domain(variable, body):
+    if variable.sort == smt.BOOL:
+        return (False, True)
+    bounds = []
+
+    def visit(term):
+        if (
+            term.operation == "<"
+            and term.arguments[0] == variable
+            and term.arguments[1].operation == "int"
+        ):
+            bounds.append(term.arguments[1].atom)
+        for argument in term.arguments:
+            visit(argument)
+
+    visit(body)
+    positive = [bound for bound in bounds if type(bound) is int and bound > 0]
+    if not positive:
+        raise AssertionError(f"cannot infer finite domain for {variable.atom}")
+    return range(max(positive))
+
+
+def _free_symbols(term, bound=frozenset()):
+    if term.operation == "symbol":
+        return set() if term.atom in bound else {term}
+    if term.operation in {"forall", "exists"}:
+        variables = term.arguments[:-1]
+        nested = bound | frozenset(variable.atom for variable in variables)
+        return _free_symbols(term.arguments[-1], nested)
+    result = set()
+    for argument in term.arguments:
+        result.update(_free_symbols(argument, bound))
+    return result
+
+
+def _satisfiable(term, constants):
+    free = sorted(
+        (
+            symbol
+            for symbol in _free_symbols(term)
+            if symbol.atom not in constants
+        ),
+        key=lambda symbol: symbol.atom,
+    )
+    domains = tuple(_quantifier_domain(symbol, term) for symbol in free)
+    return any(
+        _ground(
+            term,
+            constants
+            | dict(zip(
+                (symbol.atom for symbol in free),
+                assignment,
+            )),
+        )
+        for assignment in product(*domains)
+    )
+
+
+def _holds_for_all_choices(term, constants):
+    return not _satisfiable(smt.not_(term), constants)
 
 
 def _constants(database, present, values=None):
@@ -307,20 +401,38 @@ def _constants(database, present, values=None):
 
 def _bags(family, constants):
     bags = set()
-    for outcome in family.outcomes:
-        if not _ground(outcome.enabled, constants):
-            continue
+    for outcome, grounded in _enabled_outcomes(family, constants):
         values = []
         for row in outcome.relation.rows:
-            if _ground(row.present, constants):
+            if _ground(row.present, grounded):
                 value = row.values["a.value"]
                 values.append(
                     None
-                    if _ground(value.is_null, constants)
-                    else _ground(value.value, constants)
+                    if _ground(value.is_null, grounded)
+                    else _ground(value.value, grounded)
                 )
         bags.add(_bag(values))
     return bags
+
+
+def _enabled_outcomes(family, constants):
+    enabled = []
+    for outcome in family.outcomes:
+        choices = tuple(
+            choice
+            for choice in outcome.choices
+            if choice.term.atom not in constants
+        )
+        domains = tuple(range(choice.bound) for choice in choices)
+        for assignment in product(*domains):
+            grounded = constants | {
+                choice.term.atom: value
+                for choice, value in zip(choices, assignment)
+            }
+            if not _ground(outcome.enabled, grounded):
+                continue
+            enabled.append((outcome, grounded))
+    return tuple(enabled)
 
 
 def _bag(values):
@@ -449,6 +561,154 @@ class LimitIrTest(unittest.TestCase):
 
 
 class LimitOutcomeTest(unittest.TestCase):
+    def test_comparison_registers_and_range_guards_hand_built_choices(self):
+        script = smt.Script()
+        choice = script.fresh_constant("choice", smt.INT)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation((), ()),
+                smt.FALSE,
+                choices=(BoundedChoice(choice, 2),),
+            ),
+        ))
+
+        comparison = compare_families(
+            family,
+            single(Relation((), ())),
+            ScalarEncoder(script),
+        )
+
+        self.assertEqual(script.quantified_choice_bound(choice), 2)
+        enabled = comparison.left.outcomes[0].enabled
+        self.assertFalse(_ground(enabled, {choice.atom: -1}))
+        self.assertTrue(_ground(enabled, {choice.atom: 0}))
+        self.assertFalse(_ground(enabled, {choice.atom: 2}))
+
+    def test_comparison_rejects_untracked_choice_dependencies_in_every_outcome_field(self):
+        def dependent_family(location, choice):
+            predicate = smt.eq(choice, smt.ZERO)
+            columns = (Column("value", "Int64", True),)
+            value = Value("Int64", smt.FALSE, smt.ZERO)
+            row = Row(smt.TRUE, {"value": value})
+            enabled = smt.TRUE
+            error = smt.FALSE
+            ordinals = None
+            if location == "enabled":
+                enabled = predicate
+            elif location == "error":
+                error = predicate
+            elif location == "present":
+                row = Row(predicate, row.values)
+            elif location == "value":
+                row = Row(
+                    smt.TRUE,
+                    {"value": Value("Int64", predicate, choice)},
+                )
+            elif location == "ordinal":
+                ordinals = (choice,)
+            elif location == "partition":
+                row = Row(
+                    smt.TRUE,
+                    row.values,
+                    partition_facts=frozenset((
+                        PartitionFact(predicate, True),
+                    )),
+                )
+            elif location == "decimal state":
+                columns = (Column("value", "Decimal(5,2)", False),)
+                row = Row(
+                    smt.TRUE,
+                    {
+                        "value": Value(
+                            "Decimal(5,2)",
+                            smt.FALSE,
+                            smt.ZERO,
+                            0,
+                            DecimalAverageState(
+                                "Decimal(35,2)",
+                                choice,
+                                choice,
+                                1,
+                                1,
+                            ),
+                        )
+                    },
+                )
+            else:
+                raise AssertionError(location)
+            return RelationFamily((
+                Outcome(
+                    enabled,
+                    Relation(
+                        columns,
+                        (row,),
+                        sequence=ordinals is not None,
+                        ordinals=ordinals,
+                    ),
+                    error,
+                ),
+            ))
+
+        for location in (
+            "enabled",
+            "error",
+            "present",
+            "value",
+            "ordinal",
+            "partition",
+            "decimal state",
+        ):
+            with self.subTest(location=location):
+                script = smt.Script()
+                choice = script.fresh_constant("choice", smt.INT)
+                script.register_quantified_choice(choice, 2)
+                family = dependent_family(location, choice)
+                with self.assertRaisesRegex(
+                    RelationError,
+                    "without carrying",
+                ):
+                    compare_families(
+                        family,
+                        family,
+                        ScalarEncoder(script),
+                    )
+
+    def test_comparison_rejects_a_carried_choice_bound_mismatch(self):
+        script = smt.Script()
+        choice = script.fresh_constant("choice", smt.INT)
+        script.register_quantified_choice(choice, 2)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation((), ()),
+                smt.FALSE,
+                choices=(BoundedChoice(choice, 3),),
+            ),
+        ))
+
+        with self.assertRaisesRegex(smt.SmtError, "inconsistent bounds"):
+            compare_families(
+                family,
+                single(Relation((), ())),
+                ScalarEncoder(script),
+            )
+
+    def test_comparison_rejects_shared_choice_symbols_across_sides(self):
+        script = smt.Script()
+        choice = script.fresh_constant("choice", smt.INT)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation((), ()),
+                smt.FALSE,
+                choices=(BoundedChoice(choice, 2),),
+            ),
+        ))
+
+        with self.assertRaisesRegex(RelationError, "scopes must be disjoint"):
+            compare_families(family, family, ScalarEncoder(script))
+
     def test_query_error_is_distinct_from_every_successful_result(self):
         columns = (Column("a.value", "Int64", False),)
         empty = Relation(columns, ())
@@ -503,6 +763,7 @@ class LimitOutcomeTest(unittest.TestCase):
                 nullable=False,
             ),
             None,
+            smt.Script(),
             "zero",
         )
         self.assertIs(limited.outcomes[0].error, left_error)
@@ -571,12 +832,294 @@ class LimitOutcomeTest(unittest.TestCase):
             ).root()
             constants = _constants(database, present)
             enabled_errors = {
-                _ground(outcome.error, constants)
-                for outcome in family.outcomes
-                if _ground(outcome.enabled, constants)
+                _ground(outcome.error, grounded)
+                for outcome, grounded in _enabled_outcomes(family, constants)
             }
             with self.subTest(count=count, offset=offset, present=present):
                 self.assertEqual(enabled_errors, {expected_error})
+
+    def test_checked_limit_compression_preserves_exact_observations(self):
+        columns = (Column("a.value", "Int64", False),)
+        present_terms = tuple(
+            smt.symbol(f"present_{index}", smt.BOOL)
+            for index in range(4)
+        )
+        rows = tuple(
+            Row(
+                present,
+                {
+                    "a.value": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(10 + index),
+                    )
+                },
+            )
+            for index, present in enumerate(present_terms)
+        )
+        inherited_error = smt.symbol("inherited_error", smt.BOOL)
+        source_enabled = smt.symbol("source_enabled", smt.BOOL)
+        source_choice = BoundedChoice(
+            smt.symbol("source_choice", smt.INT),
+            2,
+        )
+
+        def literal(value):
+            return Expr(
+                kind="literal",
+                value=value,
+                result_type="Uint64",
+                nullable=False,
+            )
+
+        for ordered, count, offset in product(
+            (False, True),
+            range(6),
+            range(6),
+        ):
+            source = RelationFamily((
+                Outcome(
+                    source_enabled,
+                    Relation(columns, rows, sequence=ordered),
+                    inherited_error,
+                    (("upstream", 7),),
+                    (source_choice,),
+                ),
+            ))
+            family = limit_family(
+                source,
+                literal(count),
+                None if offset == 0 else literal(offset),
+                smt.Script(),
+                "checked",
+                ensure_at_most_one=True,
+            )
+            self.assertTrue(all(
+                source_choice in outcome.choices
+                for outcome in family.outcomes
+            ))
+            self.assertTrue(
+                all(
+                    dict(outcome.decisions).get("upstream") == 7
+                    for outcome in family.outcomes
+                )
+            )
+
+            for present, source_error in product(
+                product((False, True), repeat=4),
+                (False, True),
+            ):
+                constants = {
+                    term.atom: active
+                    for term, active in zip(present_terms, present)
+                }
+                constants.update(
+                    {
+                        source_enabled.atom: True,
+                        inherited_error.atom: source_error,
+                        source_choice.term.atom: 0,
+                    }
+                )
+                enabled = _enabled_outcomes(family, constants)
+                retained = min(
+                    count,
+                    max(sum(present) - offset, 0),
+                )
+                context = (ordered, count, offset, present, source_error)
+                self.assertTrue(enabled, context)
+                expected_error = source_error or retained > 1
+                self.assertTrue(
+                    all(
+                        _ground(outcome.error, grounded) == expected_error
+                        for outcome, grounded in enabled
+                    ),
+                    context,
+                )
+                if expected_error:
+                    continue
+                if ordered:
+                    active_values = tuple(
+                        10 + index
+                        for index, active in enumerate(present)
+                        if active
+                    )
+                    expected = {
+                        _bag(active_values[offset : offset + count])
+                    }
+                else:
+                    expected = _reference_limit(
+                        present,
+                        count,
+                        offset,
+                    )
+                self.assertEqual(_bags(family, constants), expected, context)
+
+    def test_checked_limit_quotients_only_the_cardinality_error_region(self):
+        checked_raw = snapshot(
+            [
+                scan(),
+                limit(
+                    "limit",
+                    "scan",
+                    2,
+                    ensure_at_most_one=True,
+                ),
+            ],
+            "limit",
+        )
+        checked = parse_snapshot(checked_raw)
+        script = smt.Script()
+        family = RelationEvaluator(
+            checked,
+            Database(checked, 23, script),
+            ScalarEncoder(script),
+        ).root()
+
+        self.assertEqual(len(family.outcomes), 1)
+        build_logical_kernel_problem_for_tests(checked, checked, 23)
+
+        unchecked_raw = copy.deepcopy(checked_raw)
+        unchecked_raw["plan"]["nodes"][1]["ensure_at_most_one"] = False
+        unchecked = parse_snapshot(unchecked_raw)
+        with self.assertRaisesRegex(VerificationError, "alternative audit bound"):
+            build_logical_kernel_problem_for_tests(unchecked, unchecked, 23)
+
+    def test_checked_limit_with_offset_quotients_the_high_cardinality_region(self):
+        checked_raw = snapshot(
+            [
+                scan(),
+                limit(
+                    "limit",
+                    "scan",
+                    3,
+                    7,
+                    ensure_at_most_one=True,
+                ),
+            ],
+            "limit",
+        )
+        checked = parse_snapshot(checked_raw)
+        script = smt.Script()
+        family = RelationEvaluator(
+            checked,
+            Database(checked, 23, script),
+            ScalarEncoder(script),
+        ).root()
+
+        error_outcomes = tuple(
+            outcome
+            for outcome in family.outcomes
+            if outcome.error == smt.TRUE
+        )
+        self.assertEqual(len(error_outcomes), 1)
+        self.assertEqual(len(family.outcomes), 25)
+        build_logical_kernel_problem_for_tests(checked, checked, 23)
+
+        unchecked_raw = copy.deepcopy(checked_raw)
+        unchecked_raw["plan"]["nodes"][1]["ensure_at_most_one"] = False
+        unchecked = parse_snapshot(unchecked_raw)
+        with self.assertRaisesRegex(VerificationError, "alternative audit bound"):
+            build_logical_kernel_problem_for_tests(unchecked, unchecked, 23)
+
+    def test_repeated_limit_counts_only_live_candidate_slots(self):
+        parsed = parse_snapshot(
+            snapshot(
+                [
+                    scan(),
+                    limit("first", "scan", 1),
+                    limit("second", "first", 1),
+                ],
+                "second",
+            )
+        )
+        script = smt.Script()
+        family = RelationEvaluator(
+            parsed,
+            Database(parsed, 16, script),
+            ScalarEncoder(script),
+        ).root()
+
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in family.outcomes},
+            {1},
+        )
+        self.assertTrue(
+            all(
+                not outcome.decisions and len(outcome.choices) == 1
+                for outcome in family.outcomes
+            )
+        )
+        build_logical_kernel_problem_for_tests(parsed, parsed, 16)
+
+    def test_limit_padding_does_not_consume_sort_or_merge_choices(self):
+        parsed = parse_snapshot(
+            snapshot(
+                [scan(), limit("first", "scan", 1)],
+                "first",
+            )
+        )
+        script = smt.Script()
+        limited = RelationEvaluator(
+            parsed,
+            Database(parsed, 16, script),
+            ScalarEncoder(script),
+        ).root()
+
+        def inflate(relation):
+            rows = tuple(
+                Row(
+                    row.present,
+                    row.values,
+                    row.occurrence,
+                    row.partition_facts,
+                )
+                for row in relation.rows
+                for _ in range(8)
+            )
+            rows += tuple(
+                Row(smt.FALSE, relation.rows[0].values)
+                for _ in range(8)
+            )
+            return Relation(relation.columns, rows)
+
+        padded = map_family(limited, inflate)
+        order = (SortOrder("a.value", True, True),)
+        sorted_family = sort_family(padded, order, script, "sort")
+        merged = merge_family(
+            sorted_family,
+            order,
+            (tuple(range(8)), tuple(range(8, 16))),
+            script,
+            "merge",
+        )
+
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in sorted_family.outcomes},
+            {16},
+        )
+        self.assertEqual(
+            {len(outcome.choices) for outcome in sorted_family.outcomes},
+            {9},
+        )
+        self.assertEqual(
+            {len(outcome.choices) for outcome in merged.outcomes},
+            {17},
+        )
+        for outcome in sorted_family.outcomes:
+            live = {
+                index
+                for index, row in enumerate(outcome.relation.rows)
+                if row.present != smt.FALSE
+            }
+            self.assertEqual(
+                {
+                    index
+                    for index, ordinal in enumerate(outcome.relation.ordinals)
+                    if ordinal != smt.ZERO
+                },
+                live,
+            )
 
     def test_dropping_ensure_at_most_one_is_observable(self):
         checked = parse_snapshot(
@@ -777,6 +1320,254 @@ class LimitOutcomeTest(unittest.TestCase):
                         _reference_limit(present, count, offset, values),
                     )
 
+    def test_symbolic_singleton_preserves_metadata_and_hidden_decimal_state(self):
+        script = smt.Script()
+        present = (
+            smt.symbol("left_present", smt.BOOL),
+            smt.symbol("right_present", smt.BOOL),
+        )
+        common_route = smt.symbol("common_route", smt.BOOL)
+        split_route = smt.symbol("split_route", smt.BOOL)
+        common_fact = PartitionFact(common_route, True)
+        states = (
+            DecimalAverageState(
+                "Decimal(35,2)",
+                smt.int_value(110),
+                smt.int_value(2),
+                110,
+                2,
+            ),
+            DecimalAverageState(
+                "Decimal(35,2)",
+                smt.int_value(270),
+                smt.int_value(3),
+                270,
+                3,
+            ),
+        )
+        rows = tuple(
+            Row(
+                guard,
+                {
+                    "a.value": Value(
+                        "Decimal(35,2)",
+                        smt.FALSE,
+                        smt.int_value(value),
+                        bound,
+                        state,
+                    )
+                },
+                partition_facts=frozenset((
+                    common_fact,
+                    PartitionFact(split_route, index == 1),
+                )),
+            )
+            for index, (guard, value, bound, state) in enumerate(zip(
+                present,
+                (100, 250),
+                (100, 250),
+                states,
+            ))
+        )
+        source_error = smt.symbol("source_error", smt.BOOL)
+        source_enabled = smt.symbol("source_enabled", smt.BOOL)
+        upstream = script.fresh_constant("upstream", smt.INT)
+        script.register_quantified_choice(upstream, 2)
+        upstream_choice = BoundedChoice(upstream, 2)
+        family = limit_family(
+            RelationFamily((
+                Outcome(
+                    source_enabled,
+                    Relation(
+                        (Column("a.value", "Decimal(35,2)", False),),
+                        rows,
+                    ),
+                    source_error,
+                    (("upstream", 7),),
+                    (upstream_choice,),
+                ),
+            )),
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            script,
+            "take",
+        )
+
+        self.assertEqual(len(family.outcomes), 1)
+        outcome = family.outcomes[0]
+        self.assertEqual(len(outcome.relation.rows), 1)
+        self.assertEqual(len(outcome.choices), 2)
+        self.assertIn(upstream_choice, outcome.choices)
+        selector = next(
+            choice
+            for choice in outcome.choices
+            if choice != upstream_choice
+        )
+        self.assertEqual(selector.bound, 2)
+        self.assertIs(outcome.error, source_error)
+        self.assertEqual(outcome.decisions, (("upstream", 7),))
+        selected_row = outcome.relation.rows[0]
+        self.assertIsNone(selected_row.occurrence)
+        self.assertEqual(selected_row.partition_facts, frozenset((common_fact,)))
+        selected_value = selected_row.values["a.value"]
+        self.assertEqual(selected_value.decimal_finite_abs_bound, 250)
+        self.assertIsNotNone(selected_value.decimal_average_state)
+        selected_state = selected_value.decimal_average_state
+        assert selected_state is not None
+        self.assertEqual(selected_state.finite_abs_bound, 270)
+        self.assertEqual(selected_state.count_bound, 3)
+
+        for selected, value, state_sum, state_count in (
+            (0, 100, 110, 2),
+            (1, 250, 270, 3),
+        ):
+            constants = {
+                present[0].atom: True,
+                present[1].atom: True,
+                source_enabled.atom: True,
+                source_error.atom: False,
+                upstream.atom: 0,
+                selector.term.atom: selected,
+            }
+            self.assertTrue(_ground(outcome.enabled, constants))
+            self.assertTrue(_ground(selected_row.present, constants))
+            self.assertEqual(_ground(selected_value.value, constants), value)
+            self.assertEqual(_ground(selected_state.sum, constants), state_sum)
+            self.assertEqual(_ground(selected_state.count, constants), state_count)
+
+        only_left = {
+            present[0].atom: True,
+            present[1].atom: False,
+            source_enabled.atom: True,
+            source_error.atom: False,
+            upstream.atom: 0,
+        }
+        enabled = _enabled_outcomes(family, only_left)
+        self.assertEqual(
+            {grounded[selector.term.atom] for _, grounded in enabled},
+            {0},
+        )
+        for outside in (-1, selector.bound):
+            constants = {
+                present[0].atom: True,
+                present[1].atom: True,
+                source_enabled.atom: True,
+                source_error.atom: False,
+                upstream.atom: 0,
+                selector.term.atom: outside,
+            }
+            self.assertFalse(_ground(outcome.enabled, constants))
+
+    def test_symbolic_singleton_rejects_mixed_decimal_average_state(self):
+        script = smt.Script()
+        state = DecimalAverageState(
+            "Decimal(35,2)",
+            smt.ONE,
+            smt.ONE,
+            1,
+            1,
+        )
+        rows = (
+            Row(
+                smt.symbol("left_present", smt.BOOL),
+                {
+                    "a.value": Value(
+                        "Decimal(35,2)",
+                        smt.FALSE,
+                        smt.ONE,
+                        1,
+                        state,
+                    )
+                },
+            ),
+            Row(
+                smt.symbol("right_present", smt.BOOL),
+                {
+                    "a.value": Value(
+                        "Decimal(35,2)",
+                        smt.FALSE,
+                        smt.int_value(2),
+                        2,
+                    )
+                },
+            ),
+        )
+        with self.assertRaisesRegex(
+            RelationError,
+            "mixed Decimal avg state and scalar values",
+        ):
+            limit_family(
+                single(
+                    Relation(
+                        (Column("a.value", "Decimal(35,2)", False),),
+                        rows,
+                    )
+                ),
+                Expr(
+                    kind="literal",
+                    value=1,
+                    result_type="Uint64",
+                    nullable=False,
+                ),
+                None,
+                script,
+                "take",
+            )
+
+    def test_unordered_enumerator_ignores_static_dead_padding(self):
+        left = smt.symbol("left_present", smt.BOOL)
+        right = smt.symbol("right_present", smt.BOOL)
+        columns = (Column("a.value", "Int64", False),)
+        live_rows = (
+            Row(
+                left,
+                {"a.value": Value("Int64", smt.FALSE, smt.int_value(10))},
+            ),
+            Row(
+                right,
+                {"a.value": Value("Int64", smt.FALSE, smt.int_value(11))},
+            ),
+        )
+        dead = tuple(
+            Row(
+                smt.FALSE,
+                {"a.value": Value("Int64", smt.FALSE, smt.int_value(index))},
+            )
+            for index in range(300)
+        )
+        family = limit_family(
+            single(Relation(columns, (live_rows[0], *dead, live_rows[1]))),
+            Expr(
+                kind="literal",
+                value=2,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            smt.Script(),
+            "take",
+        )
+
+        self.assertEqual(len(family.outcomes), 4)
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in family.outcomes},
+            {302},
+        )
+        for present in product((False, True), repeat=2):
+            constants = {
+                left.atom: present[0],
+                right.atom: present[1],
+            }
+            self.assertEqual(
+                _bags(family, constants),
+                _reference_limit(present, 2, 0),
+            )
+
     def test_shared_limit_node_uses_one_correlated_choice(self):
         parsed = parse_snapshot(
             snapshot(
@@ -800,6 +1591,8 @@ class LimitOutcomeTest(unittest.TestCase):
         script = smt.Script()
         database = Database(parsed, 2, script)
         family = RelationEvaluator(parsed, database, ScalarEncoder(script)).root()
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(len(family.outcomes[0].choices), 1)
         self.assertEqual(
             _bags(family, _constants(database, (True, True))),
             {(10, 10), (11, 11)},
@@ -896,7 +1689,10 @@ class LimitOutcomeTest(unittest.TestCase):
                 )
                 constants = _constants_from_witness(problem.witness, present)
                 self.assertTrue(
-                    all(_ground(assertion, constants) for assertion in problem.script.assertions)
+                    _satisfiable(
+                        smt.and_(*problem.script.assertions),
+                        constants,
+                    )
                 )
 
         parsed = logical_limit(1)
@@ -915,7 +1711,12 @@ class LimitOutcomeTest(unittest.TestCase):
             )
         )
         constants = _constants(database, (True, True))
-        self.assertFalse(_ground(family_equal(unordered, first_only, scalar), constants))
+        self.assertFalse(
+            _holds_for_all_choices(
+                family_equal(unordered, first_only, scalar),
+                constants,
+            )
+        )
 
     def test_phase_does_not_change_runtime_semantics(self):
         problem = build_logical_kernel_problem_for_tests(
@@ -926,7 +1727,10 @@ class LimitOutcomeTest(unittest.TestCase):
         for present in product((False, True), repeat=2):
             constants = _constants_from_witness(problem.witness, present)
             self.assertFalse(
-                all(_ground(assertion, constants) for assertion in problem.script.assertions)
+                _satisfiable(
+                    smt.and_(*problem.script.assertions),
+                    constants,
+                )
             )
 
     def test_limit_crossing_filter_is_observable(self):
@@ -973,7 +1777,12 @@ class LimitOutcomeTest(unittest.TestCase):
             RelationEvaluator(after, database, scalar, choice_scope="after").root(),
             scalar,
         )
-        self.assertFalse(_ground(equality, _constants(database, (True, True))))
+        self.assertFalse(
+            _holds_for_all_choices(
+                equality,
+                _constants(database, (True, True)),
+            )
+        )
 
     def test_limit_commutes_with_deterministic_non_injective_project(self):
         project = {
@@ -1017,7 +1826,13 @@ class LimitOutcomeTest(unittest.TestCase):
             scalar,
         )
         for present in product((False, True), repeat=3):
-            self.assertTrue(_ground(equality, _constants(database, present)), present)
+            self.assertTrue(
+                _holds_for_all_choices(
+                    equality,
+                    _constants(database, present),
+                ),
+                present,
+            )
 
     def test_alternative_cap_fails_closed(self):
         parsed = logical_limit(9)
@@ -1111,7 +1926,7 @@ class StageLimitOutcomeTest(unittest.TestCase):
             constants = _constants(database, present)
             for slot, task in enumerate(tasks):
                 constants[router.source_task("A", slot).atom] = task
-            return _ground(equality, constants)
+            return _holds_for_all_choices(equality, constants)
 
         for name, staged in (
             ("split", staged_limits(1, 1)),

@@ -554,10 +554,14 @@ def _symbol_key(term: Term) -> SymbolKey:
     return term.sort, term.atom
 
 
-def _depends_on(root: Term, needles: set[SymbolKey]) -> bool:
+def _dependencies_many(
+    roots: Iterable[Term],
+    needles: set[SymbolKey],
+) -> set[SymbolKey]:
     if not needles:
-        return False
-    pending = [root]
+        return set()
+    found: set[SymbolKey] = set()
+    pending = list(roots)
     seen: set[int] = set()
     while pending:
         term = pending.pop()
@@ -565,10 +569,22 @@ def _depends_on(root: Term, needles: set[SymbolKey]) -> bool:
         if identity in seen:
             continue
         seen.add(identity)
-        if term.operation == "symbol" and _symbol_key(term) in needles:
-            return True
+        if term.operation == "symbol":
+            key = _symbol_key(term)
+            if key in needles:
+                found.add(key)
+                if found == needles:
+                    break
         pending.extend(term.arguments)
-    return False
+    return found
+
+
+def _dependencies(root: Term, needles: set[SymbolKey]) -> set[SymbolKey]:
+    return _dependencies_many((root,), needles)
+
+
+def _depends_on(root: Term, needles: set[SymbolKey]) -> bool:
+    return bool(_dependencies(root, needles))
 
 
 class Script:
@@ -584,7 +600,7 @@ class Script:
         self._string_literals: dict[str, Term] = {}
         self._string_terms: dict[int, Term] = {}
         self._string_universe: StringOrderUniverse | None = None
-        self._quantified_choices: set[SymbolKey] = set()
+        self._quantified_choices: dict[SymbolKey, tuple[Term, int]] = {}
 
     def fresh_constant(self, hint: str, sort: str) -> Term:
         name = f"v_{self._next_symbol}"
@@ -609,20 +625,59 @@ class Script:
     def assert_global(self, term: Term) -> None:
         """Assert an invariant that is independent of quantified plan choices.
 
-        Family comparison deliberately rebinds sequence-choice symbols inside
+        Family comparison deliberately rebinds bounded-choice symbols inside
         quantifiers.  A top-level assertion mentioning one of those symbols
         would constrain only its global valuation, not the rebound valuations.
         Keep domains and catalog invariants honest by rejecting that shape.
         """
 
         _require(term, BOOL)
-        if _depends_on(term, self._quantified_choices):
+        if _depends_on(term, set(self._quantified_choices)):
             raise SmtError(
-                "global invariant depends on a quantified sequence choice; "
+                "global invariant depends on a quantified plan choice; "
                 "that plan shape is not modeled"
             )
         self._assertions.append(term)
         self._global_assertions.append(term)
+
+    def assert_choice_invariant(self, term: Term) -> None:
+        """Assert an invariant for every legal bounded-choice valuation.
+
+        Opaque scalar functions are deterministic globally, but their results
+        can depend on relational choices rebound by family comparison.  Bind
+        exactly those choices here and guard the invariant by their registered
+        finite ranges.  Unrelated database symbols remain free, as required
+        for a domain invariant over every bounded input instance.
+        """
+
+        _require(term, BOOL)
+        dependencies = _dependencies(
+            term,
+            set(self._quantified_choices),
+        )
+        if not dependencies:
+            self.assert_global(term)
+            return
+        choices = tuple(
+            self._quantified_choices[key]
+            for key in self._quantified_choices
+            if key in dependencies
+        )
+        ranges = and_(
+            *(
+                and_(
+                    not_(lt(choice, ZERO)),
+                    lt(choice, int_value(bound)),
+                )
+                for choice, bound in choices
+            )
+        )
+        guarded = forall(
+            tuple(choice for choice, _ in choices),
+            or_(not_(ranges), term),
+        )
+        self._assertions.append(guarded)
+        self._global_assertions.append(guarded)
 
     def string_atom(self, value: str) -> Term:
         """Return one deferred rank constant for a concrete byte-string value."""
@@ -646,7 +701,7 @@ class Script:
         return result
 
     def register_string_term(self, term: Term) -> None:
-        """Register one nonliteral value observed by equality or ordering."""
+        """Register one nonliteral string-generating root."""
 
         _require(term, INT)
         identity = id(term)
@@ -654,11 +709,6 @@ class Script:
             return
         if self._string_universe is not None:
             raise SmtError("cannot register a new string term after the order universe is sealed")
-        if _depends_on(term, self._quantified_choices):
-            raise SmtError(
-                "string-valued term depends on a quantified sequence choice; "
-                "finite string ordering for that shape is not modeled"
-            )
         # Retaining the value makes the identity key stable until exact
         # structural compaction at sealing.
         self._string_terms[identity] = term
@@ -671,30 +721,68 @@ class Script:
                     f"limit is {MAX_REPRESENTATIVES}"
                 )
 
-    def register_quantified_choice(self, term: Term) -> None:
-        """Record a symbol that family comparison may bind under a quantifier."""
+    def register_quantified_choice(self, term: Term, bound: int) -> None:
+        """Record one finite symbol that family comparison may quantify."""
 
         _require(term, INT)
         if term.operation != "symbol" or term.arguments:
             raise SmtError("quantified choice must be a named constant")
+        if type(bound) is not int or bound <= 0:
+            raise SmtError("quantified choice bound must be a positive integer")
         key = _symbol_key(term)
-        if any(
-            _depends_on(value, {key})
-            for value in self._string_terms.values()
+        previous = self._quantified_choices.get(key)
+        if previous is not None:
+            if previous[1] != bound:
+                raise SmtError("quantified choice has inconsistent bounds")
+            return
+        if (
+            self._string_universe is not None
+            and any(
+                _depends_on(value, {key})
+                for value in self._string_terms.values()
+            )
         ):
             raise SmtError(
-                "string-valued term depends on a quantified sequence choice; "
-                "finite string ordering for that shape is not modeled"
+                "cannot register a quantified choice after a dependent "
+                "string order universe is sealed"
             )
         if any(
             _depends_on(assertion, {key})
             for assertion in self._global_assertions
         ):
             raise SmtError(
-                "global invariant depends on a quantified sequence choice; "
+                "global invariant depends on a quantified plan choice; "
                 "that plan shape is not modeled"
             )
-        self._quantified_choices.add(key)
+        self._quantified_choices[key] = (term, bound)
+
+    def quantified_choice_bound(self, term: Term) -> int:
+        """Return the immutable bound of a registered choice symbol."""
+
+        _require(term, INT)
+        if term.operation != "symbol" or term.arguments:
+            raise SmtError("quantified choice must be a named constant")
+        registered = self._quantified_choices.get(_symbol_key(term))
+        if registered is None:
+            raise SmtError("bounded choice is not registered with the SMT script")
+        return registered[1]
+
+    def quantified_choice_dependencies(
+        self,
+        terms: Iterable[Term],
+    ) -> tuple[Term, ...]:
+        """Return registered choices used by any term, in registration order."""
+
+        keys = set(self._quantified_choices)
+        roots = tuple(terms)
+        if any(not isinstance(term, Term) for term in roots):
+            raise SmtError("choice dependency root must be an SMT term")
+        dependencies = _dependencies_many(roots, keys)
+        return tuple(
+            choice
+            for key, (choice, _) in self._quantified_choices.items()
+            if key in dependencies
+        )
 
     def seal_string_order(self) -> None:
         """Fix literal ranks and bound every observed string term exactly once."""
@@ -702,10 +790,11 @@ class Script:
         if self._string_universe is not None:
             return
         self._compact_string_terms()
+        nonliteral_bound = self._string_nonliteral_bound()
         try:
             universe = StringOrderUniverse(
                 self._string_literals,
-                len(self._string_terms),
+                nonliteral_bound,
             )
         except ValueError as error:
             raise SmtError(f"cannot construct string order universe: {error}") from error
@@ -715,7 +804,7 @@ class Script:
         if self._string_terms:
             upper = int_value(len(universe))
             for term in self._string_terms.values():
-                self.assert_global(
+                self.assert_choice_invariant(
                     and_(
                         not_(lt(term, ZERO)),
                         lt(term, upper),
@@ -733,6 +822,27 @@ class Script:
             id(term): term
             for term in structural_terms.values()
         }
+
+    def _string_nonliteral_bound(self) -> int:
+        """Bound simultaneous string values across legal choice valuations."""
+
+        total = 0
+        choice_keys = set(self._quantified_choices)
+        for term in self._string_terms.values():
+            capacity = 1
+            for key in _dependencies(term, choice_keys):
+                bound = self._quantified_choices[key][1]
+                if capacity > MAX_REPRESENTATIVES // bound:
+                    capacity = MAX_REPRESENTATIVES + 1
+                    break
+                capacity *= bound
+            total += capacity
+            if total > MAX_REPRESENTATIVES:
+                raise SmtError(
+                    "string representative universe requires at least "
+                    f"{total} ranks; limit is {MAX_REPRESENTATIVES}"
+                )
+        return total
 
     @property
     def string_literals(self) -> dict[int, str]:

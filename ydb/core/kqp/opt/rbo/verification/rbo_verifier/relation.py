@@ -81,17 +81,17 @@ class Relation:
 
 
 @dataclass(frozen=True, slots=True)
-class OrdinalChoice:
-    """One globally inspectable, locally quantified bounded sequence choice."""
+class BoundedChoice:
+    """One globally inspectable, locally quantified relational choice."""
 
     term: smt.Term
     bound: int
 
     def __post_init__(self) -> None:
         if self.term.operation != "symbol" or self.term.sort != smt.INT:
-            raise ValueError("ordinal choice must be a named SMT integer")
+            raise ValueError("bounded choice must be a named SMT integer")
         if type(self.bound) is not int or self.bound <= 0:
-            raise ValueError("ordinal choice bound must be positive")
+            raise ValueError("bounded choice bound must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +102,7 @@ class Outcome:
     relation: Relation
     error: smt.Term
     decisions: tuple[tuple[str, int], ...] = ()
-    choices: tuple[OrdinalChoice, ...] = ()
+    choices: tuple[BoundedChoice, ...] = ()
 
     def __post_init__(self) -> None:
         if self.enabled.sort != smt.BOOL:
@@ -224,6 +224,20 @@ def _require_relation_row_pairs(count: int, operation: str) -> None:
 
 def _unordered_row_pairs(count: int) -> int:
     return count * (count - 1) // 2
+
+
+def _live_row_indices(rows: tuple[Row, ...]) -> tuple[int, ...]:
+    """Return slots whose guards are not syntactically false."""
+
+    return tuple(
+        index
+        for index, row in enumerate(rows)
+        if row.present != smt.FALSE
+    )
+
+
+def _live_row_count(relation: Relation) -> int:
+    return len(_live_row_indices(relation.rows))
 
 
 class Database:
@@ -486,6 +500,7 @@ class Evaluator:
                 self._input(node.id, 0, node.input),
                 node.count,
                 node.offset,
+                self.scalar.script,
                 f"{self.choice_scope}:limit:{node.id}",
                 ensure_at_most_one=node.ensure_at_most_one,
             )
@@ -502,6 +517,7 @@ class Evaluator:
                     family,
                     node.limit,
                     None,
+                    self.scalar.script,
                     f"{self.choice_scope}:topsort:{node.id}",
                 )
             return family
@@ -1023,7 +1039,7 @@ class Evaluator:
                 tuple[smt.Term, ...],
                 tuple[smt.Term, ...],
                 tuple[tuple[str, int], ...],
-                tuple[OrdinalChoice, ...],
+                tuple[BoundedChoice, ...],
             ]
         ] = [
             (
@@ -1540,7 +1556,7 @@ def combine_families(
             tuple[Relation, ...],
             tuple[smt.Term, ...],
             tuple[tuple[str, int], ...],
-            tuple[OrdinalChoice, ...],
+            tuple[BoundedChoice, ...],
         ]
     ] = [
         (smt.TRUE, (), (), (), ())
@@ -1552,7 +1568,7 @@ def combine_families(
                 tuple[Relation, ...],
                 tuple[smt.Term, ...],
                 tuple[tuple[str, int], ...],
-                tuple[OrdinalChoice, ...],
+                tuple[BoundedChoice, ...],
             ]
         ] = []
         for enabled, relations, errors, decisions, choices in partials:
@@ -1611,10 +1627,7 @@ def sort_family(
 
     if not order:
         raise RelationError("sort order must not be empty")
-    if all(
-        len(outcome.relation.rows) <= 1
-        for outcome in source.outcomes
-    ):
+    if all(_live_row_count(outcome.relation) <= 1 for outcome in source.outcomes):
         outcomes: list[Outcome] = []
         for source_outcome in source.outcomes:
             relation = source_outcome.relation
@@ -1641,7 +1654,7 @@ def sort_family(
         return RelationFamily(tuple(outcomes))
     _require_relation_row_pairs(
         sum(
-            _unordered_row_pairs(len(outcome.relation.rows))
+            _unordered_row_pairs(_live_row_count(outcome.relation))
             for outcome in source.outcomes
         ),
         "sort construction",
@@ -1658,7 +1671,7 @@ def sort_family(
         ordinals, choices = _fresh_ordinals(
             script,
             f"{decision}:ordinal",
-            len(relation.rows),
+            relation.rows,
         )
         outcomes.append(
             Outcome(
@@ -1748,7 +1761,13 @@ def merge_family(
     if sorted(indices) != list(range(row_count)):
         raise RelationError("merge producer groups do not partition the input rows")
     _require_relation_row_pairs(
-        _unordered_row_pairs(row_count),
+        max(
+            (
+                _unordered_row_pairs(_live_row_count(outcome.relation))
+                for outcome in source.outcomes
+            ),
+            default=0,
+        ),
         "merge construction",
     )
     interleavings = factorial(row_count)
@@ -1769,10 +1788,17 @@ def merge_family(
         return _enumerated_merge_family(source, order, groups, decision)
 
     _require_relation_row_pairs(
-        len(source.outcomes)
-        * (
-            _unordered_row_pairs(row_count)
-            + sum(len(group) * (len(group) - 1) for group in groups)
+        sum(
+            _unordered_row_pairs(_live_row_count(outcome.relation))
+            + sum(
+                (live := sum(
+                    outcome.relation.rows[index].present != smt.FALSE
+                    for index in group
+                ))
+                * (live - 1)
+                for group in groups
+            )
+            for outcome in source.outcomes
         ),
         "merge ordinal construction",
     )
@@ -1790,15 +1816,20 @@ def merge_family(
         ordinals, choices = _fresh_ordinals(
             script,
             f"{decision}:ordinal",
-            row_count,
+            relation.rows,
         )
         constraints = [
             _ordinal_constraints(relation.rows, ordinals, order)
         ]
         input_ordinals = relation.ordinals
         for group in groups:
-            for left_position, left_index in enumerate(group):
-                for right_position, right_index in enumerate(group):
+            live_group = tuple(
+                (position, index)
+                for position, index in enumerate(group)
+                if relation.rows[index].present != smt.FALSE
+            )
+            for left_position, left_index in live_group:
+                for right_position, right_index in live_group:
                     if left_index == right_index:
                         continue
                     left_input = (
@@ -1914,17 +1945,18 @@ def _interleavings(
 def _fresh_ordinals(
     script: smt.Script,
     hint: str,
-    row_count: int,
-) -> tuple[tuple[smt.Term, ...], tuple[OrdinalChoice, ...]]:
-    ordinals = tuple(
-        script.fresh_constant(f"{hint}:{index}", smt.INT)
-        for index in range(row_count)
-    )
-    for ordinal in ordinals:
-        script.register_quantified_choice(ordinal)
-    return ordinals, tuple(
-        OrdinalChoice(ordinal, row_count) for ordinal in ordinals
-    )
+    rows: tuple[Row, ...],
+) -> tuple[tuple[smt.Term, ...], tuple[BoundedChoice, ...]]:
+    live_indices = _live_row_indices(rows)
+    live_count = len(live_indices)
+    ordinals = [smt.ZERO] * len(rows)
+    choices: list[BoundedChoice] = []
+    for index in live_indices:
+        ordinal = script.fresh_constant(f"{hint}:{index}", smt.INT)
+        script.register_quantified_choice(ordinal, live_count)
+        ordinals[index] = ordinal
+        choices.append(BoundedChoice(ordinal, live_count))
+    return tuple(ordinals), tuple(choices)
 
 
 def _ordinal_constraints(
@@ -1936,7 +1968,8 @@ def _ordinal_constraints(
 
     if len(rows) != len(ordinals):
         raise RelationError("sequence ordinals do not align with rows")
-    bound = smt.int_value(len(rows))
+    live_indices = _live_row_indices(rows)
+    bound = smt.int_value(len(live_indices))
     constraints: list[smt.Term] = []
     for row, ordinal in zip(rows, ordinals):
         in_range = smt.and_(
@@ -1946,8 +1979,9 @@ def _ordinal_constraints(
         constraints.append(
             smt.ite(row.present, in_range, smt.eq(ordinal, smt.ZERO))
         )
-    for left_index, left in enumerate(rows):
-        for right_index in range(left_index + 1, len(rows)):
+    for position, left_index in enumerate(live_indices):
+        left = rows[left_index]
+        for right_index in live_indices[position + 1 :]:
             right = rows[right_index]
             both = smt.and_(left.present, right.present)
             constraints.append(
@@ -1972,14 +2006,15 @@ def _ordinal_constraints(
 
 
 def _rows_sorted(rows: tuple[Row, ...], order: tuple[SortOrder, ...]) -> smt.Term:
+    live_rows = tuple(row for row in rows if row.present != smt.FALSE)
     return smt.and_(
         *(
             smt.or_(
                 smt.not_(smt.and_(left.present, right.present)),
                 smt.not_(_row_less(right, left, order)),
             )
-            for index, left in enumerate(rows)
-            for right in rows[index + 1 :]
+            for index, left in enumerate(live_rows)
+            for right in live_rows[index + 1 :]
         )
     )
 
@@ -2040,6 +2075,7 @@ def limit_family(
     source: RelationFamily,
     count_expression: Expr,
     offset_expression: Expr | None,
+    script: smt.Script,
     decision: str,
     *,
     ensure_at_most_one: bool = False,
@@ -2050,12 +2086,18 @@ def limit_family(
         if offset_expression is None
         else _uint64_literal(offset_expression, "limit offset")
     )
+    if ensure_at_most_one and count > 1 and offset == 0:
+        # A successful checked prefix contains at most one input row, so Take
+        # cannot change it.  Every other prefix is the same observable error.
+        # Retaining the source family also retains all upstream correlations.
+        return _ensure_at_most_one(source)
+    at_most_one = all(
+        _live_row_count(outcome.relation) <= 1
+        for outcome in source.outcomes
+    )
     if count == 0 or (
         offset > 0
-        and all(
-            len(outcome.relation.rows) <= 1
-            for outcome in source.outcomes
-        )
+        and at_most_one
     ):
         result = map_family(
             source,
@@ -2067,10 +2109,7 @@ def limit_family(
         )
     elif (
         offset == 0
-        and all(
-            len(outcome.relation.rows) <= 1
-            for outcome in source.outcomes
-        )
+        and at_most_one
     ):
         result = source
     elif source.sequence:
@@ -2080,7 +2119,9 @@ def limit_family(
             source,
             count_expression,
             offset_expression,
+            script,
             decision,
+            ensure_at_most_one=ensure_at_most_one,
         )
     return _ensure_at_most_one(result) if ensure_at_most_one else result
 
@@ -2167,13 +2208,21 @@ def _unordered_limit_family(
     source: RelationFamily,
     count_expression: Expr,
     offset_expression: Expr | None,
+    script: smt.Script,
     decision: str,
+    *,
+    ensure_at_most_one: bool = False,
 ) -> RelationFamily:
     """Enumerate every legal unordered Take(Skip(input)) output bag.
 
-    A mask is enabled exactly when all selected slots are present and its size
-    equals ``min(count, max(input_size - offset, 0))``.  Keeping false-guarded
-    unselected slots preserves a stable relation shape for downstream nodes.
+    Take(1) uses one bounded selector and one conditional output row.  Larger
+    outputs use a mask enabled exactly when all selected live slots are present
+    and its size equals ``min(count, max(input_size - offset, 0))``.  Keeping
+    false-guarded unselected slots preserves a stable relation shape for
+    downstream nodes.
+    When cardinality is checked, all outputs larger than one are the same
+    observable error.  They therefore share one canonical error decision while
+    zero- and one-row successes retain their exact masks.
     """
 
     count = _uint64_literal(count_expression, "limit count")
@@ -2182,28 +2231,95 @@ def _unordered_limit_family(
         if offset_expression is None
         else _uint64_literal(offset_expression, "limit offset")
     )
+    if count == 1:
+        return _symbolic_singleton_limit_family(
+            source,
+            offset,
+            script,
+            decision,
+        )
+
     alternatives = 0
     outcomes: list[Outcome] = []
     for source_outcome in source.outcomes:
         rows = source_outcome.relation.rows
+        live_indices = _live_row_indices(rows)
+        live_count = len(live_indices)
         if decision in dict(source_outcome.decisions):
             raise RelationError(f"duplicate unordered-limit decision {decision!r}")
 
         totals_by_size: dict[int, list[int]] = {}
-        for total in range(len(rows) + 1):
+        for total in range(live_count + 1):
             size = min(count, max(total - offset, 0))
             totals_by_size.setdefault(size, []).append(total)
         present_count = smt.add(
-            *(smt.ite(row.present, smt.ONE, smt.ZERO) for row in rows)
+            *(
+                smt.ite(rows[index].present, smt.ONE, smt.ZERO)
+                for index in live_indices
+            )
         )
 
+        error_totals = tuple(
+            total
+            for size, totals in totals_by_size.items()
+            if ensure_at_most_one and size > 1
+            for total in totals
+        )
+        if error_totals:
+            alternatives += 1
+            if alternatives > MAX_OUTCOME_ALTERNATIVES:
+                raise RelationError(
+                    "unordered limit exceeds "
+                    f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound "
+                    f"(decision={decision!r}, count={count}, offset={offset}, "
+                    f"checked={ensure_at_most_one}, "
+                    f"source_outcomes={len(source.outcomes)}, "
+                    f"live_rows={live_count}, shaped_rows={len(rows)})"
+                )
+            outcomes.append(
+                Outcome(
+                    smt.and_(
+                        source_outcome.enabled,
+                        smt.or_(
+                            *(
+                                smt.eq(present_count, smt.int_value(total))
+                                for total in error_totals
+                            )
+                        ),
+                    ),
+                    Relation(
+                        source_outcome.relation.columns,
+                        tuple(
+                            Row(
+                                smt.FALSE,
+                                row.values,
+                                row.occurrence,
+                                row.partition_facts,
+                            )
+                            for row in rows
+                        ),
+                    ),
+                    smt.TRUE,
+                    tuple(
+                        sorted(source_outcome.decisions + ((decision, 0),))
+                    ),
+                    source_outcome.choices,
+                )
+            )
+
         for size, valid_totals in totals_by_size.items():
-            for indices in combinations(range(len(rows)), size):
+            if ensure_at_most_one and size > 1:
+                continue
+            for indices in combinations(live_indices, size):
                 alternatives += 1
                 if alternatives > MAX_OUTCOME_ALTERNATIVES:
                     raise RelationError(
                         "unordered limit exceeds "
-                        f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
+                        f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound "
+                        f"(decision={decision!r}, count={count}, offset={offset}, "
+                        f"checked={ensure_at_most_one}, "
+                        f"source_outcomes={len(source.outcomes)}, "
+                        f"live_rows={live_count}, shaped_rows={len(rows)})"
                     )
                 mask = sum(1 << index for index in indices)
                 selected = tuple(rows[index].present for index in indices)
@@ -2243,6 +2359,225 @@ def _unordered_limit_family(
     return RelationFamily(tuple(outcomes))
 
 
+def _symbolic_singleton_limit_family(
+    source: RelationFamily,
+    offset: int,
+    script: smt.Script,
+    decision: str,
+) -> RelationFamily:
+    """Represent every unordered singleton with one bounded row selector.
+
+    When more rows are present than ``offset``, any present row can be retained:
+    an unordered Skip may discard other rows first.  Otherwise the output is
+    empty.  One conditional row therefore denotes the exact Take(1) bag family
+    without enumerating one outcome per candidate slot.
+    """
+
+    outcomes: list[Outcome] = []
+    for outcome_index, source_outcome in enumerate(source.outcomes):
+        relation = source_outcome.relation
+        rows = relation.rows
+        live_rows = tuple(rows[index] for index in _live_row_indices(rows))
+        if decision in dict(source_outcome.decisions):
+            raise RelationError(f"duplicate unordered-limit decision {decision!r}")
+
+        if not live_rows or offset >= len(live_rows):
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        (_absent_limit_row(relation),),
+                    ),
+                    source_outcome.error,
+                    source_outcome.decisions,
+                    source_outcome.choices,
+                )
+            )
+            continue
+
+        if len(live_rows) == 1:
+            row = live_rows[0]
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        (
+                            Row(
+                                row.present,
+                                row.values,
+                                row.occurrence,
+                                row.partition_facts,
+                            ),
+                        ),
+                    ),
+                    source_outcome.error,
+                    source_outcome.decisions,
+                    source_outcome.choices,
+                )
+            )
+            continue
+
+        choice = script.fresh_constant(
+            f"{decision}:selection:{outcome_index}",
+            smt.INT,
+        )
+        script.register_quantified_choice(choice, len(live_rows))
+        retained = (
+            smt.or_(*(row.present for row in live_rows))
+            if offset == 0
+            else smt.lt(
+                smt.int_value(offset),
+                smt.add(
+                    *(
+                        smt.ite(row.present, smt.ONE, smt.ZERO)
+                        for row in live_rows
+                    )
+                ),
+            )
+        )
+        selected_present = smt.or_(
+            *(
+                smt.and_(
+                    smt.eq(choice, smt.int_value(index)),
+                    row.present,
+                )
+                for index, row in enumerate(live_rows)
+            )
+        )
+        enabled = smt.and_(
+            source_outcome.enabled,
+            smt.not_(smt.lt(choice, smt.ZERO)),
+            smt.lt(choice, smt.int_value(len(live_rows))),
+            smt.or_(smt.not_(retained), selected_present),
+        )
+        values = {
+            column.name: _select_limit_value(
+                choice,
+                tuple(row.values[column.name] for row in live_rows),
+            )
+            for column in relation.columns
+        }
+        outcomes.append(
+            Outcome(
+                enabled,
+                Relation(
+                    relation.columns,
+                    (
+                        Row(
+                            retained,
+                            values,
+                            None,
+                            _common_partition_facts(live_rows),
+                        ),
+                    ),
+                ),
+                source_outcome.error,
+                source_outcome.decisions,
+                _merge_choices(
+                    source_outcome.choices,
+                    (BoundedChoice(choice, len(live_rows)),),
+                ),
+            )
+        )
+    if not outcomes:
+        raise RelationError("unordered singleton limit produced no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
+def _absent_limit_row(relation: Relation) -> Row:
+    """Return one typed padding row for an always-empty singleton outcome."""
+
+    if relation.rows:
+        return Row(smt.FALSE, relation.rows[0].values)
+    return Row(
+        smt.FALSE,
+        {
+            column.name: Value(
+                column.type,
+                smt.TRUE if column.nullable else smt.FALSE,
+                smt.FALSE if smt_sort(column.type) == smt.BOOL else smt.ZERO,
+                0 if is_decimal_type(column.type) else None,
+            )
+            for column in relation.columns
+        },
+    )
+
+
+def _select_limit_value(
+    choice: smt.Term,
+    alternatives: tuple[Value, ...],
+) -> Value:
+    """Conditionally select one typed value and its hidden Decimal metadata."""
+
+    if not alternatives:
+        raise RelationError("singleton limit has no value alternatives")
+    first = alternatives[0]
+    if any(value.type != first.type for value in alternatives[1:]):
+        raise RelationError("singleton limit value alternatives have different types")
+
+    is_null = first.is_null
+    value = first.value
+    for index, alternative in enumerate(alternatives[1:], start=1):
+        selected = smt.eq(choice, smt.int_value(index))
+        is_null = smt.ite(selected, alternative.is_null, is_null)
+        value = smt.ite(selected, alternative.value, value)
+
+    finite_bounds = tuple(
+        alternative.decimal_finite_abs_bound
+        for alternative in alternatives
+    )
+    finite_bound = (
+        None
+        if any(bound is None for bound in finite_bounds)
+        else max(bound for bound in finite_bounds if bound is not None)
+    )
+
+    states = tuple(
+        alternative.decimal_average_state
+        for alternative in alternatives
+    )
+    average_state = None
+    if any(state is not None for state in states):
+        if any(state is None for state in states):
+            raise RelationError(
+                "singleton limit mixed Decimal avg state and scalar values"
+            )
+        present_states = tuple(state for state in states if state is not None)
+        first_state = present_states[0]
+        if any(
+            state.sum_type != first_state.sum_type
+            for state in present_states[1:]
+        ):
+            raise RelationError(
+                "singleton limit received different Decimal avg state types"
+            )
+        state_sum = first_state.sum
+        state_count = first_state.count
+        for index, state in enumerate(present_states[1:], start=1):
+            selected = smt.eq(choice, smt.int_value(index))
+            state_sum = smt.ite(selected, state.sum, state_sum)
+            state_count = smt.ite(selected, state.count, state_count)
+        average_state = DecimalAverageState(
+            sum_type=first_state.sum_type,
+            sum=state_sum,
+            count=state_count,
+            finite_abs_bound=max(
+                state.finite_abs_bound for state in present_states
+            ),
+            count_bound=max(state.count_bound for state in present_states),
+        )
+
+    return Value(
+        first.type,
+        is_null,
+        value,
+        finite_bound,
+        average_state,
+    )
+
+
 def _uint64_literal(expression: Expr, description: str) -> int:
     if (
         expression.kind != "literal"
@@ -2268,14 +2603,14 @@ def _merge_decisions(
 
 
 def _merge_choices(
-    left: tuple[OrdinalChoice, ...],
-    right: tuple[OrdinalChoice, ...],
-) -> tuple[OrdinalChoice, ...]:
+    left: tuple[BoundedChoice, ...],
+    right: tuple[BoundedChoice, ...],
+) -> tuple[BoundedChoice, ...]:
     merged = {choice.term: choice for choice in left}
     for choice in right:
         previous = merged.get(choice.term)
         if previous is not None and previous.bound != choice.bound:
-            raise RelationError("shared ordinal choice has inconsistent bounds")
+            raise RelationError("shared bounded choice has inconsistent bounds")
         merged[choice.term] = choice
     return tuple(merged.values())
 
@@ -2415,7 +2750,7 @@ def _as_sequence_family(
 
     _require_relation_row_pairs(
         sum(
-            _unordered_row_pairs(len(outcome.relation.rows))
+            _unordered_row_pairs(_live_row_count(outcome.relation))
             for outcome in family.outcomes
         ),
         "latent sequence construction",
@@ -2431,7 +2766,7 @@ def _as_sequence_family(
         ordinals, choices = _fresh_ordinals(
             script,
             f"{scope}:latent_sequence:{index}:ordinal",
-            len(relation.rows),
+            relation.rows,
         )
         outcomes.append(
             Outcome(
@@ -2496,6 +2831,33 @@ def _comparison_inputs(
     ordered = left.sequence
     if ordered and not right.sequence:
         right = _as_sequence_family(right, script, f"{scope}:right")
+    left_choices = {
+        choice.term
+        for outcome in left.outcomes
+        for choice in outcome.choices
+    }
+    right_choices = {
+        choice.term
+        for outcome in right.outcomes
+        for choice in outcome.choices
+    }
+    shared_choices = left_choices.intersection(right_choices)
+    if shared_choices:
+        names = ", ".join(
+            repr(term.atom)
+            for term in sorted(
+                shared_choices,
+                key=lambda term: str(term.atom),
+            )
+        )
+        raise RelationError(
+            "comparison sides share bounded choice symbol(s) "
+            f"{names}; quantified choice scopes must be disjoint"
+        )
+    _register_family_choices(left, script)
+    _register_family_choices(right, script)
+    left = _bounded_choice_family(left, script, f"{scope}:left")
+    right = _bounded_choice_family(right, script, f"{scope}:right")
     comparisons = len(left.outcomes) * len(right.outcomes)
     if comparisons > MAX_OUTCOME_COMPARISONS:
         raise RelationError(
@@ -2503,6 +2865,87 @@ def _comparison_inputs(
             f"the {MAX_OUTCOME_COMPARISONS} pair audit bound"
         )
     return left, right, ordered
+
+
+def _register_family_choices(
+    family: RelationFamily,
+    script: smt.Script,
+) -> None:
+    """Make hand-built and evaluator-produced family choices equally safe."""
+
+    for outcome in family.outcomes:
+        for choice in outcome.choices:
+            script.register_quantified_choice(choice.term, choice.bound)
+
+
+def _bounded_choice_family(
+    family: RelationFamily,
+    script: smt.Script,
+    scope: str,
+) -> RelationFamily:
+    """Audit choice flow and make every outcome's legal range explicit."""
+
+    bounded: list[Outcome] = []
+    for index, outcome in enumerate(family.outcomes):
+        carried: dict[smt.Term, BoundedChoice] = {}
+        ranges: list[smt.Term] = []
+        for choice in outcome.choices:
+            if choice.term in carried:
+                raise RelationError(
+                    f"{scope} outcome {index} carries a duplicate bounded choice"
+                )
+            registered_bound = script.quantified_choice_bound(choice.term)
+            if registered_bound != choice.bound:
+                raise RelationError(
+                    f"{scope} outcome {index} carries bounded choice "
+                    f"{choice.term.atom!r} with bound {choice.bound}, "
+                    f"but the SMT script registered {registered_bound}"
+                )
+            carried[choice.term] = choice
+            ranges.extend((
+                smt.not_(smt.lt(choice.term, smt.ZERO)),
+                smt.lt(choice.term, smt.int_value(choice.bound)),
+            ))
+
+        observable_terms = [outcome.enabled, outcome.error]
+        relation = outcome.relation
+        if relation.ordinals is not None:
+            observable_terms.extend(relation.ordinals)
+        for row in relation.rows:
+            observable_terms.append(row.present)
+            observable_terms.extend(
+                fact.term
+                for fact in row.partition_facts
+            )
+            for value in row.values.values():
+                observable_terms.extend((value.is_null, value.value))
+                state = value.decimal_average_state
+                if state is not None:
+                    observable_terms.extend((state.sum, state.count))
+        dependencies = set(
+            script.quantified_choice_dependencies(observable_terms)
+        )
+        missing = dependencies.difference(carried)
+        if missing:
+            names = ", ".join(
+                repr(term.atom)
+                for term in sorted(missing, key=lambda term: str(term.atom))
+            )
+            raise RelationError(
+                f"{scope} outcome {index} uses registered bounded "
+                f"choice(s) {names} without carrying them"
+            )
+
+        bounded.append(
+            Outcome(
+                smt.and_(outcome.enabled, *ranges),
+                relation,
+                outcome.error,
+                outcome.decisions,
+                outcome.choices,
+            )
+        )
+    return RelationFamily(tuple(bounded))
 
 
 def _relations_equal(

@@ -145,15 +145,33 @@ def _constants(database, present, values):
 def _bags(family, constants):
     result = set()
     for outcome in family.outcomes:
-        if not _ground(outcome.enabled, constants):
-            continue
-        values = []
-        for row in outcome.relation.rows:
-            if not _ground(row.present, constants):
+        choices = tuple(
+            choice
+            for choice in outcome.choices
+            if choice.term.atom not in constants
+        )
+        domains = tuple(range(choice.bound) for choice in choices)
+        for assignment in product(*domains):
+            grounded = constants | {
+                choice.term.atom: value
+                for choice, value in zip(choices, assignment)
+            }
+            if not _ground(outcome.enabled, grounded):
                 continue
-            value = row.values["a.value"]
-            values.append(None if _ground(value.is_null, constants) else _ground(value.value, constants))
-        result.add(tuple(sorted(values, key=lambda item: (item is not None, repr(item)))))
+            values = []
+            for row in outcome.relation.rows:
+                if not _ground(row.present, grounded):
+                    continue
+                value = row.values["a.value"]
+                values.append(
+                    None
+                    if _ground(value.is_null, grounded)
+                    else _ground(value.value, grounded)
+                )
+            result.add(tuple(sorted(
+                values,
+                key=lambda item: (item is not None, repr(item)),
+            )))
     return result
 
 

@@ -1,5 +1,6 @@
 import copy
 import unittest
+from itertools import product
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -371,6 +372,25 @@ def _database_constants(database, present, values=(10, 20)):
     return constants
 
 
+def _enabled_outcomes(family, constants):
+    enabled = []
+    for outcome in family.outcomes:
+        choices = tuple(
+            choice
+            for choice in outcome.choices
+            if choice.term.atom not in constants
+        )
+        domains = tuple(range(choice.bound) for choice in choices)
+        for assignment in product(*domains):
+            grounded = constants | {
+                choice.term.atom: value
+                for choice, value in zip(choices, assignment)
+            }
+            if _ground(outcome.enabled, grounded):
+                enabled.append((outcome, grounded))
+    return tuple(enabled)
+
+
 class ScalarSubplanEvaluationTest(unittest.TestCase):
     def test_present_scalar_value_is_injected_only_into_expression_scope(self):
         evaluator, relation = _evaluate(_base_snapshot())
@@ -479,19 +499,15 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
             ScalarEncoder(script),
         ).root()
         constants = _database_constants(database, (True, True))
-        enabled = [
-            outcome
-            for outcome in family.outcomes
-            if _ground(outcome.enabled, constants)
-        ]
+        enabled = _enabled_outcomes(family, constants)
 
         self.assertEqual(len(enabled), 2)
-        for outcome in enabled:
-            self.assertFalse(_ground(outcome.error, constants))
+        for outcome, grounded in enabled:
+            self.assertFalse(_ground(outcome.error, grounded))
             self.assertTrue(
                 _ground(
                     outcome.relation.rows[0].values["result"].value,
-                    constants,
+                    grounded,
                 )
             )
 
@@ -1448,10 +1464,10 @@ class ScalarSubplanValidationTest(unittest.TestCase):
             ScalarEncoder(script),
         )
         family = evaluator.root()
-        self.assertGreater(len(family.outcomes), 1)
-        self.assertTrue(
-            all(outcome.decisions for outcome in family.outcomes)
-        )
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertFalse(family.outcomes[0].decisions)
+        self.assertEqual(len(family.outcomes[0].choices), 1)
+        self.assertEqual(family.outcomes[0].choices[0].bound, 2)
 
 
 if __name__ == "__main__":

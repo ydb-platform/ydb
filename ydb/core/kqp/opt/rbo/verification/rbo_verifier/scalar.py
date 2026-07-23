@@ -375,13 +375,15 @@ class Encoder:
         if family(result.type) == "string":
             self.script.register_string_term(result.value)
         elif result.type == DATE:
-            self.script.assert_global(smt.or_(result.is_null, date_domain(result.value)))
+            self.script.assert_choice_invariant(
+                smt.or_(result.is_null, date_domain(result.value))
+            )
         elif family(result.type) == "int":
-            self.script.assert_global(
+            self.script.assert_choice_invariant(
                 smt.or_(result.is_null, integer_domain(result.value, result.type))
             )
         elif decimal.is_type(result.type):
-            self.script.assert_global(
+            self.script.assert_choice_invariant(
                 smt.or_(result.is_null, decimal.domain(result.value, result.type))
             )
         return result

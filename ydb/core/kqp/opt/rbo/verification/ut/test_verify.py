@@ -843,6 +843,54 @@ def quantified_opaque_snapshot(result_type):
     )
 
 
+def unordered_take_opaque_snapshot(result_type):
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            [
+                copy.deepcopy(SCAN_A),
+                {
+                    "id": "limit",
+                    "op": "limit",
+                    "input": "a",
+                    "count": {
+                        "kind": "literal",
+                        "type": "Uint64",
+                        "value": 1,
+                    },
+                    "offset": None,
+                    "phase": "undefined",
+                },
+                {
+                    "id": "render",
+                    "op": "project",
+                    "input": "limit",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": "opaque",
+                                "fingerprint": "render($0)",
+                                "type": result_type,
+                                "nullable": False,
+                                "args": [
+                                    {
+                                        "kind": "column",
+                                        "column": "a.x",
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                },
+            ],
+            "render",
+            ["result"],
+        )
+    )
+
+
 def right_join(predicate):
     return parse_snapshot(
         {
@@ -2965,15 +3013,22 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):
-    def test_domain_constrained_opaque_result_after_symbolic_sort_fails_closed(self):
-        for result_type, reason in (
-            ("String", "quantified sequence choice"),
-            ("Int64", "global invariant.*quantified sequence choice"),
+    def test_domain_constrained_opaque_result_after_symbolic_take_is_constructible(self):
+        for result_type in (
+            "String",
+            "Utf8",
+            "Int64",
+            "Date",
+            "Decimal(5,2)",
         ):
             with self.subTest(result_type=result_type):
-                snapshot = quantified_opaque_snapshot(result_type)
-                with self.assertRaisesRegex(VerificationError, reason):
-                    build_logical_kernel_problem_for_tests(snapshot, snapshot, 6)
+                snapshot = unordered_take_opaque_snapshot(result_type)
+                problem = build_logical_kernel_problem_for_tests(
+                    snapshot,
+                    snapshot,
+                    6,
+                )
+                self.assertIn("(forall ", problem.formula())
 
     def test_date_filter_equivalence_and_boundary_mutation_use_exact_days(self):
         before = date_filtered_snapshot("lt", 1)
@@ -3481,6 +3536,29 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_choice_dependent_opaque_domains_prove_self_equivalence(self):
+        for result_type in (
+            "String",
+            "Utf8",
+            "Int64",
+            "Date",
+            "Decimal(5,2)",
+        ):
+            with self.subTest(result_type=result_type):
+                snapshot = unordered_take_opaque_snapshot(result_type)
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        snapshot,
+                        snapshot,
+                        4,
+                        20_000,
+                    ),
+                    SOLVER,
+                    4,
+                    20_000,
+                )
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
     def test_scalar_subplan_and_staged_cross_join_inline_are_bounded_equivalent(self):
         initial = scalar_subplan_inline_snapshot(False)
         final = scalar_subplan_inline_snapshot(True)

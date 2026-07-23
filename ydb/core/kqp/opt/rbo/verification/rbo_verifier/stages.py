@@ -259,6 +259,7 @@ class Evaluator:
                     partition,
                     scan.pushed_limit,
                     None,
+                    self.scalar.script,
                     f"stage:{stage.id}:task:{task}:scan:{scan.id}:pushed_limit",
                 )
                 for task, partition in enumerate(scan_partitions)

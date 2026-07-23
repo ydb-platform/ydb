@@ -786,10 +786,14 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
             }
             WrittenInTx[seqNo] = *tx;
         } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
-            if (deferred->AckState) {
-                deferred->AckState->OnWrite();
-                WrittenInDeferred[seqNo] = deferred->AckState;
+            auto& ackState = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(*deferred);
+            if (!ackState->TryOnWrite()) {
+                CloseImpl(
+                    EStatus::BAD_REQUEST,
+                    "Write after Publish/Cancel is not allowed for this deferred publication");
+                return;
             }
+            WrittenInDeferred[seqNo] = ackState;
             LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
                      LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
                                      << ", intPublicationId=" << deferred->IntPublicationId);

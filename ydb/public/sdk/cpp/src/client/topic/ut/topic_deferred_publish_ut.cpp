@@ -184,7 +184,6 @@ Y_UNIT_TEST(BeginPublicationCreatesPublication) {
     UNIT_ASSERT_VALUES_EQUAL(begin.GetPublication().IntPublicationId, begin.GetIntPublicationId());
     UNIT_ASSERT(begin.GetPublication().ExtPublicationId.has_value());
     UNIT_ASSERT_VALUES_EQUAL(*begin.GetPublication().ExtPublicationId, extId);
-    UNIT_ASSERT(begin.GetPublication().AckState != nullptr);
 
     auto list = client.ListPublications().GetValueSync();
     UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
@@ -337,18 +336,103 @@ Y_UNIT_TEST(ColdPublishByIntPublicationId) {
     UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
     const auto& hotPublication = begin.GetPublication();
 
-    TDeferredWriteHelper writer(topicClient, topicPath);
-    writer.WriteDeferred(payload, hotPublication);
-    WaitForWriteAcks(writer.Session());
-
-    // CLI-style cold handle: ids only, no local ack state.
+    // Scenario 1: cold handle used for both Write and Publish waits for acks.
     NTopic::TDeferredPublication coldPublication(hotPublication.IntPublicationId);
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, coldPublication);
+
     auto publish = deferredClient.Publish(coldPublication).GetValueSync();
     UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 
     const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+Y_UNIT_TEST(IndependentColdHandleSkipsLocalAckWait) {
+    TTopicSdkTestSetup setup("IndependentColdHandleSkipsLocalAckWait", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-independent-cold";
+    const std::string payload = "sdk-independent-cold-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+
+    NTopic::TDeferredPublication writePublication(begin.GetIntPublicationId());
+    NTopic::TDeferredPublication publishPublication(begin.GetIntPublicationId());
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, writePublication);
+    WaitForWriteAcks(writer.Session());
+
+    // Scenario 2: different cold handle — no local wait; RPC only.
+    auto publish = deferredClient.Publish(publishPublication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+Y_UNIT_TEST(WriteAfterPublishClosesWriteSession) {
+    TTopicSdkTestSetup setup("WriteAfterPublishClosesWriteSession", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-write-after-publish";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred("first", publication);
+
+    // ReadyToAccept for the next write often arrives in the same event batch as the ack;
+    // collect both so WaitForWriteAcks does not drop the token.
+    std::optional<NTopic::TContinuationToken> nextToken;
+    size_t acks = 0;
+    while (acks < 1 || !nextToken.has_value()) {
+        UNIT_ASSERT_C(
+            writer.Session().WaitEvent().Wait(TDuration::Seconds(30)),
+            "timeout waiting write ack/token");
+        for (auto& event : writer.Session().GetEvents()) {
+            if (std::holds_alternative<NTopic::TWriteSessionEvent::TAcksEvent>(event)) {
+                ++acks;
+            } else if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                nextToken = std::move(ready->ContinuationToken);
+            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+
+    // WriteCount > 0: Publish seals even though the first write is already acked.
+    auto publishFuture = deferredClient.Publish(publication);
+
+    NTopic::TWriteMessage message("second");
+    message.DeferredPublication(publication);
+    writer.Session().Write(std::move(*nextToken), std::move(message));
+
+    bool closedWithBadRequest = false;
+    UNIT_ASSERT_C(
+        writer.Session().WaitEvent().Wait(TDuration::Seconds(30)),
+        "timeout waiting write session close");
+    for (auto& event : writer.Session().GetEvents()) {
+        if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+            closedWithBadRequest = closed->GetStatus() == EStatus::BAD_REQUEST;
+        }
+    }
+    UNIT_ASSERT(closedWithBadRequest);
+
+    auto publish = publishFuture.GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(PublishAfterIdleSessionClose) {

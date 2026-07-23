@@ -10,7 +10,6 @@
 #include <ydb/public/api/protos/draft/ydb_topic_deferred_publish.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publish_ack_tracker.h>
-#include <ydb/public/sdk/cpp/src/client/topic/impl/transaction.h>
 
 namespace NYdb::inline Dev::NTopic::NDeferredPublish {
 
@@ -28,10 +27,7 @@ NThreading::TFuture<TResult> MakeBadRequestFuture(const std::string& message) {
 }
 
 NThreading::TFuture<TStatus> WaitAcksIfNeeded(const TDeferredPublication& publication) {
-    if (publication.AckState) {
-        return publication.AckState->WaitAllAcks();
-    }
-    return NThreading::MakeFuture(MakeCommitTransactionSuccess());
+    return NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(publication)->WaitAllAcks();
 }
 
 TPublicationSummary FromProto(const PublicationSummary& summary) {
@@ -141,7 +137,6 @@ public:
             }
 
             TDeferredPublication publication(result.int_publication_id(), extPublicationId);
-            publication.AckState = std::make_shared<TDeferredPublicationAckState>();
             promise.SetValue(TBeginPublicationResult(
                 TStatus(std::move(status)),
                 std::move(publication)));

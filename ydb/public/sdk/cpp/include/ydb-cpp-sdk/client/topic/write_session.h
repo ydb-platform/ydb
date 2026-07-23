@@ -205,27 +205,32 @@ concept Serializable =
 
 class TDeferredPublicationAckState;
 
+namespace NDeferredPublicationDetail {
+struct TDeferredPublicationAccess;
+} // namespace NDeferredPublicationDetail
+
 //! Deferred publication for StreamWrite and deferred-publish control RPCs.
-//! Hot handles (from BeginPublication) carry internal ack-tracking state.
-//! Cold handles (constructed from known ids) have no local ack state.
+//! Each handle owns ack-tracking state (shared on copy, transferred on move).
+//! Publish/Cancel wait for acks only when this handle's state recorded writes.
 struct TDeferredPublication {
     static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
     uint64_t IntPublicationId = 0;
     std::optional<std::string> ExtPublicationId;
 
-    TDeferredPublication() = default;
+    TDeferredPublication();
 
-    explicit TDeferredPublication(uint64_t intPublicationId)
-        : IntPublicationId(intPublicationId)
-    {
-    }
+    explicit TDeferredPublication(uint64_t intPublicationId);
 
-    TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId)
-        : IntPublicationId(intPublicationId)
-        , ExtPublicationId(std::move(extPublicationId))
-    {
-    }
+    TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId);
+
+    TDeferredPublication(const TDeferredPublication& other);
+
+    TDeferredPublication(TDeferredPublication&& other) noexcept;
+
+    TDeferredPublication& operator=(const TDeferredPublication& other);
+
+    TDeferredPublication& operator=(TDeferredPublication&& other) noexcept;
 
     bool operator==(const TDeferredPublication& other) const {
         return IntPublicationId == other.IntPublicationId
@@ -236,9 +241,10 @@ struct TDeferredPublication {
         return !(*this == other);
     }
 
-    // Shared ack state for hot publications. Null for cold handles (e.g. CLI-constructed).
-    // Not part of the stable public contract; used by the SDK write path and Publish/Cancel.
-    std::shared_ptr<TDeferredPublicationAckState> AckState;
+private:
+    friend struct NDeferredPublicationDetail::TDeferredPublicationAccess;
+
+    std::shared_ptr<TDeferredPublicationAckState> AckState_;
 };
 
 //! Contains the message to write and all the options.

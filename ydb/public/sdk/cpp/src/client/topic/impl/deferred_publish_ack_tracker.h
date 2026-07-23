@@ -7,28 +7,47 @@
 #include <util/system/spinlock.h>
 #include <util/system/types.h>
 
+#include <memory>
+
 namespace NYdb::inline Dev::NTopic {
 
-// Per-publication in-flight write ack state. Shared by TDeferredPublication (hot) copies.
+struct TDeferredPublication;
+
+// Per-publication in-flight write ack state. Shared by TDeferredPublication copies.
 class TDeferredPublicationAckState {
 public:
-    void OnWrite();
+    // Returns false if finalize (Publish/Cancel wait) has sealed this state.
+    bool TryOnWrite();
+
     void OnAck();
 
     // Drop unacked writes from an aborted write session; fails WaitAllAcks if already waiting.
+    // Clears seal on wait failure so the client may write and finalize again.
     void OnUnackedAbort(ui64 unackedCount);
 
-    // Completes when WriteCount == AckCount. Safe to call with no prior writes.
-    // If a previous wait already completed, starts a new wait for the current backlog.
-    // Concurrent callers share one in-flight wait until it completes.
+    // If there were no writes, returns success without sealing.
+    // Otherwise seals and completes when WriteCount == AckCount.
+    // Concurrent callers share one in-flight wait; a completed wait can be started again
+    // for a later finalize attempt on the same handle.
     NThreading::TFuture<TStatus> WaitAllAcks();
 
+    bool IsSealed() const;
+
 private:
-    TSpinLock Lock_;
+    mutable TSpinLock Lock_;
     ui64 WriteCount_ = 0;
     ui64 AckCount_ = 0;
     bool WaitCalled_ = false;
+    bool Sealed_ = false;
     NThreading::TPromise<TStatus> AllAcksReceived_;
 };
+
+namespace NDeferredPublicationDetail {
+
+struct TDeferredPublicationAccess {
+    static const std::shared_ptr<TDeferredPublicationAckState>& AckState(const TDeferredPublication& publication);
+};
+
+} // namespace NDeferredPublicationDetail
 
 } // namespace NYdb::NTopic

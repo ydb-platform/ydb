@@ -1,8 +1,8 @@
 import unittest
 from unittest import mock
 
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import scalar as scalar_module
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr, parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
@@ -496,7 +496,162 @@ class DecimalCastDispatchTest(unittest.TestCase):
             "Int8",
             "Decimal(3,2)",
         )
-        self.assertEqual(actual, Value("Decimal(3,2)", smt.FALSE, cast_value))
+        self.assertEqual(
+            actual,
+            Value("Decimal(3,2)", smt.FALSE, cast_value, 900),
+        )
+
+
+class DecimalFiniteAbsBoundTest(unittest.TestCase):
+    def test_finite_null_and_special_literals_have_exact_bounds(self):
+        cases = (
+            (decimal.Literal(decimal.FINITE, -125), 125),
+            (decimal.Literal(decimal.POS_INF), 0),
+            (decimal.Literal(decimal.NEG_INF), 0),
+            (decimal.Literal(decimal.NAN_KIND), 0),
+        )
+        encoder = Encoder(smt.Script())
+        for literal, expected in cases:
+            with self.subTest(kind=literal.kind):
+                result = encoder.evaluate(_literal("Decimal(5,2)", literal), {})
+                self.assertEqual(result.decimal_finite_abs_bound, expected)
+
+        result = encoder.evaluate(
+            Expr(kind="null", result_type="Decimal(5,2)", nullable=True),
+            {},
+        )
+        self.assertEqual(result.decimal_finite_abs_bound, 0)
+
+    def test_add_and_sub_sum_known_operand_bounds(self):
+        row = {
+            "left": Value("Decimal(5,2)", smt.FALSE, smt.int_value(20), 20),
+            "right": Value("Decimal(5,2)", smt.FALSE, smt.int_value(35), 35),
+        }
+        for kind in ("add", "sub"):
+            expression = _arithmetic(
+                kind,
+                "Decimal(5,2)",
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            )
+            with self.subTest(kind=kind):
+                result = Encoder(smt.Script()).evaluate(expression, row)
+                self.assertEqual(result.decimal_finite_abs_bound, 55)
+
+    def test_additive_bound_is_capped_at_largest_finite_coefficient(self):
+        expression = _arithmetic(
+            "add",
+            "Decimal(3,0)",
+            Expr(kind="column", column="left"),
+            Expr(kind="column", column="right"),
+        )
+        result = Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "left": Value("Decimal(3,0)", smt.FALSE, smt.int_value(700), 700),
+                "right": Value("Decimal(3,0)", smt.FALSE, smt.int_value(600), 600),
+            },
+        )
+        self.assertEqual(result.decimal_finite_abs_bound, 999)
+
+    def test_unknown_additive_operand_bound_stays_unknown(self):
+        expression = _arithmetic(
+            "sub",
+            "Decimal(5,2)",
+            Expr(kind="column", column="left"),
+            Expr(kind="column", column="right"),
+        )
+        result = Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "left": Value("Decimal(5,2)", smt.FALSE, smt.int_value(20), 20),
+                "right": Value("Decimal(5,2)", smt.FALSE, smt.int_value(35)),
+            },
+        )
+        self.assertIsNone(result.decimal_finite_abs_bound)
+
+    def test_integral_cast_uses_source_domain_scale_and_saturation(self):
+        cases = (
+            ("Int8", "Decimal(5,2)", 12_800),
+            ("Uint8", "Decimal(5,2)", 25_500),
+            ("Int64", "Decimal(35,2)", (1 << 63) * 100),
+            ("Uint64", "Decimal(35,2)", ((1 << 64) - 1) * 100),
+            ("Int8", "Decimal(3,2)", 900),
+            ("Uint8", "Decimal(3,2)", 900),
+        )
+        for source_type, target_type, expected in cases:
+            expression = Expr(
+                kind="cast_decimal",
+                args=(Expr(kind="column", column="source"),),
+                result_type=target_type,
+                nullable=False,
+            )
+            source_value = integer_bounds(source_type)[0]
+            with self.subTest(source_type=source_type, target_type=target_type):
+                result = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "source": Value(
+                            source_type,
+                            smt.FALSE,
+                            smt.int_value(source_value),
+                        )
+                    },
+                )
+                self.assertEqual(result.decimal_finite_abs_bound, expected)
+
+    def test_if_with_decimal_value_and_typed_null_preserves_bound(self):
+        scalar_type = "Decimal(5,2)"
+        cases = (
+            (
+                "literal",
+                _literal(
+                    scalar_type,
+                    decimal.Literal(decimal.FINITE, -125),
+                ),
+                {},
+                125,
+                -125,
+            ),
+            (
+                "integral cast",
+                Expr(
+                    kind="cast_decimal",
+                    args=(Expr(kind="column", column="source"),),
+                    result_type=scalar_type,
+                    nullable=False,
+                ),
+                {
+                    "source": Value(
+                        "Int8",
+                        smt.FALSE,
+                        smt.int_value(-7),
+                    )
+                },
+                12_800,
+                -700,
+            ),
+        )
+        for name, present, row, expected_bound, expected_value in cases:
+            expression = _if(
+                _literal("Bool", True),
+                present,
+                Expr(
+                    kind="null",
+                    result_type=scalar_type,
+                    nullable=True,
+                ),
+                scalar_type,
+                nullable=True,
+            )
+            with self.subTest(name=name):
+                result = Encoder(smt.Script()).evaluate(expression, row)
+                self.assertFalse(_ground(result.is_null))
+                self.assertEqual(_ground(result.value), expected_value)
+                self.assertEqual(
+                    result.decimal_finite_abs_bound,
+                    expected_bound,
+                )
 
 
 class ConditionalScalarTest(unittest.TestCase):

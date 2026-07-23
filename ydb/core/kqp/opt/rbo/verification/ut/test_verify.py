@@ -463,6 +463,52 @@ def aggregate_stage_snapshot(
     )
 
 
+def projected_decimal_sum_snapshot(expression, input_type="Int64"):
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1]["type"] = input_type
+    project = {
+        "id": "project",
+        "op": "project",
+        "input": "a",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "value",
+                "expression": copy.deepcopy(expression),
+            }
+        ],
+    }
+    result_type = decimal.sum_type(expression["type"])
+    assert result_type is not None
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "project",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "value",
+                "function": "sum",
+                "output": "result",
+                "type": result_type,
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [copy.deepcopy(SCAN_A), project, aggregate],
+            "aggregate",
+            ["result"],
+        )
+    )
+
+
 def count_star_snapshot():
     schema_value = _stage_schema("A")
     schema_value["tables"][0]["columns"][1]["nullable"] = True
@@ -1235,6 +1281,20 @@ def _evaluate_ground_term(term, constants, function_value=None):
             _evaluate_ground_term(argument, constants, function_value)
             for argument in term.arguments
         )
+    if term.operation == "-":
+        left, right = term.arguments
+        return _evaluate_ground_term(
+            left, constants, function_value
+        ) - _evaluate_ground_term(
+            right, constants, function_value
+        )
+    if term.operation == "*":
+        left, right = term.arguments
+        return _evaluate_ground_term(
+            left, constants, function_value
+        ) * _evaluate_ground_term(
+            right, constants, function_value
+        )
     if term.operation == "mod":
         return _evaluate_ground_term(
             term.arguments[0], constants, function_value
@@ -1624,6 +1684,202 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             RelationEvaluator(
                 snapshot,
                 two_row_database,
+                ScalarEncoder(two_row_script),
+            ).root()
+
+    def test_projected_decimal_add_and_sub_supply_sum_headroom(self):
+        scalar_type = "Decimal(35,0)"
+
+        def literal(scaled):
+            return {
+                "kind": "literal",
+                "type": scalar_type,
+                "value": {"kind": "finite", "scaled": str(scaled)},
+            }
+
+        for kind, expected_value in (("add", 5), ("sub", 9)):
+            expression = {
+                "kind": kind,
+                "left": literal(7),
+                "right": literal(-2),
+                "type": scalar_type,
+                "nullable": False,
+            }
+            snapshot = projected_decimal_sum_snapshot(expression)
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+
+            with self.subTest(kind=kind, property="bound"):
+                self.assertEqual(
+                    relation.rows[0].values["result"].decimal_finite_abs_bound,
+                    18,
+                )
+            for rows in product((None, (0, 0)), repeat=2):
+                present = sum(row is not None for row in rows)
+                expected = None if present == 0 else present * expected_value
+                with self.subTest(kind=kind, rows=rows):
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            self._constants(database, rows),
+                        ),
+                        Counter({(expected,): 1}),
+                    )
+
+    def test_integral_decimal_cast_supplies_sum_headroom(self):
+        expression = {
+            "kind": "cast_decimal",
+            "arg": {"kind": "column", "column": "a.x"},
+            "type": "Decimal(35,2)",
+            "nullable": False,
+        }
+        snapshot = projected_decimal_sum_snapshot(expression)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        self.assertEqual(
+            relation.rows[0].values["result"].decimal_finite_abs_bound,
+            2 * (1 << 63) * 100,
+        )
+        for rows in product((None, (0, -7), (0, 9)), repeat=2):
+            present = [row for row in rows if row is not None]
+            expected = (
+                sum(row[1] * 100 for row in present)
+                if present
+                else None
+            )
+            with self.subTest(rows=rows):
+                self.assertEqual(
+                    self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    ),
+                    Counter({(expected,): 1}),
+                )
+
+    def test_zero_bound_specials_and_null_preserve_sum_semantics(self):
+        scalar_type = "Decimal(35,0)"
+        cases = (
+            ({"kind": "pos_inf"}, REFERENCE_DECIMAL_INF),
+            ({"kind": "neg_inf"}, -REFERENCE_DECIMAL_INF),
+            ({"kind": "nan"}, REFERENCE_DECIMAL_NAN),
+            (None, None),
+        )
+        for literal, expected_present in cases:
+            expression = (
+                {"kind": "null", "type": scalar_type}
+                if literal is None
+                else {
+                    "kind": "literal",
+                    "type": scalar_type,
+                    "value": literal,
+                }
+            )
+            snapshot = projected_decimal_sum_snapshot(expression)
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+
+            with self.subTest(literal=literal, property="bound"):
+                self.assertEqual(
+                    relation.rows[0].values["result"].decimal_finite_abs_bound,
+                    0,
+                )
+            for rows in product((None, (0, 0)), repeat=2):
+                expected = (
+                    expected_present
+                    if expected_present is not None and any(rows)
+                    else None
+                )
+                with self.subTest(literal=literal, rows=rows):
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            self._constants(database, rows),
+                        ),
+                        Counter({(expected,): 1}),
+                    )
+
+    def test_full_domain_projected_decimal_bound_still_fails_closed(self):
+        scalar_type = "Decimal(35,0)"
+        expression = {
+            "kind": "add",
+            "left": {"kind": "column", "column": "a.x"},
+            "right": {
+                "kind": "literal",
+                "type": scalar_type,
+                "value": {"kind": "finite", "scaled": "0"},
+            },
+            "type": scalar_type,
+            "nullable": False,
+        }
+        snapshot = projected_decimal_sum_snapshot(expression, scalar_type)
+
+        one_row_script = smt.Script()
+        one_row = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, one_row_script),
+            ScalarEncoder(one_row_script),
+        ).root().certain()
+        self.assertEqual(
+            one_row.rows[0].values["result"].decimal_finite_abs_bound,
+            10**35 - 1,
+        )
+
+        two_row_script = smt.Script()
+        with self.assertRaisesRegex(
+            RelationError,
+            "non-associative overflow is not modeled",
+        ):
+            RelationEvaluator(
+                snapshot,
+                Database(snapshot, 2, two_row_script),
+                ScalarEncoder(two_row_script),
+            ).root()
+
+    def test_decimal_sum_rejects_the_exact_headroom_limit(self):
+        half_limit = 5 * 10**34
+        snapshot = projected_decimal_sum_snapshot(
+            {
+                "kind": "literal",
+                "type": "Decimal(35,0)",
+                "value": {"kind": "finite", "scaled": str(half_limit)},
+            }
+        )
+
+        one_row_script = smt.Script()
+        one_row = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, one_row_script),
+            ScalarEncoder(one_row_script),
+        ).root().certain()
+        self.assertEqual(
+            one_row.rows[0].values["result"].decimal_finite_abs_bound,
+            half_limit,
+        )
+
+        two_row_script = smt.Script()
+        with self.assertRaisesRegex(
+            RelationError,
+            "non-associative overflow is not modeled",
+        ):
+            RelationEvaluator(
+                snapshot,
+                Database(snapshot, 2, two_row_script),
                 ScalarEncoder(two_row_script),
             ).root()
 

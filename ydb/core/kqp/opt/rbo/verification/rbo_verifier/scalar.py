@@ -37,6 +37,9 @@ class Value:
     type: str
     is_null: smt.Term
     value: smt.Term
+    # For Decimal values, a known B covers abs(coefficient) for every non-NULL
+    # finite valuation. It intentionally says nothing about specials; None is
+    # an unknown bound.
     decimal_finite_abs_bound: int | None = None
 
 
@@ -73,10 +76,20 @@ class Encoder:
 
         if expression.kind == "literal":
             assert expression.result_type is not None
+            literal = self._literal(expression.result_type, expression.value)
+            finite_abs_bound = None
+            if decimal.is_type(expression.result_type):
+                assert isinstance(expression.value, decimal.Literal)
+                if expression.value.kind == decimal.FINITE:
+                    assert expression.value.scaled is not None
+                    finite_abs_bound = abs(expression.value.scaled)
+                else:
+                    finite_abs_bound = 0
             return Value(
                 expression.result_type,
                 smt.FALSE,
-                self._literal(expression.result_type, expression.value),
+                literal,
+                finite_abs_bound,
             )
 
         if expression.kind == "null":
@@ -149,10 +162,20 @@ class Encoder:
                         expression.result_type,
                         right.type,
                     )
+                finite_abs_bound = (
+                    _decimal_additive_finite_abs_bound(
+                        left,
+                        right,
+                        expression.result_type,
+                    )
+                    if expression.kind in {"add", "sub"}
+                    else None
+                )
                 return Value(
                     expression.result_type,
                     is_null,
                     value,
+                    finite_abs_bound,
                 )
             if expression.kind == "add":
                 raw = smt.add(left.value, right.value)
@@ -176,6 +199,10 @@ class Encoder:
                 smt.FALSE,
                 decimal.cast_integral(
                     argument.value,
+                    argument.type,
+                    expression.result_type,
+                ),
+                _integral_decimal_cast_finite_abs_bound(
                     argument.type,
                     expression.result_type,
                 ),
@@ -255,7 +282,12 @@ class Encoder:
         raise AssertionError(f"unknown expression kind {expression.kind!r}")
 
     def null(self, scalar_type: str) -> Value:
-        return Value(scalar_type, smt.TRUE, _default(scalar_type))
+        return Value(
+            scalar_type,
+            smt.TRUE,
+            _default(scalar_type),
+            0 if decimal.is_type(scalar_type) else None,
+        )
 
     @staticmethod
     def is_true(value: Value) -> smt.Term:
@@ -440,7 +472,7 @@ def _selected_decimal_finite_abs_bound(
     present: Value,
     missing: Value,
 ) -> int | None:
-    """Bound either branch only when both alternatives carry exact headroom."""
+    """Conservatively bound either branch when both bounds are known."""
 
     if (
         present.decimal_finite_abs_bound is None
@@ -451,6 +483,43 @@ def _selected_decimal_finite_abs_bound(
         present.decimal_finite_abs_bound,
         missing.decimal_finite_abs_bound,
     )
+
+
+def _decimal_additive_finite_abs_bound(
+    left: Value,
+    right: Value,
+    result_type: str,
+) -> int | None:
+    """Bound every finite Decimal add/sub result from bounded operands."""
+
+    if (
+        left.decimal_finite_abs_bound is None
+        or right.decimal_finite_abs_bound is None
+    ):
+        return None
+    decimal_type = decimal.parse_type(result_type)
+    assert decimal_type is not None
+    return min(
+        10**decimal_type.precision - 1,
+        left.decimal_finite_abs_bound + right.decimal_finite_abs_bound,
+    )
+
+
+def _integral_decimal_cast_finite_abs_bound(
+    source_type: str,
+    result_type: str,
+) -> int:
+    """Return the tight finite bound for a saturating integral Decimal cast."""
+
+    source_bounds = integer_bounds(source_type)
+    decimal_type = decimal.parse_type(result_type)
+    assert source_bounds is not None and decimal_type is not None
+    source_lower, source_upper = source_bounds
+    source_abs_bound = max(abs(source_lower), abs(source_upper - 1))
+    scale = 10**decimal_type.scale
+    max_finite_coefficient = 10**decimal_type.precision - 1
+    max_finite_source = max_finite_coefficient // scale
+    return min(source_abs_bound, max_finite_source) * scale
 
 
 def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:

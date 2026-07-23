@@ -209,8 +209,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
     }
 
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "Transaction load isolation event",
-        {"tliEvent", ss.Str()});
+    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }
 
 }

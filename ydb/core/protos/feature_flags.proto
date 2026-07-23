@@ -356,4 +356,5 @@ message TFeatureFlags {
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
+    optional bool DisableOldSecrets = 306 [default = false];
 }

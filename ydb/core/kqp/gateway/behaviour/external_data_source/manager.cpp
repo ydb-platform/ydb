@@ -10,6 +10,7 @@
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 namespace NKikimr::NKqp {
 
@@ -60,6 +61,17 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     return GetOrEmpty(settings, secretKeyPrefix + "_path");
 }
 
+[[nodiscard]] TYqlConclusionStatus CheckOldSecretCreationAllowed(
+    bool disableOldSecretCreation, const TString& secretName)
+{
+    if (disableOldSecretCreation && secretName && !NSecret::IsSchemeSecret(secretName)) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            "Old secrets creation syntax is disabled now. Please use the new one");
+    }
+    return TYqlConclusionStatus::Success();
+}
+
 [[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(
     NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
     const TString& name,
@@ -71,6 +83,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 
+    const bool disableOldSecretCreation = actorSystem
+        && AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
+
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
         externalDataSourceDesc.MutableAuth()->MutableNone();
@@ -78,30 +93,54 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, sa.GetSecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "BASIC") {
         auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
         basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "MDB_BASIC") {
         auto& mdbBasic = *externalDataSourceDesc.MutableAuth()->MutableMdbBasic();
         mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
         mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail()) {
+            return status;
+        }
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "AWS") {
         auto& aws = *externalDataSourceDesc.MutableAuth()->MutableAws();
         aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
         aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail()) {
+            return status;
+        }
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "IAM") {
         auto& iam = *externalDataSourceDesc.MutableAuth()->MutableIam();
         iam.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
         iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
         // Note: user must not be allowed to specify resource_id;
         // database authorization relies on resource_id lookup;
+        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail()) {
+            return status;
+        }
     } else {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }

@@ -19,6 +19,8 @@ public:
     void OnUnackedAbort(ui64 unackedCount);
 
     // Completes when WriteCount == AckCount. Safe to call with no prior writes.
+    // If a previous wait already completed, starts a new wait for the current backlog.
+    // Concurrent callers share one in-flight wait until it completes.
     NThreading::TFuture<TStatus> WaitAllAcks();
 
 private:

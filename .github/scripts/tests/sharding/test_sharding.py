@@ -11,8 +11,8 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sharding"
-SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
+SHARDING_DIR = Path(__file__).resolve().parent
+FIXTURES = SHARDING_DIR / "fixtures"
 
 if str(SHARDING_DIR) not in sys.path:
     sys.path.insert(0, str(SHARDING_DIR))

@@ -1,5 +1,5 @@
 name: Run and debug tests
-# Driver for the parallel PR-check pipeline (pr_check_parallel_core.yml).
+# Driver for sharding v3 research pipeline (pr_check_parallel_core.yml).
 #
 # Runs the pipeline over a real PR (checkout of its merge commit, like
 # PR-check does) or over a branch, without publishing anything to the PR,

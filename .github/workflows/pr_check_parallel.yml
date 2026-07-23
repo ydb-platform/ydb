@@ -1,6 +1,6 @@
 name: PR-check-parallel
-# Production-style parallel PR-check: same scope and presets as pr_check.yml,
-# but with the sharded pipeline (pr_check_parallel_core.yml).
+# Sharding v3 research driver (workflow_dispatch). Uses pr_check_parallel_core.yml
+# with main test_ya / graph LPT — not wired into automatic PR-check yet.
 #
 # Automatic pull_request_target trigger is intentionally disabled until rollout.
 # Run manually from Actions → PR-check-parallel → Run workflow.

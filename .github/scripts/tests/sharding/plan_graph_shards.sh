@@ -3,10 +3,10 @@
 #
 # PLAN_MODE: increment_graph (increment cut) or full_graph (full PR-check scope).
 #
-# Pool capacity may lower the shard count, but never below the wall-time floor
-# (default: estimated slowest shard <= 240 min). If the final plan still
-# exceeds that budget, the script fails instead of scheduling a timeout-bound
-# shard job.
+# v3: history×cpu LPT + optional MAX_SHARDS + wall-time floor
+# (default: estimated slowest shard <= 240 min). Peak/quota out of hot path.
+# If the final plan still exceeds that budget, the script fails instead of
+# scheduling a timeout-bound shard job.
 set -euo pipefail
 
 GRAPH_JSON="${1:?usage: plan_graph_shards.sh GRAPH_JSON SHARD_COUNT OUTPUT_DIR}"
@@ -22,34 +22,11 @@ LIST_SUMMARY="$OUTPUT_DIR/list_summary.json"
 
 mkdir -p "$OUTPUT_DIR"
 
-CAPACITY_CONFIG="${CAPACITY_CONFIG:-$SCRIPT_DIR/../../../config/runner_capacity.yml}"
-if [ -z "${MAX_SHARDS:-}" ] && [ -f "$CAPACITY_CONFIG" ] && [ -n "${GITHUB_TOKEN:-}${GH_TOKEN:-}" ]; then
-  capacity_cap=$(python3 "$SCRIPT_DIR/estimate_runner_capacity.py" \
-    --config "$CAPACITY_CONFIG" \
-    --preset-label "build-preset-${BUILD_PRESET:-relwithdebinfo}" || true)
-  if [ -n "$capacity_cap" ]; then
-    MAX_SHARDS="$capacity_cap"
-    echo "Pool capacity cap: $MAX_SHARDS runners fit into the quota budget"
-  fi
-fi
-
-SPLIT_EXTRA_ARGS=()
-if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
-  SPLIT_EXTRA_ARGS+=(--no-peak-cap)
-fi
 # history (default): nightly regression suite duration p90 from YDB.
-# timeout_budget: N_chunk_run_tests * SIZE timeout (opt-in).
+# timeout_budget: N_chunk_run_tests * SIZE timeout (opt-in research).
 WEIGHT_MODE="${WEIGHT_MODE:-history}"
-SPLIT_EXTRA_ARGS+=(--weight-mode "$WEIGHT_MODE")
-
-# Real pool-capacity cap supersedes the static peak-hour heuristic (same as
-# plan_shard_tests.sh): once we know how many runners fit the quota, applying
-# peak-cap on top would double-penalize.
-CAPACITY_APPLIED=0
-if [ -n "${MAX_SHARDS:-}" ]; then
-  CAPACITY_APPLIED=1
-  SPLIT_EXTRA_ARGS+=(--no-peak-cap)
-fi
+# Peak-hour heuristic removed from v3 hot path; optional MAX_SHARDS still applies.
+SPLIT_EXTRA_ARGS=(--weight-mode "$WEIGHT_MODE" --no-peak-cap)
 
 CONTEXT_JSON="${CONTEXT_JSON:-}"
 if [ -z "$CONTEXT_JSON" ]; then
@@ -82,16 +59,12 @@ run_split() {
 }
 
 if [ "$SHARD_COUNT" = "auto" ]; then
-  if [ "${DISABLE_PEAK_CAP:-}" = "1" ] || [ "$CAPACITY_APPLIED" = "1" ]; then
-    echo "Peak-hour cap disabled for auto shard count (DISABLE_PEAK_CAP=${DISABLE_PEAK_CAP:-0}, capacity=${CAPACITY_APPLIED})"
-  else
-    echo "Peak-hour cap enabled for auto shard count"
-  fi
+  echo "Auto shard count (profile=${SHARD_PROFILE:-pr}, peak cap off, MAX_SHARDS=${MAX_SHARDS:-unset})"
 fi
 
 run_split "$SHARD_COUNT"
 
-# Resolve final shard count: capacity may shrink the plan, wall-time floor may
+# Resolve final shard count: MAX_SHARDS may shrink the plan, wall-time floor may
 # raise it back so the slowest shard stays within MAX_SHARD_WALL_MIN.
 # timeout_budget weights are worst-case CPU ceilings, not expected duration —
 # do not use them to inflate shard count or fail the prepare job.

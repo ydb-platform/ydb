@@ -155,6 +155,15 @@ occurrence has one edge, and producer output indices are a bijection with
 outgoing edge occurrences. Shuffle-elimination/co-partitioning assumptions are
 rejected until the snapshot can substantiate them.
 
+Production RBO diagnostics traverse operator and stage structures as DAGs.
+`PlanToString` expands each operator body once and marks later occurrences
+`[shared]`; the optimizer HTML trace represents later occurrences as
+`Shared=true` leaf nodes. Explain and execution JSON emit one CTE-style
+definition per shared operator or stage and connection-shaped `CTE Name`
+references thereafter. This keeps diagnostic size linear without changing the
+occurrence-sensitive semantic snapshot. Explain JSON remains outside the
+verifier's trusted input.
+
 Stage task counts are validated before staged physical properties are admitted.
 Every Limit snapshot carries `ensure_at_most_one`; omission is accepted only as
 the legacy default `false`. A set marker is no longer erased through a
@@ -169,8 +178,11 @@ them, and row-removing operators do not hide an error that has already
 occurred. Equality treats two error outcomes as the same observable status,
 compares rows only when both outcomes succeed, and rejects error-versus-success
 as a mismatch. Inspector traces label each enabled outcome `success` or
-`error`. Version one does not distinguish error categories, codes, or text.
-Replay currently fails closed on an error outcome until its external
+`error`. Because an error outcome's relation is unobservable, a
+cardinality-checked Limit may quotient alternative payloads in its
+greater-than-one error region while retaining the exact zero- and one-row
+result language. Version one does not distinguish error categories, codes, or
+text. Replay currently fails closed on an error outcome until its external
 error-comparison protocol is implemented.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
@@ -192,31 +204,39 @@ type identity remains distinct. The deliberately narrower static-`IN` gate
 still requires identical string types.
 
 The quotient fixes every strict-UTF-8 snapshot literal and registers every
-distinct observable nonliteral string term from both plans. If there are `M`
-such terms, it keeps `M` concrete representatives in every infinite open
+distinct nonliteral string-generating root from both plans. Derived `if`,
+`IfPresent`, and row-selector terms are pure selections of registered roots or
+literals and therefore need no additional representative. A generating root
+independent of bounded plan choices contributes one to `M`; a dependent root
+contributes the product of the positive registered bounds of the choices it
+uses. Those capacities are summed after structural deduplication. It keeps the
+resulting `M` concrete representatives in every infinite open
 literal interval and all available representatives up to `M` in the finite
 prefix/NUL gaps. This is enough to preserve every equality and ordering among
-the literals and at most `M` assigned terms in both directions. Representatives
-are constructed from complete UTF-8 literals by NUL extension, so every decoded
-witness is valid UTF-8 and replayable even when it stands for an arbitrary-byte
-`String` value. Construction preflights limits of 65,536 representatives,
-64 MiB of total encoded representative bytes, and 1,000,000 bytes per value;
-exceeding any limit returns `UNSUPPORTED`. The per-value limit is shared with
-witness inspection and replay.
+the literals and at most `M` observable assigned values in both directions.
+Representatives are constructed from complete UTF-8 literals by NUL extension,
+so every decoded witness is valid UTF-8 and replayable even when it stands for
+an arbitrary-byte `String` value. Construction preflights limits of 65,536
+representatives, 64 MiB of total encoded representative bytes, and 1,000,000
+bytes per value; exceeding any limit returns `UNSUPPORTED`. The per-value limit
+is shared with witness inspection and replay.
 
 Literal ranks and term bounds are deferred until SMT rendering, after both
 plans and any fixed witness strings have registered their values. Rendering
-seals the universe; later registration fails closed, and the model decoder
-accepts only ranks in that sealed universe. A string-valued term that depends
-on a sequence ordinal which may be rebound under family-comparison quantifiers
-also fails closed, because a top-level rank bound would not constrain every
-rebound valuation.
+seals the universe; later value registration fails closed, and the model
+decoder accepts only ranks in that sealed universe. Bounds for a
+choice-dependent string term are universally quantified over exactly its
+dependent choices and guarded by their legal ranges, so every rebound
+valuation is constrained without restricting irrelevant out-of-range values.
 
-The same choice-independence audit applies to every top-level source, catalog,
-and opaque-result domain invariant: any such invariant that depends on a
-rebound sequence ordinal fails closed, not only String rank bounds.
-Global invariants render before the ordinary counterexample obligation even
-when deferred String sealing registers them later.
+Opaque integer, Date, and Decimal results use the same universally
+range-guarded domain-invariant mechanism. Their uninterpreted functions remain
+shared globally, preserving deterministic congruence across choice valuations
+and both plans. Raw top-level global assertions remain choice-independent.
+Before family quantification, comparison verifies that every observable
+registered-choice dependency is carried by the outcome, adds all carried
+ranges to effective enablement, and rejects shared left/right choice symbols
+that could otherwise be captured by a target quantifier.
 
 Decimal uses the exact YDB scaled-integer representation. A legal non-null
 `Decimal(p,s)` value is a finite code `c` with `-10^p < c < 10^p`, negative or
@@ -865,12 +885,17 @@ that contract is clarified.
 
 Sort order is an exact, non-empty sequence of `(column, ascending,
 nulls_first)` entries. Small inputs are represented by explicit permutations.
-For larger inputs, the bounded evaluator gives each candidate row an integer
-ordinal: present-row ordinals are in range and pairwise distinct, and strict key
-comparisons imply the corresponding ordinal order. Tied keys remain free in
-either order, so the symbolic encoding denotes the same complete sequence set
-without factorial expansion. A non-null Sort `limit` is TopSort and applies an
-exact prefix by compressed ordinal rank after sorting. Sort and Limit phases
+For larger inputs, the bounded evaluator gives each syntactically live row slot
+an integer ordinal. A slot is syntactically live unless its guard is the literal
+`false`; fixed-false padding uses constant ordinal zero and consumes no choice
+or pair budget. A symbolically guarded slot still counts as live and is forced
+to zero only when its guard evaluates false. Present-row ordinals are in range
+and pairwise distinct, and strict key comparisons imply the corresponding
+ordinal order. Tied keys remain free in either order, so the symbolic encoding
+denotes the same complete sequence set without factorial expansion. Small
+explicit permutation and interleaving selection continues to use the full
+shaped row vector. A non-null Sort `limit` is TopSort and applies an exact
+prefix by compressed ordinal rank after sorting. Sort and Limit phases
 (`undefined`, `intermediate`, and `final`) are preserved but are not otherwise
 semantic.
 Project nodes carry the exact `TOpMap::Ordered` Boolean. Both `ordered: true`
@@ -886,14 +911,15 @@ unordered or differently ordered producer and represents all sorted,
 producer-order-preserving interleavings. Symbolic Merge ordinals preserve the
 relative input ordinals within each producer as well as the output sort order.
 
-Ordinal variables are bounded by the fixed candidate-row vector. When result
-languages are compared, one side's choices describe a candidate sequence and
-the other side's choices are existentially quantified inside the membership
-test; the reverse direction is checked as well. The SMT renderer shares repeated
-DAG terms through hygienic, dependency-ordered `let` bindings separately inside
-each quantifier scope, never hoisting an expression past a binder. These are
-exact finite encodings and rendering transformations, not unbounded ordering
-proofs or semantic approximations.
+Every plan choice carries an explicit finite bound. Symbolic ordinal bounds use
+the syntactically live slot count, not the shaped row-vector length. When result
+languages are compared, one side's bounded choices describe a candidate result
+and the other side's choices are existentially quantified inside the membership
+test; the reverse direction is checked as well. The SMT renderer shares
+repeated DAG terms through hygienic, dependency-ordered `let` bindings
+separately inside each quantifier scope, never hoisting an expression past a
+binder. These are exact finite encodings and rendering transformations, not
+unbounded ordering proofs or semantic approximations.
 
 `String` and `Utf8` comparison, Sort, TopSort, and Merge use the exact bounded
 byte-order quotient above. Date is an exact bounded integer-day type with
@@ -950,20 +976,33 @@ Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.
 
-An unordered `Limit` is not modeled as an arbitrary fixed vector prefix. For
-each input outcome, the kernel enumerates every guarded-row mask whose size is
-`min(count, max(input_size - offset, 0))`. Plans are equivalent only when their
-sets of enabled output bags mutually include one another. Choice identities are
-carried through the DAG, so two uses of one Limit node share a choice, while
-stage-task instances choose independently. Count and offset are restricted to
-non-null `Uint64` literals in v1; parameterized or otherwise computed limits
-fail closed. Phase is preserved as `undefined`, `intermediate`, or `final`, but
-does not itself change runtime semantics. Distinct Limit observers downstream
-of one shared unordered plan stream fail closed until their latent-order
-correlation is modeled. Ordered Limit is deterministic. Aggregate and Join
-start new unordered streams. Unordered UnionAll does too, while ordered
-UnionAll gives each input every legal local sequence and concatenates the
-complete left sequence before the right.
+An unordered `Limit` is not modeled as an arbitrary fixed vector prefix. For a
+nontrivial `Take(1)`, each source outcome has at most one bounded selector and
+one conditional output row; empty and single-candidate cases require no
+selector. The row is present exactly when the input's present-row count exceeds
+the offset; when present, the selector must name a syntactically live present
+slot. The selector conditionally chooses the typed value, NULL term, and hidden
+Decimal AVG state. Static proof bounds are conservatively joined, occurrence
+becomes unknown, and only partition facts common to every syntactically live
+candidate survive. Other unchecked nontrivial counts use every exact
+guarded-row mask of size `min(count, max(input_size - offset, 0))`.
+
+With `ensure_at_most_one`, the exact zero- and one-row output language is
+retained. In the unordered mask representation, every greater-than-one mask for
+one source outcome is quotiented into one error outcome with an unobservable
+all-false payload. When offset is zero and count is greater than one, masks are
+not constructed; checking the input family directly is exact. Plans are
+equivalent only when their sets of enabled output bags mutually include one
+another. Bounded choices are carried through the DAG, so two uses of one Limit
+node share a choice, while stage-task instances choose independently. Count
+and offset are restricted to non-null `Uint64` literals in v1; parameterized or
+otherwise computed limits fail closed. Phase is preserved as `undefined`,
+`intermediate`, or `final`, but does not itself change runtime semantics.
+Distinct Limit observers downstream of one shared unordered plan stream fail
+closed until their latent-order correlation is modeled. Ordered Limit is
+deterministic. Aggregate and Join start new unordered streams. Unordered
+UnionAll does too, while ordered UnionAll gives each input every legal local
+sequence and concatenates the complete left sequence before the right.
 
 Every logical `union_all` node has a required Boolean `ordered` field. The
 strict decoder rejects absence or non-Boolean values, keeping logical stream
@@ -1007,14 +1046,17 @@ scan rows before symbolic source partitioning and any per-task pushed limit.
 
 Every relation is capped at 4096 candidate rows. Join matrices and outputs,
 UnionAll, and grouped aggregation are checked before construction; Sort, Merge,
-and latent sequences may construct at most 16384 audited candidate-row pairs
-before permutations or symbolic ordinals are allocated. Every explicit outcome
-family is separately capped at 256 alternatives, including unordered-Limit
-choices, at-most-three-row sequence choices, Cartesian products, and gathers.
-Other ordered families use bounded symbolic ordinals, and cross-plan bag or
-sequence equality is capped at 4096 explicit outcome pairs. Exceeding any audit
-bound returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
-approximating semantics.
+and latent-sequence pair preflights may charge at most 16384 audited pairs of
+syntactically live slots before permutations or ordinals are allocated.
+Representation selection and small explicit permutations/interleavings remain
+based on the full shaped row vector. Every explicit outcome family is
+separately capped at 256 alternatives, including non-singleton unordered-Limit
+masks, canonical checked-error outcomes, at-most-three-row sequence choices,
+Cartesian products, and gathers. Nontrivial unordered `Take(1)` instead uses at
+most one bounded choice per source outcome. Other ordered families use bounded
+symbolic ordinals, and cross-plan bag or sequence equality is capped at 4096
+explicit outcome pairs. Exceeding any audit bound returns `UNSUPPORTED` rather
+than allocating an unbounded intermediate or approximating semantics.
 
 Grouped aggregation first gives every complete ordered group-key value an exact
 nonrecursive structural signature. For `N` input rows and `K` distinct
@@ -1187,9 +1229,10 @@ python3 -m rbo_verifier before.json after.json \
 
 The command prints a JSON verdict. A `COUNTEREXAMPLE` verdict contains only the
 present base-table rows; opaque-function and symbolic-routing interpretations
-and the unmatched unordered-Limit choice are deliberately not treated as a
-stable witness format, so concrete replay is the confirmation boundary. Every
-bounded verdict reports both `row_bound` and the fixed `task_bound` of two. A
+and bounded plan-choice valuations, including an unmatched unordered-singleton
+selector, are deliberately not treated as a stable witness format, so concrete
+replay is the confirmation boundary. Every bounded verdict reports both
+`row_bound` and the fixed `task_bound` of two. A
 `SCHEMA_MISMATCH` verdict is a direct correctness failure and does not depend on
 either bound. Use `--emit-smt formula.smt2` without `--solver` to inspect the
 exact proof obligation. If satisfiability succeeds but model extraction returns
@@ -1243,17 +1286,22 @@ the obligation is complete does it add definitional aliases for model
 extraction. Base rows, routing-dependent rows, opaque scalar results,
 nondeterministic outcomes, and the exact root mismatch are requested together
 from one SAT model. All enabled outcomes are printed; absent rows omit their
-meaningless payloads. Trace extraction fails closed above 100,000 unique terms.
-Enabling the read-only observers without aliases is regression-tested to leave
-the normal SMT-LIB obligation byte-for-byte unchanged. Every trace carries
-SHA-256 digests of the complete normalized before/after snapshots; supplying
-`--query` also binds the exact query bytes and is mandatory for real replay.
+meaningless payloads. Every enabled outcome and unmatched root record includes
+its bounded plan choices as concrete `{value,bound}` pairs. Those values are
+diagnostic model data, not stable verifier-witness fields. Trace extraction
+fails closed above 100,000 unique terms. Enabling the read-only observers
+without aliases is regression-tested to leave the normal SMT-LIB obligation
+byte-for-byte unchanged. Every trace carries SHA-256 digests of the complete
+normalized before/after snapshots; supplying `--query` also binds the exact
+query bytes and is mandatory for real replay.
 When tracing a saved verifier candidate, `--verifier-verdict verdict.json`
 constrains the rebuilt obligation to that verdict's decoded base-table rows.
-The inspector may resolve routing, opaque-function, and ordering choices, but
-cannot silently select a different database. If the saved database no longer
-makes the obligation satisfiable, the diagnostic status is
-`WITNESS_NOT_REPRODUCED`, not a global equivalence proof.
+The inspector may resolve routing decisions, bounded plan choices, and
+opaque-function values, including values under legal bounded choices, but
+cannot silently select a different database. Raw global invariants remain
+choice-independent; opaque-result domains use guarded quantified invariants.
+If the saved database no longer makes the obligation satisfiable, the
+diagnostic status is `WITNESS_NOT_REPRODUCED`, not a global equivalence proof.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \

@@ -218,9 +218,9 @@ TString RowsYson(std::initializer_list<const char*> rows) {
     return result;
 }
 
-class TGeneratedDmlFixture {
+class TTestFixture {
 public:
-    explicit TGeneratedDmlFixture(const std::string& createTable, const std::string& seed = "")
+    explicit TTestFixture(const std::string& createTable, const std::string& seed = "")
         : Kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false))
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
@@ -248,7 +248,6 @@ public:
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    // Compares a query's rows ignoring their order, which RETURNING never promises
     void CheckUnordered(const std::string& query, const TString& expected) {
         auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
@@ -256,8 +255,6 @@ public:
             TStringBuilder() << "unexpected rows for: " << query);
     }
 
-    // What an UPDATE ... RETURNING reports has to be what actually landed in the table, so the returned rows
-    // are checked both against the expectation and against a SELECT of the same columns over the same rows
     void CheckReturning(const std::string& update, const std::string& selectBack, const TString& expected) {
         auto result = Session.ExecuteQuery(update, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << update << "\n" << result.GetIssues().ToString());
@@ -282,671 +279,254 @@ private:
 
 Y_UNIT_TEST_SUITE(GeneratedStored) {
     Y_UNIT_TEST(Basic) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 1);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[4]]]");
 
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 2);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[5]]]");
 
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 3, 3);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[8]]]");
 
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[4]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 2);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[5]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2, v1) VALUES (1, 3, 3);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[8]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 5);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[10]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 5);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[10]]]");
     }
 
     Y_UNIT_TEST(WithIndex) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL ON (v)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 1);");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 4;", "[[1;[4]]]");
 
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k),
-                    INDEX idx_v GLOBAL ON (v)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 3);");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 4;", "[]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 6;", "[[1;[6]]]");
 
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable VIEW idx_v WHERE v = 4;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[4]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 3);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable VIEW idx_v WHERE v = 4;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable VIEW idx_v WHERE v = 6;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[6]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 5);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, v FROM TestTable VIEW idx_v WHERE v = 10;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[10]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 5);");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 10;", "[[1;[10]]]");
     }
 
     Y_UNIT_TEST(DependsOnDefault) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                c Int32 NOT NULL DEFAULT 7,
+                g Int32 GENERATED ALWAYS AS (k + c) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    c Int32 NOT NULL DEFAULT 7,
-                    g Int32 GENERATED ALWAYS AS (k + c) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k) VALUES (1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, c, g FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;7;[8]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec("UPSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, c, g FROM TestTable ORDER BY k;", "[[1;7;[8]]]");
     }
 
     Y_UNIT_TEST(Insert) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
         // Omit v1: new row stores v1 = NULL. v = 1*2 + 1 + COALESCE(NULL, 1) = 4
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (k, v2) VALUES (1, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("INSERT INTO TestTable (k, v2) VALUES (1, 1);");
 
         // Supply every dependency. v = 2*2 + 3 + COALESCE(5, 1) = 12
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (k, v2, v1) VALUES (2, 3, 5);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("INSERT INTO TestTable (k, v2, v1) VALUES (2, 3, 5);");
 
-        {
-            const std::string query = R"(
-                SELECT k, v1, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;#;[4]];
-                [2;[5];[12]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Check("SELECT k, v1, v FROM TestTable ORDER BY k;", "[[1;#;[4]];[2;[5];[12]]]");
     }
 
     Y_UNIT_TEST(Replace) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
         // Seed a row with a non-null v1. v = 1*2 + 1 + COALESCE(5, 1) = 8
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 5);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("INSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 5);");
 
         // REPLACE the existing row omitting v1: v1 is reset to NULL. v = 1*2 + 3 + COALESCE(NULL, 1) = 6
-        {
-            const std::string query = R"(
-                REPLACE INTO TestTable (k, v2) VALUES (1, 3);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("REPLACE INTO TestTable (k, v2) VALUES (1, 3);");
 
         // REPLACE inserting a new row: v1 = NULL. v = 2*2 + 1 + COALESCE(NULL, 1) = 6
-        {
-            const std::string query = R"(
-                REPLACE INTO TestTable (k, v2) VALUES (2, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("REPLACE INTO TestTable (k, v2) VALUES (2, 1);");
 
-        {
-            const std::string query = R"(
-                SELECT k, v1, v FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;#;[6]];
-                [2;#;[6]]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Check("SELECT k, v1, v FROM TestTable ORDER BY k;", "[[1;#;[6]];[2;#;[6]]]");
     }
 
     Y_UNIT_TEST(Returning) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        auto returns = [&](const std::string& query, const TString& expected) {
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
-        };
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
         // UPSERT a new row (v1 read back as NULL). v = 1*2 + 1 + COALESCE(NULL, 1) = 4
-        returns("UPSERT INTO TestTable (k, v2) VALUES (1, 1) RETURNING k, v;", R"([[1;[4]]])");
+        fixture.CheckReturning("UPSERT INTO TestTable (k, v2) VALUES (1, 1) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[4]]]");
 
         // UPSERT the existing row supplying v1. v = 1*2 + 3 + COALESCE(5, 1) = 10
-        returns("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 3, 5) RETURNING k, v;", R"([[1;[10]]])");
+        fixture.CheckReturning("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 3, 5) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[10]]]");
 
         // UPSERT the existing row omitting v1 (== 5): it is read back, not treated as NULL
         // v = 1*2 + 4 + COALESCE(5, 1) = 11
-        returns("UPSERT INTO TestTable (k, v2) VALUES (1, 4) RETURNING k, v;", R"([[1;[11]]])");
+        fixture.CheckReturning("UPSERT INTO TestTable (k, v2) VALUES (1, 4) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[11]]]");
 
         // INSERT a new row (v1 = NULL). v = 2*2 + 3 + COALESCE(NULL, 1) = 8
-        returns("INSERT INTO TestTable (k, v2) VALUES (2, 3) RETURNING k, v;", R"([[2;[8]]])");
+        fixture.CheckReturning("INSERT INTO TestTable (k, v2) VALUES (2, 3) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 2;", "[[2;[8]]]");
 
         // REPLACE a new row (v1 = NULL). v = 3*2 + 1 + COALESCE(NULL, 1) = 8
-        returns("REPLACE INTO TestTable (k, v2) VALUES (3, 1) RETURNING k, v;", R"([[3;[8]]])");
+        fixture.CheckReturning("REPLACE INTO TestTable (k, v2) VALUES (3, 1) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 3;", "[[3;[8]]]");
     }
 
     Y_UNIT_TEST(ReturningWithIndex) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL ON (v)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k * 2 + v2 + COALESCE(v1, 1)) STORED,
-                    PRIMARY KEY (k),
-                    INDEX idx_v GLOBAL ON (v)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        auto returns = [&](const std::string& query, const TString& expected) {
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
-        };
         auto viaIndex = [&](const std::string& value, const TString& expected) {
-            const std::string query = "SELECT k, v FROM TestTable VIEW idx_v WHERE v = " + value + " ORDER BY k;";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = " + value + " ORDER BY k;", expected);
         };
 
         // UPSERT supplying v1. v = 1*2 + 1 + COALESCE(3, 1) = 6
-        returns("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 3) RETURNING k, v;", R"([[1;[6]]])");
-        viaIndex("6", R"([[1;[6]]])");
+        fixture.CheckReturning("UPSERT INTO TestTable (k, v2, v1) VALUES (1, 1, 3) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[6]]]");
+        viaIndex("6", "[[1;[6]]]");
 
         // Partial UPSERT omitting v1 (== 3): read back, index updated. v = 1*2 + 5 + COALESCE(3, 1) = 10
-        returns("UPSERT INTO TestTable (k, v2) VALUES (1, 5) RETURNING k, v;", R"([[1;[10]]])");
+        fixture.CheckReturning("UPSERT INTO TestTable (k, v2) VALUES (1, 5) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[10]]]");
         viaIndex("6", "[]");
-        viaIndex("10", R"([[1;[10]]])");
+        viaIndex("10", "[[1;[10]]]");
 
         // INSERT (v1 = NULL). v = 2*2 + 3 + COALESCE(NULL, 1) = 8
-        returns("INSERT INTO TestTable (k, v2) VALUES (2, 3) RETURNING k, v;", R"([[2;[8]]])");
+        fixture.CheckReturning("INSERT INTO TestTable (k, v2) VALUES (2, 3) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 2;", "[[2;[8]]]");
 
         // REPLACE (v1 = NULL). v = 3*2 + 1 + COALESCE(NULL, 1) = 8
-        returns("REPLACE INTO TestTable (k, v2) VALUES (3, 1) RETURNING k, v;", R"([[3;[8]]])");
+        fixture.CheckReturning("REPLACE INTO TestTable (k, v2) VALUES (3, 1) RETURNING k, v;",
+            "SELECT k, v FROM TestTable WHERE k = 3;", "[[3;[8]]]");
 
         // Both k=2 and k=3 land on v == 8 in the index
-        viaIndex("8", R"([[2;[8]];[3;[8]]])");
+        viaIndex("8", "[[2;[8]];[3;[8]]]");
     }
 
     Y_UNIT_TEST(DependsOnSerial) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                id Serial,
+                name String,
+                g Int32 GENERATED ALWAYS AS (id * 10) STORED,
+                PRIMARY KEY (id)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    id Serial,
-                    name String,
-                    g Int32 GENERATED ALWAYS AS (id * 10) STORED,
-                    PRIMARY KEY (id)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (name) VALUES ("a"), ("b");
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT id, g FROM TestTable ORDER BY id;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[10]];
-                [2;[20]];
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec(R"(INSERT INTO TestTable (name) VALUES ("a"), ("b");)");
+        fixture.Check("SELECT id, g FROM TestTable ORDER BY id;", "[[1;[10]];[2;[20]]]");
     }
 
     Y_UNIT_TEST(NotNull) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    g Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v1, 0) + v2) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                g Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v1, 0) + v2) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
         // Inline path: every dependency supplied. g = COALESCE(5, 0) + 1 = 6
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v1, v2) VALUES (1, 5, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v1, v2) VALUES (1, 5, 1);");
 
         // Stream-lookup path: partial UPSERT omitting v1 (== 5), which is read back. g = 5 + 3 = 8
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 3);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 3);");
 
         // INSERT omitting the nullable v1: it is stored as NULL, and COALESCE keeps g non-NULL
         // g = COALESCE(NULL, 0) + 3 = 3.
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (k, v2) VALUES (2, 3);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec("INSERT INTO TestTable (k, v2) VALUES (2, 3);");
 
         // g is NOT NULL, so it comes back non-optional
-        {
-            const std::string query = R"(
-                SELECT k, g FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;8];
-                [2;3]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Check("SELECT k, g FROM TestTable ORDER BY k;", "[[1;8];[2;3]]");
     }
 
     Y_UNIT_TEST(NotNullWithIndex) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v1 Int32,
-                    v2 Int32 NOT NULL,
-                    g Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v1, 0) + v2) STORED,
-                    PRIMARY KEY (k),
-                    INDEX idx_g GLOBAL ON (g)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32 NOT NULL,
+                g Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v1, 0) + v2) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_g GLOBAL ON (g)
+            );
+        )");
 
         // g = COALESCE(3, 0) + 1 = 4
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v1, v2) VALUES (1, 3, 1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, g FROM TestTable VIEW idx_g WHERE g = 4;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;4]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v1, v2) VALUES (1, 3, 1);");
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 4;", "[[1;4]]");
 
         // Partial UPSERT omitting v1 (== 3): read back, index updated. g = 3 + 5 = 8
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v2) VALUES (1, 5);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, g FROM TestTable VIEW idx_g WHERE g = 4;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            const std::string query = R"(
-                SELECT k, g FROM TestTable VIEW idx_g WHERE g = 8;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;8]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec("UPSERT INTO TestTable (k, v2) VALUES (1, 5);");
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 4;", "[]");
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 8;", "[[1;8]]");
     }
 
     Y_UNIT_TEST(NotNullDependsOnSerial) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                id Serial,
+                name String,
+                g Int32 NOT NULL GENERATED ALWAYS AS (id * 10) STORED,
+                PRIMARY KEY (id)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    id Serial,
-                    name String,
-                    g Int32 NOT NULL GENERATED ALWAYS AS (id * 10) STORED,
-                    PRIMARY KEY (id)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                INSERT INTO TestTable (name) VALUES ("a");
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                SELECT id, g FROM TestTable ORDER BY id;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;10]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Exec(R"(INSERT INTO TestTable (name) VALUES ("a");)");
+        fixture.Check("SELECT id, g FROM TestTable ORDER BY id;", "[[1;10]]");
     }
 
     Y_UNIT_TEST(ShowCreateTable) {
@@ -1296,50 +876,24 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             "is declared NOT NULL, but its expression can evaluate to NULL");
     }
     Y_UNIT_TEST(NullableOptionalExprAccepted) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Json,
+                hasKey Bool GENERATED ALWAYS AS (JSON_EXISTS(v, "$.key" UNKNOWN ON ERROR)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    v Json,
-                    hasKey Bool GENERATED ALWAYS AS (JSON_EXISTS(v, "$.key" UNKNOWN ON ERROR)) STORED,
-                    PRIMARY KEY (k)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                UPSERT INTO TestTable (k, v) VALUES
-                    (1, CAST(@@{"key": 1}@@ AS Json)),
-                    (2, CAST(@@{"other": 1}@@ AS Json)),
-                    (3, NULL);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        fixture.Exec(R"(
+            UPSERT INTO TestTable (k, v) VALUES
+                (1, CAST(@@{"key": 1}@@ AS Json)),
+                (2, CAST(@@{"other": 1}@@ AS Json)),
+                (3, NULL);
+        )");
 
         // A NULL document yields a NULL value, which a nullable column stores
-        {
-            const std::string query = R"(
-                SELECT k, hasKey FROM TestTable ORDER BY k;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([
-                [1;[%true]];
-                [2;[%false]];
-                [3;#]
-            ])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fixture.Check("SELECT k, hasKey FROM TestTable ORDER BY k;", "[[1;[%true]];[2;[%false]];[3;#]]");
     }
 
     Y_UNIT_TEST(GeneratedColumnStoredPersisted) {
@@ -1354,38 +908,19 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(SuppliedValueRejected) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32,
+                v Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
-        {
-            auto result = session
-                              .ExecuteQuery(R"(
-                CREATE TABLE TestTable (
-                    k Int32,
-                    v Int32 GENERATED ALWAYS AS (k + 1) STORED,
-                    PRIMARY KEY (k)
-                );
-            )",
-                                  TTxControl::NoTx())
-                              .GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteQuery("UPSERT INTO TestTable (k, v) VALUES (1, 99);", TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "supplying a value for a generated column must be rejected");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "cannot be set explicitly");
-        }
+        fixture.Rejects("UPSERT INTO TestTable (k, v) VALUES (1, 99);", "cannot be set explicitly");
     }
 
     Y_UNIT_TEST(TtlRejected) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-        auto result = session
-                          .ExecuteQuery(R"(
+        CheckGeneratedColumnRejected(R"(
             CREATE TABLE TestTable (
                 k Int32,
                 base Timestamp,
@@ -1393,10 +928,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                 PRIMARY KEY (k)
             ) WITH (TTL = Interval("PT1H") ON ts);
         )",
-                              TTxControl::NoTx())
-                          .GetValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), "TTL on a generated column must be rejected");
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "can not be a GENERATED column");
+            "can not be a GENERATED column");
     }
 
     Y_UNIT_TEST(BulkUpsertRejected) {
@@ -1431,34 +963,20 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DependencyDropRejected) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32,
+                a Int32,
+                v Int32 GENERATED ALWAYS AS (a + 1) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
 
-        {
-            auto result = session
-                              .ExecuteQuery(R"(
-                CREATE TABLE TestTable (
-                    k Int32,
-                    a Int32,
-                    v Int32 GENERATED ALWAYS AS (a + 1) STORED,
-                    PRIMARY KEY (k)
-                );
-            )",
-                                  TTxControl::NoTx())
-                              .GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteQuery("ALTER TABLE TestTable DROP COLUMN a;", TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "dropping a dependency of a generated column must be rejected");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "used by generated column");
-        }
+        fixture.Rejects("ALTER TABLE TestTable DROP COLUMN a;", "used by generated column");
     }
 
     Y_UNIT_TEST(UpdateSetGeneratedRejected) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         fixture.Rejects("UPDATE TestTable SET g1 = 5 WHERE k = 1;", "cannot be set explicitly");
         fixture.Rejects("UPDATE TestTable SET g2 = 5 WHERE k = 1;", "cannot be set explicitly");
@@ -1469,7 +987,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetGeneratedWithDependencyRejected) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         fixture.Rejects("UPDATE TestTable SET a = 5, g1 = 5 WHERE k = 1;", "cannot be set explicitly");
         fixture.Rejects("UPDATE TestTable SET d = 5, g2 = 5 WHERE k = 1;", "cannot be set explicitly");
@@ -1480,7 +998,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetOneDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = COALESCE(10, 0) + COALESCE(2, 0) = 12, g2 untouched (b, c unchanged) = 23
         fixture.Exec("UPDATE TestTable SET a = 10 WHERE k = 1;");
@@ -1490,7 +1008,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetAllDependencies) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = 5 + 6 = 11, g2 = 6*10 + 7 = 67
         fixture.Exec("UPDATE TestTable SET a = 5, b = 6, c = 7 WHERE k = 1;");
@@ -1500,7 +1018,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetSharedDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
         fixture.Exec("UPDATE TestTable SET b = 7 WHERE k = 1;");
@@ -1510,7 +1028,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetIndependentDependencies) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = 4 + 2 = 6, g2 = 2*10 + 9 = 29
         fixture.Exec("UPDATE TestTable SET a = 4, c = 9 WHERE k = 1;");
@@ -1520,7 +1038,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetNonDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         fixture.Exec("UPDATE TestTable SET d = 42 WHERE k = 1;");
 
@@ -1529,7 +1047,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateSetDependencyToNull) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = 1 + 0 = 1, g2 = 0*10 + 3 = 3
         fixture.Exec("UPDATE TestTable SET b = NULL WHERE k = 1;");
@@ -1539,7 +1057,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // Matches k=1 only. g1 = 10 + 2 = 12, g2 = 23
         fixture.Exec("UPDATE TestTable SET a = 10 WHERE b = 2;");
@@ -1549,7 +1067,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 == 3 matches k=1 only. g1 = 10 + 2 = 12, g2 = 23
         fixture.Exec("UPDATE TestTable SET a = 10 WHERE g1 = 3;");
@@ -1559,7 +1077,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereGeneratedAndDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // g1 = 3 unchanged (a, b untouched), g2 = 2*10 + 9 = 29
         fixture.Exec("UPDATE TestTable SET c = 9 WHERE g1 = 3 AND b = 2;");
@@ -1569,7 +1087,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereGeneratedSetSharedDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         // WHERE sees the old g2 == 23; after the write g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
         fixture.Exec("UPDATE TestTable SET b = 7 WHERE g2 = 23;");
@@ -1579,7 +1097,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereGeneratedNoMatch) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed);
 
         fixture.Exec("UPDATE TestTable SET a = 10 WHERE g1 = 999;");
 
@@ -1588,7 +1106,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWithIndexOnGenerated) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL);
+        TTestFixture fixture(IndexedGeneratedTableDDL);
         fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2);");
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
 
@@ -1601,7 +1119,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningStarNoGeneratedUpdate) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING *;",
@@ -1613,7 +1131,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningStarWithGeneratedUpdate) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 100 + b, g2 untouched
         fixture.CheckReturning(
@@ -1627,7 +1145,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningAllColumnsListed) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // b feeds both: g1 = a + 50, g2 = 50*10 + c
         fixture.CheckReturning(
@@ -1641,7 +1159,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningGeneratedUpdated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, g1;",
@@ -1650,7 +1168,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningGeneratedNotUpdated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING k, g1, g2;",
@@ -1659,7 +1177,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningDependenciesUpdatedAndNot) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, a, b, g1;",
@@ -1668,7 +1186,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningOneOfTwoGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET a = 100 WHERE k < 3 RETURNING k, g1, g2;",
@@ -1677,7 +1195,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningBothGeneratedSharedDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET b = 50 WHERE k < 3 RETURNING k, g1, g2;",
@@ -1686,7 +1204,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningBothGeneratedIndependentDependencies) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET a = 100, c = 77 WHERE k < 3 RETURNING k, g1, g2;",
@@ -1699,7 +1217,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateReturningNoGeneratedColumns) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckReturning(
             "UPDATE TestTable SET d = 55 WHERE k < 3 RETURNING k, d;",
@@ -1711,7 +1229,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateWhereGeneratedWithIndex) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL);
+        TTestFixture fixture(IndexedGeneratedTableDDL);
         fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 5, 5);");
 
         fixture.Exec("UPDATE TestTable SET b = 7 WHERE g1 = 3;");
@@ -1723,7 +1241,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnGeneratedRejected) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Rejects("UPDATE TestTable ON (k, g1) VALUES (1, 5);", "cannot be set explicitly");
         fixture.Rejects("UPDATE TestTable ON (k, a, g2) VALUES (1, 5, 5);", "cannot be set explicitly");
@@ -1732,7 +1250,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnOneDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 10 + 2 = 12, g2 = 2*10 + 3 = 23
         fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10);");
@@ -1742,7 +1260,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnAllDependencies) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 5 + 6 = 11, g2 = 6*10 + 7 = 67
         fixture.Exec("UPDATE TestTable ON (k, a, b, c) VALUES (1, 5, 6, 7);");
@@ -1752,7 +1270,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnSharedDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 1 + 7 = 8, g2 = 7*10 + 3 = 73
         fixture.Exec("UPDATE TestTable ON (k, b) VALUES (1, 7);");
@@ -1762,7 +1280,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnIndependentDependencies) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 4 + 2 = 6, g2 = 2*10 + 9 = 29
         fixture.Exec("UPDATE TestTable ON (k, a, c) VALUES (1, 4, 9);");
@@ -1772,7 +1290,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnNonDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("UPDATE TestTable ON (k, d) VALUES (1, 42);");
 
@@ -1781,7 +1299,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnDependencyToNull) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 1 + 0 = 1, g2 = 0*10 + 3 = 3
         fixture.Exec("UPDATE TestTable ON (k, b) VALUES (1, NULL);");
@@ -1791,7 +1309,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnMultipleRows) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // k=1: g1 = 10 + 2 = 12, k=2: g1 = 20 + 5 = 25
         fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10), (2, 20);");
@@ -1801,7 +1319,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnMissingRow) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("UPDATE TestTable ON (k, a) VALUES (99, 1);");
 
@@ -1809,7 +1327,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnMissingAndExistingRows) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // Only k=1 exists: g1 = 10 + 2 = 12
         fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 10), (99, 1);");
@@ -1819,7 +1337,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnViaSelect) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 10 + 2 = 12
         fixture.Exec("UPDATE TestTable ON SELECT 1 AS k, 10 AS a;");
@@ -1829,7 +1347,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnReturningGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // g1 = 10 + 2 = 12, g2 unchanged at 23
         fixture.CheckReturning(
@@ -1839,7 +1357,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnReturningBothGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         // k=1: g1 = 1 + 7 = 8,  g2 = 7*10 + 3 = 73
         // k=2: g1 = 4 + 7 = 11, g2 = 7*10 + 6 = 76
@@ -1850,7 +1368,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(UpdateOnWithIndexOnGenerated) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+        TTestFixture fixture(IndexedGeneratedTableDDL,
             "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
 
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
@@ -1865,7 +1383,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnByKey) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable ON (k) VALUES (2);");
 
@@ -1873,7 +1391,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnMultipleRows) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable ON (k) VALUES (1), (3);");
 
@@ -1881,7 +1399,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnMissingRow) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable ON (k) VALUES (99);");
 
@@ -1889,7 +1407,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnViaSelect) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable ON SELECT 2 AS k;");
 
@@ -1897,7 +1415,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnReturningGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable ON (k) VALUES (2) RETURNING k, a, b, g1, g2;",
             "[[2;[4];[5];[9];[56]]]");
@@ -1906,7 +1424,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteOnWithIndexOnGenerated) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+        TTestFixture fixture(IndexedGeneratedTableDDL,
             "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
 
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 9;", "[[2;[9]]]");
@@ -1919,7 +1437,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByPrimaryKey) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE k = 2;");
 
@@ -1927,7 +1445,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedColumn) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 9;");
 
@@ -1935,7 +1453,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedColumnRange) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g2 > 50;");
 
@@ -1943,7 +1461,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByDependencyColumn) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE b = 5;");
 
@@ -1951,7 +1469,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedAndDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 9 AND b = 5;");
 
@@ -1959,7 +1477,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedOrDependency) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 3 OR c = 9;");
 
@@ -1967,7 +1485,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByBothGeneratedColumns) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 9 AND g2 = 56;");
 
@@ -1975,7 +1493,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedColumnIn) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 IN (3, 15);");
 
@@ -1983,7 +1501,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedNoMatch) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 999;");
 
@@ -1991,7 +1509,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteAllByGeneratedPredicate) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 > 0;");
 
@@ -1999,7 +1517,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteReturningStar) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable WHERE g1 = 9 RETURNING *;",
             "[[[4];[5];[6];[100];[9];[56];2]]");
@@ -2008,7 +1526,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteReturningGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable WHERE b = 5 RETURNING k, g1, g2;", "[[2;[9];[56]]]");
 
@@ -2016,7 +1534,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteReturningDependenciesAndGenerated) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable WHERE g1 = 15 RETURNING k, a, b, g1;", "[[3;[7];[8];[15]]]");
 
@@ -2024,7 +1542,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteReturningMultipleRows) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable WHERE d = 100 RETURNING k, g1, g2;",
             "[[1;[3];[23]];[2;[9];[56]]]");
@@ -2033,7 +1551,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteReturningNoMatch) {
-        TGeneratedDmlFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
 
         fixture.CheckUnordered("DELETE FROM TestTable WHERE g1 = 999 RETURNING k, g1;", "[]");
 
@@ -2041,7 +1559,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteWithIndexOnGenerated) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+        TTestFixture fixture(IndexedGeneratedTableDDL,
             "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
 
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 3;", "[[1;[3]]]");
@@ -2054,7 +1572,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
     }
 
     Y_UNIT_TEST(DeleteByGeneratedWithIndex) {
-        TGeneratedDmlFixture fixture(IndexedGeneratedTableDDL,
+        TTestFixture fixture(IndexedGeneratedTableDDL,
             "UPSERT INTO TestTable (k, a, b) VALUES (1, 1, 2), (2, 4, 5), (3, 7, 8);");
 
         fixture.Exec("DELETE FROM TestTable WHERE g1 = 9;");

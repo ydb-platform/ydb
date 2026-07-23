@@ -244,7 +244,8 @@ class YdbTopicWorkload(WorkloadBase):
         self._run_workload(
             self.workload_topic_name,
             self.duration,
-            "10M",  # 100M DEFAULT_BYTE_RATE overloads a single CI node
+            # DEFAULT_BYTE_RATE (100M) overloads a single CI node
+            self.config.SMALL_BYTE_RATE,
             self.producers,
             self.consumers,
             with_config=True
@@ -327,8 +328,8 @@ class YdbTopicWorkload(WorkloadBase):
             return tests
         chunk = tests[self.chunk_index * self.chunk_size:(self.chunk_index + 1) * self.chunk_size]
 
-        # Sequential: WorkloadBase runs each returned func in a parallel thread;
-        # several topic stresses at once overload CI (#46635).
+        # One callable so WorkloadBase starts a single worker; run chunk
+        # scenarios one by one (parallel topic stresses overload CI, #46635).
         def run_chunk():
             for f in chunk:
                 f()

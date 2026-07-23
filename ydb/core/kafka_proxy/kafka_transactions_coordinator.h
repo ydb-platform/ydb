@@ -52,8 +52,10 @@ namespace NKafka {
                 TBase::Become(&TTransactionsCoordinator::StateWork);
             }
 
-            TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionsCoordinator ";
+            NStructuredLog::TStructuredMessage LogPrefix() const {
+                return YDB_LOG_CREATE_MESSAGE(
+                    {"actorClassName", "KafkaTransactionsCoordinator"},
+                    {"selfId", SelfId()});
             }
 
             void PassAway() override;

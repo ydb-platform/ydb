@@ -17,6 +17,11 @@ PROTO_NAMESPACE(
     contrib/libs/opentelemetry-proto
 )
 
+INCLUDE_TAGS(
+    TS_PREPARE_DEPS
+    TS_PROTO
+)
+
 GRPC()
 
 SRCS(

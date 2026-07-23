@@ -1,13 +1,13 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
-#include <ydb/core/kqp/workload_service/actors/actors.h>
-#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -4834,7 +4834,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4885,7 +4885,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4998,12 +4998,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
             "Invalid vector_dimension: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
-            "Invalid vector_dimension: 0 should be between 1 and 16384");
+            "Invalid vector_dimension: 0 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
-            "Invalid vector_dimension: 16385 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65536, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65537, levels=3, clusters=10",
+            "Invalid vector_dimension: 65537 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
@@ -5095,7 +5096,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5109,7 +5110,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         WITH (
                             similarity=inner_product,
                             vector_type=float,
-                            vector_dimension=16385,
+                            vector_dimension=65537,
                             levels=3,
                             clusters=10)
                 );
@@ -5121,10 +5122,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5219,7 +5220,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
@@ -5228,7 +5229,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     WITH (
                         similarity=inner_product,
                         vector_type=float,
-                        vector_dimension=16385,
+                        vector_dimension=65537,
                         levels=3,
                         clusters=10)
             )";
@@ -5239,10 +5240,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
@@ -8552,7 +8553,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableExternalDataSourcesOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableExternalDataSourcesOnServerless(false)
             .Create();
@@ -8589,21 +8590,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto& dropTableSql = "DROP EXTERNAL TABLE MyExternalTable;";
 
-        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+        auto settings = NWorkloadManager::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
@@ -12427,7 +12428,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableResourcePoolsOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(false)
             .Create();
@@ -12457,19 +12458,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto& dropSql = "DROP RESOURCE POOL MyResourcePool;";
 
-        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+        auto settings = NWorkloadManager::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
@@ -12756,7 +12757,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableResourcePoolClassifiersOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(false)
             .Create();
@@ -12785,19 +12786,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto& dropSql = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
 
-        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+        auto settings = NWorkloadManager::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
@@ -12883,6 +12888,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         // Create with sample rank
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER ClassifierRank42 WITH (
@@ -12936,11 +12946,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
         const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIndex)), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
+        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIndex)), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NWorkloadManager::TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
 
         const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor);
         UNIT_ASSERT(response);
-        return response->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>()->SerializeToString();
+        return response->Get()->GetSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>()->SerializeToString();
     }
 
     TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
@@ -12956,6 +12966,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         // Explicit rank
         auto query = R"(
@@ -12980,19 +12995,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateResourcePoolClassifierOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableResourcePoolsOnServerless(true)
             .Create();
 
         const auto nodeIdx = ydb->GetServerlessTenantInfo().NodeIdx;
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        ydb->ExecuteQueryRetry("Wait EnableResourcePools on Serverless", R"(
+            CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);)",
+            NWorkloadManager::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(nodeIdx)
+        );
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK=20,
                 RESOURCE_POOL="test_pool"
             );)",
-            NWorkload::TQueryRunnerSettings()
+            NWorkloadManager::TQueryRunnerSettings()
                 .PoolId("")
                 .Database(serverlessTenant)
                 .NodeIndex(nodeIdx)
@@ -13014,6 +13036,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(
@@ -13046,6 +13073,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         // Create sample pool
         {
@@ -13104,6 +13136,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto query = R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
                 SET (RESOURCE_POOL = "test", RANK = 100),
@@ -13123,6 +13160,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(
@@ -13160,7 +13202,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableMetadataObjectsOnServerless(false)
             .Create();
@@ -13175,28 +13217,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto& upsertSql = "UPSERT OBJECT MySecretObject (TYPE SECRET) WITH value = \"edcba\";";
         const auto& dropSql = "DROP OBJECT MySecretObject (TYPE SECRET);";
 
-        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+        auto settings = NWorkloadManager::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
 
     Y_UNIT_TEST(CreateBackupCollectionDisabledByDefault) {
@@ -13636,7 +13678,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -13653,7 +13695,7 @@ END DO)",
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -13670,7 +13712,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -14418,17 +14460,17 @@ END DO)",
     }
 
     Y_UNIT_TEST(StreamingQueriesOnServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .Create();
 
         const auto& tenantName = ydb->GetSettings().GetServerlessTenantName();
-        const auto settings = NWorkload::TQueryRunnerSettings()
+        const auto settings = NWorkloadManager::TQueryRunnerSettings()
             .PoolId("")
             .Database(tenantName)
             .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(fmt::format(R"(
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(fmt::format(R"(
                 CREATE TOPIC MyTopic;
                 CREATE EXTERNAL DATA SOURCE MySource WITH (
                     SOURCE_TYPE = "Ydb",
@@ -14441,7 +14483,7 @@ END DO)",
             "database"_a = tenantName
         ), settings));
 
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
             CREATE STREAMING QUERY MyStreamingQuery WITH (
                 RUN = TRUE
             ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO
@@ -14451,7 +14493,7 @@ END DO)",
         TString queryText = " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 
@@ -14459,7 +14501,7 @@ END DO)",
             const auto& result = ydb->ExecuteQuery(
                 TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` " << filter
             , settings);
-            NWorkload::TSampleQueries::CheckSuccess(result);
+            NWorkloadManager::TSampleQueries::CheckSuccess(result);
 
             UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.size(), 1);
             NYdb::TResultSetParser resultParser(result.ResultSets[0]);
@@ -14476,7 +14518,7 @@ END DO)",
                 UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Ast").GetOptionalUtf8(), "/Root/test-serverless/MySource");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Text").GetOptionalUtf8(), text);
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Run").GetOptionalBool(), true);
-                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("RetryCount").GetOptionalUint64(), 0);
                 UNIT_ASSERT(!resultParser.ColumnParser("LastFailAt").GetOptionalTimestamp());
                 UNIT_ASSERT(!resultParser.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
@@ -14493,7 +14535,7 @@ END DO)",
         checkSysView(queryText, false, TStringBuilder() << "WHERE Path > '" << queryName << "'");
         checkSysView(queryText, false, TStringBuilder() << "WHERE Path < '" << queryName << "'");
 
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
             ALTER STREAMING QUERY MyStreamingQuery SET (
                 FORCE = TRUE
             ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO
@@ -14502,14 +14544,14 @@ END DO)",
         queryText = " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 
         Sleep(TDuration::Seconds(2));
         checkSysView(queryText);
 
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+        NWorkloadManager::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
             DROP STREAMING QUERY MyStreamingQuery
         )", settings));
 

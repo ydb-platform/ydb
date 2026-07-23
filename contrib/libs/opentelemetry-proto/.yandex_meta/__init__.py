@@ -13,6 +13,7 @@ def post_install(self):
         GRPC=True,
         PROTO_NAMESPACE=ArcPath(self.arcdir, GLOBAL=True),
         PY_NAMESPACE=".",
+        INCLUDE_TAGS=["TS_PROTO", "TS_PREPARE_DEPS"],
     )
 
 

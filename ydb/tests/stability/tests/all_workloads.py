@@ -102,7 +102,7 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--owner-idx", "{global_run_id}",
+                "--path", "testshard_{global_run_id}",
                 "--tsserver-port", "31313",
                 "--tsserver-host", "{node_host}"
             ],

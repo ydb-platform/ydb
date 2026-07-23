@@ -2,6 +2,8 @@
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -9,10 +11,10 @@ NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, c
     return new TKafkaFindCoordinatorActor(context, correlationId, message);
 }
 
-TString TKafkaFindCoordinatorActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaFindCoordinatorActor " << SelfId().ToString() << ": ";
-    return sb;
+NActors::NStructuredLog::TStructuredMessage TKafkaFindCoordinatorActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaFindCoordinatorActor"},
+        {"selfId", SelfId()});
 }
 
 void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
@@ -34,7 +36,9 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     TFindCoordinatorResponseData::TPtr response = std::make_shared<TFindCoordinatorResponseData>();
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
-        KAFKA_LOG_I("FIND_COORDINATOR incoming request for group# " << coordinatorKey);
+        YDB_LOG_INFO("FIND_COORDINATOR incoming request",
+            {LogPrefix()},
+            {"group", coordinatorKey});
 
         TFindCoordinatorResponseData::TCoordinator coordinator;
         coordinator.ErrorCode = NONE_ERROR;
@@ -51,7 +55,11 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     response->Port = port;
     response->NodeId = nodeId;
 
-    KAFKA_LOG_D("FIND_COORDINATOR response. Host#: " << host << ", Port#: " << port << ", NodeId# " << nodeId);
+    YDB_LOG_DEBUG("FIND_COORDINATOR response",
+        {LogPrefix()},
+        {"host", host},
+        {"port", port},
+        {"nodeId", nodeId});
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
@@ -61,7 +69,9 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
     TFindCoordinatorResponseData::TPtr response = std::make_shared<TFindCoordinatorResponseData>();
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
-        KAFKA_LOG_CRIT("FIND_COORDINATOR request failed. Reason# " << message);
+        YDB_LOG_CRIT("FIND_COORDINATOR request failed",
+            {LogPrefix()},
+            {"reason", message});
 
         TFindCoordinatorResponseData::TCoordinator coordinator;
         coordinator.ErrorCode = error;

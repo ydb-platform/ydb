@@ -100,8 +100,12 @@ public:
     void Die(const TActorContext &ctx);
     TString GetMetadataDatabasePath() const;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "TKafkaOffsetFetchActor{GroupId=" << Message->GroupId.value() << ",DatabasePath=" << DatabasePath << "}: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TKafkaOffsetFetchActor"},
+            {"selfId", SelfId()},
+            {"groupId", Message->GroupId.value()},
+            {"databasePath", DatabasePath});
     }
 
 private:

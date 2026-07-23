@@ -14,6 +14,7 @@ public:
 
     void Run(TOpRoot& root) {
         for (const auto& iter : root) {
+            iter.Current->Props.Analysis.LiveInByChild.reset();
             iter.Current->Props.Analysis.LiveOut.reset();
         }
 
@@ -36,7 +37,23 @@ public:
         return *op->Props.Analysis.LiveOut;
     }
 
-    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) override {
+    void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) override {
+        Y_ENSURE(op);
+        Y_ENSURE(childIndex < op->Children.size());
+
+        if (!op->Props.Analysis.LiveInByChild) {
+            op->Props.Analysis.LiveInByChild.emplace(op->Children.size());
+        }
+
+        auto& liveInByChild = *op->Props.Analysis.LiveInByChild;
+        Y_ENSURE(liveInByChild.size() == op->Children.size());
+
+        AddInfoUnits(liveInByChild[childIndex], columns);
+
+        AddLiveColumns(op->Children[childIndex], columns);
+    }
+
+    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) {
         const bool firstVisit = !op->Props.Analysis.LiveOut;
         bool changed = false;
         if (firstVisit) {
@@ -52,7 +69,7 @@ public:
         return firstVisit || changed;
     }
 
-    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) override {
+    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) {
         const bool firstVisit = !op->Props.Analysis.LiveOut;
         bool changed = false;
         if (firstVisit) {
@@ -110,6 +127,7 @@ private:
                     continue;
                 }
 
+                // Stage connections seed the producer's LiveOut directly.
                 AddLiveColumns(child, required);
             }
         }
@@ -149,7 +167,7 @@ void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
             AddInfoUnit(inputLive, iu);
         }
     }
-    ctx.AddLiveColumns(GetInput(), inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpRead::PropagateLiveness(ILivenessContext& ctx) {
@@ -177,13 +195,13 @@ void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
         }
     }
 
-    ctx.AddLiveColumns(input, inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpFilter::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet inputLive = ctx.GetLiveOut(this);
     ctx.AddExpressionDeps(FilterExpr, inputLive);
-    ctx.AddLiveColumns(GetInput(), inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
@@ -233,8 +251,8 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
         }
     }
 
-    ctx.AddLiveColumns(leftInput, leftLive);
-    ctx.AddLiveColumns(rightInput, rightLive);
+    ctx.AddLiveInput(this, 0, leftLive);
+    ctx.AddLiveInput(this, 1, rightLive);
 }
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
@@ -256,8 +274,8 @@ void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
         AddInfoUnit(rightLive, Columns.front());
     }
 
-    ctx.AddLiveColumns(GetLeftInput(), leftLive);
-    ctx.AddLiveColumns(GetRightInput(), rightLive);
+    ctx.AddLiveInput(this, 0, leftLive);
+    ctx.AddLiveInput(this, 1, rightLive);
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
@@ -266,7 +284,7 @@ void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
     if (auto offsetCond = GetOffsetCond()) {
         ctx.AddExpressionDeps(*offsetCond, inputLive);
     }
-    ctx.AddLiveColumns(GetInput(), inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
@@ -277,7 +295,7 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
     if (LimitCond) {
         ctx.AddExpressionDeps(*LimitCond, inputLive);
     }
-    ctx.AddLiveColumns(GetInput(), inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
@@ -286,17 +304,27 @@ void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
     for (const auto& traits : AggregationTraitsList) {
         AddInfoUnit(inputLive, traits.OriginalColName);
     }
-    ctx.AddLiveColumns(GetInput(), inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
-    for (const auto& child : Children) {
-        ctx.AddLiveColumns(child, child->GetOutputIUs());
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, MakeInfoUnitSet(Children[childIndex]->GetOutputIUs()));
     }
 }
 
 void ComputePlanLiveness(TOpRoot& root) {
     TLogicalLiveness(root.PlanProps).Run(root);
+}
+
+const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex) {
+    Y_ENSURE(op);
+    Y_ENSURE(
+        op->Props.Analysis.LiveInByChild.has_value(),
+        "Liveness requested for an operator without computed input liveness, kind: " << static_cast<ui32>(op->Kind));
+    const auto& liveInByChild = *op->Props.Analysis.LiveInByChild;
+    Y_ENSURE(childIndex < liveInByChild.size());
+    return liveInByChild[childIndex];
 }
 
 const TInfoUnitSet& GetLiveOut(IOperator* op) {

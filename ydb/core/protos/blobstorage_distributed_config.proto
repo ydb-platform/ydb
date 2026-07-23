@@ -198,6 +198,8 @@ message TEvNodeConfigInvokeOnRoot {
         bool IgnoreVSlotQuotaCheck = 6;
         bool IsSelfHealReasonDecommit = 7;
         bool FromSelfHeal = 8;
+        bool AllowUnusableDisks = 9;
+        bool SettleOnlyOnOperationalDisks = 10;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

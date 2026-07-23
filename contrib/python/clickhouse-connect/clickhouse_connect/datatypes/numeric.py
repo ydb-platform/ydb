@@ -16,6 +16,8 @@ from clickhouse_connect.driver.types import ByteSource
 
 
 class IntBase(ArrayType, registered=False):
+    _array_type: str
+
     def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):
         if len(column) == 0:
             return
@@ -109,7 +111,7 @@ class BigInt(ClickHouseType, registered=False):
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         signed = self._signed
         sz = self.byte_size
-        column = []
+        column: list[Any] = []
         app = column.append
         ifb = int.from_bytes
         if self.read_format(ctx) == "string":
@@ -407,7 +409,7 @@ class BigDecimal(Decimal, registered=False):
     def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         dec = decimal.Decimal
         scale = self.scale
-        column = []
+        column: list[Any] = []
         app = column.append
         sz = self.byte_size
         ifb = int.from_bytes

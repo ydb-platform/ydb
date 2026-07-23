@@ -328,6 +328,7 @@ namespace {
             hFunc(TEvErasePersistentBuffer, Handle)
             hFunc(TEvBatchErasePersistentBuffer, Handle)
             hFunc(TEvListPersistentBuffer, Handle)
+            hFunc(TEvPrivate::TEvRetryListPersistentBuffer, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
 
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
@@ -413,6 +414,9 @@ namespace {
         }
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
+        if (!IsPersistentBufferActor) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
         TActorBootstrapped::PassAway();
     }
 

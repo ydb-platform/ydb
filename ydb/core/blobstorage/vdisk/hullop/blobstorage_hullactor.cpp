@@ -280,6 +280,9 @@ namespace NKikimr {
         void HandleWakeup(const TActorContext& ctx) {
             Y_VERIFY_S(CompactionScheduled, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             CompactionScheduled = false;
+            if (!HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+                CancelOrReleaseCompactionTokenIfNeeded(ctx);
+            }
             UpdateTimingMetrics(ctx);
             if (ctx.Monotonic() >= NextCompactionWakeup) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
@@ -405,6 +408,7 @@ namespace NKikimr {
 
             switch (action) {
                 case NHullComp::ActNothing: {
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     // notify compaction completed
                     FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
                     // nothing to merge, try later
@@ -416,6 +420,7 @@ namespace NKikimr {
                 case NHullComp::ActDeleteSsts: {
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
                         AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
@@ -447,6 +452,7 @@ namespace NKikimr {
                 case NHullComp::ActMoveSsts: {
                     Y_VERIFY_S(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     AccountSelectedStrategy();
                     ApplyCompactionResult(ctx, {}, {}, 0);
                     break;
@@ -455,7 +461,8 @@ namespace NKikimr {
                     // start compaction
                     YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 
-                    if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+                    if (CompactionTokenState == ECompactionTokenState::NotNeeded ||
+                            !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
                         CancelOrReleaseCompactionTokenIfNeeded(ctx);
                         YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token not needed, starting compaction",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
@@ -490,10 +497,12 @@ namespace NKikimr {
             switch (CompactionTokenState) {
                 case ECompactionTokenState::Requested:
                 case ECompactionTokenState::Acquired:
-                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: cancelling pending compaction token request", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+                case ECompactionTokenState::InProgress:
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: cancelling or releasing compaction token", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
                     ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
                         Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));
                     CompactionTokenState = ECompactionTokenState::Idle;
+                    CompactionToken = 0;
                     CompactionWaitingStartTime = TMonotonic();
                     break;
                 default:
@@ -537,9 +546,8 @@ namespace NKikimr {
 
         void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
             if (CompactionTokenState == ECompactionTokenState::Idle) {
-                const TCompactionTokenId token = ev->Get()->Token;
                 ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
-                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, token));
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));
                 return;
             }
 

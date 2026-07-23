@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 
 tzlocal = None
 try:
-    import tzlocal  # Maybe we can use the tzlocal module to get a safe timezone
+    import tzlocal  # type: ignore[no-redef]  # Maybe we can use the tzlocal module to get a safe timezone
 except ImportError:
     pass
 
@@ -270,7 +270,9 @@ def _detect_local_tz() -> tzinfo:
             return resolve_zone(env_tz)
         except zoneinfo.ZoneInfoNotFoundError:
             pass
-    return datetime.now().astimezone().tzinfo
+    local = datetime.now().astimezone().tzinfo
+    assert local is not None
+    return local
 
 
 local_tz, local_tz_dst_safe = normalize_timezone(_detect_local_tz())

@@ -23,7 +23,112 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200) {
+    Y_UNIT_TEST(AllocateStaticGroupRespectsExpectedSlotSizeFromBaseConfig) {
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *node = config.AddAllNodes();
+        node->SetNodeId(1);
+        node->MutableLocation()->SetDataCenter("dc-1");
+        node->MutableLocation()->SetRack("rack-1");
+        node->MutableLocation()->SetUnit("unit-1");
+
+        NKikimrBlobStorage::TBaseConfig baseConfig;
+        baseConfig.MutableSettings()->AddDefaultMaxSlots(16);
+
+        auto *pdisk = baseConfig.AddPDisk();
+        pdisk->SetNodeId(1);
+        pdisk->SetPDiskId(1);
+        pdisk->SetPath("/dev/disk1");
+        pdisk->SetType(NKikimrBlobStorage::SSD);
+        pdisk->SetKind(0);
+        pdisk->SetGuid(1);
+        pdisk->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+        pdisk->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+        pdisk->SetExpectedSlotCount(4);
+        pdisk->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetMaxSlots(4);
+        pdisk->MutablePDiskMetrics()->SetTotalSize(1000);
+        pdisk->MutablePDiskMetrics()->SetAvailableSize(1000);
+
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(1);
+        geometry.SetNumFailDomainsPerFailRealm(1);
+        geometry.SetNumVDisksPerFailDomain(1);
+        auto *selfManagementConfig = config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::SSD);
+
+        try {
+            keeper.AllocateStaticGroup({
+                .Config = &config,
+                .GroupId = TGroupId::Zero(),
+                .GroupGeneration = 1,
+                .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                .RequiredSpace = 200,
+                .BaseConfig = &baseConfig,
+            });
+            UNIT_FAIL("Expected group allocation to fail");
+        } catch (const NStorage::TDistributedConfigKeeper::TExConfigError& ex) {
+            const TString error = ex.what();
+            UNIT_ASSERT_C(error.Contains("group allocation failed"), error);
+            UNIT_ASSERT_C(error.Contains("-v"), error);
+        }
+    }
+
+    Y_UNIT_TEST(AllocateStaticGroupOnFreshDrivesWithExpectedSlotSize) {
+        // Bootstrap self-assembly: the static group must be allocatable on drives that come
+        // straight from the config with expected_slot_size + max_slots, when neither the
+        // materialized ExpectedSlotCount nor PDisk metrics exist yet. MaxSlots serves as the
+        // slot count upper bound until NodeWarden computes the real value from the drive size.
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *node = config.AddAllNodes();
+        node->SetNodeId(1);
+        node->MutableLocation()->SetDataCenter("dc-1");
+        node->MutableLocation()->SetRack("rack-1");
+        node->MutableLocation()->SetUnit("unit-1");
+
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        auto *hostConfig = bsConfig->AddDefineHostConfig();
+        hostConfig->SetHostConfigId(1);
+        auto *drive = hostConfig->AddDrive();
+        drive->SetPath("/dev/disk1");
+        drive->SetType(NKikimrBlobStorage::SSD);
+        drive->MutablePDiskConfig()->SetExpectedSlotSize(100ull << 30);
+        drive->MutablePDiskConfig()->SetMaxSlots(4);
+
+        auto *host = bsConfig->MutableDefineBox()->AddHost();
+        host->SetHostConfigId(1);
+        host->SetEnforcedNodeId(1);
+
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(1);
+        geometry.SetNumFailDomainsPerFailRealm(1);
+        geometry.SetNumVDisksPerFailDomain(1);
+        auto *selfManagementConfig = config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::SSD);
+
+        keeper.AllocateStaticGroup({
+            .Config = &config,
+            .GroupId = TGroupId::Zero(),
+            .GroupGeneration = 1,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+        });
+
+        const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.PDisksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPath(), "/dev/disk1");
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPDiskConfig().GetExpectedSlotSize(), 100ull << 30);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPDiskConfig().GetMaxSlots(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.VDisksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GroupsSize(), 1);
+    }
+
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSS = {}, bool automaticManagement = true) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
         NKikimrBlobStorage::TStorageConfig config;
@@ -31,7 +136,10 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, {}, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (goodConfigOut) {
+            *goodConfigOut = goodConfig;
+        }
         return ss;
     }
 
@@ -46,6 +154,9 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         , ui32 overrideReplicasInRingCount = 0
         , ui32 overrideRingsCount = 0
         , ui32 replicasSpecificVolume = 1000
+        , std::unordered_set<ui32> nodesToUse = {}
+        , bool *goodConfigOut = nullptr
+        , bool automaticManagement = true
     ) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
@@ -74,7 +185,10 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, oldSS, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        bool goodConfig = keeper.GenerateStateStorageConfig(&ss, config, usedNodes, nodesToUse, oldSS, automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (goodConfigOut) {
+            *goodConfigOut = goodConfig;
+        }
         return ss;
     }
 
@@ -208,6 +322,279 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             "{ RingGroups { NToSelect: 3 Ring { Node: 1 Node: 2 Node: 3 }"
             " Ring { Node: 4 Node: 5 Node: 6 } Ring { Node: 7 Node: 8 Node: 9 } } }");
         CheckStateStorage2(GenerateSimpleStateStorage(16, {}, 0, 2, 5), "{ RingGroups { NToSelect: 1 Ring { Node: 1 Node: 2 Node: 3 Node: 4 } Ring { Node: 5 Node: 6 Node: 7 Node: 8 } } }");
+    }
+
+    Y_UNIT_TEST(NodesToUseEmptyMeansNoRestriction) {
+        // Explicit regression check: passing an empty nodesToUse set behaves exactly
+        // like not passing the parameter at all (default argument in other tests).
+        CheckStateStorage(GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}), 5, {1, 2, 3, 4, 5, 6, 7, 8});
+        CheckStateStorage(GenerateDCStateStorage(3, 1, 1, {}, {}, {}, 9, 0, 0, 1000, {}), 3, {1, 2, 3});
+    }
+
+    Y_UNIT_TEST(NodesToUseRestrictsSimplePool) {
+        // Out of 10 available nodes, only {5, 6, 7} are allowed to be used.
+        CheckStateStorage(GenerateSimpleStateStorage(10, {}, 0, 0, 200, {5, 6, 7}), 3, {5, 6, 7});
+    }
+
+    Y_UNIT_TEST(NodesToUseKeepsOriginalNodeIds) {
+        // Restrict a big pool of 100 nodes down to 8 specific nodes; the algorithm
+        // should behave exactly as if only those 8 nodes existed, while preserving
+        // their original (non-contiguous) node ids.
+        CheckStateStorage(
+            GenerateSimpleStateStorage(100, {}, 0, 0, 200, {10, 20, 30, 40, 50, 60, 70, 80}),
+            5, {10, 20, 30, 40, 50, 60, 70, 80});
+    }
+
+    Y_UNIT_TEST(NodesToUseIgnoresUnknownNodeIds) {
+        // Node ids in nodesToUse that are not present in baseConfig's AllNodes
+        // must simply be ignored, not cause a crash or a bad config.
+        CheckStateStorage(GenerateSimpleStateStorage(3, {}, 0, 0, 200, {1, 2, 3, 9999}), 3, {1, 2, 3});
+    }
+
+    Y_UNIT_TEST(NodesToUseAllUnknownYieldsBadConfigNotEmptySS) {
+        // Regression test: if nodesToUse is non-empty, but *none* of the specified node ids
+        // exist in baseConfig's AllNodes (e.g. StateStorageSelfHealAllowedNodes referencing
+        // decommissioned nodes), the generator must not silently produce an empty (but "good")
+        // state storage config, since that would trigger a destructive full reconfiguration
+        // to an empty state storage in the self-heal path. Instead, GenerateStateStorageConfig
+        // must report the config as bad.
+        bool goodConfig = true;
+        auto ss = GenerateSimpleStateStorage(3, {}, 0, 0, 200, {9998, 9999}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+        UNIT_ASSERT_EQUAL(ss.RingGroupsSize(), 0);
+    }
+
+    Y_UNIT_TEST(NodesToUseAllUnknownInDCTopologyYieldsBadConfig) {
+        // Same regression, but exercised through the multi-DC/rack topology generator, since
+        // that is the code path used in practice by the self-heal state storage logic.
+        bool goodConfig = true;
+        auto ss = GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, 0, 1000, /*nodesToUse=*/{9998, 9999}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+        UNIT_ASSERT_EQUAL(ss.RingGroupsSize(), 0);
+    }
+
+    Y_UNIT_TEST(NodesToUseForcesAlternateNodeSelectionInDC) {
+        // Without restriction, the default pick within each 3-node rack is its
+        // first node: {1, 4, 7, 10, 13, 16, 19, 22, 25}.
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
+
+        // Excluding those default nodes from nodesToUse forces the generator to
+        // fall back to the next available node in each rack.
+        std::unordered_set<ui32> nodesToUse = {
+            2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 23, 24, 26, 27
+        };
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, 0, 1000, nodesToUse),
+            9, {2, 5, 8, 11, 14, 17, 20, 23, 26});
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Cases where the requested configuration (via overrideRingsCount/overrideReplicasInRingCount)
+    // can not be honored because nodesToUse restricts the available nodes too much.
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideRingsCountSingleGroup) {
+        // Only 3 nodes are usable (all with a known GOOD self-heal state, via GenerateDCStateStorage),
+        // but the caller explicitly asks for 8 rings: impossible to satisfy.
+        bool goodConfig = true;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, /*overrideReplicasInRingCount=*/0, /*overrideRingsCount=*/8,
+            1000, /*nodesToUse=*/{1, 2, 3}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+
+        // Sanity check: with exactly as many nodes as requested rings, the override is satisfiable.
+        bool goodConfig2 = false;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, 0, /*overrideRingsCount=*/3, 1000, /*nodesToUse=*/{1, 2, 3}, &goodConfig2);
+        UNIT_ASSERT(goodConfig2);
+    }
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideReplicasInRingCountSingleGroup) {
+        // Only 2 nodes are usable, but the caller explicitly asks for 3 replicas per ring:
+        // impossible to satisfy (would need at least 3 nodes for a single ring).
+        bool goodConfig = true;
+        GenerateDCStateStorage(1, 1, 100, {}, {}, {}, 9, /*overrideReplicasInRingCount=*/3, /*overrideRingsCount=*/1,
+            1000, /*nodesToUse=*/{1, 2}, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+    }
+
+    Y_UNIT_TEST(NodesToUseInsufficientForOverrideRingsCountMultiGroup) {
+        // 3-DC topology, but nodesToUse leaves only 2 nodes in one of the DCs while the
+        // caller explicitly requests 9 rings (3 per group) - the smallest group can't supply 3 rings.
+        std::unordered_set<ui32> nodesToUse = {
+            1, 4, 7,             // dc-0: full rack representation (3 nodes)
+            10, 13,              // dc-1: only 2 nodes available
+            19, 22, 25,          // dc-2: full rack representation (3 nodes)
+        };
+        bool goodConfig = true;
+        GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, /*overrideRingsCount=*/9, 1000, nodesToUse, &goodConfig);
+        UNIT_ASSERT(!goodConfig);
+    }
+
+    Y_UNIT_TEST(NodesToUseSufficientForOverrideKeepsGoodConfig) {
+        // Same restriction style as above, but this time nodesToUse leaves exactly enough
+        // nodes in every group to satisfy the override - the config must be reported as good.
+        std::unordered_set<ui32> nodesToUse = {
+            1, 4, 7,
+            10, 13, 16,
+            19, 22, 25,
+        };
+        bool goodConfig = false;
+        GenerateDCStateStorage(3, 3, 3, {}, {}, {}, 9, 0, /*overrideRingsCount=*/9, 1000, nodesToUse, &goodConfig);
+        UNIT_ASSERT(goodConfig);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // AutomaticManagement (AutomaticStateStorageManagement / AutomaticStateStorageBoardManagement /
+    // AutomaticSchemeBoardManagement) semantics at the GenerateStateStorageConfig level: when the
+    // subsystem's automatic management is disabled, self-heal must keep the current (old) config
+    // untouched and report the result as "good", regardless of node states or overrides.
+
+    Y_UNIT_TEST(AutomaticManagementDisabledKeepsOldConfigUnchanged) {
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(42);
+        }
+
+        bool goodConfig = false;
+        auto ss = GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}, &goodConfig, oldSS, /*automaticManagement=*/false);
+
+        // The generator must not have touched node selection at all: result equals oldSS verbatim.
+        UNIT_ASSERT_EQUAL(TStringBuilder() << ss, TStringBuilder() << oldSS);
+        UNIT_ASSERT(goodConfig);
+    }
+
+    Y_UNIT_TEST(AutomaticManagementEnabledGeneratesNewConfig) {
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(42);
+        }
+
+        bool goodConfig = false;
+        auto ss = GenerateSimpleStateStorage(8, {}, 0, 0, 200, {}, &goodConfig, oldSS, /*automaticManagement=*/true);
+
+        // With automatic management enabled (default), a fresh configuration must be generated
+        // from the current node pool, ignoring the stale oldSS content.
+        UNIT_ASSERT(TStringBuilder() << ss != TStringBuilder() << oldSS);
+        CheckStateStorage(ss, 5, {1, 2, 3, 4, 5, 6, 7, 8});
+    }
+
+    Y_UNIT_TEST(AutomaticManagementDisabledIgnoresBadNodeStates) {
+        // Even if nodesToUse/overrides would normally produce a bad config, disabling automatic
+        // management must short-circuit generation entirely and still report "good", since the
+        // old config is kept as-is and self-heal is not supposed to touch it.
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(1);
+            auto* ring = rg->AddRing();
+            ring->AddNode(7);
+        }
+        bool goodConfig = false;
+        GenerateSimpleStateStorage(100, {}, /*overrideReplicasInRingCount=*/0, /*overrideRingsCount=*/8,
+            200, /*nodesToUse=*/{1, 2, 3}, &goodConfig, oldSS, /*automaticManagement=*/false);
+        UNIT_ASSERT(goodConfig);
+    }
+
+    Y_UNIT_TEST(AutomaticManagementDisabledPopulatesUsedNodes) {
+        // Regression test: when automaticManagement is false, the generator must still populate
+        // usedNodes with the node IDs taken from oldConfig, because usedNodes is shared across
+        // the StateStorage / StateStorageBoard / SchemeBoard generator invocations, and subsequent
+        // subsystem generators rely on it to avoid co-locating replicas on the same nodes.
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(2);
+            auto* ring1 = rg->AddRing();
+            ring1->AddNode(3);
+            auto* ring2 = rg->AddRing();
+            ring2->AddNode(5);
+        }
+
+        std::unordered_set<ui32> usedNodes;
+        bool goodConfig = false;
+        GenerateSimpleStateStorage(8, usedNodes, 0, 0, 200, {}, &goodConfig, oldSS,
+            /*automaticManagement=*/false);
+        UNIT_ASSERT(goodConfig);
+
+        // usedNodes is passed by value into GenerateSimpleStateStorage's helper, so re-derive it
+        // directly via the keeper API to check that the reference-passed set was actually filled.
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        NKikimrConfig::TDomainsConfig::TStateStorage ssOut;
+        NKikimrBlobStorage::TStorageConfig config;
+        for (ui32 i : xrange(8)) {
+            auto *node = config.AddAllNodes();
+            node->SetNodeId(i + 1);
+        }
+        std::unordered_set<ui32> refUsedNodes;
+        bool refGoodConfig = keeper.GenerateStateStorageConfig(&ssOut, config, refUsedNodes, {}, oldSS,
+            /*automaticManagement=*/false, 0, 0, 200);
+        UNIT_ASSERT(refGoodConfig);
+        UNIT_ASSERT(refUsedNodes.contains(3));
+        UNIT_ASSERT(refUsedNodes.contains(5));
+        UNIT_ASSERT_EQUAL(refUsedNodes.size(), 2u);
+    }
+
+    Y_UNIT_TEST(AutomaticManagementDisabledUsedNodesAvoidedBySubsequentGenerator) {
+        // Simulate the real-world scenario from the bug report: StateStorage has automatic
+        // management disabled (its nodes are kept as-is), while StateStorageBoard has it enabled.
+        // The board generator must avoid nodes already occupied by StateStorage replicas, which
+        // are threaded through the shared usedNodes set.
+        NKikimrConfig::TDomainsConfig::TStateStorage oldStateStorage;
+        {
+            auto* rg = oldStateStorage.AddRingGroups();
+            rg->SetNToSelect(3);
+            for (ui32 node : {1, 2, 3}) {
+                auto* ring = rg->AddRing();
+                ring->AddNode(node);
+            }
+        }
+
+        // Use a node pool large enough that plenty of spare nodes remain even after 3 are marked
+        // as used by StateStorage, so the board generator has enough room to build its own config.
+        NKikimrBlobStorage::TStorageConfig config;
+        for (ui32 i : xrange(20)) {
+            auto *node = config.AddAllNodes();
+            node->SetNodeId(i + 1);
+        }
+
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        // Explicitly mark all nodes as GOOD; otherwise nodes absent from SelfHealNodesState are
+        // treated as UNKNOWN, which would make IsGoodConfig() always return false.
+        for (ui32 i : xrange(20)) {
+            keeper.SelfHealNodesState[i + 1] = 0;
+        }
+        std::unordered_set<ui32> usedNodes;
+
+        // Step 1: StateStorage generation with automatic management disabled.
+        NKikimrConfig::TDomainsConfig::TStateStorage stateStorageOut;
+        bool goodConfig1 = keeper.GenerateStateStorageConfig(&stateStorageOut, config, usedNodes, {},
+            oldStateStorage, /*automaticManagement=*/false, 0, 0, 200);
+        UNIT_ASSERT(goodConfig1);
+        UNIT_ASSERT(usedNodes.contains(1));
+        UNIT_ASSERT(usedNodes.contains(2));
+        UNIT_ASSERT(usedNodes.contains(3));
+
+        // Step 2: StateStorageBoard generation with automatic management enabled, sharing usedNodes.
+        NKikimrConfig::TDomainsConfig::TStateStorage boardOut;
+        NKikimrConfig::TDomainsConfig::TStateStorage emptyOldBoard;
+        bool goodConfig2 = keeper.GenerateStateStorageConfig(&boardOut, config, usedNodes, {},
+            emptyOldBoard, /*automaticManagement=*/true, 0, 0, 200);
+        UNIT_ASSERT(goodConfig2);
+
+        // None of the nodes selected for the board must overlap with the nodes already used by
+        // StateStorage, since those were marked as used via usedNodes.
+        for (const auto& rg : boardOut.GetRingGroups()) {
+            for (const auto& ring : rg.GetRing()) {
+                for (ui32 node : ring.GetNode()) {
+                    UNIT_ASSERT_C(!(node == 1 || node == 2 || node == 3),
+                        "StateStorageBoard replica placed on node " << node
+                            << " which is already occupied by StateStorage");
+                }
+            }
+        }
     }
 }
 
@@ -438,7 +825,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         NKikimrBlobStorage::TStorageConfig Config;
         NKikimrBlobStorage::TBaseConfig BaseConfig;
 
-        void AddNode(ui32 nodeId, const TString& host, ui32 port = 19001, 
+        void AddNode(ui32 nodeId, const TString& host, ui32 port = 19001,
                      const TString& dataCenter = "", const TString& rack = "") {
             auto *node = Config.AddAllNodes();
             node->SetNodeId(nodeId);
@@ -448,6 +835,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
                 node->MutableLocation()->SetDataCenter(dataCenter);
                 node->MutableLocation()->SetRack(rack);
             }
+
+            auto *baseNode = BaseConfig.AddNode();
+            baseNode->SetNodeId(nodeId);
+            baseNode->SetConnected(true);
         }
 
         void AddCandidatePDisk(ui32 nodeId, ui32 pdiskId) {
@@ -552,6 +943,36 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             }
             return result;
         }
+
+        void SetPDiskType(ui32 nodeId, NKikimrBlobStorage::EPDiskType type) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.SetType(type);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
+
+        void SetNodeConnected(ui32 nodeId, bool connected) {
+            for (auto& node : *BaseConfig.MutableNode()) {
+                if (node.GetNodeId() == nodeId) {
+                    node.SetConnected(connected);
+                    return;
+                }
+            }
+            UNIT_FAIL("Node not found");
+        }
+
+        void SetPDiskState(ui32 nodeId, NKikimrBlobStorage::TPDiskState::E state) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.MutablePDiskMetrics()->SetState(state);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
     };
 
     NKikimrBlobStorage::TGroupGeometry Geometry(ui32 numFailDomains) {
@@ -563,16 +984,30 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     }
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-                    i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1) {
+            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1,
+            bool allowUnusableDisks = false, bool settleOnlyOnOperationalDisks = false) {
+        auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
+        selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(numFailDomains));
+        selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+        selfManagementConfig->MutableStaticGroupSelfHealAllowedNodes()->CopyFrom(allowedNodeIds);
+
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
-        keeper.AllocateStaticGroup(&s.Config, TGroupId::FromValue(0), /*groupGeneration=*/ 2,
-            TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies), Geometry(numFailDomains),
-            /*pdiskFilters=*/ {}, NKikimrBlobStorage::EPDiskType::ROT, replacedDisks, forbid,
-            /*requiredSpace=*/ 0, &s.BaseConfig, /*convertToDonor=*/ false, /*ignoreVSlotQuotaCheck=*/ true,
-            /*isSelfHealReasonDecommit=*/ false, TBridgePileId(), std::nullopt, allowedNodeIds, applyNodeAllowList);
+        keeper.AllocateStaticGroup({
+            .Config = &s.Config,
+            .GroupId = TGroupId::FromValue(0),
+            .GroupGeneration = 2,
+            .GroupType = TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies),
+            .ReplacedDisks = std::move(replacedDisks),
+            .ForbiddenPDisks = std::move(forbid),
+            .BaseConfig = &s.BaseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .AllowUnusableDisks = allowUnusableDisks,
+            .SettleOnlyOnOperationalDisks = settleOnlyOnOperationalDisks,
+            .ApplySelfHealNodeAllowList = applyNodeAllowList,
+        });
     }
 
     NProtoBuf::RepeatedField<ui32> NodeIds(const std::vector<ui32>& nodeIds) {
@@ -633,6 +1068,46 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), /*applyNodeAllowList=*/ true));
     }
 
+    Y_UNIT_TEST(PrefersOperationalPDisk) {
+        TSetup s = MakeSetup();
+        s.SetNodeConnected(2, false);
+        s.SetNodeConnected(4, false);
+        s.SetNodeConnected(5, false);
+        Reallocate(s, NodeIds({}), false);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+    }
+
+    Y_UNIT_TEST(FallsBackToNonOperationalPDiskByDefault) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), false));
+    }
+
+    Y_UNIT_TEST(FailsWithoutOperationalPDiskWhenRequested) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsNonNormalPDiskWhenOperationalRequired) {
+        TSetup s = MakeSetup();
+        s.SetPDiskState(2, NKikimrBlobStorage::TPDiskState::OpenFileError);
+        for (ui32 nodeId = 3; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
     Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {
         TSetup s = MakeBlock42Setup();
         Reallocate(s, NodeIds({10}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8);
@@ -650,6 +1125,23 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_EXCEPTION(
             Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(Block42RejectsUnusablePreservedPDiskByDefault) {
+        TSetup s = MakeBlock42Setup();
+        s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(Block42AllowsUnusablePreservedPDiskWhenRequested) {
+        TSetup s = MakeBlock42Setup();
+        s.SetPDiskType(2, NKikimrBlobStorage::EPDiskType::SSD);
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8,
+                /*allowUnusableDisks=*/ true));
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[1], 2u);
     }
 }
 

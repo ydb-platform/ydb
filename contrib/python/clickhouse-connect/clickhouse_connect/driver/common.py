@@ -3,6 +3,7 @@ import asyncio
 import struct
 import sys
 from collections.abc import Callable, Generator, MutableSequence, Sequence
+from io import IOBase
 from typing import Any
 
 from clickhouse_connect.driver.exceptions import DataError, ProgrammingError, StreamClosedError
@@ -107,7 +108,7 @@ def unescape_identifier(x: str) -> str:
     return x
 
 
-def dict_copy(source: dict = None, update: dict | None = None) -> dict:
+def dict_copy(source: dict | None = None, update: dict | None = None) -> dict:
     copy = source.copy() if source else {}
     if update:
         copy.update(update)
@@ -153,10 +154,13 @@ class SliceView(Sequence):
 
     slots = ("_source", "_range")
 
+    _source: Sequence
+    _range: range
+
     def __init__(self, source: Sequence, source_slice: slice | None = None):
         if isinstance(source, SliceView):
             self._source = source._source
-            self._range = source._range[source_slice]
+            self._range = source._range if source_slice is None else source._range[source_slice]
         else:
             self._source = source
             if source_slice is None:
@@ -200,7 +204,7 @@ class StreamContext:
 
     __slots__ = "source", "gen", "_in_context"
 
-    def __init__(self, source: Closable, gen: Generator):
+    def __init__(self, source: Closable | IOBase, gen: Generator):
         self.source = source
         self.gen = gen
         self._in_context = False

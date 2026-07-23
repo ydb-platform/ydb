@@ -2,13 +2,52 @@
 #include "interconnect_tcp_proxy.h"
 
 #include <util/stream/str.h>
+#include <util/string/cast.h>
 
 namespace NActors {
+
+    class TInterconnectSessionTCPv2::TDirectSessionV2 final : public IDirectSession {
+        TIntrusivePtr<IUringEngine> Engine;
+        ui64 Conn;
+        std::atomic_bool Stopped{false};
+
+    public:
+        TDirectSessionV2(TIntrusivePtr<IUringEngine> engine, ui64 conn)
+            : Engine(std::move(engine))
+            , Conn(conn)
+        {}
+
+        bool Send(TAutoPtr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) override {
+            if (Stopped) {
+                return false;
+            }
+            Engine->Send(Conn, std::unique_ptr<IEventHandle>(ev.Release()), std::move(replyCallback));
+            return true;
+        }
+
+        void RegisterReceiveCallback(const TActorId& localActorId, TIntrusivePtr<IReceiveCallback> callback) override {
+            if (Stopped) {
+                return;
+            }
+            Engine->RegisterReceiveCallback(Conn, localActorId, std::move(callback));
+        }
+
+        void UnregisterReceiveCallback(const TActorId& localActorId) override {
+            if (Stopped) {
+                return;
+            }
+            Engine->RegisterReceiveCallback(Conn, localActorId, nullptr);
+        }
+
+        void Shutdown() {
+            Stopped.store(true);
+        }
+    };
 
     TInterconnectSessionTCPv2::TInterconnectSessionTCPv2(TInterconnectProxyTCP* const proxy)
         : TActor(&TInterconnectSessionTCPv2::StateFunc)
         , Proxy(proxy)
-    { }
+    {}
 
     void TInterconnectSessionTCPv2::Init(const TSessionParams& params) {
         Params = params;
@@ -18,7 +57,6 @@ namespace NActors {
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
-        DirectSession = std::make_shared<TDirectSessionV2>();
     }
 
     void TInterconnectSessionTCPv2::SetNewConnection(TEvHandshakeDone::TPtr& ev) {
@@ -30,12 +68,24 @@ namespace NActors {
             i64(*ev->Get()->Socket));
 
         Socket = std::move(ev->Get()->Socket);
-        XdcSocket = std::move(ev->Get()->XdcSocket);
+        XdcSocket = std::move(ev->Get()->XdcSocket); // unused by v2 (no external data channel)
 
         Proxy->Metrics->SetConnected(1);
 
-        // NOTE: data-plane setup (input session, poller registration, traffic generation) is stubbed.
-        // Subscribers receive the direct interface through TEvNodeConnected upon subscription.
+        // Register the socket with the shared io_uring engine and start driving traffic.
+        Y_ABORT_UNLESS(Proxy->Common->UringEngineV2);
+        auto onDisconnectCallback = [selfId = SelfId(), as = TActivationContext::ActorSystem()](TDisconnectReason reason) {
+            as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
+        };
+        SetNonBlock(*Socket, false);
+        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(),
+            Proxy->Common->Settings.ChecksumInterconnectSessionV2, Params.PeerScopeId, onDisconnectCallback);
+        if (!EngineHandle) {
+            LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
+            return Terminate(TDisconnectReason::LostConnection());
+        }
+
+        DirectSession = std::make_shared<TDirectSessionV2>(Proxy->Common->UringEngineV2, EngineHandle);
     }
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
@@ -48,6 +98,7 @@ namespace NActors {
             DirectSession->Shutdown();
         }
 
+        // Shutting down the socket forces any in-flight writev/recv to complete promptly.
         if (Socket) {
             Socket->Shutdown(SHUT_RDWR);
         }
@@ -61,6 +112,8 @@ namespace NActors {
         Subscribers.clear();
 
         Proxy->Metrics->SetConnected(0);
+
+        Proxy->Common->UringEngineV2->Unregister(EngineHandle);
 
         TActor::PassAway();
     }
@@ -85,7 +138,9 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::CloseInputSession() {
-        // no input session in the current stub
+        // v2 has no separate input session; a request to close the input means the connection is being
+        // torn down
+        Terminate(TDisconnectReason::UserRequest());
     }
 
     void TInterconnectSessionTCPv2::AddSubscriber(const TActorId& actorId, ui64 cookie) {
@@ -96,14 +151,20 @@ namespace NActors {
         return new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId, DirectSession);
     }
 
+    void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
+        if (Proxy->Common->Settings.EnablePreserializeInV2) {
+            ev->Preserialize();
+        }
+        Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
+    }
+
     void TInterconnectSessionTCPv2::Forward(STATEFN_SIG) {
         Proxy->ValidateEvent(ev, "Forward");
         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
             AddSubscriber(ev->Sender, ev->Cookie);
             Send(ev->Sender, MakeNodeConnectedEvent(), 0, ev->Cookie);
         }
-        // data-plane stub: the payload event is dropped for now
-        LOG_DEBUG_IC_SESSION("ICS95", "v2 stub dropping forwarded event to %s", ev->Recipient.ToString().data());
+        EnqueueOutgoing(std::move(ev));
     }
 
     void TInterconnectSessionTCPv2::ForwardWithSubscribe(STATEFN_SIG) {
@@ -112,7 +173,7 @@ namespace NActors {
         Y_ABORT_UNLESS(msg->Event);
         AddSubscriber(msg->Event->Sender, msg->Event->Cookie);
         Send(msg->Event->Sender, MakeNodeConnectedEvent(), 0, msg->Event->Cookie);
-        // data-plane stub: the wrapped payload event is dropped for now
+        EnqueueOutgoing(TAutoPtr<IEventHandle>(msg->Event.Release()));
     }
 
     void TInterconnectSessionTCPv2::HandleSubscribe(STATEFN_SIG) {
@@ -135,8 +196,15 @@ namespace NActors {
         ev->Get()->Output(str);
         str << "<div class=\"panel panel-info\">"
                "<div class=\"panel-heading\">Session (v2)</div>"
-               "<div class=\"panel-body\">TInterconnectSessionTCPv2: data plane not yet implemented</div>"
-               "</div>";
+               "<div class=\"panel-body\">";
+        str << "<table class=\"table\">";
+//        str << "<tr><td>Registered</td><td>" << (Registered ? "true" : "false") << "</td></tr>";
+        str << "<tr><td>EngineHandle</td><td>" << EngineHandle << "</td></tr>";
+//        str << "<tr><td>OutstandingWrites</td><td>" << PendingBatches.size() << "</td></tr>";
+        str << "<tr><td>BytesSent</td><td>" << BytesSent << "</td></tr>";
+        str << "<tr><td>BytesReceived</td><td>" << BytesReceived << "</td></tr>";
+        str << "</table>";
+        str << "</div></div>";
         TActivationContext::Send(new IEventHandle(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str())));
     }
 

@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Sequence, TypeAlias
 
-from .string_order import StringOrderUniverse
+from .string_order import MAX_REPRESENTATIVES, StringOrderUniverse
 
 
 BOOL = "Bool"
@@ -508,18 +508,65 @@ def _require(term: Term, sort: str) -> None:
         raise SmtError(f"expected {sort}, got {term.sort}")
 
 
-def _depends_on(root: Term, needles: set[Term]) -> bool:
+def structural_ids(roots: tuple[Term, ...]) -> tuple[int, ...]:
+    """Intern exact term structure without recursively hashing a deep DAG."""
+
+    by_identity: dict[int, int] = {}
+    by_structure: dict[tuple[object, ...], int] = {}
+    for root in roots:
+        pending = [(root, False)]
+        while pending:
+            term, expanded = pending.pop()
+            identity = id(term)
+            if identity in by_identity:
+                continue
+            if not expanded:
+                pending.append((term, True))
+                pending.extend(
+                    (argument, False)
+                    for argument in reversed(term.arguments)
+                    if id(argument) not in by_identity
+                )
+                continue
+            structure = (
+                term.sort,
+                term.operation,
+                term.atom,
+                tuple(by_identity[id(argument)] for argument in term.arguments),
+            )
+            by_identity[identity] = by_structure.setdefault(
+                structure,
+                len(by_structure),
+            )
+    return tuple(by_identity[id(root)] for root in roots)
+
+
+SymbolKey: TypeAlias = tuple[str, str]
+
+
+def _symbol_key(term: Term) -> SymbolKey:
+    if (
+        term.operation != "symbol"
+        or term.arguments
+        or not isinstance(term.atom, str)
+    ):
+        raise SmtError("expected a well-formed named SMT symbol")
+    return term.sort, term.atom
+
+
+def _depends_on(root: Term, needles: set[SymbolKey]) -> bool:
     if not needles:
         return False
     pending = [root]
-    seen: set[Term] = set()
+    seen: set[int] = set()
     while pending:
         term = pending.pop()
-        if term in needles:
-            return True
-        if term in seen:
+        identity = id(term)
+        if identity in seen:
             continue
-        seen.add(term)
+        seen.add(identity)
+        if term.operation == "symbol" and _symbol_key(term) in needles:
+            return True
         pending.extend(term.arguments)
     return False
 
@@ -535,9 +582,9 @@ class Script:
         self._ordinary_assertions: list[Term] = []
         self._global_assertions: list[Term] = []
         self._string_literals: dict[str, Term] = {}
-        self._string_terms: dict[Term, None] = {}
+        self._string_terms: dict[int, Term] = {}
         self._string_universe: StringOrderUniverse | None = None
-        self._quantified_choices: set[Term] = set()
+        self._quantified_choices: set[SymbolKey] = set()
 
     def fresh_constant(self, hint: str, sort: str) -> Term:
         name = f"v_{self._next_symbol}"
@@ -602,7 +649,8 @@ class Script:
         """Register one nonliteral value observed by equality or ordering."""
 
         _require(term, INT)
-        if term in self._string_terms:
+        identity = id(term)
+        if identity in self._string_terms:
             return
         if self._string_universe is not None:
             raise SmtError("cannot register a new string term after the order universe is sealed")
@@ -611,7 +659,17 @@ class Script:
                 "string-valued term depends on a quantified sequence choice; "
                 "finite string ordering for that shape is not modeled"
             )
-        self._string_terms[term] = None
+        # Retaining the value makes the identity key stable until exact
+        # structural compaction at sealing.
+        self._string_terms[identity] = term
+        if len(self._string_terms) > MAX_REPRESENTATIVES:
+            self._compact_string_terms()
+            if len(self._string_terms) > MAX_REPRESENTATIVES:
+                raise SmtError(
+                    "string representative universe requires at least "
+                    f"{len(self._string_terms)} ranks; "
+                    f"limit is {MAX_REPRESENTATIVES}"
+                )
 
     def register_quantified_choice(self, term: Term) -> None:
         """Record a symbol that family comparison may bind under a quantifier."""
@@ -619,23 +677,31 @@ class Script:
         _require(term, INT)
         if term.operation != "symbol" or term.arguments:
             raise SmtError("quantified choice must be a named constant")
-        if any(_depends_on(value, {term}) for value in self._string_terms):
+        key = _symbol_key(term)
+        if any(
+            _depends_on(value, {key})
+            for value in self._string_terms.values()
+        ):
             raise SmtError(
                 "string-valued term depends on a quantified sequence choice; "
                 "finite string ordering for that shape is not modeled"
             )
-        if any(_depends_on(assertion, {term}) for assertion in self._global_assertions):
+        if any(
+            _depends_on(assertion, {key})
+            for assertion in self._global_assertions
+        ):
             raise SmtError(
                 "global invariant depends on a quantified sequence choice; "
                 "that plan shape is not modeled"
             )
-        self._quantified_choices.add(term)
+        self._quantified_choices.add(key)
 
     def seal_string_order(self) -> None:
         """Fix literal ranks and bound every observed string term exactly once."""
 
         if self._string_universe is not None:
             return
+        self._compact_string_terms()
         try:
             universe = StringOrderUniverse(
                 self._string_literals,
@@ -648,13 +714,25 @@ class Script:
             self.assert_global(eq(term, int_value(universe.rank(value))))
         if self._string_terms:
             upper = int_value(len(universe))
-            for term in self._string_terms:
+            for term in self._string_terms.values():
                 self.assert_global(
                     and_(
                         not_(lt(term, ZERO)),
                         lt(term, upper),
                     )
                 )
+
+    def _compact_string_terms(self) -> None:
+        """Keep one registered root for every exact structural SMT term."""
+
+        terms = tuple(self._string_terms.values())
+        structural_terms: dict[int, Term] = {}
+        for structural_id, term in zip(structural_ids(terms), terms):
+            structural_terms.setdefault(structural_id, term)
+        self._string_terms = {
+            id(term): term
+            for term in structural_terms.values()
+        }
 
     @property
     def string_literals(self) -> dict[int, str]:

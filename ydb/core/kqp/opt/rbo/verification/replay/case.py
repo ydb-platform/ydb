@@ -194,7 +194,9 @@ def logical_root_is_ordered(snapshot: Snapshot) -> bool:
                 result = True
             elif isinstance(node, (Project, Filter, Limit)):
                 result = ordered(node.input)
-            elif isinstance(node, (Aggregate, Join, UnionAll, Scan)):
+            elif isinstance(node, UnionAll):
+                result = node.ordered
+            elif isinstance(node, (Aggregate, Join, Scan)):
                 result = False
             else:
                 result = False

@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <future>
 #include <memory>
 #include <string>
@@ -59,6 +60,50 @@ private:
     std::atomic<int> CreateForServiceRequestCount_{0};
 };
 
+class TFlakyIamServiceStub final : public IamTokenService::Service {
+public:
+    grpc::Status Create(
+        grpc::ServerContext*,
+        const CreateIamTokenRequest*,
+        CreateIamTokenResponse* response) override
+    {
+        if (Attempts_.fetch_add(1) == 0) {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "transient failure");
+        }
+        response->set_iam_token("oauth-token");
+        response->mutable_expires_at()->set_seconds(4102444800);
+        return grpc::Status::OK;
+    }
+
+    size_t Attempts() const {
+        return Attempts_.load();
+    }
+
+private:
+    std::atomic_size_t Attempts_ = 0;
+};
+
+class TFailingCoreFacility final : public ICoreFacility {
+public:
+    void AddPeriodicTask(TPeriodicCb&& callback, TDeadline::Duration) override {
+        NYdb::NIssue::TIssues issues;
+        callback(std::move(issues), EStatus::CLIENT_CANCELLED);
+    }
+
+    void PostToResponseQueue(TPostTaskCb&&) override {}
+};
+
+using TTestOAuthFactory = TIamOAuthCredentialsProviderFactory<
+    CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+
+TTestOAuthFactory MakeOAuthFactory() {
+    TIamOAuth params;
+    params.Endpoint = "localhost:1";
+    params.EnableSsl = false;
+    params.OAuthToken = "token";
+    return TTestOAuthFactory(params);
+}
+
 using TJwtFactory = TIamJwtCredentialsProviderFactory<
     CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
 
@@ -77,6 +122,44 @@ TIamServiceParams MakeServiceParams(TCredentialsProviderFactoryPtr nestedFactory
 }
 
 } // namespace
+
+TEST(IamCredentialsProvider, AuthInfoFailsWithExpiredFacility) {
+    auto provider = MakeOAuthFactory().CreateProvider(std::weak_ptr<ICoreFacility>{});
+    auto future = provider->GetAuthInfoAsync();
+
+    ASSERT_TRUE(future.IsReady());
+    EXPECT_THROW(future.GetValue(), std::exception);
+}
+
+TEST(IamCredentialsProvider, AuthInfoFailsWhenPeriodicTaskIsRejected) {
+    auto facility = std::make_shared<TFailingCoreFacility>();
+    auto provider = MakeOAuthFactory().CreateProvider(std::weak_ptr<ICoreFacility>(facility));
+    auto future = provider->GetAuthInfoAsync();
+
+    ASSERT_TRUE(future.IsReady());
+    EXPECT_THROW(future.GetValue(), std::exception);
+}
+
+TEST(IamCredentialsProvider, AuthInfoRetriesTransientIamFailure) {
+    TFlakyIamServiceStub stub;
+    TIamGrpcServer server(&stub);
+    ASSERT_TRUE(server.Start());
+
+    TIamOAuth params;
+    params.Endpoint = server.Endpoint();
+    params.EnableSsl = false;
+    params.OAuthToken = "token";
+    params.RequestTimeout = TDuration::Seconds(2);
+
+    auto provider = TTestOAuthFactory(params).CreateProvider();
+    auto future = provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+
+    EXPECT_EQ(future.GetValue(), "oauth-token");
+    EXPECT_GE(stub.Attempts(), 2u);
+
+    server.Stop();
+}
 
 TEST(IamCredentialsProviderIdentity, IdentityIsValueBased) {
     const auto jwtParams = MakeJwtParams("iam.example:443");
@@ -136,6 +219,7 @@ TEST(IamServiceCredentialsProvider, NoArgProviderIsCachedAcrossFactoryInstances)
     secondServiceParams.TargetServiceAccountId = "another-target";
     auto differentProvider = CreateIamServiceCredentialsProviderFactory(secondServiceParams)->CreateProvider();
     EXPECT_NE(firstProvider, differentProvider);
+    EXPECT_EQ(differentProvider->GetAuthInfo(), "outer-service-token");
     EXPECT_EQ(stub.GetCreateRequestCount(), 1);
     EXPECT_EQ(stub.GetCreateForServiceRequestCount(), 2);
 
@@ -145,9 +229,8 @@ TEST(IamServiceCredentialsProvider, NoArgProviderIsCachedAcrossFactoryInstances)
 // Regression test for the deprecated no-arg CreateProvider() on the IAM service-account
 // factory with a nested gRPC JWT auth provider. Before the fix, both providers shared a single
 // TSimpleCoreFacility, each registered a periodic refresh task, and TSimpleCoreFacility's
-// single-task invariant tripped Y_ABORT_UNLESS and killed the process. The fix gives the
-// nested auth provider its own facility (via a recursive no-arg CreateProvider()), so the two
-// periodic tasks land on separate facilities.
+// single-task invariant tripped Y_ABORT_UNLESS and killed the process. Keep the nested auth
+// provider on its own facility so the two periodic tasks remain separate.
 TEST(IamServiceCredentialsProvider, NoArgCreateProviderWithGrpcInnerCreds) {
     TIamServiceStub stub;
     TIamGrpcServer server(&stub);

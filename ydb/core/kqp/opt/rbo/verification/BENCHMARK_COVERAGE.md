@@ -526,12 +526,30 @@ contains the eighteen obligations described below.
   q55, q69, q90, q93, and q96, each at two rows per referenced table and two
   tasks. These are eighteen bounded proofs (14.9% of the workload) for the
   modeled pre-physical semantics, not unbounded SQL-equivalence claims. The
-  fresh TPCH run spent 1,080/57,062 ms and the TPC-DS run spent 1,498/36,022 ms
-  in preparation/verification. Their retained SHA-256 values are
-  `cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`
+  canonical-first exact-branch portfolio's fresh TPCH run spent 1,145/56,389
+  ms and the TPC-DS run spent 1,446/36,036 ms in
+  preparation/verification. Their retained SHA-256 values are
+  `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`
   and
-  `bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`,
+  `136deef295abfe9c1fa8b4c7d8b01fe8e5131a76886ec998c0a90cbd8b778846`,
   respectively.
+
+- The exact solver portfolio retains the grouped mismatch as its canonical
+  artifact and gives that check a three-quarter SMT timeout. After `UNKNOWN`,
+  it checks the exact distributive cover: the two language-absence predicates,
+  then one guarded unmatched-result predicate per normalized source outcome
+  in either direction. Canonical `UNSAT`, or `UNSAT` for every branch, proves
+  the same theorem under one monotonic deadline. Branch-only solving lost the
+  existing TPCH q15 proof, so preservation of both nine-query corpus gates is
+  part of the accepted portfolio evidence.
+
+- A fresh portfolio run keeps TPC-DS q19, q65, and q99 `UNKNOWN` after
+  207/61,602, 259/73,190, and 206/62,883 ms of preparation/verification. The
+  first unresolved exact predicates are q19's left outcome 0 unmatched (branch
+  3/28), q65's right language absent (branch 2/4), and q99's left outcome 0
+  unmatched (branch 3/4). The retained report SHA-256 is
+  `58cc491e30e2b866f36916f2b01db36e385f005ffe3b38685f250d95ccd10164`.
+  These are localized proof bottlenecks, not proofs or counterexamples.
 
 - Independent focused and repeat runs returned `VERIFIED_BOUNDED` for TPCH q4
   after 85/924 and 98/949 ms, TPCH q22 after 200/5,645 and 158/5,636 ms, and
@@ -956,7 +974,7 @@ final side is still the ordinary StageGraph; no special equivalence path is
 introduced.
 
 Focused gates pass 11/11 in Python, 4/4 in C++, and 4/4 through the real host;
-the current full suites pass 431/431 verifier, 167/167 C++, 43/43 inspector,
+the current full suites pass 446/446 verifier, 167/167 C++, 43/43 inspector,
 and 26/26 integration tests. The complete dashboards add TPCH q4/q22 and
 TPC-DS q10/q69, producing the 45-query formula floor above. q35 reaches
 `Double`, q54 remains the invalid Map rename, and the proof floor now includes

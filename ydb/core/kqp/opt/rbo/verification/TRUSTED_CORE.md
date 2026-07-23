@@ -28,6 +28,32 @@ If the pinned solver returns `UNSAT`, `VERIFIED_BOUNDED` means:
 > and no modeled execution choice within the fixed task semantics, makes the
 > initial and final modeled observable outcomes differ.
 
+The canonical formula is retained as one grouped mismatch assertion. Solver
+execution first sets that check's SMT timeout to at most three quarters of the
+one global solver deadline. If it returns `UNKNOWN`, the verifier replaces
+only that assertion with an exact distributive cover: no enabled left
+language, no enabled right language, then one guarded unmatched-result
+predicate for each normalized left and right outcome. The verdict is
+`VERIFIED_BOUNDED` only when the canonical assertion is `UNSAT`, or every
+branch is `UNSAT` before the same deadline. Any branch `SAT` wins immediately;
+an unresolved or untried branch prevents a proof. Model extraction reruns the
+exact winning assertion without resetting the deadline.
+
+The critical construction invariant is:
+
+```text
+canonical mismatch = OR(all exact solver branches)
+```
+
+`relation.py` assembles both forms by local Boolean distribution. A
+solver-backed quantified 2-by-2 representative regression checks their
+equivalence and fixed branch order. A future edit to either representation
+requires reviewing the construction itself, not merely rerunning that example.
+`--emit-smt` deliberately writes the canonical monolithic formula for stable
+inspection. It is the exact theorem but not a transcript of the internal
+portfolio, so solving that one file can have different performance or return
+`UNKNOWN` where the portfolio succeeds.
+
 The command-line default is two row slots per table. Stage execution has a
 fixed bound of two tasks; a modeled stage may use one or two. Explicit type,
 value, expression, relation, choice, and construction ceilings are also part of
@@ -53,25 +79,24 @@ A defect in these files can turn inequivalent supported plans into
 | `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, subplan, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, operator and StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
-| `rbo_verifier/smt.py` | Typed immutable SMT terms, declarations, quantifier-safe sharing, deterministic SMT-LIB rendering, and solver-output parsing primitives. |
+| `rbo_verifier/smt.py` | Typed immutable SMT terms, declarations, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, subplans, bags/sequences, errors, choices, and result-family equality. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, subplans, bags/sequences, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
-| `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, negated-equivalence assertion, solver invocation, status interpretation, and witness decoding. |
+| `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
-The 2026-07-23 physical-line audit, including the hardening changes that added
-this map, recorded:
+The post-portfolio 2026-07-23 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 9,375 |
+| Nine trusted Python semantic modules | 9,774 |
 | C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,492 |
-| **Proof-producing code total** | **16,867** |
-| Tests, outside the TCB | 39,577 |
-| Diagnostic/orchestration tools, outside the TCB | 5,082 |
-| Documentation, outside the TCB | 4,444 |
+| **Proof-producing code total** | **17,266** |
+| Tests, outside the TCB | 39,906 |
+| Diagnostic/orchestration tools, outside the TCB | 5,086 |
+| Documentation, outside the TCB | 4,524 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by

@@ -69,16 +69,24 @@ Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus
 TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: eighteen obligations
-(14.9% of the workload). The fresh TPCH proof-floor run spent 1,080/57,062 ms
+(14.9% of the workload). The canonical-first exact-branch portfolio's fresh
+TPCH proof-floor run spent 1,145/56,389 ms
 and produced report SHA-256
-`cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`;
-the TPC-DS run spent 1,498/36,022 ms and produced
-`bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`.
+`6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
+the TPC-DS run spent 1,446/36,036 ms and produced
+`136deef295abfe9c1fa8b4c7d8b01fe8e5131a76886ec998c0a90cbd8b778846`.
 The new relational `EXISTS` formulas therefore extend the proof floor through
 TPCH q4/q22 and TPC-DS q69. Independent focused sweeps returned
 `VERIFIED_BOUNDED` for TPCH q4 after 85/924 ms and again after 98/949 ms, TPCH
 q22 after 200/5,645 ms and again after 158/5,636 ms, and TPC-DS q69 after
 374/3,781 ms and again after 359/3,758 ms.
+The proof-scaling milestone keeps the grouped mismatch as the canonical
+formula, gives it three quarters of one global solver budget, and falls back on
+an exact cover containing the two result-language-absence predicates and
+one guarded unmatched predicate per source outcome in either direction.
+Canonical `UNSAT`, or `UNSAT` for every branch, proves the same bounded theorem;
+any unknown or untried branch prevents a proof. This restored all eighteen
+policy proofs after branch-only solving exposed a TPCH q15 regression.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
@@ -92,6 +100,13 @@ non-gating q40 experiment with a 10-second solver budget reported
 deadline; the focused `ya` experiment failed on that status as designed. These
 obligations are formula-covered, not proved, and not part of the proof floor.
 None is evidence of an optimizer correctness bug.
+The post-decomposition portfolio repeat keeps q19, q65, and q99 `UNKNOWN` after
+207/61,602, 259/73,190, and 206/62,883 ms of preparation/verification. Their
+first unresolved exact branches are q19's left outcome 0 unmatched (branch
+3/28), q65's right language absent (branch 2/4), and q99's left outcome 0
+unmatched (branch 3/4). The retained three-query report SHA-256 is
+`58cc491e30e2b866f36916f2b01db36e385f005ffe3b38685f250d95ccd10164`.
+This localizes proof work but adds no proof or bug finding.
 After exact direct literal-to-Date normalization, regenerated full TPC-DS
 solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend
@@ -749,7 +764,7 @@ optimized side remains the ordinary final StageGraph, with no subplan-specific
 equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
-through the real host. The current complete suites pass 431/431 verifier tests,
+through the real host. The current complete suites pass 446/446 verifier tests,
 167/167 C++ exporter tests, 43/43 inspector tests, and 26/26 real-host
 integration tests. Dynamic `IN`, correlated scalar subplans, multiple
 dependencies, and broader correlations remain separate extensions.
@@ -1278,8 +1293,11 @@ replay is the confirmation boundary. Every bounded verdict reports both
 `row_bound` and the fixed `task_bound` of two. A
 `SCHEMA_MISMATCH` verdict is a direct correctness failure and does not depend on
 either bound. Use `--emit-smt formula.smt2` without `--solver` to inspect the
-exact proof obligation. If satisfiability succeeds but model extraction returns
-unknown, the result remains `COUNTEREXAMPLE` with a reason and no witness.
+exact canonical proof obligation. The file is intentionally the stable grouped
+formula, not a transcript of the equivalent internal solver portfolio, so its
+standalone solve can have different performance. If satisfiability succeeds but
+model extraction returns unknown, the result remains `COUNTEREXAMPLE` with a
+reason and no witness.
 
 Normal verification requires a logical initial snapshot and a final snapshot
 with a complete StageGraph. The separate localization path may compare that

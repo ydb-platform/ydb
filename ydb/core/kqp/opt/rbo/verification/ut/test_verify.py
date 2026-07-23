@@ -1317,6 +1317,22 @@ def scalar_subplan_inline_snapshot(staged, aggregate_input="a.x"):
 
 
 class SolverProtocolTest(unittest.TestCase):
+    @staticmethod
+    def _branch_problem(count=2):
+        script = smt.Script()
+        requested = script.fresh_constant("requested", smt.BOOL)
+        obligation = script.fresh_constant("whole_mismatch", smt.BOOL)
+        predicates = tuple(
+            script.fresh_constant(f"branch_{index}", smt.BOOL)
+            for index in range(count)
+        )
+        script.assert_obligation(obligation)
+        branches = tuple(
+            relation_model.MismatchBranch(f"branch_{index}", predicate)
+            for index, predicate in enumerate(predicates)
+        )
+        return Problem(script, {}, branches), requested, predicates
+
     def test_string_rank_decoder_is_exact_and_rejects_out_of_universe_values(self):
         representatives = {0: "", 1: "a", 2: "é"}
         self.assertEqual(verifier.decode_string_atom(2, representatives), "é")
@@ -1324,6 +1340,188 @@ class SolverProtocolTest(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(SolverError):
                     verifier.decode_string_atom(value, representatives)
+
+    def test_canonical_unsat_can_verify_without_branch_checks(self):
+        problem, _, _ = self._branch_problem(3)
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+
+        with mock.patch.object(verifier, "_run_solver", return_value=unsat) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unsat")
+        run.assert_called_once()
+
+    def test_all_exact_branches_must_be_unsat_after_canonical_unknown(self):
+        problem, _, _ = self._branch_problem(3)
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            *(
+                subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+                for _ in range(3)
+            ),
+        ]
+
+        with mock.patch.object(verifier, "_run_solver", side_effect=responses) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unsat")
+        self.assertEqual(run.call_count, 4)
+
+    def test_later_sat_wins_after_unknown_and_reuses_its_branch_for_model(self):
+        problem, requested, predicates = self._branch_problem()
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n((v_0 true))\n", ""),
+        ]
+
+        with mock.patch.object(verifier, "_run_solver", side_effect=responses) as run:
+            query = verifier.query_solver(problem, "z3", (requested,))
+
+        self.assertEqual(query.status, "sat")
+        self.assertEqual(query.values, {"v_0": True})
+        formulas = [call.args[1] for call in run.call_args_list]
+        first_assertion = f"(assert {predicates[0].render()})"
+        winning_assertion = f"(assert {predicates[1].render()})"
+        self.assertNotIn(first_assertion, formulas[0])
+        self.assertIn(first_assertion, formulas[1])
+        self.assertNotIn(winning_assertion, formulas[1])
+        self.assertIn(winning_assertion, formulas[2])
+        self.assertIn(winning_assertion, formulas[3])
+        self.assertNotIn(first_assertion, formulas[2])
+        self.assertNotIn(first_assertion, formulas[3])
+        self.assertNotIn("(get-value", formulas[2])
+        self.assertIn("(get-value (v_0))", formulas[3])
+
+    def test_unknown_branch_is_retained_after_all_other_branches_are_unsat(self):
+        problem, _, _ = self._branch_problem(3)
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+        ]
+
+        with mock.patch.object(verifier, "_run_solver", side_effect=responses) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unknown")
+        self.assertIn("branch 2/3 (branch_1)", query.reason)
+        self.assertEqual(run.call_count, 4)
+
+    def test_problem_without_exact_branches_keeps_the_legacy_single_query(self):
+        script = smt.Script()
+        obligation = script.fresh_constant("obligation", smt.BOOL)
+        script.assert_(obligation)
+        problem = Problem(script, {})
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+
+        with mock.patch.object(verifier, "_run_solver", return_value=unsat) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unsat")
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[1], script.render())
+
+    def test_empty_exact_branch_set_cannot_verify(self):
+        with self.assertRaisesRegex(SolverError, "has no branches"):
+            verifier.query_solver(Problem(smt.Script(), {}, ()), "z3")
+
+    def test_portfolio_shares_one_decreasing_solver_deadline(self):
+        problem, _, _ = self._branch_problem()
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+        ]
+        tick = iter(index / 40 for index in range(40))
+
+        with (
+            mock.patch.object(verifier.time, "monotonic", side_effect=tick),
+            mock.patch.object(verifier, "_run_solver", side_effect=responses) as run,
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unsat")
+        formulas = [call.args[1] for call in run.call_args_list]
+        solver_timeouts = [
+            int(
+                next(
+                    line
+                    for line in formula.splitlines()
+                    if line.startswith("(set-option :timeout ")
+                ).removeprefix("(set-option :timeout ").removesuffix(")")
+            )
+            for formula in formulas
+        ]
+        process_timeouts = [call.args[2] for call in run.call_args_list]
+        self.assertEqual(solver_timeouts[0], 750)
+        self.assertGreater(solver_timeouts[1], solver_timeouts[2])
+        self.assertGreater(process_timeouts[1], process_timeouts[2])
+
+    def test_expired_global_deadline_stops_before_the_next_branch(self):
+        problem, _, _ = self._branch_problem()
+        responses = [
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+        ]
+        clock = iter((0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.1))
+
+        with (
+            mock.patch.object(verifier.time, "monotonic", side_effect=clock),
+            mock.patch.object(verifier, "_run_solver", side_effect=responses) as run,
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unknown")
+        self.assertIn("deadline expired before branch 2/2", query.reason)
+        self.assertEqual(run.call_count, 2)
+
+    def test_unsat_arriving_during_process_grace_cannot_verify(self):
+        problem, _, _ = self._branch_problem(1)
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+        clock = iter((0.0, 0.1, 0.2, 0.3, 1.1, 1.2))
+
+        with (
+            mock.patch.object(verifier.time, "monotonic", side_effect=clock),
+            mock.patch.object(verifier, "_run_solver", return_value=unsat),
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unknown")
+        self.assertIn("deadline expired before branch 1/1", query.reason)
+
+    def test_solver_process_timeout_is_unknown(self):
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=verifier._ProcessDeadlineExceeded,
+        ):
+            result = solve(Problem(smt.Script(), {}), "z3", 0)
+
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertIn("process exceeded", result.reason)
+
+    def test_model_process_timeout_preserves_the_confirmed_counterexample(self):
+        script = smt.Script()
+        present = script.fresh_constant("present", smt.BOOL)
+        problem = Problem(
+            script,
+            {"A": (relation_model.WitnessRow(present, {}),)},
+        )
+        sat = subprocess.CompletedProcess(["z3"], 0, "sat\n", "")
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=[sat, verifier._ProcessDeadlineExceeded],
+        ):
+            result = solve(problem, "z3", 1)
+
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertIsNone(result.witness)
+        self.assertIn("extracting its model", result.reason)
 
     def test_solver_error_cannot_be_reported_as_verified(self):
         process = subprocess.CompletedProcess(

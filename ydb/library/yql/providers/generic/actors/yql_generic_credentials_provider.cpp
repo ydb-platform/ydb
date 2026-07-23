@@ -20,14 +20,10 @@ namespace NYql::NDq {
             }
         }
 
-<<<<<<< HEAD
         auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
             credentialsFactory,
             structuredTokenJSON,
             false);
-=======
-        auto credentialsProviderFactory = credentialsFactory->Create(structuredTokenJSON, false);
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
 
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }

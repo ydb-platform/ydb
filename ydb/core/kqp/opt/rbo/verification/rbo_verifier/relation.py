@@ -149,6 +149,25 @@ class RelationFamily:
         return self.outcomes[0].relation
 
 
+@dataclass(frozen=True, slots=True)
+class ScalarSubplanOutcome:
+    """One scalar value plus its inherited and local-cardinality errors."""
+
+    outcome: Outcome
+    cardinality_error: smt.Term
+
+    def __post_init__(self) -> None:
+        if self.cardinality_error.sort != smt.BOOL:
+            raise ValueError("scalar cardinality error condition must be Boolean")
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarSubplanFamily:
+    """Scalar outcomes whose local cardinality error is demand-gated later."""
+
+    outcomes: tuple[ScalarSubplanOutcome, ...]
+
+
 NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
 
 
@@ -323,7 +342,7 @@ class Evaluator:
                 for consumer in subplan.consumers
             }
         }
-        self.scalar_subplan_families: dict[str, RelationFamily] = {}
+        self.scalar_subplan_families: dict[str, ScalarSubplanFamily] = {}
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -989,7 +1008,7 @@ class Evaluator:
         if not subplans:
             return map_family(source, lambda relation: transform(relation, {}))
 
-        binding_families: list[RelationFamily] = []
+        binding_families: list[ScalarSubplanFamily] = []
         for subplan in subplans:
             family = self.scalar_subplan_families.get(subplan.binding)
             if family is None:
@@ -997,43 +1016,105 @@ class Evaluator:
                 self.scalar_subplan_families[subplan.binding] = family
             binding_families.append(family)
 
-        def apply(relations: tuple[Relation, ...]) -> Relation:
+        partials: list[
+            tuple[
+                smt.Term,
+                tuple[Relation, ...],
+                tuple[smt.Term, ...],
+                tuple[smt.Term, ...],
+                tuple[tuple[str, int], ...],
+                tuple[OrdinalChoice, ...],
+            ]
+        ] = [
+            (
+                outcome.enabled,
+                (outcome.relation,),
+                (outcome.error,),
+                (),
+                outcome.decisions,
+                outcome.choices,
+            )
+            for outcome in source.outcomes
+        ]
+        for binding_family in binding_families:
+            expanded = []
+            for (
+                enabled,
+                relations,
+                inherited_errors,
+                cardinality_errors,
+                decisions,
+                choices,
+            ) in partials:
+                for scalar_outcome in binding_family.outcomes:
+                    outcome = scalar_outcome.outcome
+                    merged = _merge_decisions(decisions, outcome.decisions)
+                    if merged is None:
+                        continue
+                    expanded.append(
+                        (
+                            smt.and_(enabled, outcome.enabled),
+                            relations + (outcome.relation,),
+                            inherited_errors + (outcome.error,),
+                            cardinality_errors
+                            + (scalar_outcome.cardinality_error,),
+                            merged,
+                            _merge_choices(choices, outcome.choices),
+                        )
+                    )
+                    if len(expanded) > MAX_OUTCOME_ALTERNATIVES:
+                        raise RelationError(
+                            "scalar outcome product exceeds "
+                            f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
+                        )
+            partials = expanded
+        if not partials:
+            raise RelationError("scalar binding family has no compatible outcomes")
+
+        outcomes: list[Outcome] = []
+        for (
+            enabled,
+            relations,
+            inherited_errors,
+            cardinality_errors,
+            decisions,
+            choices,
+        ) in partials:
             bindings = {
                 subplan.binding: relations[index].rows[0].values[subplan.binding]
                 for index, subplan in enumerate(subplans, start=1)
             }
-            return transform(relations[0], bindings)
-
-        def errors(
-            relations: tuple[Relation, ...],
-            outcome_errors: tuple[smt.Term, ...],
-        ) -> smt.Term:
-            # Legacy KQP evaluates every scalar binding once this relational
-            # consumer has a row, including bindings under a dead scalar branch.
-            # With no input row it does not execute the binding at all.
+            # A consumer row demands this binding's own cardinality check,
+            # including through a dead scalar-expression branch. Errors already
+            # produced inside the subplan remain observable without that row.
             demanded = smt.or_(*(row.present for row in relations[0].rows))
-            return smt.or_(
-                outcome_errors[0],
-                *(
-                    smt.and_(demanded, error)
-                    for error in outcome_errors[1:]
-                ),
+            outcomes.append(
+                Outcome(
+                    enabled,
+                    transform(relations[0], bindings),
+                    smt.or_(
+                        *inherited_errors,
+                        *(
+                            smt.and_(demanded, error)
+                            for error in cardinality_errors
+                        ),
+                    ),
+                    decisions,
+                    choices,
+                )
             )
-
-        return combine_families(
-            (source, *binding_families),
-            apply,
-            combine_errors=errors,
+        return RelationFamily(
+            tuple(outcomes),
         )
 
     def _evaluate_scalar_subplan(
         self,
         subplan: ScalarSubplan,
-    ) -> RelationFamily:
+    ) -> ScalarSubplanFamily:
         binding = subplan.binding
         family = self.node(subplan.root)
         column = Column(binding, subplan.type, True)
-        outcomes: list[Outcome] = []
+        outcomes: list[ScalarSubplanOutcome] = []
         for outcome in family.outcomes:
             selected = self.scalar.null(subplan.type)
             for row in outcome.relation.rows:
@@ -1050,27 +1131,27 @@ class Evaluator:
                 )
             )
             outcomes.append(
-                Outcome(
-                    outcome.enabled,
-                    Relation(
-                        (column,),
-                        (
-                            Row(
-                                smt.TRUE,
-                                {binding: selected},
-                                Occurrence("scalar_subplan", binding),
+                ScalarSubplanOutcome(
+                    Outcome(
+                        outcome.enabled,
+                        Relation(
+                            (column,),
+                            (
+                                Row(
+                                    smt.TRUE,
+                                    {binding: selected},
+                                    Occurrence("scalar_subplan", binding),
+                                ),
                             ),
                         ),
-                    ),
-                    smt.or_(
                         outcome.error,
-                        smt.lt(smt.ONE, present_count),
+                        outcome.decisions,
+                        outcome.choices,
                     ),
-                    outcome.decisions,
-                    outcome.choices,
+                    smt.lt(smt.ONE, present_count),
                 )
             )
-        return RelationFamily(tuple(outcomes))
+        return ScalarSubplanFamily(tuple(outcomes))
 
     @staticmethod
     def _select_value(

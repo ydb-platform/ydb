@@ -755,6 +755,124 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
             )
         )
 
+    def test_inherited_scalar_error_is_observed_without_a_consumer_input_row(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "inner_cardinality_error",
+                "op": "limit",
+                "input": "sub_scan",
+                "count": _literal("Uint64", 2),
+                "offset": None,
+                "phase": "undefined",
+                "ensure_at_most_one": True,
+            }
+        )
+        raw["plan"]["subplans"][0]["root"] = "inner_cardinality_error"
+        raw["plan"]["nodes"].insert(
+            1,
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": "main_source",
+                "predicate": _literal("Bool", False),
+            },
+        )
+        raw["plan"]["nodes"][2]["input"] = "empty_outer"
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        family = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        constants = _database_constants(database, (True, True))
+        enabled = [
+            outcome
+            for outcome in family.outcomes
+            if _ground(outcome.enabled, constants)
+        ]
+
+        self.assertTrue(enabled)
+        self.assertTrue(
+            all(_ground(outcome.error, constants) for outcome in enabled)
+        )
+
+    def test_multiple_bindings_keep_inherited_and_local_errors_separate(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"].insert(
+            1,
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": "main_source",
+                "predicate": _literal("Bool", False),
+            },
+        )
+        raw["plan"]["nodes"][2]["input"] = "empty_outer"
+        raw["plan"]["nodes"][2]["columns"][0]["expression"] = {
+            "kind": "add",
+            "left": {"kind": "column", "column": BINDING},
+            "right": {"kind": "column", "column": "$scalar2"},
+            "type": "Int64",
+            "nullable": True,
+        }
+        raw["plan"]["nodes"].extend(
+            [
+                {
+                    "id": "sub_scan_two",
+                    "op": "scan",
+                    "table": "A",
+                    "columns": [{"source": "x", "output": "sub2.value"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "inner_cardinality_error",
+                    "op": "limit",
+                    "input": "sub_scan_two",
+                    "count": _literal("Uint64", 2),
+                    "offset": None,
+                    "phase": "undefined",
+                    "ensure_at_most_one": True,
+                },
+            ]
+        )
+        second = copy.deepcopy(raw["plan"]["subplans"][0])
+        second.update(
+            {
+                "binding": "$scalar2",
+                "root": "inner_cardinality_error",
+                "output": {
+                    "column": "sub2.value",
+                    "type": "Int64",
+                    "nullable": False,
+                },
+            }
+        )
+        raw["plan"]["subplans"].append(second)
+
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        family = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        constants = _database_constants(database, (True, True))
+        enabled = [
+            outcome
+            for outcome in family.outcomes
+            if _ground(outcome.enabled, constants)
+        ]
+
+        self.assertTrue(enabled)
+        self.assertTrue(
+            all(_ground(outcome.error, constants) for outcome in enabled)
+        )
+
     def test_scalar_error_is_consumer_eager_across_dead_if_branch(self):
         raw = _scan_scalar_snapshot()
         raw["plan"]["nodes"][1]["columns"][0]["expression"] = {

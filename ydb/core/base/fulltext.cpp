@@ -339,7 +339,7 @@ namespace {
                         }
                         if (tryRead(q, c2, n2) && IsDecdigit(c2)) {
                             p = q + n2;
-                            prev = LETTER;
+                            prev = DIGIT;
                             safeEnd = p;
                         } else {
                             break;

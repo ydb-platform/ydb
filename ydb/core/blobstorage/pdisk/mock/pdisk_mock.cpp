@@ -479,12 +479,12 @@ public:
         p->SetAvailableSize((ui64)(Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
         p->SetTotalSize((ui64)Impl.TotalChunks * Impl.ChunkSize);
         p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
-        if (Impl.ReportVDiskMetrics) {
-            // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
-            p->SetMaxIOPS(1000);
-            p->SetMaxReadThroughput(1'000'000'000);
-            p->SetMaxWriteThroughput(1'000'000'000);
 
+        // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
+        p->SetMaxIOPS(1000);
+        p->SetMaxReadThroughput(1'000'000'000);
+        p->SetMaxWriteThroughput(1'000'000'000);
+        if (Impl.ReportVDiskMetrics) {
             // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
             for (const auto& [ownerId, owner] : Impl.Owners) {
                 auto *m = record.AddVDisksMetrics();

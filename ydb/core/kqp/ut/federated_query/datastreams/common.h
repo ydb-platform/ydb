@@ -143,9 +143,7 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
-    void WaitForClassifierPropagation() {
-        NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
-    }
+    void WaitForClassifierPropagation();
 
     // Query client SDK
 

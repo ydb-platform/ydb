@@ -645,6 +645,9 @@ public:
         });
     }
 
+    void WaitForClassifierPropagation() const override {
+        NWorkloadManager::WaitForClassifierPropagation(*GetRuntime());
+    }
 
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
@@ -936,10 +939,5 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
         new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
         nodeIndex);
 }
-
-void WaitForClassifierPropagation() const override {
-    WaitForClassifierPropagation(*GetRuntime());
-}
-
 
 }  // NKikimr::NWorkloadManager

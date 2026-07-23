@@ -212,6 +212,9 @@ struct TDeferredPublicationAccess;
 //! Deferred publication for StreamWrite and deferred-publish control RPCs.
 //! Each handle owns ack-tracking state (shared on copy, transferred on move).
 //! Publish/Cancel wait for acks only when this handle's state recorded writes.
+//! Move leaves the source with IntPublicationId=0, no ExtPublicationId, and a fresh empty ack state.
+//! On Write, ExtPublicationId is optional and informational (omit / "" / any string); only the
+//! MaxExtPublicationIdLength cap applies. BeginPublication still requires a non-empty ext id.
 struct TDeferredPublication {
     static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 

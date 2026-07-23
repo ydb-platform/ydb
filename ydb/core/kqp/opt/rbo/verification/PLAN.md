@@ -1512,7 +1512,7 @@ shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
 through the real host. Current full validation passes 463/463 verifier, 169/169
-C++, 45/45 inspector, 37/37 replay, and 27/27 real-host integration tests.
+C++, 45/45 inspector, 37/37 replay, and 28/28 real-host integration tests.
 That milestone moved TPCH q4/q22 and TPC-DS q10/q69 to formula construction;
 q35 instead exposed `Unsupported scalar type Double`. TPCH q4/q22 and TPC-DS
 q69 entered the eighteen-query proof floor; TPC-DS q10 remains formula-covered
@@ -1531,7 +1531,7 @@ dynamic `IN`, multiple dependencies, and broader correlations remain later
 work. The eighteen-query proof-floor rerun is green after the new semantic
 slice.
 
-The milestone audit has independently found seven production optimizer defects.
+The milestone audit has independently found eight production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
 `NOT EXISTS`; the focused regression and per-conjunct reset are committed in
@@ -1586,6 +1586,19 @@ join rule tests passed 2/2 at that checkpoint,
 `KqpRboYql::ExpressionSubquery` passed 1/1 including the CBO2 nested regression,
 the full `cpp_ut` passed 165/165, and the affected Python gates passed 507/507.
 Defect seven is fixed.
+
+Eighth, the equality-correlated scalar slice found a live empty-input defect in
+direct `COUNT(*)`. Its initial keyless Aggregate has COUNT's non-NULL zero
+identity. Correlation pull-up adds the outer equality key, converting that
+Aggregate into a grouped one that has no row for an unmatched outer key.
+Scalar inlining left-joins the grouped result but leaves the missing count as
+NULL. The real-host
+`RealHostFindsCorrelatedScalarCountEmptyInputBug` integration regression
+retains this as an expected `COUNTEREXAMPLE` at row and task bound two and
+requires an unmatched outer row in the symbolic witness without fixing
+arbitrary model values. This focused finding does not change formula or proof
+coverage. Its production repair is intentionally deferred to a separate
+commit.
 
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises

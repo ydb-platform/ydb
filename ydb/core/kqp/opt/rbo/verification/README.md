@@ -781,7 +781,7 @@ equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
 through the real host. Current full validation passes 463/463 verifier,
-169/169 C++ exporter, 45/45 inspector, 37/37 replay, and 27/27 real-host
+169/169 C++ exporter, 45/45 inspector, 37/37 replay, and 28/28 real-host
 integration tests. Dynamic `IN`, multiple dependencies, and broader
 correlations remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
@@ -789,7 +789,7 @@ The auditability consolidation is complete in commits `7a3639d1c16`,
 `DistinctAll` aggregation, exposed as TPC-DS q6's next blocker. The
 post-correlation eighteen-query proof-floor gate is green.
 
-The audit has found seven production optimizer defects. A stale negation flag could
+The audit has found eight production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
 are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
@@ -837,6 +837,19 @@ absorption through them. At that checkpoint the two direct rule regressions
 passed 2/2, the real-host `KqpRboYql::ExpressionSubquery` test passed 1/1 with
 the CBO2 nested case, the full `cpp_ut` passed 165/165, and the affected Python
 gates passed 507/507. Defect seven is fixed.
+
+The eighth defect is a correlated scalar `COUNT(*)` empty-input mismatch.
+Before correlation pull-up, its keyless Aggregate produces the required
+non-NULL zero for an empty input. Pull-up adds the correlation key, so the
+Aggregate becomes grouped and emits no row for an unmatched outer key.
+Scalar inlining then exposes the absent right side of its left join as NULL
+instead of restoring COUNT's zero identity. The real-host
+`RealHostFindsCorrelatedScalarCountEmptyInputBug` regression requires the
+verifier to return `COUNTEREXAMPLE` at row and task bound two and checks that
+the retained witness contains an outer row with no strict non-NULL inner-key
+match. It does not pin solver-chosen cell values. This is a focused finding and
+does not change the benchmark dashboard counts. The production repair remains
+open at this checkpoint.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

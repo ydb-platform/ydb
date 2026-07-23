@@ -988,7 +988,7 @@ introduced.
 
 Focused gates pass 11/11 in Python, 4/4 in C++, and 4/4 through the real host;
 current full validation passes 463/463 verifier, 169/169 C++, 45/45 inspector,
-37/37 replay, and 27/27 integration tests. Those dashboards added TPCH q4/q22
+37/37 replay, and 28/28 integration tests. Those dashboards added TPCH q4/q22
 and TPC-DS q10/q69. q35 reached `Double`, q54 remained the invalid Map rename,
 and the proof floor added TPCH q4/q22 and TPC-DS q69. No new counterexample was
 claimed.
@@ -1022,7 +1022,7 @@ proof floor is green after its post-correlation rerun.
 
 ### Confirmed subplan optimizer defects
 
-The subplan audit also produced seven production optimizer findings,
+The subplan audit also produced eight production optimizer findings,
 independently of the solver dashboard:
 
 - With a nonempty inner table, `WHERE NOT flag AND EXISTS (subquery)` returned
@@ -1074,6 +1074,19 @@ inherited scalar error. Optimizer commit `cab0dd1e89c` installs the
 `PreserveInputOrder` barriers described above. At that checkpoint its direct
 rules passed 2/2, the real-host regression passed 1/1, full `cpp_ut` passed
 165/165, and the affected Python gates passed 507/507. Defect seven is fixed.
+
+The eighth finding is a live equality-correlated scalar `COUNT(*)` defect.
+The initial keyless Aggregate returns the required non-NULL zero on empty
+input. Correlation pull-up adds a key, turning it into grouped aggregation;
+for an unmatched outer key it emits no row, and scalar inlining's left join
+then exposes NULL rather than restoring COUNT's zero identity. The real-host
+`RealHostFindsCorrelatedScalarCountEmptyInputBug` test preserves the exact
+initial/final snapshots and requires a row-bound-two, task-bound-two
+`COUNTEREXAMPLE` whose witness has an unmatched outer row. It deliberately
+does not pin solver-selected cell values. This is a focused finding rather
+than a dashboard run, so formula coverage and the proof floor are unchanged.
+The optimizer fix remains open at this checkpoint and will be recorded
+separately from the finding.
 
 An additional legacy probe with intrinsic
 `Ensure(foo.id, false, "inner scalar error")` in the scalar producer also

@@ -544,20 +544,69 @@ class Evaluator:
                 )
             )
         else:
-            _require_relation_row_pairs(
-                len(source.rows) * len(source.rows),
-                "grouped aggregate",
+            row_count = len(source.rows)
+            directional_pair_count = row_count * row_count
+            share_group_comparisons = (
+                directional_pair_count > MAX_RELATION_ROW_PAIRS
             )
+            if share_group_comparisons:
+                _require_relation_row_pairs(
+                    row_count * (row_count + 1) // 2,
+                    "grouped aggregate",
+                )
+                # Null-safe equality is symmetric, but row presence is not.
+                # Share one composite group-key comparison per unordered pair
+                # and retain the member row's directional presence guard below.
+                # The triangular preflight also keeps those N^2 guards strictly
+                # below twice the generic pair bound.
+                same_groups = {
+                    (left_index, right_index): self._same_group(
+                        node,
+                        source.rows[left_index],
+                        source.rows[right_index],
+                    )
+                    for left_index in range(row_count)
+                    for right_index in range(left_index, row_count)
+                }
+
+                def same_group(left_index: int, right_index: int) -> smt.Term:
+                    pair = (
+                        (left_index, right_index)
+                        if left_index <= right_index
+                        else (right_index, left_index)
+                    )
+                    return same_groups[pair]
+
+            else:
+                _require_relation_row_pairs(
+                    directional_pair_count,
+                    "grouped aggregate",
+                )
+
+                def same_group(left_index: int, right_index: int) -> smt.Term:
+                    return self._same_group(
+                        node,
+                        source.rows[left_index],
+                        source.rows[right_index],
+                    )
+
             for index, candidate in enumerate(source.rows):
                 matches = tuple(
-                    smt.and_(row.present, self._same_group(node, candidate, row))
-                    for row in source.rows
+                    smt.and_(row.present, same_group(index, row_index))
+                    for row_index, row in enumerate(source.rows)
                 )
-                earlier = tuple(
-                    smt.and_(row.present, self._same_group(node, candidate, row))
-                    for row in source.rows[:index]
+                earlier = (
+                    matches[:index]
+                    if share_group_comparisons
+                    else tuple(
+                        smt.and_(row.present, same_group(index, row_index))
+                        for row_index, row in enumerate(source.rows[:index])
+                    )
                 )
-                present = smt.and_(candidate.present, smt.not_(smt.or_(*earlier)))
+                present = smt.and_(
+                    candidate.present,
+                    smt.not_(smt.or_(*earlier)),
+                )
                 rows.append(
                     Row(
                         present,

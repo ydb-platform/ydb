@@ -151,8 +151,8 @@ StageGraph remains a separate diagnostic step.
 Both complete formula-only dashboards were rerun on current code on
 2026-07-23. Together they emitted the 29-query floor below and recorded an
 outcome for every workload entry. The TPC-DS rerun includes the exact Decimal
-wrapper hardening described below; its eight-query proof floor was also rerun
-after the preceding exporter hardening and remained green.
+wrapper hardening and grouped-comparison sharing described below. The complete
+thirteen-query proof floor was rerun after grouped sharing and remained green.
 `FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
 checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry.
 
@@ -203,7 +203,7 @@ milestone. The complete run recorded preparation/verifier times of
 170/113,378, 55/222, 108/7,886, and 53/267 ms, respectively. q12 clears the
 calendar shift and now
 passes the narrow exact composite-Boolean gate described below. Its fresh
-complete-dashboard row is `FORMULA_EMITTED` after 81/5,732 ms, raising TPCH to
+complete-dashboard row is `FORMULA_EMITTED` after 109/5,343 ms, raising TPCH to
 7/22; q7 and q8 remain on generic `Map`.
 
 ### TPC-DS inventory
@@ -235,19 +235,21 @@ after the matrix.
 | Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 
 After both snapshots export, q4 fails before materializing a 13,824-row join
-output above the 4,096-row relation bound. q11's join matching and q25/q29's
-grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
-bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
+output above the 4,096-row relation bound. q11's join matching requires 65,536
+candidate-row pairs, while q25/q29's grouped aggregates each require 32,896
+unique composite group-key row comparisons; all exceed the 16,384-pair bound.
+q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
 q5 passes Decimal `sum` headroom and then rejects a 32,896-pair Merge above the
 16,384-pair construction bound after 1,581/39,739 ms of preparation/verifier
-work. q80's grouped aggregate requires 82,944 candidate-row pairs above that
-same bound after 1,845/11,011 ms.
+work. q80's grouped aggregate requires 41,616 unique composite group-key row
+comparisons above that same bound after 1,867/10,472 ms.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
 rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
 and fails closed because aggregate `avg` is not modeled. q77 passes both
-exports and finite Decimal `sum` headroom, then rejects a 25,600-pair grouped
-aggregate above the same cap after 2,063/442 ms of preparation/verifier work.
+exports, finite Decimal `sum` headroom, and both 160-row grouped aggregates,
+then rejects a 51,360-pair Sort above the same cap after 2,161/19,363 ms of
+preparation/verifier work.
 The complete q68 row reached its Merge audit cap after 293/11,061 ms. The
 complete dashboard took 230/322,599 ms to reach q91's Merge cap;
 that late preflight is a known construction-performance gap, not a correctness
@@ -356,6 +358,18 @@ TPC-DS therefore reaches 22/99 formulas and the combined workload reaches
 147/69,391 ms at the 60-second budget, so the proof floor remains 13/121 and no
 candidate or optimizer bug arose.
 
+Exact scalable grouped-aggregate sharing leaves the established directional
+formula unchanged while its `N^2` square fits the ordinary pair ceiling. Above
+that threshold it identity-shares only symmetric null-safe key equality as an
+upper triangle; membership presence and first-representative suppression remain
+directional. The complete current-code TPC-DS dashboard remains policy-valid at
+22/99 formulas, 48 unsupported queries, and 29 optimizer failures. q25/q29 now
+reject 32,896 unique composite group-key row comparisons instead of 65,536,
+q80 rejects 41,616 instead of 82,944, and q77 clears both 160-row aggregates
+before its 321-row Sort
+rejects 51,360 unordered pairs after 2,161/19,363 ms. Formula coverage remains
+29/121 (24.0%) and the proof floor remains 13/121 (10.7%).
+
 ## Curated proof floor and focused results
 
 - The complete current-code proof floor returns `VERIFIED_BOUNDED` for TPCH q3,
@@ -363,12 +377,13 @@ candidate or optimizer bug arose.
   each at two rows per referenced table and two tasks. These are thirteen
   bounded proofs (10.7% of the workload) for the modeled pre-physical
   semantics, not unbounded SQL-equivalence claims. The latest TPCH run spent
-  114/13,345 ms of preparation/verification on q3, 56/777 ms on q6,
-  106/40,602 ms on q12,
-  123/34,122 ms on q14, and 122/871 ms on q19; q42 spent 95 ms preparing and
-  15,210 ms verifying in its recorded proof-floor run.
+  107/11,691 ms of preparation/verification on q3, 57/709 ms on q6,
+  78/34,956 ms on q12, 95/30,288 ms on q14, and 100/830 ms on q19. The latest
+  TPC-DS run prepared/verified q3, q42, q48, q52, q55, q90, q93, and q96 in
+  103/14,687, 114/15,310, 199/3,911, 121/15,208, 94/10,689, 231/8,209,
+  104/14,782, and 128/445 ms, respectively.
 
-- TPCH q12's fresh complete-dashboard formula row spent 81/5,732 ms on
+- TPCH q12's fresh complete-dashboard formula row spent 109/5,343 ms on
   preparation/verification; an earlier focused formula-only run spent
   108/5,816 ms. Focused and policy-backed solver runs returned
   `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms, respectively. Neither
@@ -502,14 +517,27 @@ candidate or optimizer bug arose.
   `VERIFIED_BOUNDED`, raising formula coverage to 28/121 (23.1%) and the proof
   floor to 13/121 (10.7%). No candidate or optimizer bug arose.
 
-- Exact direct Decimal `Coalesce(member, zero)` and the corresponding reviewed
-  Decimal `Just` form move TPC-DS q43 through formula construction after
+- At that milestone, exact direct Decimal `Coalesce(member, zero)` and the
+  corresponding reviewed Decimal `Just` form move TPC-DS q43 through formula
+  construction after
   145/4,760 ms. Its focused 60-second solver run returned `UNKNOWN` after
   147/69,391 ms, so q43 is formula-covered but not proved. q77 clears both
   exporters and finite Decimal `SUM` headroom, then fails closed at the
   25,600-pair grouped-aggregate construction cap after 2,063/442 ms. It emits
   no formula. These results raise formula coverage to 29/121 (24.0%) without
   changing the thirteen-query proof floor or producing a candidate.
+
+- Exact scalable grouped-key sharing activates only when the old directional
+  square would exceed the construction cap. It caches one unguarded composite
+  null-safe group-key term per unordered row pair including the diagonal, then
+  reuses those terms beneath directional row-presence guards; small aggregates
+  retain their established solver formula. Three-row call-identity tests prove that only six
+  upper-triangle comparisons are encoded, explicit absent/NULL-key cases cover
+  the directional guards, and the exhaustive aggregate differential remains
+  green. The complete dashboard moves q25/q29 from 65,536 to 32,896 unique
+  comparisons, q80 from 82,944 to 41,616, and q77 from its 25,600 directional
+  square through both aggregates to a 51,360-pair Sort after 2,161/19,363 ms.
+  No formula, proof, or candidate count changes.
 
 - Finite Decimal headroom now starts at exact finite/special/NULL literals and
   complete non-null integral casts, propagates through exact `+`/`-` and

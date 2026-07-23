@@ -1360,15 +1360,77 @@ class ConstructionAuditBoundTest(unittest.TestCase):
                 build_logical_kernel_problem_for_tests(union, union, 2)
 
         aggregate = aggregate_stage_snapshot("count", True, False)
-        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 2):
             with self.assertRaisesRegex(
                 VerificationError,
-                "grouped aggregate requires 4 candidate-row pairs.*3 pair construction",
+                "grouped aggregate requires 3 candidate-row pairs.*2 pair construction",
             ):
                 build_logical_kernel_problem_for_tests(aggregate, aggregate, 2)
 
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            build_logical_kernel_problem_for_tests(aggregate, aggregate, 2)
+
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_group_comparisons_share_one_symmetric_triangle(self):
+        snapshot = aggregate_stage_snapshot("count", True, False)
+        script = smt.Script()
+        database = Database(snapshot, 3, script)
+        evaluator = RelationEvaluator(snapshot, database, ScalarEncoder(script))
+        source_rows = evaluator.node("a").certain().rows
+
+        with (
+            mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 6),
+            mock.patch.object(
+                evaluator,
+                "_same_group",
+                wraps=evaluator._same_group,
+            ) as same_group,
+        ):
+            relation = evaluator.root().certain()
+
+        self.assertEqual(len(relation.rows), 3)
+        self.assertEqual(same_group.call_count, 6)
+        expected_pairs = (
+            (source_rows[0], source_rows[0]),
+            (source_rows[0], source_rows[1]),
+            (source_rows[0], source_rows[2]),
+            (source_rows[1], source_rows[1]),
+            (source_rows[1], source_rows[2]),
+            (source_rows[2], source_rows[2]),
+        )
+        for call, expected in zip(same_group.call_args_list, expected_pairs):
+            self.assertIs(call.args[1], expected[0])
+            self.assertIs(call.args[2], expected[1])
+
+    def test_shared_group_comparisons_keep_presence_directional(self):
+        snapshot = aggregate_stage_snapshot(
+            "count",
+            True,
+            False,
+            nullable_key=True,
+        )
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+
+        cases = (
+            ((None, (None, 7)), Counter({(None, 1): 1})),
+            (((None, 7), None), Counter({(None, 1): 1})),
+            (((None, 7), (None, 8)), Counter({(None, 2): 1})),
+        )
+        for rows, expected in cases:
+            with self.subTest(rows=rows):
+                self.assertEqual(
+                    self._symbolic_bag(relation, self._constants(database, rows)),
+                    expected,
+                )
+
     def test_void_count_input_implements_count_star(self):
         snapshot = count_star_snapshot()
         script = smt.Script()
@@ -1455,9 +1517,17 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     )
                     script = smt.Script()
                     database = Database(snapshot, 2, script)
-                    relation = RelationEvaluator(
-                        snapshot, database, ScalarEncoder(script)
-                    ).root().certain()
+                    pair_bound = (
+                        3 if grouped else relation_model.MAX_RELATION_ROW_PAIRS
+                    )
+                    with mock.patch.object(
+                        relation_model,
+                        "MAX_RELATION_ROW_PAIRS",
+                        pair_bound,
+                    ):
+                        relation = RelationEvaluator(
+                            snapshot, database, ScalarEncoder(script)
+                        ).root().certain()
                     key_values = (None, 0, 1) if nullable_key else (0, 1)
                     minimum, maximum = bounds[input_type]
                     concrete_values = tuple(dict.fromkeys((minimum, 0, 1, maximum)))
@@ -1494,12 +1564,20 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 script = smt.Script()
                 database = Database(snapshot, 2, script)
                 router = Router(script)
-                relation = StageEvaluator(
-                    snapshot,
-                    database,
-                    ScalarEncoder(script),
-                    router,
-                ).root().certain()
+                pair_bound = (
+                    10 if grouped else relation_model.MAX_RELATION_ROW_PAIRS
+                )
+                with mock.patch.object(
+                    relation_model,
+                    "MAX_RELATION_ROW_PAIRS",
+                    pair_bound,
+                ):
+                    relation = StageEvaluator(
+                        snapshot,
+                        database,
+                        ScalarEncoder(script),
+                        router,
+                    ).root().certain()
                 for rows, placements in product(
                     product(states, repeat=2),
                     product((False, True), repeat=2),
@@ -1550,11 +1628,17 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             )
             script = smt.Script()
             database = Database(snapshot, 2, script)
-            relation = RelationEvaluator(
-                snapshot,
-                database,
-                ScalarEncoder(script),
-            ).root().certain()
+            pair_bound = 3 if grouped else relation_model.MAX_RELATION_ROW_PAIRS
+            with mock.patch.object(
+                relation_model,
+                "MAX_RELATION_ROW_PAIRS",
+                pair_bound,
+            ):
+                relation = RelationEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                ).root().certain()
             keys = (None, 0, 1) if nullable_key else (0, 1)
             values = (
                 (None,) + concrete_values

@@ -52,8 +52,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         ss << "], ";
 
         ss << messageBody;
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "TLI debug log",
-            {"debugString", ss.Str()});
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
     }
 
     // Log to DATA_INTEGRITY service (only if we have broken locks)
@@ -70,8 +69,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         }
         ss << "], ";
         ss << messageBody;
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Data integrity trail",
-            {"debugString", ss.Str()});
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
     }
 
 }
@@ -104,8 +102,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         ss << messageBody;
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "TLI debug log",
-            {"debugString", ss.Str()});
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
     }
 
     // Log to DATA_INTEGRITY service
@@ -114,8 +111,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
         ss << messageBody;
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "Data integrity trail",
-            {"debugString", ss.Str()});
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
     }
 }
 

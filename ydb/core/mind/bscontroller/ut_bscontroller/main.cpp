@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
+#include <ydb/core/mind/bscontroller/impl.h>
+#include <ydb/core/mind/bscontroller/sys_view.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -1276,5 +1278,162 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(DefineHostConfigValidatesExpectedSlotSettings) {
+        TEnvironmentSetup env(1, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            auto invoke = [&](ui64 hostConfigId, auto configurePDiskConfig) {
+                NKikimrBlobStorage::TConfigRequest request;
+                auto* cmd = request.AddCommand()->MutableDefineHostConfig();
+                cmd->SetHostConfigId(hostConfigId);
+                cmd->SetName(TStringBuilder() << "DefineHostConfigValidatesExpectedSlotSettings" << hostConfigId);
+                auto* drive = cmd->AddDrive();
+                drive->SetPath(TStringBuilder() << "/dev/disk" << hostConfigId);
+                drive->SetType(NKikimrBlobStorage::ROT);
+                configurePDiskConfig(*drive->MutablePDiskConfig());
+                return env.Invoke(request);
+            };
+
+            auto expectInvalid = [](const NKikimrBlobStorage::TConfigResponse& response, TStringBuf error) {
+                Cerr << (TStringBuilder() << response.DebugString() << Endl);
+                UNIT_ASSERT(!response.GetSuccess());
+                UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+                UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
+                UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains(error),
+                    response.DebugString());
+            };
+
+            expectInvalid(invoke(1, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotCount(4);
+                config.SetExpectedSlotSize(100ull << 30);
+            }), "ExpectedSlotSize is mutually exclusive with ExpectedSlotCount");
+
+            expectInvalid(invoke(3, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotSize(100ull << 30);
+            }), "ExpectedSlotSize requires MaxSlots");
+
+            expectInvalid(invoke(6, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetMaxSlots(16);
+            }), "MaxSlots requires ExpectedSlotSize");
+
+            NKikimrBlobStorage::TConfigResponse response = invoke(4, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotSize(100ull << 30);
+                config.SetMaxSlots(16);
+            });
+            Cerr << (TStringBuilder() << response.DebugString() << Endl);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(response.GetStatus(0).GetSuccess());
+
+            response = invoke(5, [](NKikimrBlobStorage::TPDiskConfig& config) {
+                config.SetExpectedSlotCount(4);
+            });
+            Cerr << (TStringBuilder() << response.DebugString() << Endl);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT(response.GetStatus(0).GetSuccess());
+        });
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeWithoutSlotCountMetricsKeepsZeroSlotCount) {
+        NKikimrBlobStorage::TPDiskConfig config;
+        config.SetExpectedSlotSize(1ull << 30);
+        config.SetMaxSlots(16);
+
+        TString serializedConfig;
+        UNIT_ASSERT(config.SerializeToString(&serializedConfig));
+
+        using TPDiskInfo = TBlobStorageController::TPDiskInfo;
+        using TPDiskTable = TPDiskInfo::Table;
+
+        TPDiskInfo pdisk(
+            TBlobStorageController::THostId(TString("host"), 1),
+            TString("/dev/disk"),
+            0,
+            1,
+            TMaybe<TPDiskTable::SharedWithOs::Type>(),
+            TMaybe<TPDiskTable::ReadCentric::Type>(),
+            1,
+            serializedConfig,
+            0,
+            16,
+            NKikimrBlobStorage::EDriveStatus::ACTIVE,
+            TInstant::Zero(),
+            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
+            TPDiskMood::Normal,
+            TString(),
+            TString(),
+            TString(),
+            0,
+            true,
+            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+
+        UNIT_ASSERT(!pdisk.Metrics.HasTotalSize());
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotSize(), 1ull << 30);
+
+        pdisk.Metrics.SetTotalSize(2400ull << 30);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 0);
+
+        pdisk.Metrics.SetSlotCount(64);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
+    }
+
+    Y_UNIT_TEST(GroupUsagePrefersExpectedSlotSizeOverDynamicSlotSize) {
+        NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
+        pdiskMetrics.SetEnforcedDynamicSlotSize(1000);
+
+        NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
+        vdiskMetrics.SetAllocatedSize(25);
+
+        NKikimrSysView::TGroupInfo info;
+        CalculateGroupUsageStats(
+            &info,
+            {{&pdiskMetrics, &vdiskMetrics, 10, 100}},
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone));
+
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 75);
+    }
+
+    Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultSlotCount) {
+        NKikimrBlobStorage::TPDiskConfig config;
+        config.SetExpectedSlotSize(0);
+
+        TString serializedConfig;
+        UNIT_ASSERT(config.SerializeToString(&serializedConfig));
+
+        using TPDiskInfo = TBlobStorageController::TPDiskInfo;
+        using TPDiskTable = TPDiskInfo::Table;
+
+        TPDiskInfo pdisk(
+            TBlobStorageController::THostId(TString("host"), 1),
+            TString("/dev/disk"),
+            0,
+            1,
+            TMaybe<TPDiskTable::SharedWithOs::Type>(),
+            TMaybe<TPDiskTable::ReadCentric::Type>(),
+            1,
+            serializedConfig,
+            0,
+            16,
+            NKikimrBlobStorage::EDriveStatus::ACTIVE,
+            TInstant::Zero(),
+            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
+            TPDiskMood::Normal,
+            TString(),
+            TString(),
+            TString(),
+            0,
+            true,
+            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+
+        UNIT_ASSERT(!pdisk.HasExpectedSlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 16);
     }
 }

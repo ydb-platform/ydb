@@ -125,7 +125,26 @@ namespace NKikimr::NStorage {
             bool AdjustSpaceAvailable = false;
         };
 
+        struct TPDiskMapperSettings {
+            ui32 SlotCount = 0;
+            ui64 SlotSizeInBytes = 0;
+            ui32 MaxSlots = 0;
+        };
+
         THashMap<TPDiskId, TPDiskInfo> pdisks;
+        THashMap<TPDiskId, TPDiskMapperSettings> pdiskMapperSettings;
+
+        auto applyPDiskConfig = [](TPDiskMapperSettings& settings, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
+            if (pdiskConfig.HasExpectedSlotCount()) {
+                settings.SlotCount = pdiskConfig.GetExpectedSlotCount();
+            }
+            if (pdiskConfig.HasExpectedSlotSize()) {
+                settings.SlotSizeInBytes = pdiskConfig.GetExpectedSlotSize();
+            }
+            if (pdiskConfig.HasMaxSlots()) {
+                settings.MaxSlots = pdiskConfig.GetMaxSlots();
+            }
+        };
 
         auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (type == pdiskType) {
@@ -199,6 +218,13 @@ namespace NKikimr::NStorage {
                         pdisk.GetKind()).GetRaw());
                     if (pdisk.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
+                        applyPDiskConfig(pdiskMapperSettings[pdiskId], pdisk.GetPDiskConfig());
+                    }
+                    if (pdisk.GetExpectedSlotCount()) {
+                        pdiskMapperSettings[pdiskId].SlotCount = pdisk.GetExpectedSlotCount();
+                    }
+                    if (pdisk.GetExpectedSlotSize()) {
+                        pdiskMapperSettings[pdiskId].SlotSizeInBytes = pdisk.GetExpectedSlotSize();
                     }
 
                     // this 'usable' logic repeats the one in BS_CONTROLLER
@@ -216,6 +242,10 @@ namespace NKikimr::NStorage {
 
                     if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
                         const auto& m = pdisk.GetPDiskMetrics();
+                        auto& settings = pdiskMapperSettings[pdiskId];
+                        if (settings.SlotSizeInBytes && m.HasSlotCount()) {
+                            settings.SlotCount = m.GetSlotCount();
+                        }
                         if (m.HasEnforcedDynamicSlotSize() && pdiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
                             pdiskInfo.SpaceAvailable = m.GetEnforcedDynamicSlotSize() * (1000 - pdiskSpaceMarginPromille) / 1000;
                         } else {
@@ -318,6 +348,9 @@ namespace NKikimr::NStorage {
                     if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                         auto& r = it->second.Record;
                         r.CopyFrom(pdisk);
+                        if (pdisk.HasPDiskConfig()) {
+                            applyPDiskConfig(pdiskMapperSettings[pdiskId], pdisk.GetPDiskConfig());
+                        }
                     }
                 }
 
@@ -362,7 +395,8 @@ namespace NKikimr::NStorage {
             if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
-                    auto& r = it->second.Record;
+                    TPDiskInfo& pdiskInfo = it->second;
+                    auto& r = pdiskInfo.Record;
                     r.SetNodeID(pdiskId.NodeId);
                     r.SetPDiskID(pdiskId.PDiskId);
                     r.SetPath(drive.GetPath());
@@ -371,6 +405,7 @@ namespace NKikimr::NStorage {
                         drive.GetKind()));
                     if (drive.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
+                        applyPDiskConfig(pdiskMapperSettings[pdiskId], drive.GetPDiskConfig());
                     }
                 } else {
                     Y_ABORT("duplicate PDiskId");
@@ -389,12 +424,19 @@ namespace NKikimr::NStorage {
                 throw TExConfigError() << "no location for node";
             }
 
+            const auto settingsIt = pdiskMapperSettings.find(pdiskId);
+            const TPDiskMapperSettings settings = settingsIt != pdiskMapperSettings.end()
+                ? settingsIt->second
+                : TPDiskMapperSettings();
+
             ui32 maxSlots = defaultMaxSlots;
-            if (item.Record.HasPDiskConfig()) {
-                const auto& pdiskConfig = item.Record.GetPDiskConfig();
-                if (pdiskConfig.HasExpectedSlotCount()) {
-                    maxSlots = pdiskConfig.GetExpectedSlotCount();
-                }
+            if (settings.SlotCount) {
+                maxSlots = settings.SlotCount;
+            } else if (settings.SlotSizeInBytes) {
+                // Slot count for byte-sized slots is calculated by NodeWarden and arrives via PDisk config or
+                // metrics. Until then MaxSlots is its upper bound (ExpectedSlotCount = min(size/slot, MaxSlots)),
+                // which keeps fresh drives usable for static group allocation during bootstrap.
+                maxSlots = settings.MaxSlots;
             }
 
             mapper.RegisterPDisk({
@@ -403,6 +445,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotSizeInBytes = settings.SlotSizeInBytes,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

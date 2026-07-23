@@ -88,4 +88,6 @@ message TPDiskMetrics {
     optional TPDiskState.E State = 10;
 
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
+    optional uint64 SlotCount = 12;
+    optional uint64 ExpectedSlotSize = 16; // expected slot size for space limit calculation, 0 if not set
 }

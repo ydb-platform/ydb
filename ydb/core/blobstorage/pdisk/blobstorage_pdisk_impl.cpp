@@ -51,6 +51,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
+    , ExpectedSlotSize(cfg->ExpectedSlotSize)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
@@ -101,6 +102,21 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     DebugInfoGenerator = [id = cfg->PDiskId, type = PDiskCategory]() {
         return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
     };
+}
+
+void TPDisk::NormalizeExpectedSlotSettings() {
+    Cfg->ExpectedSlotCount = ExpectedSlotCount;
+    Cfg->ExpectedSlotSize = ExpectedSlotSize;
+}
+
+i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
+    if (!ExpectedSlotSize || !Format.ChunkSize) {
+        return 0;
+    }
+    // Quota accounting is chunk-based; round down to keep ExpectedSlotSize an upper bound.
+    ui64 chunks = ExpectedSlotSize / Format.ChunkSize;
+    Y_VERIFY(chunks <= ui64(Max<i64>()));
+    return chunks;
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -1578,13 +1594,16 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
         }
         pdiskState.SetNumActiveSlots(TotalOwners);
-        if (ExpectedSlotCount) {
-            pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
-        }
+        // set unconditionally: whiteboard merges updates field by field, so a field skipped
+        // when its value returns to 0 would keep the stale nonzero value until node restart
+        pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
+        pdiskState.SetExpectedSlotSize(ExpectedSlotSize);
 
         *Mon.NumActiveSlots = TotalOwners;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
-        if (ExpectedSlotCount) {
+        if (ExpectedSlotSize) {
+            *Mon.SlotSizeBytes = ExpectedSlotSize;
+        } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
 
@@ -1633,6 +1652,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }
         pDiskMetrics.SetState(state);
+        if (ExpectedSlotCount) {
+            pDiskMetrics.SetSlotCount(ExpectedSlotCount);
+        }
+        if (ExpectedSlotSize) {
+            pDiskMetrics.SetExpectedSlotSize(ExpectedSlotSize);
+        }
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2061,6 +2086,18 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         ContinueShredsInFlight++;
         PCtx->ActorSystem->Send(new IEventHandle(PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
     }
+}
+
+void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
+    TGuard<TMutex> guard(StateMutex);
+    ExpectedSlotCount = request.ExpectedSlotCount;
+    ExpectedSlotSize = request.ExpectedSlotSize;
+    NormalizeExpectedSlotSettings();
+    Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks());
+
+    auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
+    Mon.ChangeExpectedSlotCount.CountResponse();
+    PCtx->ActorSystem->Send(request.Sender, result.release());
 }
 
 // Scheduler weight configuration
@@ -2714,6 +2751,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestContinueShred:
                 ProcessContinueShred(static_cast<TContinueShred&>(*req));
                 break;
+            case ERequestType::RequestChangeExpectedSlotCount:
+                ProcessChangeExpectedSlotCount(static_cast<TChangeExpectedSlotCount&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -3343,6 +3383,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+        case ERequestType::RequestChangeExpectedSlotCount:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3976,6 +4017,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestConfigureScheduler:
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestContinueReadMetadata:
+        case ERequestType::RequestChangeExpectedSlotCount:
             return false;
 
         // Can't be processed in read-only mode.

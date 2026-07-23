@@ -128,8 +128,51 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, scalarResultType, &ctx.ExprCtx));
         auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements);
 
-        auto cardinalityCheck = MakeIntrusive<TOpLimit>(
+        auto scalarBound = MakeIntrusive<TOpLimit>(
             subplan,
+            subplan->Pos,
+            MakeConstant("Uint64", "2", subplan->Pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+
+        // Bound the scalar side before Cross materializes it, then gate its
+        // cardinality observation with one outer row.
+        auto outerGate = MakeIntrusive<TOpLimit>(
+            child,
+            subplan->Pos,
+            MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+
+        const auto outerIUs = child->GetOutputIUs();
+        const auto scalarIUs = subplan->GetOutputIUs();
+        TInfoUnitSet usedIUs;
+        NMapRenames::AddUsedIUs(usedIUs, outerIUs);
+        NMapRenames::AddUsedIUs(usedIUs, scalarIUs);
+        NMapRenames::TRenameMap scalarRenames;
+        for (const auto& iu : scalarIUs) {
+            if (ContainsInfoUnit(outerIUs, iu)) {
+                scalarRenames.emplace(
+                    iu,
+                    NMapRenames::MakeUniqueInternalIU(props.InternalVarIdx, usedIUs));
+            }
+        }
+        auto gatedSubplanResIU = subplanResIU;
+        if (const auto it = scalarRenames.find(subplanResIU); it != scalarRenames.end()) {
+            gatedSubplanResIU = it->second;
+        }
+
+        auto demandedScalar = NMapRenames::MakeJoinWithRightRenames(
+            outerGate,
+            scalarBound,
+            subplan->Pos,
+            "Cross",
+            joinKeys,
+            {},
+            scalarRenames,
+            ctx.ExprCtx,
+            props);
+        auto cardinalityCheck = MakeIntrusive<TOpLimit>(
+            demandedScalar,
             subplan->Pos,
             MakeConstant("Uint64", "2", subplan->Pos, &ctx.ExprCtx),
             EOpPhase::Undefined);
@@ -137,7 +180,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         TVector<TMapElement> renameElements;
         if (makeResultOptional) {
-            auto value = MakeColumnAccess(subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            auto value = MakeColumnAccess(gatedSubplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
             auto optionalValue = ctx.ExprCtx.NewCallable(
                 subplan->Pos,
                 "Just",
@@ -146,7 +189,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 scalarIU,
                 TExpression(optionalValue, &ctx.ExprCtx, &props));
         } else {
-            renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            renameElements.emplace_back(scalarIU, gatedSubplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
         }
         auto rename = MakeIntrusive<TOpMap>(cardinalityCheck, subplan->Pos, renameElements);
 
@@ -160,7 +203,6 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
     
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
         unaryOp->SetInput(cross);
     }

@@ -161,6 +161,8 @@
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/tests/compatibility/streaming @ydb-platform/fq
 /ydb/core/external_sources/s3 @ydb-platform/fq
+/ydb/core/resource_pools @ydb-platform/fq
+/ydb/services/workload_manager @ydb-platform/fq
 
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend

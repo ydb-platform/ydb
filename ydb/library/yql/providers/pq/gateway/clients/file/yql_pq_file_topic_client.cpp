@@ -125,8 +125,8 @@ private:
         auto start = StartFuture.GetValueSync();
         if (start.Offset && seekable) {
             auto target = *start.Offset;
-            while (MsgOffset != target) {
-                auto skipped = fi.Skip(MsgOffset);
+            while (MsgOffset < target) {
+                auto skipped = fi.Skip(target - MsgOffset);
                 if (skipped == 0) {
                     break;
                 }

@@ -246,7 +246,7 @@ class ScalarSubplan:
 
 @dataclass(frozen=True, slots=True)
 class ExistsSubplan:
-    """One EXISTS binding with one correlation equality and inner-only residuals."""
+    """One EXISTS binding, uncorrelated or equality-correlated with inner-only residuals."""
 
     binding: str
     root: str
@@ -2154,7 +2154,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if binding in input_schema:
                     _fail(
                         f"node {node.id!r}",
-                        f"scalar subplan binding {binding!r} collides with an "
+                        f"subplan binding {binding!r} collides with an "
                         "input column",
                     )
                 expression_schema[binding] = column
@@ -2185,7 +2185,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if binding in result:
                     _fail(
                         f"node {node.id!r}",
-                        f"scalar subplan binding {binding!r} collides with an "
+                        f"subplan binding {binding!r} collides with an "
                         "input column",
                     )
                 expression_schema[binding] = column

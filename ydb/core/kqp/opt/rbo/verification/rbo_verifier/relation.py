@@ -170,6 +170,18 @@ class SubplanFamily:
     outcomes: tuple[SubplanOutcome, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _SubplanPartial:
+    """One compatible source/subplan outcome product under construction."""
+
+    enabled: smt.Term
+    relations: tuple[Relation, ...]
+    inherited_errors: tuple[smt.Term, ...]
+    cardinality_errors: tuple[smt.Term, ...]
+    decisions: tuple[tuple[str, int], ...]
+    choices: tuple[BoundedChoice, ...]
+
+
 NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
 
 
@@ -1040,50 +1052,45 @@ class Evaluator:
                 self.subplan_families[subplan.binding] = family
             binding_families.append(family)
 
-        partials: list[
-            tuple[
-                smt.Term,
-                tuple[Relation, ...],
-                tuple[smt.Term, ...],
-                tuple[smt.Term, ...],
-                tuple[tuple[str, int], ...],
-                tuple[BoundedChoice, ...],
-            ]
-        ] = [
-            (
-                outcome.enabled,
-                (outcome.relation,),
-                (outcome.error,),
-                (),
-                outcome.decisions,
-                outcome.choices,
+        partials = [
+            _SubplanPartial(
+                enabled=outcome.enabled,
+                relations=(outcome.relation,),
+                inherited_errors=(outcome.error,),
+                cardinality_errors=(),
+                decisions=outcome.decisions,
+                choices=outcome.choices,
             )
             for outcome in source.outcomes
         ]
         for binding_family in binding_families:
-            expanded = []
-            for (
-                enabled,
-                relations,
-                inherited_errors,
-                cardinality_errors,
-                decisions,
-                choices,
-            ) in partials:
+            expanded: list[_SubplanPartial] = []
+            for partial in partials:
                 for subplan_outcome in binding_family.outcomes:
                     outcome = subplan_outcome.outcome
-                    merged = _merge_decisions(decisions, outcome.decisions)
+                    merged = _merge_decisions(
+                        partial.decisions,
+                        outcome.decisions,
+                    )
                     if merged is None:
                         continue
                     expanded.append(
-                        (
-                            smt.and_(enabled, outcome.enabled),
-                            relations + (outcome.relation,),
-                            inherited_errors + (outcome.error,),
-                            cardinality_errors
+                        _SubplanPartial(
+                            enabled=smt.and_(
+                                partial.enabled,
+                                outcome.enabled,
+                            ),
+                            relations=partial.relations
+                            + (outcome.relation,),
+                            inherited_errors=partial.inherited_errors
+                            + (outcome.error,),
+                            cardinality_errors=partial.cardinality_errors
                             + (subplan_outcome.cardinality_error,),
-                            merged,
-                            _merge_choices(choices, outcome.choices),
+                            decisions=merged,
+                            choices=_merge_choices(
+                                partial.choices,
+                                outcome.choices,
+                            ),
                         )
                     )
                     if len(expanded) > MAX_OUTCOME_ALTERNATIVES:
@@ -1096,16 +1103,10 @@ class Evaluator:
             raise RelationError("subplan binding family has no compatible outcomes")
 
         outcomes: list[Outcome] = []
-        for (
-            enabled,
-            relations,
-            inherited_errors,
-            cardinality_errors,
-            decisions,
-            choices,
-        ) in partials:
+        for partial in partials:
             exists_pairs = sum(
-                len(relations[0].rows) * len(relations[index].rows)
+                len(partial.relations[0].rows)
+                * len(partial.relations[index].rows)
                 for index, subplan in enumerate(subplans, start=1)
                 if isinstance(subplan, ExistsSubplan)
             )
@@ -1116,7 +1117,7 @@ class Evaluator:
                     subplan.binding: self._subplan_value(
                         subplan,
                         row,
-                        relations[index],
+                        partial.relations[index],
                     )
                     for index, subplan in enumerate(subplans, start=1)
                 }
@@ -1124,20 +1125,22 @@ class Evaluator:
             # A consumer row demands this binding's own cardinality check,
             # including through a dead scalar-expression branch. Errors already
             # produced inside the subplan remain observable without that row.
-            demanded = smt.or_(*(row.present for row in relations[0].rows))
+            demanded = smt.or_(
+                *(row.present for row in partial.relations[0].rows)
+            )
             outcomes.append(
                 Outcome(
-                    enabled,
-                    transform(relations[0], bindings),
+                    partial.enabled,
+                    transform(partial.relations[0], bindings),
                     smt.or_(
-                        *inherited_errors,
+                        *partial.inherited_errors,
                         *(
                             smt.and_(demanded, error)
-                            for error in cardinality_errors
+                            for error in partial.cardinality_errors
                         ),
                     ),
-                    decisions,
-                    choices,
+                    partial.decisions,
+                    partial.choices,
                 )
             )
         return RelationFamily(

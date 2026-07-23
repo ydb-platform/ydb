@@ -27,6 +27,16 @@ def _deep_shared_term(leaf, depth=2000):
 
 
 class SmtTest(unittest.TestCase):
+    def test_literal_constructors_require_exact_python_types(self):
+        for value in (None, 0, 1):
+            with self.subTest(constructor="bool", value=value):
+                with self.assertRaisesRegex(smt.SmtError, "must be bool"):
+                    smt.bool_value(value)
+        for value in (True, False, 1.0):
+            with self.subTest(constructor="int", value=value):
+                with self.assertRaisesRegex(smt.SmtError, "must be int"):
+                    smt.int_value(value)
+
     def test_script_is_typed_and_deterministic(self):
         script = smt.Script(timeout_ms=100)
         value = script.fresh_constant("ignored user hint", smt.INT)

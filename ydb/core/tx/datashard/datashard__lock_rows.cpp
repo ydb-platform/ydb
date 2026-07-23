@@ -650,13 +650,6 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     return ETxLockRows::Restart;
                 }
 
-                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
-                    success->Record.AddSkippedAbsentKeys(processedKeys);
-                    runtimeLock.Reset();
-                    ++processedKeys;
-                    continue;
-                }
-
                 // Undecided volatile transactions will have non-zero VolatileVersion
                 // We don't wait until they are decided and return a modified flag
                 // instead. A subsequent re-read will wait for the decision.
@@ -707,6 +700,19 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                         setLockMode(combinedLockMode, lockId);
                     }
                     finishLocked();
+                    continue;
+                }
+
+                // Note: we run the skipAbsent check *after* we check that we already have the lock
+                // for this key. The purpose of skipAbsent is to allow other transactions to lock and
+                // insert a row to this key if this transaction is trying to update/delete a row that
+                // is not there. If we already locked the key, this means that previously in this
+                // transaction we inserted the row, so it should be able to do other operations
+                // to it, and we shouldn't skip even if no committed row exists.
+                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
+                    success->Record.AddSkippedAbsentKeys(processedKeys);
+                    runtimeLock.Reset();
+                    ++processedKeys;
                     continue;
                 }
 

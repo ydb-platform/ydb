@@ -1,5 +1,5 @@
 name: Run build and tests (ya make)
-# Includes research sharding inputs: save_test_graph / skip_graph_compare / prebuilt_*.
+# Sharding inputs: save_test_graph / skip_graph_compare / prebuilt_* / s3_subdir.
 description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
@@ -101,26 +101,10 @@ inputs:
     type: boolean
     default: true
     description: "Post build_* and test_* commit statuses"
-  status_context_prefix:
-    type: string
-    default: ""
-    description: "Prefix for GitHub commit status contexts (avoids clobbering production build_*/test_* during debug)"
   publish_pr_comment:
     type: boolean
     default: true
     description: "Append progress and summary to the PR comment"
-  single_attempt:
-    type: boolean
-    default: false
-    description: "Run a single ya make attempt (for test shards)"
-  start_retry:
-    type: string
-    default: "1"
-    description: "First retry attempt number (aggregate retry uses 2)"
-  previous_report_path:
-    type: string
-    default: ""
-    description: "build-results-report for retries when start_retry > 1"
   save_test_graph:
     type: boolean
     default: false
@@ -169,14 +153,14 @@ runs:
         if [ "${{ inputs.publish_github_status }}" = "true" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
-            -d '{"state":"pending","description":"The check has been started","context":"${{ inputs.status_context_prefix }}build_${{inputs.build_preset}}"}'
+            -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
           # Graph-only prepare (save_test_graph, !run_tests) must not leave test_*
           # pending — terminal test status is posted only after merge publish.
           if [[ "${{inputs.run_tests}}" == "true" ]]; then
             curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
-              -d '{"state":"pending","description":"The check has been started","context":"${{ inputs.status_context_prefix }}test_${{inputs.build_preset}}"}'
+              -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
           fi
         fi
 
@@ -310,14 +294,7 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
-        if [ "${{ inputs.single_attempt }}" = "true" ]; then
-          TEST_RETRY_COUNT=1
-        fi
-
-        START_RETRY=${{ inputs.start_retry }}
-        if [ -z "$START_RETRY" ]; then
-          START_RETRY=1
-        fi
+        START_RETRY=1
 
         PUBLISH_PR_COMMENT=${{ inputs.publish_pr_comment }}
         PUBLISH_GITHUB_STATUS=${{ inputs.publish_github_status }}
@@ -506,15 +483,6 @@ runs:
         fi
 
         BUILD_FAILED=0
-
-        CROSS_JOB_RETRY=0
-        if [ "$START_RETRY" -gt 1 ] && [ -n "${{ inputs.previous_report_path }}" ]; then
-          PREV_REPORT="${{ inputs.previous_report_path }}"
-          CROSS_JOB_RETRY=1
-          mkdir -p "$PUBLIC_DIR/try_1"
-          cp "$PREV_REPORT" "$PUBLIC_DIR/try_1/report.json"
-          cp "$PREV_REPORT" "$LAST_BUILD_RESULTS_REPORT"
-        fi
 
         if [ "$SKIP_TEST_LOOP" = "1" ]; then
           :
@@ -790,11 +758,11 @@ runs:
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
-            -d '{"state":"failure","description":"The check has been failed","context":"${{ inputs.status_context_prefix }}build_${{inputs.build_preset}}"}'
+            -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
         else
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
-            -d '{"state":"success","description":"The check has been completed successfully","context":"${{ inputs.status_context_prefix }}build_${{inputs.build_preset}}"}'
+            -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
 
     - name: analyze tests results
@@ -813,7 +781,7 @@ runs:
           fi
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
-              -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"${{ inputs.status_context_prefix }}test_${{inputs.build_preset}}"}'
+              -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
           if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
@@ -834,6 +802,15 @@ runs:
       run: |
         set -x
         echo "::group::s3-sync"
+        # Graph-only prepare: keep the plan inputs next to build logs on S3.
+        if [ "${{ inputs.save_test_graph }}" = "true" ]; then
+          if [ -f graph.json ]; then
+            cp -f graph.json "$PUBLIC_DIR/graph.json"
+          fi
+          if [ -f context.json ]; then
+            cp -f context.json "$PUBLIC_DIR/context.json"
+          fi
+        fi
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         if [ true = ${{ inputs.run_tests }} ]; then
           if [ -n "${S3_SUBDIR:-}" ]; then

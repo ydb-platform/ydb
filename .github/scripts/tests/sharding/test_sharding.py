@@ -31,11 +31,13 @@ from plan import (  # noqa: E402
     enrich_plan_timing_estimate,
     estimate_critical_path_minutes,
     extract_node_path,
+    filter_graph_result,
     load_graph,
     min_shards_for_wall_budget,
     plan_uid_weights,
     print_summary,
 )
+from render_artifacts_nav import render_root_index_html  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -460,9 +462,11 @@ class BuildPlanAndFilterTest(unittest.TestCase):
         filtered, _, returned = filter_for_shard(plan, graph, shard_id)
         self.assertLessEqual(len(filtered["result"]), len(graph["result"]))
         self.assertGreater(len(filtered["result"]), 0)
-        self.assertEqual(len(filtered["graph"]), len(graph["graph"]))
+        self.assertLessEqual(len(filtered["graph"]), len(graph["graph"]))
+        filtered_uids = {node["uid"] for node in filtered["graph"]}
         for uid in filtered["result"]:
             self.assertEqual(returned[uid], shard_id)
+            self.assertIn(uid, filtered_uids)
 
     def test_filter_for_shard_requires_uid_assignments(self):
         graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
@@ -558,6 +562,31 @@ class BuildPlanAndFilterTest(unittest.TestCase):
             filtered = json.loads(out.read_text(encoding="utf-8"))
             self.assertTrue(filtered["result"])
             self.assertLess(len(filtered["result"]), 5)
+            self.assertLess(len(filtered["graph"]), 5)
+
+
+class FilterGraphPruneTest(unittest.TestCase):
+    def test_filter_graph_result_prunes_unrelated_nodes(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        filtered = filter_graph_result(graph, {"test-a1", "build-a"})
+        self.assertEqual(filtered["result"], ["test-a1", "build-a"])
+        uids = {node["uid"] for node in filtered["graph"]}
+        self.assertEqual(uids, {"test-a1", "build-a"})
+        self.assertNotIn("test-b1", uids)
+        self.assertNotIn("build-b", uids)
+
+
+class RenderArtifactsNavTest(unittest.TestCase):
+    def test_root_index_lists_stage_folders(self):
+        html = render_root_index_html(
+            tries_dir=None,
+            include_params=True,
+            include_build=True,
+            include_plan=True,
+            shard_ids=["0", "1"],
+        )
+        for name in ("params", "build", "plan", "shard_0", "shard_1", "final"):
+            self.assertIn(f'href="{name}/index.html"', html)
 
 
 if __name__ == "__main__":

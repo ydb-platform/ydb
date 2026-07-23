@@ -66,11 +66,6 @@ on:
         required: false
         type: string
         default: ''
-      disable_peak_cap:
-        description: 'Ignore the peak-hours shard cap'
-        required: false
-        type: boolean
-        default: false
       publish:
         description: 'Post build_*/test_* commit statuses and PR test summary comment'
         required: false
@@ -196,7 +191,6 @@ jobs:
       history_branch: ${{ needs.resolve.outputs.history_branch }}
       status_sha: ${{ needs.resolve.outputs.pr_head_sha }}
       publish: ${{ inputs.publish }}
-      disable_peak_cap: ${{ inputs.disable_peak_cap }}
 
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]

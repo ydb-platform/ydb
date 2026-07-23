@@ -653,9 +653,41 @@ def component_weight(
     return sum(per_uid.values()), dict(per_path)
 
 
+def collect_dep_closure(nodes_by_uid: dict[str, dict[str, Any]], roots: set[str]) -> set[str]:
+    """UIDs reachable from roots by following ``deps`` (roots inclusive)."""
+    stack = list(roots)
+    seen: set[str] = set()
+    while stack:
+        uid = stack.pop()
+        if uid in seen:
+            continue
+        seen.add(uid)
+        node = nodes_by_uid.get(uid)
+        if not node:
+            continue
+        for dep in node.get("deps") or []:
+            if isinstance(dep, str):
+                dep_uid = dep
+            elif isinstance(dep, dict):
+                dep_uid = dep.get("uid")
+            else:
+                dep_uid = None
+            if dep_uid is not None:
+                stack.append(str(dep_uid))
+    return seen
+
+
 def filter_graph_result(graph: dict[str, Any], allowed_uids: set[str]) -> dict[str, Any]:
+    """Keep allowed result UIDs and prune ``graph`` to their dependency closure."""
     filtered = copy.deepcopy(graph)
-    filtered["result"] = [uid for uid in result_uids(graph) if uid in allowed_uids]
+    filtered_result = [uid for uid in result_uids(graph) if uid in allowed_uids]
+    filtered["result"] = filtered_result
+    keep = collect_dep_closure(graph_nodes_by_uid(graph), set(filtered_result))
+    filtered["graph"] = [
+        node
+        for node in (graph.get("graph") or [])
+        if isinstance(node, dict) and str(node.get("uid") or "") in keep
+    ]
     return filtered
 
 

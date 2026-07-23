@@ -60,11 +60,6 @@ on:
         required: false
         type: boolean
         default: false
-      disable_peak_cap:
-        description: 'Ignore the peak-hours shard cap (manual experiments)'
-        required: false
-        type: boolean
-        default: false
       status_sha:
         description: 'PR head SHA for GitHub commit statuses (empty = checkout_ref / event head)'
         required: false
@@ -96,52 +91,124 @@ jobs:
             *) echo "Unsupported build_preset: ${{ inputs.build_preset }}" >&2; exit 1 ;;
           esac
           echo "runner=$(jq -nc --arg l "$label" '["self-hosted","auto-provisioned",$l]')" >> "$GITHUB_OUTPUT"
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/Indexer
+            .github/actions/s3cmd
       - name: Classify change volume
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
           MODE_INPUT: ${{ inputs.mode }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
         run: |
           set -euo pipefail
-          if [ "$MODE_INPUT" != "auto" ]; then
-            echo "mode=$MODE_INPUT" >> "$GITHUB_OUTPUT"
-            echo "Mode forced by input: $MODE_INPUT"
-            exit 0
-          fi
-          if [ -z "$PR_NUMBER" ]; then
-            # Branch run without a diff: assume full scope.
-            echo "mode=sharded" >> "$GITHUB_OUTPUT"
-            echo "No PR number: full-scope run -> sharded"
-            exit 0
-          fi
-          # Paths whose changes ripple through most of the build graph.
-          heavy_re='^(ydb/core/|ydb/library/|ydb/public/|ydb/services/|ydb/apps/|yql/|util/|library/|contrib/|build/|devtools/|ya\.make$|ydb/ya\.make$)'
-          files_json=$(mktemp)
-          : > "$files_json"
+          mkdir -p params_out
+          : > params_out/changed_files.txt
+          mode=""
+          reason=""
+          forced=false
           total=0
-          for page in 1 2 3 4 5 6 7 8 9 10; do
-            resp=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}")
-            count=$(echo "$resp" | jq 'length')
-            echo "$resp" | jq -r '.[].filename' >> "$files_json"
-            total=$((total + count))
-            [ "$count" -lt 100 ] && break
-          done
-          echo "PR #$PR_NUMBER changed files: $total"
-          if [ "$total" -ge 500 ]; then
+          if [ "$MODE_INPUT" != "auto" ]; then
+            mode="$MODE_INPUT"
+            forced=true
+            reason="forced_by_input"
+            echo "Mode forced by input: $MODE_INPUT"
+          elif [ -z "$PR_NUMBER" ]; then
+            # Branch run without a diff: assume full scope.
             mode=sharded
-          elif grep -qE "$heavy_re" "$files_json"; then
-            mode=sharded
-            echo "Heavy paths touched:"
-            grep -m 10 -E "$heavy_re" "$files_json" || true
+            reason="no_pr_full_scope"
+            echo "No PR number: full-scope run -> sharded"
           else
-            mode=single
+            # Paths whose changes ripple through most of the build graph.
+            heavy_re='^(ydb/core/|ydb/library/|ydb/public/|ydb/services/|ydb/apps/|yql/|util/|library/|contrib/|build/|devtools/|ya\.make$|ydb/ya\.make$)'
+            files_json=$(mktemp)
+            : > "$files_json"
+            for page in 1 2 3 4 5 6 7 8 9 10; do
+              resp=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}")
+              count=$(echo "$resp" | jq 'length')
+              echo "$resp" | jq -r '.[].filename' >> "$files_json"
+              total=$((total + count))
+              [ "$count" -lt 100 ] && break
+            done
+            cp "$files_json" params_out/changed_files.txt
+            echo "PR #$PR_NUMBER changed files: $total"
+            if [ "$total" -ge 500 ]; then
+              mode=sharded
+              reason="file_count_ge_500"
+            elif grep -qE "$heavy_re" "$files_json"; then
+              mode=sharded
+              reason="heavy_paths"
+              echo "Heavy paths touched:"
+              grep -m 10 -E "$heavy_re" "$files_json" || true
+            else
+              mode=single
+              reason="light_change"
+            fi
           fi
+          jq -n \
+            --arg mode "$mode" \
+            --arg reason "$reason" \
+            --argjson forced "$forced" \
+            --argjson total_files "$total" \
+            --arg build_preset "$BUILD_PRESET" \
+            --arg mode_input "$MODE_INPUT" \
+            '{
+              mode: $mode,
+              reason: $reason,
+              forced: $forced,
+              total_files: $total_files,
+              build_preset: $build_preset,
+              mode_input: $mode_input
+            }' > params_out/mode.json
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "Classifier decision: $mode"
+          echo "Classifier decision: $mode ($reason)"
+      - name: Upload params decision
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-params-${{ github.run_id }}
+          path: params_out
+          retention-days: 3
+      - name: Install s3cmd
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq s3cmd
+      - name: Prepare S3 folder prefix
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd for params upload
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+          s3_subdir: params
+      - name: Upload params decision to S3
+        shell: bash
+        run: |
+          set -eux
+          staging=params_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp params_out/mode.json params_out/changed_files.txt "$staging/"
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Params decision (S3)"
+            echo "[Params index](${S3_URL_PREFIX}/index.html) | [mode.json](${S3_URL_PREFIX}/mode.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------- single --
   single:
@@ -262,7 +329,7 @@ jobs:
           plan_args=(
             graph.json
             --shard-count "$SHARD_COUNT"
-            --profile "${SHARD_PROFILE:-soft}"
+            --profile "${SHARD_PROFILE:-pr}"
             --plan-mode "$plan_mode"
             -o shard_plan_out/shard_plan.json
             --build-type "${BUILD_PRESET:-relwithdebinfo}"
@@ -307,15 +374,21 @@ jobs:
           staging=plan_upload
           rm -rf "$staging"
           mkdir -p "$staging"
-          cp graph.json context.json "$staging/"
+          cp graph.json "$staging/"
+          if [ -f context.json ]; then
+            cp context.json "$staging/"
+          fi
           cp shard_plan_out/shard_plan.json "$staging/"
+          if [ -f shard_plan_out/shard_plan_summary.md ]; then
+            cp shard_plan_out/shard_plan_summary.md "$staging/"
+          fi
           .github/scripts/Indexer/indexer.py -r "$staging/"
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
             "$staging/" "$S3_BUCKET_PATH/"
           {
             echo ""
             echo "## Plan artifacts (S3)"
-            echo "[Plan index](${S3_URL_PREFIX}/index.html) | [shard_plan.json](${S3_URL_PREFIX}/shard_plan.json)"
+            echo "[Plan index](${S3_URL_PREFIX}/index.html) | [shard_plan.json](${S3_URL_PREFIX}/shard_plan.json) | [summary](${S3_URL_PREFIX}/shard_plan_summary.md)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   test_shard:
@@ -351,16 +424,59 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p shard_graph_out
-          python3 .github/scripts/tests/sharding/filter.py \
-            --graph build_graph/graph.json \
-            --context build_graph/context.json \
-            --plan shard_plan/shard_plan.json \
-            --shard-id ${{ matrix.shard_id }} \
-            -o shard_graph_out/graph.json \
-            --context-output shard_graph_out/context.json
+          filter_args=(
+            --graph build_graph/graph.json
+            --plan shard_plan/shard_plan.json
+            --shard-id ${{ matrix.shard_id }}
+            -o shard_graph_out/graph.json
+          )
+          if [ -f build_graph/context.json ]; then
+            filter_args+=(--context build_graph/context.json --context-output shard_graph_out/context.json)
+          fi
+          python3 .github/scripts/tests/sharding/filter.py "${filter_args[@]}"
           echo "graph_path=$PWD/shard_graph_out/graph.json" >> "$GITHUB_OUTPUT"
-          echo "context_path=$PWD/shard_graph_out/context.json" >> "$GITHUB_OUTPUT"
-          echo "Shard ${{ matrix.shard_id }} graph nodes: $(jq '.result | length' shard_graph_out/graph.json)"
+          if [ -f shard_graph_out/context.json ]; then
+            echo "context_path=$PWD/shard_graph_out/context.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "context_path=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Shard ${{ matrix.shard_id }} result nodes: $(jq '.result | length' shard_graph_out/graph.json)"
+          echo "Shard ${{ matrix.shard_id }} graph nodes: $(jq '.graph | length' shard_graph_out/graph.json)"
+      - name: Prepare S3 folder prefix
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd for shard decision
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+          s3_subdir: shard_${{ matrix.shard_id }}/decision
+      - name: Upload shard decision to S3
+        shell: bash
+        run: |
+          set -eux
+          staging=shard_decision_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp shard_graph_out/graph.json "$staging/"
+          if [ -f shard_graph_out/context.json ]; then
+            cp shard_graph_out/context.json "$staging/"
+          fi
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Shard ${{ matrix.shard_id }} decision (S3)"
+            echo "[Decision index](${S3_URL_PREFIX}/index.html) | [filtered graph](${S3_URL_PREFIX}/graph.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -472,6 +588,7 @@ jobs:
           fi
           rm -rf .tested_ref
       - name: Download shard reports
+        if: needs.prepare.outputs.active_shard_count != '0'
         uses: actions/download-artifact@v4
         with:
           pattern: parallel-${{ inputs.build_preset }}-shard-report-*-${{ github.run_id }}
@@ -593,8 +710,6 @@ jobs:
           STATUS_SHA: ${{ inputs.status_sha != '' && inputs.status_sha || inputs.checkout_ref }}
           SKIP_GITHUB_PUBLISH: ${{ inputs.publish && '0' || '1' }}
           SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
-          INCLUDE_BUILD_ARTIFACTS: "1"
-          INCLUDE_PLAN_ARTIFACTS: "1"
           SHARD_COUNT: ${{ steps.merge.outputs.shard_count }}
         run: |
           set -eux
@@ -612,8 +727,18 @@ jobs:
           cp "$REPORT_PATH" "$PUBLIC_DIR/final/report.json"
           : > "$SUMMARY_LINKS"
           if [ -n "${PUBLIC_DIR_URL:-}" ]; then
-            .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
             echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+            echo "01 [Params](${PUBLIC_DIR_URL}/params/index.html)" >> "$SUMMARY_LINKS"
+            echo "02 [Build](${PUBLIC_DIR_URL}/build/index.html)" >> "$SUMMARY_LINKS"
+            echo "03 [Plan](${PUBLIC_DIR_URL}/plan/index.html)" >> "$SUMMARY_LINKS"
+            if [ "${SHARD_COUNT:-0}" -gt 0 ]; then
+              for shard_id in $(seq 0 $((SHARD_COUNT - 1))); do
+                printf '%02d [Shard %s](%s/shard_%s/index.html)\n' \
+                  $((10 + shard_id)) "$shard_id" "$PUBLIC_DIR_URL" "$shard_id" >> "$SUMMARY_LINKS"
+                printf '%02d [Shard %s decision](%s/shard_%s/decision/index.html)\n' \
+                  $((40 + shard_id)) "$shard_id" "$PUBLIC_DIR_URL" "$shard_id" >> "$SUMMARY_LINKS"
+              done
+            fi
           fi
           IS_TEST_RESULT_IGNORED=0
           case "$BUILD_PRESET" in release-asan|release-msan) IS_TEST_RESULT_IGNORED=1 ;; esac
@@ -661,6 +786,16 @@ jobs:
               --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
               "Tests" "try_1/ya-test.html" "$REPORT_PATH"
           fi
+          # Index after HTML generation so ya-test.html appears in folder indexes.
+          .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
+          python3 .github/scripts/tests/sharding/render_artifacts_nav.py \
+            --output "$PUBLIC_DIR/index.html" \
+            --tries-dir "$TRIES_DIR" \
+            --public-dir "$PUBLIC_DIR" \
+            --include-params \
+            --include-build \
+            --include-plan \
+            --shard-count "${SHARD_COUNT:-0}"
           if [ -n "${S3_BUCKET_PATH:-}" ]; then
             s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
               "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"

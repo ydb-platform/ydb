@@ -84,22 +84,9 @@ inputs:
   publish_github_status:
     type: boolean
     default: true
-  status_context_prefix:
-    type: string
-    default: ""
-    description: "Prefix for GitHub commit status contexts (empty = build_/test_*; set only for debug isolation)"
   publish_pr_comment:
     type: boolean
     default: true
-  single_attempt:
-    type: boolean
-    default: false
-  start_retry:
-    type: string
-    default: "1"
-  previous_report_path:
-    type: string
-    default: ""
   save_test_graph:
     type: boolean
     default: false
@@ -183,10 +170,6 @@ runs:
         prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
         prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
         publish_github_status: ${{ inputs.publish_github_status }}
-        status_context_prefix: ${{ inputs.status_context_prefix }}
         publish_pr_comment: ${{ inputs.publish_pr_comment }}
-        single_attempt: ${{ inputs.single_attempt }}
-        start_retry: ${{ inputs.start_retry }}
-        previous_report_path: ${{ inputs.previous_report_path }}
         save_test_graph: ${{ inputs.save_test_graph }}
         clean_ya_cache: ${{ inputs.clean_ya_cache }}

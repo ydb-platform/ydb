@@ -1,2 +1,0 @@
-ydb/core/foo/ut
-ydb/tests/bar

@@ -41,6 +41,14 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
     return BuildKeyColumnsList(pos, ctx, table.Metadata->KeyColumnNames);
 }
 
+// Prefix-table read columns: the index prefix key columns with the trailing
+// embedding column replaced by __ydb_id.
+TCoAtomList BuildPrefixColumnsList(const TIndexDescription& indexDesc, TPositionHandle pos, TExprContext& ctx) {
+    auto columns = indexDesc.KeyColumns;
+    columns.back().assign(NTableIndex::NKMeans::IdColumn);
+    return BuildKeyColumnsList(pos, ctx, columns);
+}
+
 TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
     TMap<TString, TCoAtom> columns;
     for (const auto& c : col1) {
@@ -905,6 +913,55 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     return TExprBase{read};
 }
 
+TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
+    const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    TExprContext& ctx, const TIndexDescription& indexDesc)
+{
+    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+
+    const auto pos = match.Pos();
+
+    // Extract the target (query) vector from the sort lambda.
+    TNodeOnNodeOwnedMap replaces;
+    TExprNode::TPtr targetVector;
+    LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
+    YQL_ENSURE(targetVector, "failed to extract the target vector from the sort lambda");
+
+    // Ensure the embedding column is among the read columns so the actor can rank rows
+    // even if it is not part of the final projection.
+    const auto& embeddingColumn = indexDesc.KeyColumns.back();
+    TVector<TCoAtom> columns;
+    bool hasEmbedding = false;
+    for (const auto& col : match.Columns()) {
+        columns.push_back(col);
+        if (col.Value() == embeddingColumn) {
+            hasEmbedding = true;
+        }
+    }
+    if (!hasEmbedding) {
+        columns.push_back(Build<TCoAtom>(ctx, pos).Value(embeddingColumn).Done());
+    }
+
+    TExprNode::TPtr read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+        .Table(match.Table())
+        .Index(ctx.NewAtom(pos, indexDesc.Name))
+        .Columns<TCoAtomList>().Add(columns).Build()
+        .TopK(top.Count())
+        .TargetVector(TExprBase{targetVector})
+        .Done().Ptr();
+
+    if (flatMap) {
+        read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
+            .Input(read)
+            .Lambda(ctx.DeepCopyLambda(flatMap.Cast().Lambda().Ref()))
+        .Done().Ptr();
+    }
+
+    VectorTopMain(ctx, top, read);
+
+    return TExprBase{read};
+}
+
 template<typename T>
 TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHandle pos) {
     auto leafFlag = Build<TCoUint64>(ctx, pos)
@@ -959,11 +1016,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
             NTableIndex::NKMeans::ParentColumn,
             NTableIndex::NKMeans::IdColumn,
             NTableIndex::NKMeans::CentroidColumn});
-    const auto prefixColumns = [&] {
-        auto columns = indexDesc.KeyColumns;
-        columns.back().assign(NTableIndex::NKMeans::IdColumn);
-        return BuildKeyColumnsList(pos, ctx, columns);
-    }();
+    const auto prefixColumns = BuildPrefixColumnsList(indexDesc, pos, ctx);
     auto mainColumns = match.Columns();
 
     THashSet<TStringBuf> prefixColumnSet;
@@ -1113,6 +1166,117 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
             .Lambda(mainLambda.Cast())
         .Done().Ptr();
     }
+
+    VectorTopMain(ctx, top, read);
+    return TExprBase{read};
+}
+
+// Rewrites the prefixed kmeans-tree vector search onto TKqlReadTableVectorIndex. The prefix
+// table is read here, in the query plan, filtered by the original WHERE predicate (which
+// references only prefix key columns) with full predicate pushdown; each matching group's
+// __ydb_id is remapped to __ydb_parent and crossed with the target vector to form the actor's
+// input rows {__target, __ydb_parent}, which the actor uses as the level-traversal roots.
+TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
+    const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
+{
+    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(indexDesc.KeyColumns.size() > 1, "expected a prefixed vector index");
+
+    const auto* prefixTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Next->Name);
+    YQL_ENSURE(prefixTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PrefixTable));
+
+    const auto pos = match.Pos();
+    const auto prefixTable = BuildTableMeta(*prefixTableDesc->Metadata, pos, ctx);
+
+    // Prefix table read columns: prefix key columns + __ydb_id.
+    const auto prefixColumns = BuildPrefixColumnsList(indexDesc, pos, ctx);
+
+    // Extract the target (query) vector from the sort lambda.
+    TNodeOnNodeOwnedMap replaces;
+    TExprNode::TPtr targetVector;
+    LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
+    YQL_ENSURE(targetVector, "failed to extract the target vector from the sort lambda");
+
+    // Read the prefix table, filtered by the original WHERE predicate, passing each
+    // matching prefix row through (so __ydb_id stays available for the remap).
+    auto prefixRead = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
+
+    auto optionalIf = flatMap.Lambda().Body().Cast<TCoOptionalIf>();
+    auto prefixArg = Build<TCoArgument>(ctx, pos).Name("prefixRow").Done();
+    TNodeOnNodeOwnedMap predReplaces;
+    predReplaces[flatMap.Lambda().Args().Arg(0).Raw()] = prefixArg.Ptr();
+    auto predicate = ctx.ReplaceNodes(optionalIf.Predicate().Ptr(), predReplaces);
+
+    auto filtered = Build<TCoFlatMap>(ctx, pos)
+        .Input(prefixRead)
+        .Lambda()
+            .Args({prefixArg})
+            .Body<TCoOptionalIf>()
+                .Predicate(TExprBase{predicate})
+                .Value(prefixArg)
+                .Build()
+            .Build()
+        .Done();
+
+    // Build the actor's input rows: {__target: targetVector, __ydb_parent: __ydb_id}.
+    // No TDqPrecompute here: a separate precompute phase would acquire locks, which
+    // conflict with the follower read of the immutable prefix table.
+    auto rowArg = Build<TCoArgument>(ctx, pos).Name("idRow").Done();
+    TExprNode::TPtr prefixRows = Build<TCoMap>(ctx, pos)
+        .Input(filtered)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add<TCoNameValueTuple>()
+                    .Name().Build("__target")
+                    .Value(TExprBase{targetVector})
+                    .Build()
+                .Add<TCoNameValueTuple>()
+                    .Name().Build(NTableIndex::NKMeans::ParentColumn)
+                    .Value<TCoMember>()
+                        .Struct(rowArg)
+                        .Name().Build(NTableIndex::NKMeans::IdColumn)
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Done().Ptr();
+
+    // Read columns must include everything the reapplied projection/predicate uses:
+    // all referenced main columns (match.Columns), the embedding (for ranking) and
+    // the prefix key columns (the WHERE predicate references them).
+    THashSet<TStringBuf> present;
+    TVector<TCoAtom> columns;
+    for (const auto& col : match.Columns()) {
+        columns.push_back(col);
+        present.insert(col.Value());
+    }
+    auto ensureColumn = [&](TStringBuf name) {
+        if (present.insert(name).second) {
+            columns.push_back(Build<TCoAtom>(ctx, pos).Value(name).Done());
+        }
+    };
+    ensureColumn(indexDesc.KeyColumns.back());
+    for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
+        ensureColumn(indexDesc.KeyColumns[i]);
+    }
+
+    TExprNode::TPtr read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+        .Table(match.Table())
+        .Index(ctx.NewAtom(pos, indexDesc.Name))
+        .Columns<TCoAtomList>().Add(columns).Build()
+        .TopK(top.Count())
+        .TargetVector(TExprBase{targetVector})
+        .PrefixRows(TExprBase{prefixRows})
+        .Done().Ptr();
+
+    // Reapply the original projection/filter on the main-table rows.
+    read = Build<TCoFlatMap>(ctx, flatMap.Pos())
+        .Input(read)
+        .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+    .Done().Ptr();
 
     VectorTopMain(ctx, top, read);
     return TExprBase{read};
@@ -3370,6 +3534,10 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
             }
+            if (kqpCtx.Config->GetEnableVectorSearchActor()) {
+                return DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
+                                                                            ctx, kqpCtx, *indexDesc, *implTable);
+            }
             return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
                                                           ctx, typesCtx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
@@ -3413,6 +3581,10 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                 return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
+        }
+        if (kqpCtx.Config->GetEnableVectorSearchActor()) {
+            return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
+                                                                ctx, *indexDesc);
         }
         return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);

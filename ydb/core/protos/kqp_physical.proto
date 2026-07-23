@@ -348,6 +348,24 @@ message TKqpPhyCnVectorResolve {
     optional double OverlapRatio = 12;
 }
 
+message TKqpPhyCnVectorSearch {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;          // Main table
+    TKqpPhyTableId LevelTable = 3;     // indexImplLevelTable
+    TKqpPhyTableId PostingTable = 4;   // indexImplPostingTable
+    repeated string Columns = 5;       // Output columns requested from the main table
+    bytes InputType = 6;               // Serialized MiniKQL item type of the target vector input
+    bytes OutputType = 7;              // Serialized MiniKQL item type of the output row
+    TKqpPhyValue TopK = 8;             // LIMIT (top-K); literal or query parameter
+    uint32 LevelTop = 9;               // KMeansTreeSearchTopSize
+    uint32 OverlapClusters = 10;
+    uint32 Levels = 11;                // Number of KMeans tree levels
+    uint32 VectorColumnIndex = 12;     // Index of the embedding column in Columns
+    // Prefixed index: the transform input carries, per prefix group, the root
+    // __ydb_parent id alongside the target vector.
+    bool HasPrefix = 13;
+}
+
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 2;
@@ -406,6 +424,7 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
+        TKqpPhyCnVectorSearch VectorSearch = 18;
     };
 }
 

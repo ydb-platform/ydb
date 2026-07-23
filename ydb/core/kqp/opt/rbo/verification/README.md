@@ -18,7 +18,9 @@ membership/complement predicate, exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
 semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
 Decimal `MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
-and exact uncorrelated scalar subplans that are statically at most one row,
+explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
+uncorrelated scalar subplans with consumer-demanded local cardinality errors
+and eager inherited errors,
 plus the benchmark-dashboard parts of M4. The reviewed exact
 wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
 instead of being erased. The exporter also exactly folds the reviewed constant
@@ -37,8 +39,9 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The latest complete formula-only measurements reran both suites on current code
-on 2026-07-23. They establish formula construction for TPCH q1, q3, q5, q6,
+The latest complete formula-only measurements reran both suites on 2026-07-23,
+before the explicit general scalar-error commits described below. They
+establish formula construction for TPCH q1, q3, q5, q6,
 q10, q11, q12, q14, q15, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77,
 q79, q80, q82, q88, q90, q91, q93, q96, and q99: 41/121 workload queries
@@ -48,6 +51,8 @@ twenty-eight optimizer failures. Across both suites that is 49 unsupported
 queries and 31 optimizer failures. The complete TPCH dashboard spent
 2,754/6,017 ms and TPC-DS spent 54,058/178,875 ms in
 preparation/verification, or 56,812/184,892 ms together.
+No later complete dashboard is inferred from focused unit or host tests; the
+recorded counts remain the coverage baseline until both suites are rerun.
 Within TPC-DS, q9 is the only inventory-category change from the preceding
 complete run: optimizer preparation now succeeds and exposes unsupported final
 Read range/ordering semantics, so it moves from optimizer failure to
@@ -151,12 +156,22 @@ outgoing edge occurrences. Shuffle-elimination/co-partitioning assumptions are
 rejected until the snapshot can substantiate them.
 
 Stage task counts are validated before staged physical properties are admitted.
-The `EnsureAtMostOne` check on a Limit is semantically erased only when its
-input passes the small structural at-most-one proof. That proof may stay in the
-Limit's stage or cross into a producer stage whose inferred task count is
-exactly one; every further crossing repeats the same check. A two-task producer
-remains unsafe because two task-local scalar rows can meet in one consumer and
-make the runtime check observable, so export fails closed.
+Every Limit snapshot carries `ensure_at_most_one`; omission is accepted only as
+the legacy default `false`. A set marker is no longer erased through a
+structural cardinality proof. It raises an explicit outcome error exactly when
+the post-Skip/post-Take relation contains more than one present row. The check
+runs independently in each stage task, and any task error propagates through
+the StageGraph.
+
+The verifier represents each family member as an enabled relation plus an
+explicit query-error Boolean. Operators preserve input errors, products combine
+them, and row-removing operators do not hide an error that has already
+occurred. Equality treats two error outcomes as the same observable status,
+compares rows only when both outcomes succeed, and rejects error-versus-success
+as a mismatch. Inspector traces label each enabled outcome `success` or
+`error`. Version one does not distinguish error categories, codes, or text.
+Replay currently fails closed on an error outcome until its external
+error-comparison protocol is implemented.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
@@ -612,53 +627,74 @@ Initial catalog capture validates the subplan registry and follows every subplan
 root, so a failed initial semantic export no longer hides the final boundary.
 The snapshot now records each scalar binding's root, selected output, exact type
 and nullability, dependencies, and consumers. The first deliberately narrow
-contract accepts only uncorrelated bindings with no dependencies, explicit
+milestone accepted only uncorrelated bindings with no dependencies, explicit
 Project/Filter consumers, and roots statically known to produce at most one
 row: `EmptySource`, an eligible ungrouped aggregate, a literal `Limit <= 1`, or
 Project/Filter/Sort wrappers over one of those shapes. Join, UnionAll,
 intermediate or `DistinctAll` aggregation, nested subplans, and staged subplans
-fail closed.
+failed closed at that milestone.
 
 The current exporter always emits the `plan.subplans` array. Its absence in a
 legacy-v1 snapshot means an empty array: the earlier version-one exporter could
 not encode a residual subplan and failed closed whenever one was present.
 
-Each admitted subplan is evaluated lazily once against the same symbolic
-database as the main plan. Zero rows produce a typed NULL and one row produces
-the selected value; cardinality, type/nullability, binding collisions, consumer
-scope, and nondeterministic direct outcomes are validated fail-closed across
-the exporter and trusted decoder/evaluator. The optimized form remains the
-ordinary main plan, so the proof compares that initial scalar semantics with
-the final StageGraph without adding a special equivalence shortcut.
-
-The optimized scalar lowering retains physical `EnsureAtMostOne` Limits. Their
-task-aware no-op audit runs only after the complete StageGraph and its task
-counts have been validated. TPCH q11 and q15 each propagate a final check
-across a serial UnionAll from a one-task aggregate stage, so the check is
-provably inert rather than ignored. The focused
-`*ProvenAtMostOneMarker*` C++ matrix passes 3/3: marker-off and marker-on
-snapshots are byte-identical for the one-task case, a graph-valid two-task
-producer is rejected only when the marker is enabled, and a grouped aggregate
-shows that one task permits traversal but does not itself prove cardinality.
-The complete exporter suite passes 161/161.
-
-This exact slice moves TPCH q11 and q15 through formula construction and into
-the checked-in proof floor. In the fresh complete formula dashboard they spent
+That exact static slice moved TPCH q11 and q15 through formula construction and
+into the checked-in proof floor. In the complete formula dashboard they spent
 176/558 and 152/462 ms in preparation/verification. The post-hardening proof
-floor returns `VERIFIED_BOUNDED` after 158/6,585 and 199/2,750 ms,
-respectively. The complete dashboard remains 41/121 formulas (33.9%) and the
-proof floor remains 15/121 (12.4%).
+floor returned `VERIFIED_BOUNDED` after 158/6,585 and 199/2,750 ms,
+respectively. The recorded dashboard remains 41/121 formulas (33.9%) and the
+proof floor remains 15/121 (12.4%). These are preserved historical
+measurements from before the general scalar-error implementation; no fresh
+dashboard metric is inferred from the unit coverage below.
 
-TPC-DS q24 remains unsupported because both boundaries reach the independent
-`Unsupported scalar callable Map` blocker. q54's initial scalar binding is not
-statically at most one row; its final boundary now fails closed because a
-`Limit` carries physical properties that logical snapshot v1 cannot represent.
-The next semantic milestone is general uncorrelated scalar subplans with
-explicit query-error outcomes for the more-than-one-row case. Restricted
-relational `EXISTS`, dynamic `IN`, and correlated subplans follow separately;
-solver/formula-size work then promotes supported `UNKNOWN` obligations.
+Commit `b2cd6e3c5bb` adds the explicit outcome algebra, and `f930f1352e7`
+introduces general uncorrelated scalar subplans within the modeled relational
+surface. A binding reuses the source family's decisions and choices, returns
+typed NULL for zero present rows, returns the selected value for one, and
+generates a cardinality-error term for more than one. Commit `1aaf281c07a`
+assigns enumerated latent-sequence alternatives a stable scoped decision, so
+the cached family cannot select different permutations at different consumers.
+The optimized form remains the ordinary main plan, so comparison with the final
+StageGraph has no scalar-specific equivalence shortcut.
 
-The audit found five production optimizer defects. A stale negation flag could
+Only the current binding's newly generated more-than-one-row error is
+consumer-demanded. It is observed when that binding's immediate Project/Filter
+consumer has a present row, including when the binding appears under a dead
+scalar-expression branch. An error inherited from evaluating the subplan root
+remains observable and is not gated again by an empty enclosing consumer. Thus
+a nested scalar demanded by its own nonempty consumer can error even when the
+top-level outer consumer is empty. An intrinsic error already raised inside the
+producer is eager in the same way.
+
+Model-correction commit `125962c87df` preserves inherited `Outcome.error`
+separately from the binding-local `cardinality_error` until the immediate
+consumer applies that demand gate.
+
+Production commit `9e50d234264` correctly gates the direct cardinality check
+inserted for one binding. CBO could then commute this order-sensitive synthetic
+Cross. Physical Cross drains the right side first, so a commuted empty outer
+side could finish without evaluating the inherited scalar error. Commit
+`cab0dd1e89c` marks both synthetic Crosses `PreserveInputOrder`, keeps them as
+BuildInitial/Expand CBO barriers while optimizing their sides, and blocks filter
+absorption through the barriers.
+
+Physical `EnsureAtMostOne` Limits are now serialized and evaluated rather than
+proved inert during export. The focused `*AtMostOneMarker*` C++ matrix passes
+3/3 for direct, multi-task-producer, and single-task-producer serialization.
+The current full `cpp_ut` passes 165/165, and the affected Python
+verifier/inspector/bisect/replay/confirmation gates pass 507/507. The check
+observes the exact post-Skip/post-Take relation independently in each stage
+task.
+
+TPC-DS q24 still has the independent `Unsupported scalar callable Map` blocker.
+The recorded q54 reasons—an initially non-statically-single-row binding and an
+unrepresentable final Limit—describe the preceding complete dashboard. A full
+dashboard has not yet been rerun on general scalar errors, so this document
+does not claim new q54 formula coverage. Restricted relational `EXISTS`,
+dynamic `IN`, and correlated subplans follow separately; solver/formula-size
+work then promotes supported `UNKNOWN` obligations.
+
+The audit has found seven production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
 are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
@@ -673,6 +709,48 @@ scalar projection constructed `Nothing<Int64>` instead of an optional NULL,
 causing type annotation to fail. Commit `52a1d7c4084` fixes those three
 projection-path defects and covers already-optional aggregation, a plain
 singleton, a computed projection, zero-row NULL, and the multirow error.
+
+The sixth defect is the converse demand case: a multirow scalar raised
+`PRECONDITION_FAILED` under new RBO even when the outer consumer was empty,
+where legacy execution correctly returned no rows. The generated cardinality
+check ran eagerly in an independent scalar producer. Commit `9e50d234264`
+bounds the scalar input, observes its direct cardinality only after crossing
+one demanded outer row, and renames colliding outer/scalar IUs. At that
+production-fix checkpoint, `ScalarSubplanEvaluationTest` passed 14/14, and the
+real-host `KqpRboYql::ExpressionSubquery` test passed 1/1 with the new
+empty-consumer and same-IU cases plus its existing cardinality cases. The
+prerequisite shared-input rule correction is kept separate in `a51c2459ad5`;
+its two direct Limit-pushdown regressions pass 2/2 for shared Read and Sort
+inputs.
+
+The seventh defect was confirmed with a reliable warmed paired real-host probe
+of `nested_empty_outer.sql`. Its inner scalar has a nonempty immediate consumer
+and more than one row, but the top-level consumer is empty. Legacy execution
+raises `PRECONDITION_FAILED` with “More than one row in a scalar subquery”.
+Before the fix, two warmed default-CBO new-RBO runs instead deterministically exited
+successfully with an empty result JSON beginning
+`{"columns":[{"name":"value",...}]}`. Model commits `125962c87df` and
+`1aaf281c07a` correct inherited-error separation and shared enumerated choices,
+respectively, exposing the mismatch.
+
+CBO had commuted the order-sensitive synthetic scalar Cross. Physical Cross
+drains its right input first, so the commuted empty outer input could prevent
+evaluation of the inherited scalar error. Optimizer commit `cab0dd1e89c` marks
+both synthetic Crosses `PreserveInputOrder`, makes BuildInitial/Expand CBO stop
+at those barriers while still optimizing both sides, and prevents filter
+absorption through them. The two direct rule regressions pass 2/2, the
+real-host `KqpRboYql::ExpressionSubquery` test passes 1/1 with the CBO2 nested
+case, the full `cpp_ut` passes 165/165, and the affected Python gates pass
+507/507. Defect seven is fixed.
+
+An additional legacy probe placed
+`Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it
+also raised `PRECONDITION_FAILED` despite the empty top-level consumer. This
+confirms that inherited intrinsic errors share the eager contract.
+
+The focused
+`test_inherited_scalar_error_is_observed_without_a_consumer_input_row`
+regression preserves the corrected distinction.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -1311,3 +1389,24 @@ namespaces to user-supplied external YDB targets.
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/confirmation_ut 2>&1 | tail
 ```
+
+## Failure records and commits
+
+Keep every solver candidate as a SHA-bound case containing the exact query,
+both snapshots, raw verifier verdict, and emitted SMT formula. Add the pinned
+inspector trace, confirmation streams, real-YDB namespaces, and transformation
+prefix captures as those stages run. A hand-minimized working query is useful
+during diagnosis, but the durable repro is a focused test checked in with the
+production correction.
+
+Replay can reclassify a symbolic discrepancy as a verifier-model error; retain
+that case as a model regression, then audit the optimizer independently because
+the model bug and a real execution divergence may coexist.
+
+Verifier/model changes are reviewed in commits separate from optimizer
+changes. An optimizer fix and its focused regression normally land atomically.
+Semantic and finding notes may be updated with that fix, but numerical coverage
+reports change only after a complete corpus rerun. There is no intentionally
+failing commit solely to record the defect—the preserved repro and a pre-fix
+run against the parent revision provide that evidence without leaving the main
+history red.

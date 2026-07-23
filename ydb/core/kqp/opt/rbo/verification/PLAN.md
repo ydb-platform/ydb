@@ -488,6 +488,17 @@ of guarded rows. Rows also carry structural occurrence provenance and routing
 facts used only for exact StageGraph normalization; neither annotation changes
 SQL values or multiplicity.
 
+Each relational outcome also carries one explicit Boolean query-error status.
+Ordinary relational operators preserve an input error, family products combine
+input errors with Boolean OR, and error is observable even when an operator such
+as `Limit 0` produces no rows. Two outcomes are equal when both error, or when
+both succeed and their result relations are equal; an error and a successful
+result are never equal. The result relation attached to an error outcome is
+therefore diagnostic data, not an observable value. Inspector traces render the
+status explicitly. Version one distinguishes error from success but does not
+compare error categories, codes, or text. Error-aware real-YDB replay remains a
+separate extension and currently fails closed on such a trace.
+
 Implementation sequence:
 
 1. M1: one-row empty source, scan, exact projection, and filter;
@@ -526,10 +537,12 @@ Implementation sequence:
 25. M4: exact captured uncorrelated scalar subplans that are statically at most
     one row, including task-aware no-op admission for final
     `EnsureAtMostOne` markers;
-26. next: explicit query-error outcomes for general scalar subplans plus exact
-    restricted `IN`/`EXISTS`;
-27. later: equality-correlated scalar and `EXISTS` subplans;
-28. later: proof scaling, distinct expansion, range reads, and other OLAP
+26. M4: explicit query-error outcomes, exact `EnsureAtMostOne`, and general
+    uncorrelated scalar subplans with consumer-demanded local cardinality
+    errors and eager inherited errors;
+27. next: exact restricted relational `IN`/`EXISTS`;
+28. later: equality-correlated scalar and `EXISTS` subplans;
+29. later: proof scaling, distinct expansion, range reads, and other OLAP
     pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -617,13 +630,14 @@ Stage-local operators execute independently on each task. The final collection
 then projects `TOpRoot::ColumnOrder`.
 
 Stage task inference is completed as part of strict StageGraph validation before
-any staged physical property is admitted. The physical `EnsureAtMostOne` check
-on a Limit is semantically erased only when its input has the existing
-structural at-most-one proof. That proof can cross from a consumer stage into a
-producer stage only when the producer's inferred task count is one, and every
-subsequent crossing repeats the same check. A multi-task producer fails closed
-because separate task-local rows can be gathered into one consumer and make
-the check observable.
+any staged physical property is admitted. Every Limit snapshot explicitly
+records `ensure_at_most_one`; legacy snapshots may omit it only as the
+well-defined default `false`. When set, the evaluator observes an error exactly
+when the post-Skip/post-Take relation contains more than one present row.
+Stage-local checks run independently in each task, and a later connection
+propagates any task error. The exporter no longer erases the marker through a
+structural cardinality proof or treats a single producer task as proof that the
+check is inert.
 
 Merge requires every producer task to carry an order compatible with the edge
 order. Small cases may enumerate sorted producer-order-preserving interleavings.
@@ -672,6 +686,29 @@ both committed rule applications and atomic mutating non-rule stage commits;
 rules may occur repeatedly while a stage iterates to a fixpoint. Prefixes are
 inspected sequentially because equivalence is not monotonic across optimizer
 transformations, so binary search would not soundly identify the first bad one.
+
+### Finding preservation and commit policy
+
+Every solver candidate is retained as a reproducible case: exact query,
+initial and final snapshots, byte-exact raw verdict, their SHA-256 bindings,
+and the emitted SMT formula when available. Inspection adds the pinned witness
+and operator/stage trace; confirmation adds exact child commands, streams, and
+the retained real-YDB namespaces. A localized case additionally retains the
+transformation-prefix captures. Temporary minimized queries are promoted to a
+focused durable test before a production fix is considered complete.
+Real-host replay may instead reclassify a symbolic discrepancy as a
+verifier-model error. Such a case becomes a model regression, but the optimizer
+must still be audited independently because a model bug and a real execution
+divergence can coexist.
+
+Verifier semantics or exporter changes are committed separately from optimizer
+changes so review can audit the model independently. An optimizer correction
+and its focused regression normally form one atomic commit. Semantic and
+finding notes may be updated with that fix, but numerical coverage reports
+change only after a complete corpus rerun. The history does not intentionally
+retain a red commit merely to demonstrate the bug: the pre-fix failure is
+documented by the preserved repro and by showing that the regression fails
+against the parent revision.
 
 ## Validation strategy
 
@@ -1169,7 +1206,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements reran on current code on 2026-07-23. They emit TPCH q1, q3, q5,
+  measurements reran on 2026-07-23 before the explicit general scalar-error
+  commits. They emit TPCH q1, q3, q5,
   q6, q10, q11, q12, q14, q15, and q19 (10/22) and TPC-DS q3, q5, q15, q19,
   q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68,
   q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99 (31/99),
@@ -1259,50 +1297,78 @@ ordinals use input-specific choice scopes and compressed branch offsets, so an
 ordered UnionAll followed by `Limit 1` selects a real scalar row before the NULL
 fallback without correlating independent input orderings.
 
-The first auditable initial-boundary contract is implemented: uncorrelated
+The first auditable initial-boundary milestone accepted uncorrelated
 scalar bindings with no dependencies, nullable result type, explicit
 Project/Filter consumers, and a root statically known to produce at most one
-row. The static proof admits `EmptySource`, an eligible ungrouped aggregate, a
+row. The static proof admitted `EmptySource`, an eligible ungrouped aggregate, a
 literal `Limit <= 1`, and Project/Filter/Sort wrappers over an admitted child.
-It rejects Join, UnionAll, grouped/intermediate/`DistinctAll` aggregation, and
+It rejected Join, UnionAll, grouped/intermediate/`DistinctAll` aggregation, and
 every shape not covered by that small structural proof. Root plans may carry
 auxiliary columns, but only the declared result output becomes the scalar
 binding.
 
-The evaluator resolves each admitted binding lazily once against the same
-symbolic database and cache as the main plan. Exactly zero rows become a typed
-NULL; exactly one row yields the selected value. Direct subplan decisions,
-choice scopes, multiple unconditional relation outcomes, or more than one
-candidate fail closed instead of turning nondeterminism or an error into an
-assumption. Binding types are injected only while evaluating consumer
-expressions, so virtual scalar bindings cannot leak into physical operator
-outputs.
+That historical slice moved TPCH q11 and q15 through formula construction and
+into the proof floor. Final scalar lowering retained physical
+`EnsureAtMostOne` Limits, and the then-current staged export proved those
+markers inert. q11 and q15 each crossed a serial UnionAll from a one-task
+aggregate producer; their recorded complete formula rows took 176/558 and
+152/462 ms, and the post-hardening proof floor returned `VERIFIED_BOUNDED` in
+158/6,585 and 199/2,750 ms. Those measurements predate general scalar-error
+modeling and are not silently reclassified.
 
-This slice moves TPCH q11 and q15 through formula construction and into the
-proof floor. Final scalar lowering retains physical `EnsureAtMostOne` Limits,
-so staged export applies the task-aware no-op proof above rather than discarding
-the marker. q11 and q15 each cross a serial UnionAll from a one-task aggregate
-producer; their fresh complete formula rows take 176/558 and 152/462 ms, and
-the post-hardening proof floor returns `VERIFIED_BOUNDED` in 158/6,585 and
-199/2,750 ms. The focused `*ProvenAtMostOneMarker*` matrix passes 3/3 and the
-complete exporter suite passes 161/161: marker-on and marker-off JSON is
-identical for a safe one-task producer, a graph-valid two-task producer is
-rejected only with the marker, and a grouped aggregate proves that one task is
-permission to continue the structural proof rather than a cardinality fact.
-TPC-DS q24 still reaches `Unsupported scalar callable Map` at both boundaries.
-q54's initial binding is not statically at most one row, while its final
-`Limit` still carries physical properties outside logical snapshot v1.
+Commit `b2cd6e3c5bb` introduces the explicit outcome algebra, and
+`f930f1352e7` introduces general uncorrelated scalar subplans. Each binding
+retains the source family's relational decisions and choices: zero present
+rows produce typed NULL, one produces the selected value, and more than one
+produces a new cardinality-error term. Commit `1aaf281c07a` gives enumerated
+latent-sequence alternatives a stable scoped decision, so the same cached
+scalar family cannot select different sequence permutations at different
+consumers. Binding types remain lexically available only in declared
+Project/Filter consumers and cannot leak into physical outputs.
 
-The next bounded deliverable is general uncorrelated scalar subplans with an
-explicit query-error outcome for more than one row. That error must be compared
-with successful bags rather than encoded as a solver assumption or silently
-truncated. Exact relational `EXISTS`, restricted dynamic `IN`, and correlated
-forms remain separate later slices. Every slice must preserve output
-type/nullability, empty behavior, correlation metadata, and every final
-StageGraph consumer. Solver/formula-size work follows coverage and promotes a
-query only after a reproducible `VERIFIED_BOUNDED` run.
+The binding's newly generated more-than-one-row error is demanded only when
+that binding's immediate Project/Filter consumer has at least one present input
+row. Once such a row exists, the binding is evaluated even when it appears
+under a dead scalar-expression branch. An error already inherited from
+evaluating the subplan root is different: it remains observable and is not
+gated again by an empty outer consumer. This distinction composes through
+nested scalars. An inner binding demanded by its own nonempty consumer may
+error; an enclosing binding inherits that error even when the enclosing
+binding's top-level consumer is empty. An intrinsic error already raised while
+evaluating the producer is eager in the same way.
 
-The milestone audit has independently found five production optimizer defects.
+Model-correction commit `125962c87df` keeps the inherited `Outcome.error` and
+the binding-local `cardinality_error` as separate terms until it combines them
+at that immediate consumer.
+
+Commit `9e50d234264` correctly gates the cardinality observation generated for
+one scalar binding with one outer row. CBO could then commute the
+order-sensitive synthetic Cross: physical Cross drains its right input first,
+so putting the empty outer input on the right allowed execution to finish
+without draining the scalar side and its inherited error. Optimizer-fix commit
+`cab0dd1e89c` marks both synthetic scalar Crosses `PreserveInputOrder`, makes
+BuildInitial/Expand CBO treat the marked join as a barrier while still
+optimizing its sides, and prevents filter absorption from rewriting that
+barrier.
+
+Every Limit now serializes its marker, including across one- and multi-task
+producer stages, and the evaluator checks it exactly after Skip/Take in each
+task. The focused `*AtMostOneMarker*` exporter matrix passes 3/3 for direct,
+multi-task-producer, and single-task-producer serialization. After the model
+and optimizer corrections, the full `cpp_ut` passes 165/165 and the affected
+Python verifier/inspector/bisect/replay/confirmation gates pass 507/507.
+TPC-DS q24 still reaches the independent blocker, `Unsupported scalar callable
+Map`. The recorded q54 dashboard reasons belong to the preceding static-proof
+snapshot; no fresh full-dashboard metric is claimed for the general
+implementation.
+
+Exact relational `EXISTS`, restricted dynamic `IN`, and correlated forms remain
+separate later slices. Every slice must preserve output type/nullability, empty
+behavior, correlation metadata, and every final StageGraph consumer.
+Solver/formula-size work follows coverage and promotes a query only after a
+reproducible `VERIFIED_BOUNDED` run.
+
+The milestone audit has independently found seven production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
 `NOT EXISTS`; the focused regression and per-conjunct reset are committed in
@@ -1318,6 +1384,53 @@ producing `Nothing<Optional<Int64>>`, so a valid zero-row scalar subquery failed
 type annotation rather than returning NULL. Commit `52a1d7c4084` fixes the
 last three together and retains direct aggregate, plain singleton, computed,
 zero-row, and multirow real-YDB regressions.
+
+Sixth, a multirow uncorrelated scalar raised `PRECONDITION_FAILED` under new
+RBO even when the outer consumer produced no rows, while legacy execution
+returned the required empty result. The direct `EnsureAtMostOne` check was
+materialized eagerly in an independent scalar producer instead of being
+conditioned on consumer demand. Commit `9e50d234264` bounds the scalar side,
+gates the generated check with one outer row, preserves colliding outer/scalar
+IUs through an explicit rename, and retains both the empty-consumer and
+same-name real-host regressions. Its symbolic regression proves the gated
+lowering for demanded and empty consumers and distinguishes both a missing
+check and the former eager check. At that production-fix checkpoint,
+`ScalarSubplanEvaluationTest` passed 14/14, and
+`KqpRboYql::ExpressionSubquery` passed 1/1 with the new empty-consumer and
+same-IU cases plus the existing scalar-cardinality cases. The prerequisite
+shared-input repair is separate in `a51c2459ad5`; its two direct rule tests pass
+2/2 and prevent Limit pushdown into a shared Read or Sort. As noted above, the
+scalar patch addresses the directly generated cardinality error, while
+inherited producer errors require the separate treatment below.
+
+Seventh, a reliable warmed paired real-host probe of
+`nested_empty_outer.sql` found both a verifier-model bug and a production
+divergence. The inner scalar has a nonempty immediate consumer and more than one
+row, while the top-level consumer is empty. Legacy execution raises
+`PRECONDITION_FAILED` with “More than one row in a scalar subquery”; two warmed
+default-CBO new-RBO runs instead deterministically exited successfully with an empty
+result JSON beginning `{"columns":[{"name":"value",...}]}`. Commit
+`125962c87df` corrects the model's inherited/local error split, and
+`1aaf281c07a` preserves shared enumerated-sequence choices. The corrected model
+exposes the production mismatch.
+
+The production root cause was CBO commuting an order-sensitive synthetic scalar
+Cross. Because physical Cross drains the right input first, the commuted empty
+outer input could finish the join before the inherited scalar error was
+evaluated. Commit `cab0dd1e89c` fixes the defect with the
+`PreserveInputOrder` barriers described above. Its two direct order-sensitive
+join rule tests pass 2/2, `KqpRboYql::ExpressionSubquery` passes 1/1 including
+the CBO2 nested regression, the full `cpp_ut` passes 165/165, and the affected
+Python gates pass 507/507. Defect seven is fixed.
+
+An additional legacy probe with an intrinsic
+`Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises
+`PRECONDITION_FAILED` despite an empty top-level consumer, confirming that the
+eager inherited-error contract is not specific to nested cardinality checks.
+
+The focused
+`test_inherited_scalar_error_is_observed_without_a_consumer_input_row`
+regression locks the corrected boundary.
 
 ### M5: confirmation and localization — implemented for replayable single-result witnesses
 

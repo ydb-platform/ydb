@@ -10,7 +10,8 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/opt/rbo/verification/prefix_capture
     ydb/core/kqp/ut/common
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
 )
 
 YQL_LAST_ABI_VERSION()

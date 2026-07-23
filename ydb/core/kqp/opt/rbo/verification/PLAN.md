@@ -1278,14 +1278,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements reran on 2026-07-23 after the correlated-COUNT repair and
-  exact `DistinctAll` support. They emit TPCH q1, q3, q4, q5, q6, q10, q11,
+  measurements reran on 2026-07-23 after the correlated-COUNT repair, exact
+  `DistinctAll` support, and restoration of the production PostgreSQL
+  parser/runtime in the benchmark host. They emit TPCH q1, q3, q4, q5, q6,
+  q10, q11,
   q12, q14, q15, q19, and q22 (12/22) and TPC-DS q3, q5, q6, q10, q15, q19,
   q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65,
   q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99
-  (34/99), for 46/121 workload queries (38.0%). TPCH has six unsupported and
-  four optimizer-failure results; TPC-DS has 32 unsupported and 33
-  optimizer-failure results, for 38 unsupported and 37 optimizer failures
+  (34/99), for 46/121 workload queries (38.0%). TPCH has eight unsupported and
+  two optimizer-failure results; TPC-DS has 39 unsupported and 26
+  optimizer-failure results, for 47 unsupported and 28 optimizer failures
   across both suites.
 
   `DistinctAll` adds TPC-DS q6. The correlated-COUNT correctness repair
@@ -1293,10 +1295,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula construction to an optimizer-side fail-closed result because their
   computed correlated aggregate shapes require general empty-row
   reconstruction. None was in the proof floor. The current TPCH run spent
-  2,497/8,023 ms and produced report SHA-256
-  `6389617cbc9833f218f104ee7c67e7b46dbd995eb668ee9c04259fb420313a49`;
-  TPC-DS spent 54,698/186,809 ms and produced
-  `842a745905a7b86d2c4a50d0cff998ff810a78cf311144ea9942d19dc3fc763e`.
+  2,781/7,810 ms and produced report SHA-256
+  `dcc802b3dbd51ef04fdd179dbd90db6690b38892ead687d5849962ddd87cf0d1`;
+  TPC-DS spent 64,206/189,264 ms and produced
+  `d8c88141b6e6dccc3bf7596024b6033a297c267e8a1d05511206ea930fd7d763`.
   Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
@@ -1548,9 +1550,12 @@ permutations after an upstream alternative initially produced a
 bounded-ordinal representation for an already-alternative Sort reduces that
 obligation to 32,055,251 bytes and roughly 375 MiB for direct rendering,
 without changing the sequence language. A 60-second solver experiment remains
-`UNKNOWN`, so q6 enters only the formula floor. Dynamic `IN`, multiple
-dependencies, broader correlations, range reads, and other OLAP pushdowns are
-the next semantic work. The eighteen-query proof floor remains unchanged.
+`UNKNOWN`, so q6 enters only the formula floor. The production PostgreSQL
+parser/runtime now backs both the coverage host and benchmark-mode prefix
+capture, exposing dynamic `IN` as a verifier boundary instead of a dummy-host
+preparation failure. Dynamic `IN`, multiple dependencies, broader
+correlations, range reads, and other OLAP pushdowns are the next semantic work.
+The eighteen-query proof floor remains unchanged.
 
 The milestone audit has independently found eight production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule

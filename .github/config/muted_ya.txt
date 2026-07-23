@@ -45,6 +45,7 @@ ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
+ydb/tests/compatibility/common test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_stable-26-3-1]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-3-1]

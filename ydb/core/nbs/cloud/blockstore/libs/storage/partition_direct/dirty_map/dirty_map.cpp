@@ -7,6 +7,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -17,12 +18,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 template <typename T>
-TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
+TVector<TRecordId> DoMakeRecordIds(std::span<const T> segments)
 {
-    TVector<ui64> result;
+    TVector<TRecordId> result;
     result.reserve(segments.size());
     for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
+        result.push_back(segment.RecordId);
     }
     return result;
 }
@@ -33,12 +34,12 @@ TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
 
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 requestRelativeRange,
     TBlockRange64 vchunkRange,
     TRangeLock&& lock)
     : HostMask(hostMask)
-    , Lsn(lsn)
+    , RecordId(recordId)
     , RequestRelativeRange(requestRelativeRange)
     , VChunkRange(vchunkRange)
     , Lock(std::move(lock))
@@ -50,9 +51,15 @@ TReadRangeHint& TReadRangeHint::operator=(
 
 TString TReadRangeHint::DebugPrint() const
 {
-    return TStringBuilder()
-           << Lsn << "{" << HostMask.Print() << VChunkRange.Print()
+    TStringBuilder result;
+    if (RecordId.Lsn == 0) {
+        result << "0";
+    } else {
+        result << RecordId.Print();
+    }
+    result << "{" << HostMask.Print() << VChunkRange.Print()
            << RequestRelativeRange.Print() << "};";
+    return result;
 }
 
 TString TReadHint::DebugPrint() const
@@ -72,23 +79,18 @@ TString TReadHint::DebugPrint() const
 ////////////////////////////////////////////////////////////////////////////////
 
 // static
-TVector<ui64> TPBufferSegment::MakeLsnVector(
+TVector<TRecordId> TPBufferSegment::MakeRecordIds(
     std::span<const TPBufferSegment> segments)
 {
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
+    return DoMakeRecordIds(segments);
 }
 
 TString TPBufferSegment::DebugPrint(bool brief) const
 {
     if (brief) {
-        return ToString(Lsn);
+        return ToString(RecordId.Lsn);
     }
-    return TStringBuilder() << Lsn << Range.Print();
+    return TStringBuilder() << RecordId.Print() << Range.Print();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,13 +114,13 @@ TString TFlushHint::DebugPrint(bool brief) const
 void TFlushHints::AddHint(
     THostIndex source,
     THostIndex destination,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range)
 {
     Hints[THostRoute{
               .SourceHostIndex = source,
               .DestinationHostIndex = destination}]
-        .Segments.emplace_back(lsn, range);
+        .Segments.emplace_back(recordId, range);
 }
 
 bool TFlushHints::Empty() const
@@ -150,9 +152,9 @@ TString TFlushHints::DebugPrint() const
 TString TEraseSegment::DebugPrint(bool brief) const
 {
     if (brief) {
-        return ToString(Lsn);
+        return ToString(RecordId.Lsn);
     }
-    return TStringBuilder() << Generation << ":" << Lsn;
+    return RecordId.Print();
 }
 
 TString TEraseHint::DebugPrint(bool brief) const
@@ -169,11 +171,9 @@ TString TEraseHint::DebugPrint(bool brief) const
     return builder;
 }
 
-void TEraseHints::AddHint(THostIndex host, ui64 lsn)
+void TEraseHints::AddHint(THostIndex host, TRecordId recordId)
 {
-    Hints[host].Segments.emplace_back(
-        0,   // TODO(drbasic)
-        lsn);
+    Hints[host].Segments.emplace_back(recordId);
 }
 
 bool TEraseHints::Empty() const
@@ -336,7 +336,7 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
         DDiskStates[indx].SwitchOffline();
     }
 
-    TVector<ui64> erased;
+    TVector<TRecordId> erased;
     Inflight.Enumerate(
         [&](TInflightMap::TFindItem& item)
         {
@@ -349,30 +349,30 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
-    for (auto lsn: erased) {
-        Inflight.RemoveRange(lsn);
-        ReadyToErase.erase(lsn);
-        ReadyToFlush.erase(lsn);
+    for (auto recordId: erased) {
+        Inflight.RemoveRange(recordId);
+        ReadyToErase.erase(recordId);
+        ReadyToFlush.erase(recordId);
     }
 }
 
 void TBlocksDirtyMap::RestorePBuffer(
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     THostIndex host)
 {
     Y_ABORT_UNLESS(host < PBufferCounters.size());
 
-    if (auto item = Inflight.GetValue(lsn)) {
+    if (auto item = Inflight.GetValue(recordId)) {
         Y_ABORT_UNLESS(item->Range == range);
 
         auto& inflight = item->Value;
         inflight.RestorePBuffer(host);
     } else {
         Inflight.AddRange(
-            lsn,
+            recordId,
             range,
-            TInflightInfo(this, lsn, range.Size() * BlockSize, host));
+            TInflightInfo(this, recordId, range.Size() * BlockSize, host));
     }
 }
 
@@ -382,31 +382,56 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
     if (!Inflight.HasOverlaps(range)) {   // read from ddisk
-        result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
+        result.RangeHints.push_back(MakeReadRangeHint({}, {}, range, 0));
         return result;
     }
 
+    struct TOverlappingRecord
+    {
+        TRecordId RecordId;
+        TBlockRange64 Range;
+        TReadSource ReadSource;
+    };
+
     bool shouldWaitQuorum = false;
-    TStackVec<TWeightedRange> ranges;
+    // The split helper weighs ranges with plain ui64 keys where the bigger key
+    // wins the overlap and 0 marks a hole. Collect the readable overlapping
+    // records, order them by record id (the lexicographic order matches real
+    // time across generations), and use dense 1-based positions as weights.
+    TStackVec<TOverlappingRecord> overlapping;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
-            const auto readMask = item.Value.ReadMask();
-            if (readMask.Empty()) {
+            const auto readSource = item.Value.ReadMask();
+            if (readSource.Empty()) {
                 shouldWaitQuorum = true;
                 result.WaitReady = item.Value.GetQuorumReadyFuture();
                 result.RangeHints.clear();
                 return TInflightMap::EEnumerateContinuation::Stop;
             }
 
-            if (!readMask.OnlyDDisk()) {
-                ranges.push_back({.Key = item.Key, .Range = item.Range});
+            if (!readSource.OnlyDDisk()) {
+                overlapping.push_back(
+                    {.RecordId = item.Key,
+                     .Range = item.Range,
+                     .ReadSource = readSource});
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
     if (shouldWaitQuorum) {
         return result;
+    }
+
+    Sort(
+        overlapping,
+        [](const auto& lhs, const auto& rhs)
+        { return lhs.RecordId < rhs.RecordId; });
+
+    TStackVec<TWeightedRange> ranges;
+    ranges.reserve(overlapping.size());
+    for (size_t i = 0; i < overlapping.size(); ++i) {
+        ranges.push_back({.Key = i + 1, .Range = overlapping[i].Range});
     }
 
     auto nonOverlappingRanges =
@@ -415,24 +440,20 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 
     ui64 offsetBlocks{};
     for (auto& nonOverlappingRange: nonOverlappingRanges) {
-        auto lsn = nonOverlappingRange.Key;
+        const ui64 weight = nonOverlappingRange.Key;
 
-        if (lsn == 0) {
+        if (weight == 0) {
             auto hint = MakeReadRangeHint(
                 {},
-                0,
+                {},
                 nonOverlappingRange.Range,
                 offsetBlocks);
             result.RangeHints.push_back(std::move(hint));
         } else {
-            auto item = Inflight.GetValue(lsn);
-            Y_ABORT_UNLESS(item);
-            const auto readMask = item->Value.ReadMask();
-            Y_DEBUG_ABORT_UNLESS(!readMask.Empty());
-
+            const auto& record = overlapping[weight - 1];
             auto hint = MakeReadRangeHint(
-                readMask.Mask,
-                lsn,
+                record.ReadSource.Mask,
+                record.RecordId,
                 nonOverlappingRange.Range,
                 offsetBlocks);
             result.RangeHints.push_back(std::move(hint));
@@ -458,17 +479,17 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
         return result;
     }
 
-    TSet<ui64> readyToFlush;
+    TSet<TRecordId> readyToFlush;
     readyToFlush.swap(ReadyToFlush);
 
-    for (ui64 lsn: readyToFlush) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: readyToFlush) {
+        auto item = Inflight.GetValue(recordId);
         Y_ABORT_UNLESS(item);
         auto& val = item->Value;
 
         if (InflightDDiskReads.HasOverlaps(item->Range)) {
             // Can't flush to DDisk during reading from overlapped range.
-            ReadyToFlush.insert(lsn);
+            ReadyToFlush.insert(recordId);
             continue;
         }
 
@@ -496,11 +517,11 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         return result;
     }
 
-    TSet<ui64> readyToErase;
+    TSet<TRecordId> readyToErase;
     readyToErase.swap(ReadyToErase);
 
-    for (ui64 lsn: readyToErase) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: readyToErase) {
+        auto item = Inflight.GetValue(recordId);
         Y_ABORT_UNLESS(item);
 
         auto& val = item->Value;
@@ -534,36 +555,38 @@ TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
     for (const auto& item: readyToEraseBelated) {
         auto hostMask = item.Hosts;
         for (auto host: hostMask) {
-            result.AddHint(host, item.Lsn);
+            result.AddHint(host, item.RecordId);
         }
     }
 
     return result;
 }
 
-void TBlocksDirtyMap::RegisterInflightWrite(ui64 lsn, TBlockRange64 range)
+void TBlocksDirtyMap::RegisterInflightWrite(
+    TRecordId recordId,
+    TBlockRange64 range)
 {
     const bool inserted = Inflight.AddRange(
-        lsn,
+        recordId,
         range,
-        TInflightInfo(this, lsn, range.Size() * BlockSize));
+        TInflightInfo(this, recordId, range.Size() * BlockSize));
     Y_ABORT_UNLESS(inserted);
 }
 
 void TBlocksDirtyMap::WriteFinished(
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     THostMask requested,
     THostMask confirmed)
 {
     // Every write is pre-registered as pending at generation time (see
     // RegisterInflightWrite), so the entry always exists here.
-    auto item = Inflight.GetValue(lsn);
+    auto item = Inflight.GetValue(recordId);
     Y_ABORT_UNLESS(item);
     Y_ABORT_UNLESS(item->Range == range);
 
     if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
-        const bool removed = Inflight.RemoveRange(lsn);
+        const bool removed = Inflight.RemoveRange(recordId);
         Y_ABORT_UNLESS(removed);
         return;
     }
@@ -573,8 +596,8 @@ void TBlocksDirtyMap::WriteFinished(
 
 void TBlocksDirtyMap::FlushFinished(
     THostRoute route,
-    const TVector<ui64>& flushOk,
-    const TVector<ui64>& flushFailed)
+    const TVector<TRecordId>& flushOk,
+    const TVector<TRecordId>& flushFailed)
 {
     if (DisabledHosts.Get(route.DestinationHostIndex)) {
         // No processing is required, all inflight operations have been updated
@@ -582,8 +605,8 @@ void TBlocksDirtyMap::FlushFinished(
         return;
     }
 
-    for (ui64 lsn: flushOk) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: flushOk) {
+        auto item = Inflight.GetValue(recordId);
         if (!item) {
             // The item was deleted when the host was disabled.
             continue;
@@ -593,8 +616,8 @@ void TBlocksDirtyMap::FlushFinished(
         inflight.ConfirmFlush(route.DestinationHostIndex);
     }
 
-    for (ui64 lsn: flushFailed) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: flushFailed) {
+        auto item = Inflight.GetValue(recordId);
         if (!item) {
             // The item was deleted when the host was disabled.
             continue;
@@ -607,11 +630,11 @@ void TBlocksDirtyMap::FlushFinished(
 
 void TBlocksDirtyMap::EraseFinished(
     THostIndex host,
-    const TVector<ui64>& eraseOk,
-    const TVector<ui64>& eraseFailed)
+    const TVector<TRecordId>& eraseOk,
+    const TVector<TRecordId>& eraseFailed)
 {
-    for (ui64 lsn: eraseOk) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: eraseOk) {
+        auto item = Inflight.GetValue(recordId);
         if (!item) {
             // The record already left the inflight map: deleted when the host
             // was disabled, or this is a belated ack (for example a duplicate
@@ -626,8 +649,8 @@ void TBlocksDirtyMap::EraseFinished(
         }
     }
 
-    for (ui64 lsn: eraseFailed) {
-        auto item = Inflight.GetValue(lsn);
+    for (TRecordId recordId: eraseFailed) {
+        auto item = Inflight.GetValue(recordId);
         if (!item) {
             // The record already left the inflight map: deleted when the host
             // was disabled, or this is a belated failure. Nothing to track
@@ -642,18 +665,18 @@ void TBlocksDirtyMap::EraseFinished(
 
 void TBlocksDirtyMap::UpdateBelatedEraseQueue(
     THostMask completedWrites,
-    ui64 lsn)
+    TRecordId recordId)
 {
-    const auto item = Inflight.GetValue(lsn);
-    const bool unknownLsn = item == std::nullopt;
+    const auto item = Inflight.GetValue(recordId);
+    const bool unknownRecord = item == std::nullopt;
     const bool erasingInProgress =
         item &&
         (item->Value.GetState() == TInflightInfo::EState::PBufferErasing ||
          item->Value.GetState() == TInflightInfo::EState::PBufferErased);
 
-    if (unknownLsn || erasingInProgress) {
+    if (unknownRecord || erasingInProgress) {
         ReadyToEraseBelated.emplace(
-            TInfoEraseBelated{.Lsn = lsn, .Hosts = completedWrites});
+            TInfoEraseBelated{.RecordId = recordId, .Hosts = completedWrites});
     }
 }
 
@@ -707,7 +730,7 @@ ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
         return 0;
     }
     // TSet is ordered, so the first element is the minimum. O(1) access.
-    return *ReadyToFlush.begin();
+    return ReadyToFlush.begin()->Lsn;
 }
 
 ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
@@ -716,10 +739,10 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
         return 0;
     }
     // TSet is ordered, so the first element is the minimum. O(1) access.
-    return *ReadyToErase.begin();
+    return ReadyToErase.begin()->Lsn;
 }
 
-std::optional<ui64> TBlocksDirtyMap::GetSafeBarrierForErase() const
+std::optional<TRecordId> TBlocksDirtyMap::GetSafeBarrierForErase() const
 {
     return Inflight.GetMinKey();
 }
@@ -740,16 +763,16 @@ ui64 TBlocksDirtyMap::GetPBufferUsedSize(THostIndex host) const
     return PBufferCounters[host].CurrentBytesCount;
 }
 
-void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
+void TBlocksDirtyMap::LockPBuffer(TRecordId recordId)
 {
-    auto item = Inflight.GetValue(lsn);
+    auto item = Inflight.GetValue(recordId);
     Y_ABORT_UNLESS(item.has_value());
     item->Value.LockPBuffer();
 }
 
-void TBlocksDirtyMap::UnlockPBuffer(ui64 lsn)
+void TBlocksDirtyMap::UnlockPBuffer(TRecordId recordId)
 {
-    auto item = Inflight.GetValue(lsn);
+    auto item = Inflight.GetValue(recordId);
     Y_ABORT_UNLESS(item.has_value());
     item->Value.UnlockPBuffer();
 }
@@ -783,38 +806,38 @@ void TBlocksDirtyMap::UnLockDDiskRange(TLockRangeHandle handle)
     InflightDDiskReads.RemoveRange(handle);
 }
 
-void TBlocksDirtyMap::Register(ui64 lsn, EQueueType queueType)
+void TBlocksDirtyMap::Register(TRecordId recordId, EQueueType queueType)
 {
     switch (queueType) {
         case IReadyQueue::EQueueType::Clone: {
-            ReadyToClone.insert(lsn);
+            ReadyToClone.insert(recordId);
 
-            ReadyToFlush.erase(lsn);
-            ReadyToErase.erase(lsn);
+            ReadyToFlush.erase(recordId);
+            ReadyToErase.erase(recordId);
             break;
         }
         case IReadyQueue::EQueueType::Flush: {
-            ReadyToFlush.insert(lsn);
+            ReadyToFlush.insert(recordId);
 
-            ReadyToClone.erase(lsn);
-            ReadyToErase.erase(lsn);
+            ReadyToClone.erase(recordId);
+            ReadyToErase.erase(recordId);
             break;
         }
         case IReadyQueue::EQueueType::Erase: {
-            ReadyToErase.insert(lsn);
+            ReadyToErase.insert(recordId);
 
-            ReadyToClone.erase(lsn);
-            ReadyToFlush.erase(lsn);
+            ReadyToClone.erase(recordId);
+            ReadyToFlush.erase(recordId);
             break;
         }
     }
 }
 
-void TBlocksDirtyMap::UnRegister(ui64 lsn)
+void TBlocksDirtyMap::UnRegister(TRecordId recordId)
 {
-    ReadyToErase.erase(lsn);
-    ReadyToClone.erase(lsn);
-    ReadyToFlush.erase(lsn);
+    ReadyToErase.erase(recordId);
+    ReadyToClone.erase(recordId);
+    ReadyToFlush.erase(recordId);
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -886,7 +909,7 @@ TString TBlocksDirtyMap::DebugPrintPBuffers()
     Inflight.Enumerate(
         [&](TInflightMap::TFindItem& item)
         {
-            result << "  " << item.Key << item.Range.Print()
+            result << "  " << item.Key.Print() << item.Range.Print()
                    << item.Value.DebugPrint(now) << "\n";
             return TInflightMap::EEnumerateContinuation::Continue;
         });
@@ -939,8 +962,8 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
 TString TBlocksDirtyMap::DebugPrintReadyToClone() const
 {
     TStringBuilder result;
-    for (auto lsn: ReadyToClone) {
-        result << ToString(lsn) << ";";
+    for (auto recordId: ReadyToClone) {
+        result << recordId.Print() << ";";
     }
     return result;
 }
@@ -948,8 +971,8 @@ TString TBlocksDirtyMap::DebugPrintReadyToClone() const
 TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
 {
     TStringBuilder result;
-    for (auto lsn: ReadyToFlush) {
-        result << ToString(lsn) << ";";
+    for (auto recordId: ReadyToFlush) {
+        result << recordId.Print() << ";";
     }
     return result;
 }
@@ -957,8 +980,8 @@ TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
 TString TBlocksDirtyMap::DebugPrintReadyToErase() const
 {
     TStringBuilder result;
-    for (auto lsn: ReadyToErase) {
-        result << ToString(lsn) << ";";
+    for (auto recordId: ReadyToErase) {
+        result << recordId.Print() << ";";
     }
     return result;
 }
@@ -991,13 +1014,13 @@ THostMask TBlocksDirtyMap::FilterLocations(
 
 TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
     THostMask mask,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     ui64 offsetBlocks)
 {
     if (mask.Empty()) {
         mask = FilterLocations(DesiredDDisks, range);
-    } else if (lsn == 0) {
+    } else if (recordId.Lsn == 0) {
         mask = mask.LogicalAnd(DesiredDDisks);
         mask = FilterLocations(mask, range);
     }
@@ -1012,10 +1035,11 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
 
     return TReadRangeHint(
         mask,
-        lsn,
+        recordId,
         TBlockRange64::WithLength(offsetBlocks, range.Size()),
         range,
-        lsn == 0 ? TRangeLock(this, range, mask) : TRangeLock(this, lsn));
+        recordId.Lsn == 0 ? TRangeLock(this, range, mask)
+                          : TRangeLock(this, recordId));
 }
 
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
@@ -1023,7 +1047,7 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
 {
     auto makeTuple = [](const TInfoEraseBelated& info)
     {
-        return std::tie(info.Lsn, info.Hosts);
+        return std::tie(info.RecordId, info.Hosts);
     };
 
     return makeTuple(*this) < makeTuple(other);
@@ -1031,14 +1055,14 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
+TVector<TRecordId> MakeRecordIds(std::span<const TPBufferSegment> segments)
 {
-    return DoMakeLsnVector<TPBufferSegment>(segments);
+    return DoMakeRecordIds(segments);
 }
 
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
+TVector<TRecordId> MakeRecordIds(std::span<const TEraseSegment> segments)
 {
-    return DoMakeLsnVector<TEraseSegment>(segments);
+    return DoMakeRecordIds(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

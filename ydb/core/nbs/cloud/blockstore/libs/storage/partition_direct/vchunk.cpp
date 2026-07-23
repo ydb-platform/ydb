@@ -278,7 +278,7 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferUsedSize(hostIndex);
 }
 
-std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
+std::optional<TRecordId> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -287,7 +287,7 @@ std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
         // PBuffers and are not inflight, so an empty dirty map does not mean
         // "no constraint". Report the blocking bound so the tablet-wide
         // cleanup skips its tick until every vchunk finishes restoring.
-        return 0;
+        return TRecordId{};
     }
 
     return BlocksDirtyMap.GetSafeBarrierForErase();
@@ -345,7 +345,7 @@ void TVChunk::OnWriteBlocksResponse(
             NWilson::EFlags::AUTO_END);
 
         BlocksDirtyMap.WriteFinished(
-            response.Lsn,
+            response.RecordId,
             bundle->GetVChunkRange(),
             response.RequestedWrites,
             response.CompletedWrites);
@@ -374,7 +374,9 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
+    BlocksDirtyMap.UpdateBelatedEraseQueue(
+        completedWrites,
+        bundle->GetRecordId());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
     ScheduleCleaningUp();
@@ -387,7 +389,10 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (const auto& meta: response.Meta) {
-        BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
+        BlocksDirtyMap.RestorePBuffer(
+            meta.RecordId,
+            meta.Range,
+            meta.HostIndex);
     }
     if (!DirtyMapReady.HasValue()) {
         DirtyMapReady.SetValue();
@@ -564,18 +569,21 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 
     WaitForDirtyMapReady();
 
-    // Generate the lsn and register the write as inflight on the same executor
-    // thread, so the cleanup watermark covers it from the moment of generation.
-    const ui64 lsn = PartitionDirectService->GenerateLsn();
-    bundle->SetLsn(lsn);
-    BlocksDirtyMap.RegisterInflightWrite(lsn, bundle->GetVChunkRange());
+    // Mint the record id and register the write as inflight on the same
+    // executor thread, so the cleanup watermark covers it from the moment of
+    // minting.
+    const TRecordId recordId{
+        .Generation = DirectBlockGroup->GetTabletGeneration(),
+        .Lsn = PartitionDirectService->GenerateLsn()};
+    bundle->SetRecordId(recordId);
+    BlocksDirtyMap.RegisterInflightWrite(recordId, bundle->GetVChunkRange());
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s DoWriteBlocksLocal: lsn %lu %s",
+        "%s DoWriteBlocksLocal: recordId %s %s",
         LogTitle.GetWithTime().c_str(),
-        lsn,
+        recordId.Print().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
     auto writeExecutor = CreateWriteRequestExecutor(

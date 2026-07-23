@@ -50,14 +50,15 @@ private:
     struct TPBufferCleanupGather
     {
         std::atomic<bool> Active{false};
-        TVector<std::optional<ui64>> SafeBarriers;
+        TVector<std::optional<TRecordId>> SafeBarriers;
         std::atomic<size_t> PendingResponses{0};
     };
 
     TPBufferCleanupGather CleanupGather;
 
-    // Result of the last finished cleanup round: the minimum safe barrier
-    // across all DBGs. 0 until the first round finishes.
+    // Result of the last finished cleanup round: the lsn of the minimum safe
+    // barrier across all DBGs (only current-generation barriers reach the
+    // store). 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
 public:
@@ -143,7 +144,7 @@ private:
     void PBufferCleanup();
     void OnGatherSafeBarrierForErase(
         size_t dbgIndex,
-        std::optional<ui64> safeBarrier);
+        std::optional<TRecordId> safeBarrier);
     void FinishPBufferCleanup();
 };
 

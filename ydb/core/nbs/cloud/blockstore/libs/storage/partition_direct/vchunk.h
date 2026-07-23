@@ -70,11 +70,12 @@ public:
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
-    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
-    // Until the dirty map is restored it returns 0 (the blocking bound), so
-    // the cleanup cannot erase records that are not accounted for yet.
+    // smallest record id still held in PBuffers, or nullopt when nothing is
+    // inflight. Until the dirty map is restored it returns the zero record id
+    // (the blocking bound), so the cleanup cannot erase records that are not
+    // accounted for yet.
     // Must run on the executor thread.
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+    [[nodiscard]] std::optional<TRecordId> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
 

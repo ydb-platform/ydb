@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/record_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -16,7 +17,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 struct TWriteRequestResponse
 {
     NProto::TError Error;
-    ui64 Lsn = 0;
+    TRecordId RecordId;
     // The PBuffer hosts where the attempt was made to write the data.
     THostMask RequestedWrites;
     // The PBuffer hosts where exactly the data was written and confirmed.
@@ -54,8 +55,8 @@ public:
     NWilson::TSpan& GetSpan();
     TBlockRange64 GetRange() const;
     TBlockRange64 GetVChunkRange() const;
-    void SetLsn(ui64 lsn);
-    ui64 GetLsn() const;
+    void SetRecordId(TRecordId recordId);
+    TRecordId GetRecordId() const;
     TGuardedSgList& GetSgList();
 
 private:
@@ -64,7 +65,7 @@ private:
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
     TBlockRange64 VChunkRange;
-    ui64 Lsn = 0;
+    TRecordId RecordId;
 
     NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
 };

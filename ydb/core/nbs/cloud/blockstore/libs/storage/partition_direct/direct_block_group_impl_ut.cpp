@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     2,   // Coordinator
                     hosts,
-                    100,   // lsn
+                    TRecordId{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -425,8 +425,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TRecordId{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -488,8 +489,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TRecordId{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -571,7 +573,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TRecordId{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -651,7 +653,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TRecordId{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -867,8 +869,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TRecordId{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,
@@ -1213,7 +1216,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     2,
                     hosts,
-                    100,
+                    TRecordId{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,

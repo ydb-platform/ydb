@@ -89,12 +89,12 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TRecordId recordId,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(recordId);
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
@@ -117,14 +117,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TRecordId recordId,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(recordId);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);

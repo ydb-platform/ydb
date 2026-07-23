@@ -5,6 +5,7 @@ SRCS(
     block_range_field.cpp
     block_range_map.cpp
     block_range.cpp
+    record_id.cpp
     thread_checker.cpp
 )
 

@@ -324,7 +324,6 @@ struct TKqpProxySharedResources {
     std::atomic<ui32> AtomicLocalSessionCount{0};
 };
 
-// Takes the ownership over `resourceManager` and binds it to the created actor.
 // A single resource manager instance must not be shared between several actors.
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,

@@ -249,10 +249,7 @@ public:
 
         if (txState->TargetPathId != InvalidPathId) {
             Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->TargetPathId));
-            auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
-            
-            context.SS->ClearDescribePathCaches(targetPath);
-            context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
+            // Don't publish here - finalize will publish after bumping index versions
             context.OnComplete.ReleasePathState(OperationId, txState->TargetPathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
@@ -417,8 +414,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -558,8 +559,12 @@ bool CreateRestoreMultipleIncrementalBackups(
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
         } else {
             checks
                 .FailOnExist(TPathElement::EPathType::EPathTypeTable, false);

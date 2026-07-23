@@ -154,7 +154,7 @@ class TIncrRestoreChangeSenderMain
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
 
-        if (NoMoreData && IsAllSendersReadyOrUninit()) {
+        if (NoMoreData && !HasPendingRecords() && IsAllSendersReadyOrUninit()) {
             Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
         }
     }
@@ -176,7 +176,7 @@ class TIncrRestoreChangeSenderMain
         LOG_D("Handle " << ev->Get()->ToString());
         NoMoreData = true;
 
-        if (IsAllSendersReadyOrUninit()) {
+        if (!HasPendingRecords() && IsAllSendersReadyOrUninit()) {
             Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
         }
     }

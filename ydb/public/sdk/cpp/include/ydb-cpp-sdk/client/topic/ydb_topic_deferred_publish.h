@@ -140,7 +140,7 @@ public:
         const TListPublicationsSettings& settings = {});
 
     TAsyncDescribePublicationResult DescribePublication(
-        uint64_t intPublicationId,
+        const TDeferredPublication& publication,
         const TDescribePublicationSettings& settings = {});
 
 private:

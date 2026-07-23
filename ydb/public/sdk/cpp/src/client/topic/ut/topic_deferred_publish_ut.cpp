@@ -197,6 +197,45 @@ Y_UNIT_TEST(BeginPublicationCreatesPublication) {
     UNIT_ASSERT_VALUES_EQUAL(list.GetPublications()[0].IntPublicationId, begin.GetIntPublicationId());
 }
 
+Y_UNIT_TEST(DescribePublicationByHandle) {
+    TTopicSdkTestSetup setup("DescribePublicationByHandle", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    auto zeroId = deferredClient.DescribePublication(NTopic::TDeferredPublication(0)).GetValueSync();
+    UNIT_ASSERT(!zeroId.IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(zeroId.GetStatus(), EStatus::BAD_REQUEST);
+
+    const std::string extId = "ext-sdk-describe";
+    const std::string payload = "sdk-describe-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    auto describe = deferredClient.DescribePublication(publication).GetValueSync();
+    UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(describe.GetPublication().ExtPublicationId, extId);
+    UNIT_ASSERT(describe.GetPublication().CreatedAt != TInstant::Zero());
+
+    // Cold handle with the same int id also works (Describe does not use ack state).
+    auto describeCold = deferredClient.DescribePublication(
+        NTopic::TDeferredPublication(publication.IntPublicationId)).GetValueSync();
+    UNIT_ASSERT_C(describeCold.IsSuccess(), describeCold.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(describeCold.GetPublication().ExtPublicationId, extId);
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payload, publication);
+    auto publish = deferredClient.Publish(publication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    auto afterPublish = deferredClient.DescribePublication(publication).GetValueSync();
+    UNIT_ASSERT(!afterPublish.IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(afterPublish.GetStatus(), EStatus::NOT_FOUND);
+}
+
 Y_UNIT_TEST(PublishMakesDataVisible) {
     TTopicSdkTestSetup setup("PublishMakesDataVisible", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());

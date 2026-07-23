@@ -296,15 +296,15 @@ public:
     }
 
     TAsyncDescribePublicationResult DescribePublication(
-        uint64_t intPublicationId,
+        const TDeferredPublication& publication,
         const TDescribePublicationSettings& settings)
     {
-        if (intPublicationId == 0) {
+        if (publication.IntPublicationId == 0) {
             return MakeBadRequestFuture<TDescribePublicationResult>("int_publication_id must be greater than zero");
         }
 
         auto request = MakeOperationRequest<DescribePublicationRequest>(settings);
-        request.set_int_publication_id(intPublicationId);
+        request.set_int_publication_id(publication.IntPublicationId);
 
         auto promise = NThreading::NewPromise<TDescribePublicationResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -367,10 +367,10 @@ TAsyncListPublicationsResult TTopicDeferredPublishClient::ListPublications(
 }
 
 TAsyncDescribePublicationResult TTopicDeferredPublishClient::DescribePublication(
-    uint64_t intPublicationId,
+    const TDeferredPublication& publication,
     const TDescribePublicationSettings& settings)
 {
-    return Impl_->DescribePublication(intPublicationId, settings);
+    return Impl_->DescribePublication(publication, settings);
 }
 
 } // namespace NYdb::NTopic::NDeferredPublish

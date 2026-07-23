@@ -75,7 +75,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash, NTable::NPage::TPageLocationByOffsetEq>;
+        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
 
         void ToLoadPage(const TPageLocation& location, TPageCollection *pageCollection) {
             auto res = ToLoad[pageCollection->Id].insert(location);

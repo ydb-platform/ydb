@@ -185,12 +185,11 @@ namespace NPage {
         /** Access the offset as a page index — asserts the location was built from FromPageIndex */
         ui32 GetPageIndex() const { return Offset.AsPageIndex(); }
 
-        /** In theory pages in different rooms may share same offset but differ in Type */
+        /** Within a single collection, pages never overlap — Offset alone uniquely identifies a page */
         auto operator<=>(const TPageLocation& rhs) const noexcept {
             if (auto cmp = Offset <=> rhs.Offset; cmp != 0) return cmp;
-            if (auto cmp = static_cast<ui16>(Type) <=> static_cast<ui16>(rhs.Type); cmp != 0) return cmp;
-            if (Size != rhs.Size) return Size <=> rhs.Size;
-            return Crc32 <=> rhs.Crc32;
+            Y_DEBUG_ABORT_UNLESS(Type == rhs.Type && Size == rhs.Size && Crc32 == rhs.Crc32);
+            return std::strong_ordering::equal;
         }
 
         bool operator==(const TPageLocation& rhs) const noexcept { return (operator<=>(rhs)) == 0; }
@@ -258,13 +257,6 @@ namespace NPage {
         }
         size_t operator()(TPageOffset offset) const noexcept {
             return THash<TPageOffset>()(offset);
-        }
-    };
-
-    /** Equality predicate for TPageLocation — compares only Offset */
-    struct TPageLocationByOffsetEq {
-        bool operator()(const TPageLocation& a, const TPageLocation& b) const noexcept {
-            return a.Offset == b.Offset;
         }
     };
 

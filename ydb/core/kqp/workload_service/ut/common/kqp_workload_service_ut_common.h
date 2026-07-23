@@ -81,6 +81,8 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableStreamingQueries, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableHasPredicatesInResourcePoolClassifiers, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableRejectActionInResourcePoolClassifiers, true);
     FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
     FLUENT_SETTING_DEFAULT(i32, DedicatedDiskQuota, -1);
 
@@ -134,6 +136,7 @@ public:
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;
     virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
+    virtual void WaitForClassifierPropagation() const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
     virtual TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const = 0;

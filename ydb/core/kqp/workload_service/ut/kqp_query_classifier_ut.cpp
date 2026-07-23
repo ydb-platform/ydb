@@ -32,7 +32,7 @@ public:
         return EState::PreCompileDone;
     }
 
-    TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
+    TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder&, const TUserRequestContext&) override {
         PostCompileCalled = true;
         return PostClassifyResult;
     }

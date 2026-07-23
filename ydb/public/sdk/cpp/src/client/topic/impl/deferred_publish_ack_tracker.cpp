@@ -55,7 +55,12 @@ NThreading::TFuture<TStatus> TDeferredPublicationAckState::WaitAllAcks() {
 
     with_lock (Lock_) {
         if (WaitCalled_) {
-            return AllAcksReceived_.GetFuture();
+            auto existing = AllAcksReceived_.GetFuture();
+            if (!existing.HasValue()) {
+                // In-flight wait: Publish/Cancel callers share the same future.
+                return existing;
+            }
+            // Previous wait finished (success or abort). Allow retry for the current backlog.
         }
 
         WaitCalled_ = true;

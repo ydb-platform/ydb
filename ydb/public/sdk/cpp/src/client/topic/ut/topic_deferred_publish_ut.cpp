@@ -64,9 +64,7 @@ public:
     }
 
     ~TDeferredWriteHelper() {
-        if (Session_) {
-            Session_->Close(TDuration::Seconds(10));
-        }
+        Close(TDuration::Seconds(10));
     }
 
     void WriteDeferred(const std::string& payload, const NTopic::TDeferredPublication& publication) {
@@ -75,6 +73,13 @@ public:
         message.DeferredPublication(publication);
         Session_->Write(std::move(*Token_), std::move(message));
         Token_.reset();
+    }
+
+    void Close(TDuration timeout = TDuration::Seconds(10)) {
+        if (Session_) {
+            Session_->Close(timeout);
+            Session_.reset();
+        }
     }
 
     NTopic::IWriteSession& Session() {
@@ -344,6 +349,121 @@ Y_UNIT_TEST(ColdPublishByIntPublicationId) {
     const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+Y_UNIT_TEST(PublishAfterIdleSessionClose) {
+    TTopicSdkTestSetup setup("PublishAfterIdleSessionClose", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-idle-close";
+    const std::string payload = "sdk-idle-close-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    {
+        TDeferredWriteHelper writer(topicClient, topicPath);
+        writer.WriteDeferred(payload, publication);
+        WaitForWriteAcks(writer.Session());
+        writer.Close();
+    }
+
+    // Abort with no unacked writes must not poison a later Publish on the same handle.
+    auto publish = deferredClient.Publish(publication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+Y_UNIT_TEST(PublishRetryAfterWriteSessionAbort) {
+    TTopicSdkTestSetup setup("PublishRetryAfterWriteSessionAbort", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-abort-retry";
+    const std::string payload = "sdk-abort-retry-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    NThreading::TFuture<TPublishResult> firstPublish;
+    {
+        TDeferredWriteHelper writer(topicClient, topicPath);
+        writer.WriteDeferred(payload, publication);
+        firstPublish = deferredClient.Publish(publication);
+        // Abort before/while waiting for acks so WaitAllAcks can fail.
+        writer.Close(TDuration::Zero());
+    }
+
+    const auto firstResult = firstPublish.GetValueSync();
+    if (firstResult.IsSuccess()) {
+        // Write was acked before abort; nothing to retry for this race.
+        const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+        return;
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(firstResult.GetStatus(), EStatus::SESSION_EXPIRED);
+
+    TDeferredWriteHelper writer2(topicClient, topicPath);
+    writer2.WriteDeferred(payload, publication);
+    auto secondPublish = deferredClient.Publish(publication).GetValueSync();
+    UNIT_ASSERT_C(secondPublish.IsSuccess(), secondPublish.GetIssues().ToString());
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+Y_UNIT_TEST(CancelRetryAfterWriteSessionAbort) {
+    TTopicSdkTestSetup setup("CancelRetryAfterWriteSessionAbort", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-cancel-abort-retry";
+    const std::string payload = "sdk-cancel-abort-retry-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    NThreading::TFuture<TCancelPublicationResult> firstCancel;
+    {
+        TDeferredWriteHelper writer(topicClient, topicPath);
+        writer.WriteDeferred(payload, publication);
+        firstCancel = deferredClient.CancelPublication(publication);
+        writer.Close(TDuration::Zero());
+    }
+
+    const auto firstResult = firstCancel.GetValueSync();
+    if (firstResult.IsSuccess()) {
+        // Write was acked before abort; cancel already finalized the publication.
+        const auto messages = ReadNoMessages(topicClient, topicPath, TEST_CONSUMER);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+        return;
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(firstResult.GetStatus(), EStatus::SESSION_EXPIRED);
+
+    TDeferredWriteHelper writer2(topicClient, topicPath);
+    writer2.WriteDeferred(payload, publication);
+    auto secondCancel = deferredClient.CancelPublication(publication).GetValueSync();
+    UNIT_ASSERT_C(secondCancel.IsSuccess(), secondCancel.GetIssues().ToString());
+
+    const auto messages = ReadNoMessages(topicClient, topicPath, TEST_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
 }
 
 Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {

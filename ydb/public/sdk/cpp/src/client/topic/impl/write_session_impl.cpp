@@ -63,7 +63,6 @@ bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::N
     return true;
 }
 using TTxIdOpt = std::optional<TTxId>;
-using TDeferredPublicationOpt = std::optional<TDeferredPublication>;
 
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
 {
@@ -75,21 +74,6 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
 
     const Ydb::Topic::TransactionIdentity& tx = request.tx();
     return TTxId(tx.session(), tx.id());
-}
-
-TDeferredPublicationOpt GetDeferredPublication(
-    const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
-{
-    if (!request.has_deferred_publish()) {
-        return std::nullopt;
-    }
-
-    TDeferredPublication result;
-    result.IntPublicationId = request.deferred_publish().int_publication_id();
-    if (request.deferred_publish().has_ext_publication_id()) {
-        result.ExtPublicationId = request.deferred_publish().ext_publication_id();
-    }
-    return result;
 }
 
 void SetWriteContext(
@@ -144,12 +128,30 @@ TTxIdOpt GetTransactionId(const TWriteContext& writeContext)
     return std::nullopt;
 }
 
-TDeferredPublicationOpt GetDeferredPublication(const TWriteContext& writeContext)
+bool DeferredPublishIdentityChanged(
+    const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest,
+    const TWriteContext& messageContext)
 {
-    if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
-        return *deferred;
+    const auto* messageDeferred = std::get_if<TDeferredPublication>(&messageContext);
+    if (!writeRequest.has_deferred_publish()) {
+        return messageDeferred != nullptr;
     }
-    return std::nullopt;
+    if (!messageDeferred) {
+        return true;
+    }
+
+    const auto& requestDeferred = writeRequest.deferred_publish();
+    if (requestDeferred.int_publication_id() != messageDeferred->IntPublicationId) {
+        return true;
+    }
+
+    const bool requestHasExt = requestDeferred.has_ext_publication_id();
+    const bool messageHasExt = messageDeferred->ExtPublicationId.has_value();
+    if (requestHasExt != messageHasExt) {
+        return true;
+    }
+    return requestHasExt
+        && requestDeferred.ext_publication_id() != *messageDeferred->ExtPublicationId;
 }
 
 std::optional<TTransactionId> MakeTransactionId(const TTransactionBase* tx)
@@ -1738,7 +1740,9 @@ bool TWriteSessionImpl::DeferredPublishIsChanged(const Ydb::Topic::StreamWriteMe
 
     Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
-    return GetDeferredPublication(writeRequest) != GetDeferredPublication(OriginalMessagesToSend.front().WriteContext);
+    return DeferredPublishIdentityChanged(
+        writeRequest,
+        OriginalMessagesToSend.front().WriteContext);
 }
 
 void TWriteSessionImpl::SendBatchBlock(

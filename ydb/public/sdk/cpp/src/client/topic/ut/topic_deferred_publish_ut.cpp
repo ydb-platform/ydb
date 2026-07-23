@@ -290,6 +290,39 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
 }
 
+Y_UNIT_TEST(StreamWriteAllowsEmptyAndAlternateExtPublicationId) {
+    TTopicSdkTestSetup setup("StreamWriteAllowsEmptyAndAlternateExtPublicationId", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TTopicDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-empty-and-alt";
+    const std::string payloadAlt = "sdk-alt-ext-payload";
+    const std::string payloadEmpty = "sdk-empty-ext-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    NTopic::TDeferredPublication writeAlt = publication;
+    writeAlt.ExtPublicationId = "other-valid-ext";
+    NTopic::TDeferredPublication writeEmpty = publication;
+    writeEmpty.ExtPublicationId = "";
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred(payloadAlt, writeAlt);
+    writer.WriteDeferred(payloadEmpty, writeEmpty);
+
+    auto publish = deferredClient.Publish(publication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 2);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payloadAlt);
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], payloadEmpty);
+}
+
 Y_UNIT_TEST(CancelDiscardsData) {
     TTopicSdkTestSetup setup("CancelDiscardsData", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());

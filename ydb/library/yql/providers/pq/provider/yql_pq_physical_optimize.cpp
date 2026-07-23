@@ -26,6 +26,12 @@ namespace {
 using namespace NNodes;
 using namespace NDq;
 
+class TNoRemapOptimizationContext final : public IOptimizationContext {
+public:
+    void RemapNode(const TExprNode&, const TExprNode::TPtr&) final {
+    }
+};
+
 TCoAtomList GetWatermarkMetadataColumns(TPositionHandle pos, const TPqState& state, TExprContext& ctx) {
     static constexpr auto RequiredMetadataColumns = std::to_array<std::string_view>({
         "cluster",
@@ -351,6 +357,62 @@ public:
                     .Build()
                 .Build()
             .Done();
+
+        const auto stage = connection.Output().Stage().Cast<TDqStage>();
+        if (GetStageOutputsCount(stage) > 1 && stage.Program().Body().Maybe<TDqReplicate>()) {
+            const auto& parentsMap = *getParents();
+            const auto stageParents = parentsMap.find(stage.Raw());
+            if (stageParents == parentsMap.cend()) {
+                return node;
+            }
+
+            const auto outputIndex = connection.Output().Index().Value();
+            for (const auto* parent : stageParents->second) {
+                const auto maybeOutput = TMaybeNode<TDqOutput>(parent);
+                if (!maybeOutput) {
+                    return node;
+                }
+
+                const auto output = maybeOutput.Cast();
+                if (output.Index().Value() == outputIndex && output.Raw() != connection.Output().Raw()) {
+                    return node;
+                }
+            }
+
+            TNoRemapOptimizationContext noRemapOptCtx;
+            const auto maybeNewStage = DqPushLambdaToStage(
+                stage,
+                connection.Output().Index(),
+                lambda,
+                {},
+                ctx,
+                noRemapOptCtx
+            );
+            if (!maybeNewStage) {
+                return node;
+            }
+            const auto newStage = maybeNewStage.Cast();
+
+            for (const auto* parent : stageParents->second) {
+                const auto output = TDqOutput(parent);
+                if (output.Raw() == connection.Output().Raw()) {
+                    continue;
+                }
+
+                const auto newOutput = Build<TDqOutput>(ctx, output.Pos())
+                    .Stage(newStage)
+                    .Index(output.Index())
+                    .Done();
+                optCtx.RemapNode(output.Ref(), newOutput.Ptr());
+            }
+
+            return Build<TDqCnUnionAll>(ctx, connection.Pos())
+                .Output<TDqOutput>()
+                    .Stage(newStage)
+                    .Index(connection.Output().Index())
+                    .Build()
+                .Done();
+        }
 
         const auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
         if (!result) {

@@ -3704,8 +3704,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         DisableAuthorization();
 
         // Send an XML API CreateQueue request without authorization header.
-        // This triggers the XML API auth path (TCloudAuthRequestProxy) which calls
-        // Callback_->OnIamAuthError(), setting SkipMetering on the response.
+        // This triggers the XML API auth path (TCloudAuthRequestProxy) setting SkipMetering on the response due to auth non-successful.
         // Auth failures are reported with HTTP code 400 and an IncompleteSignature error.
         auto json2 = CreateQueueXml({{"QueueName", "XmlAuthFailQueue"}}, 400);
         UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json2, "__type"), "IncompleteSignature");

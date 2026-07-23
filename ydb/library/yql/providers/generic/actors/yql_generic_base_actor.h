@@ -93,14 +93,12 @@ namespace NYql::NDq {
         };
 
         struct TEvGotCredentials: NActors::TEventLocal<TEvGotCredentials, EvGotCredentials> {
-            explicit TEvGotCredentials(TGenericCredentials credentials, TEvState state = {})
+            explicit TEvGotCredentials(TGenericCredentials credentials)
                 : Credentials(std::move(credentials))
-                , State(std::move(state))
             {
             }
 
             TGenericCredentials Credentials;
-            TEvState State;
         };
 
     protected: // TODO move common logic here

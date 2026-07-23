@@ -1,10 +1,15 @@
-#include "sql_ut_antlr4.h"
+#include "sql_ut.h"
 
-#include <yql/essentials/core/sql_types/match_recognize.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/core/sql_types/match_recognize.h>
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
+using namespace NSQLTranslationV1;
+
+namespace {
 
 NYql::TAstParseResult MatchRecognizeSqlToYql(const TString& query) {
     TString enablingPragma = R"(
@@ -60,7 +65,10 @@ bool IsLambda(const NYql::TAstNode* node, ui32 numberOfArgs) {
     return IsListOfSize(GetQuoted(node->GetChild(1)), numberOfArgs);
 }
 
+} // namespace
+
 Y_UNIT_TEST_SUITE(MatchRecognize) {
+
 auto minValidMatchRecognizeSql = R"(
 USE plato;
 SELECT *
@@ -69,6 +77,7 @@ FROM Input MATCH_RECOGNIZE(
     DEFINE A as A
     )
 )";
+
 Y_UNIT_TEST(EnabledWithPragma) {
     UNIT_ASSERT(not SqlToYql(minValidMatchRecognizeSql).IsOk());
     UNIT_ASSERT(MatchRecognizeSqlToYql(minValidMatchRecognizeSql).IsOk());

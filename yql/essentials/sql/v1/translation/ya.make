@@ -68,5 +68,5 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut_antlr4
+    ut
 )

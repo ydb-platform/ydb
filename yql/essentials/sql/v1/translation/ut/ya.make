@@ -1,8 +1,21 @@
 UNITTEST_FOR(yql/essentials/sql/v1/translation)
 
 SRCS(
-    sql_ut_antlr4.cpp
+    sql_aggregation_ut.cpp
+    sql_ansi_ut.cpp
+    sql_core_ut.cpp
+    sql_ddl_table_ut.cpp
+    sql_ddl_ut.cpp
+    sql_ddl_view_ut.cpp
+    sql_error_ut.cpp
+    sql_json_ut.cpp
     sql_match_recognize_ut.cpp
+    sql_materialize_ut.cpp
+    sql_parsing_only_ut.cpp
+    sql_select_ut.cpp
+    sql_ut.cpp
+    sql_utility_ut.cpp
+    sql_yqlselect_ut.cpp
 )
 
 PEERDIR(

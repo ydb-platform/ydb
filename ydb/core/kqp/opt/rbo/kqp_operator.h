@@ -564,6 +564,10 @@ public:
     TVector<TInfoUnit> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
+    // Transient provenance used while decorrelating scalar aggregation.
+    // Once correlation keys are present, final shape alone cannot distinguish
+    // this case from an aggregate that was grouped in the source query.
+    bool WasKeylessBeforeCorrelation = false;
 
 protected:
     void ComputeOutputIUs() override;

@@ -100,16 +100,23 @@ per-invocation choice families fail closed. Every invocation shares one
 validated immutable plan context and one cumulative 16,384-pair construction
 budget.
 
-The post-correlation 2026-07-23 physical-line audit recorded:
+The correlated-COUNT repair has no new Python semantics. The C++ exporter
+recognizes only the optimizer-generated
+`Just(Coalesce(Optional<Uint64> direct-member, Uint64(0)))` shape and lowers it
+to existing exact `if`/`if_present` IR. Type, nullability, direct-member,
+literal, visibility, metadata, depth, and construction-budget checks all fail
+closed; near-miss shapes remain opaque.
+
+The post-correlated-COUNT-repair 2026-07-23 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
 | Nine trusted Python semantic modules | 10,340 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,879 |
-| **Proof-producing code total** | **18,219** |
-| Tests, outside the TCB | 41,588 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,016 |
+| **Proof-producing code total** | **18,356** |
+| Tests, outside the TCB | 42,193 |
 | Diagnostic/orchestration tools, outside the TCB | 5,119 |
-| Documentation, outside the TCB | 4,662 |
+| Documentation, outside the TCB | 4,697 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by

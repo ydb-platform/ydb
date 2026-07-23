@@ -1511,7 +1511,7 @@ side remains the normal StageGraph, with no `EXISTS`-specific equivalence
 shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
-through the real host. Current full validation passes 463/463 verifier, 169/169
+through the real host. Current full validation passes 463/463 verifier, 176/176
 C++, 45/45 inspector, 37/37 replay, and 28/28 real-host integration tests.
 That milestone moved TPCH q4/q22 and TPC-DS q10/q69 to formula construction;
 q35 instead exposed `Unsupported scalar type Double`. TPCH q4/q22 and TPC-DS
@@ -1593,12 +1593,21 @@ identity. Correlation pull-up adds the outer equality key, converting that
 Aggregate into a grouped one that has no row for an unmatched outer key.
 Scalar inlining left-joins the grouped result but leaves the missing count as
 NULL. The real-host
-`RealHostFindsCorrelatedScalarCountEmptyInputBug` integration regression
-retains this as an expected `COUNTEREXAMPLE` at row and task bound two and
-requires an unmatched outer row in the symbolic witness without fixing
-arbitrary model values. This focused finding does not change formula or proof
-coverage. Its production repair is intentionally deferred to a separate
-commit.
+finding is retained separately in commit `605dca7e9f0`: the integration
+regression expected `COUNTEREXAMPLE` at row and task bound two and required an
+unmatched outer row without fixing arbitrary model values.
+
+The production fix carries explicit originally-keyless provenance across
+correlation pull-up, accepts only a unique exact Member alias path to the
+selected direct COUNT trait, and restores the missing value after the left
+join with `Just(Coalesce(joined_count, Uint64(0)))`. A narrow exporter
+normalization maps only that generated shape to the existing exact
+`if`/`if_present` IR. The finding now proves `VERIFIED_BOUNDED`; runtime
+regressions cover Project and Filter consumers and prove that originally
+grouped COUNT remains NULL on a missing group. Arbitrary computed
+post-aggregate empty-row expressions still need general reconstruction and
+fail closed in new RBO; legacy fallback is not claimed to repair that broader
+class. Formula coverage and the proof floor are unchanged.
 
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises

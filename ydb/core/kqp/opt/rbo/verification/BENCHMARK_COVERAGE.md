@@ -576,7 +576,7 @@ correlation slice.
   structural proof established that the physical checks were inert. The
   current `*AtMostOneMarker*` matrix instead passes 3/3 by requiring marker
   serialization directly, across multi-task producers, and across single-task
-  producers; the current full `cpp_ut` passes 169/169. A mutation that changes
+  producers; the current full `cpp_ut` passes 176/176. A mutation that changes
   the scalar aggregate input from `a.x` to `a.k` returns `COUNTEREXAMPLE` with
   a concrete bounded witness, exercising the subplan proof path rather than
   only decoder/exporter acceptance.
@@ -987,7 +987,7 @@ final side is still the ordinary StageGraph; no special equivalence path is
 introduced.
 
 Focused gates pass 11/11 in Python, 4/4 in C++, and 4/4 through the real host;
-current full validation passes 463/463 verifier, 169/169 C++, 45/45 inspector,
+current full validation passes 463/463 verifier, 176/176 C++, 45/45 inspector,
 37/37 replay, and 28/28 integration tests. Those dashboards added TPCH q4/q22
 and TPC-DS q10/q69. q35 reached `Double`, q54 remained the invalid Map rename,
 and the proof floor added TPCH q4/q22 and TPC-DS q69. No new counterexample was
@@ -1080,13 +1080,21 @@ The initial keyless Aggregate returns the required non-NULL zero on empty
 input. Correlation pull-up adds a key, turning it into grouped aggregation;
 for an unmatched outer key it emits no row, and scalar inlining's left join
 then exposes NULL rather than restoring COUNT's zero identity. The real-host
-`RealHostFindsCorrelatedScalarCountEmptyInputBug` test preserves the exact
-initial/final snapshots and requires a row-bound-two, task-bound-two
-`COUNTEREXAMPLE` whose witness has an unmatched outer row. It deliberately
-does not pin solver-selected cell values. This is a focused finding rather
-than a dashboard run, so formula coverage and the proof floor are unchanged.
-The optimizer fix remains open at this checkpoint and will be recorded
-separately from the finding.
+finding is preserved separately in commit `605dca7e9f0`, including the exact
+snapshots and a row-bound-two, task-bound-two `COUNTEREXAMPLE` with an
+unmatched outer row. It deliberately did not pin solver-selected cell values.
+
+The fix records whether correlation pull-up changed an originally keyless
+Aggregate, traces a unique exact Member path to the selected direct COUNT
+trait, and restores `Just(Coalesce(joined_count, Uint64(0)))` after the left
+join. The exporter gives only that generated shape exact existing
+`if`/`if_present` semantics. The preserved finding now returns
+`VERIFIED_BOUNDED`; runtime cases cover projection, Filter consumption, and
+the negative originally grouped COUNT case. Computed post-aggregate empty-row
+expressions remain a general reconstruction extension and fail closed in new
+RBO; legacy fallback is not treated as a semantic repair for that broader
+class. This is a focused fix rather than a dashboard run, so formula coverage
+and the proof floor are unchanged.
 
 An additional legacy probe with intrinsic
 `Ensure(foo.id, false, "inner scalar error")` in the scalar producer also

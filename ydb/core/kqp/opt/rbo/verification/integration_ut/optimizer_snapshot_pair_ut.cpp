@@ -172,25 +172,6 @@ const NJson::TJsonValue& PlanNode(
     return *match;
 }
 
-const NJson::TJsonValue& WitnessRows(
-    const NJson::TJsonValue& verdict,
-    TStringBuf tablePath)
-{
-    const TString identityPart = TStringBuilder()
-        << "path:" << tablePath.size() << ":" << tablePath << ";";
-    const NJson::TJsonValue* match = nullptr;
-    for (const auto& [table, rows] :
-        verdict["witness"].GetMapSafe())
-    {
-        if (table.Contains(identityPart)) {
-            UNIT_ASSERT_C(!match, tablePath);
-            match = &rows;
-        }
-    }
-    UNIT_ASSERT_C(match, tablePath);
-    return *match;
-}
-
 void CollectConjuncts(
     const NJson::TJsonValue& expression,
     TVector<const NJson::TJsonValue*>& conjuncts)
@@ -803,11 +784,11 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             "left");
     }
 
-    Y_UNIT_TEST(RealHostFindsCorrelatedScalarCountEmptyInputBug) {
+    Y_UNIT_TEST(RealHostVerifiesCorrelatedScalarCountEmptyInput) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);
 
-        const auto pair = CaptureRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
             SELECT
                 outer_row.Id,
                 (
@@ -844,37 +825,46 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             (*joins[0])["kind"].GetStringSafe(),
             "left");
 
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            pair.Verdict["status"].GetStringSafe(),
-            "COUNTEREXAMPLE",
-            NJson::WriteJson(pair.Verdict, false));
-        UNIT_ASSERT_VALUES_EQUAL(
-            pair.Verdict["row_bound"].GetIntegerSafe(),
-            2);
-        UNIT_ASSERT_VALUES_EQUAL(
-            pair.Verdict["task_bound"].GetIntegerSafe(),
-            2);
-
-        const auto& outerRows =
-            WitnessRows(pair.Verdict, "/Root/RboExistsOuter").GetArraySafe();
-        const auto& innerRows =
-            WitnessRows(pair.Verdict, "/Root/RboExistsInner").GetArraySafe();
-        UNIT_ASSERT(!outerRows.empty());
-        bool hasUnmatchedOuter = false;
-        for (const auto& outer : outerRows) {
-            const i64 key = outer["MatchKey"].GetIntegerSafe();
-            bool matched = false;
-            for (const auto& inner : innerRows) {
-                const auto& innerKey = inner["MatchKey"];
-                matched = matched ||
-                    (!innerKey.IsNull() &&
-                     innerKey.GetIntegerSafe() == key);
+        TVector<const NJson::TJsonValue*> ifExpressions;
+        CollectExpressions(pair.Final["plan"], "if", ifExpressions);
+        const NJson::TJsonValue* repair = nullptr;
+        for (const auto* expression : ifExpressions) {
+            if (expression->Has("type") &&
+                (*expression)["type"].GetStringSafe() == "Uint64" &&
+                expression->Has("nullable") &&
+                (*expression)["nullable"].GetBooleanSafe() &&
+                expression->Has("then") &&
+                (*expression)["then"]["kind"].GetStringSafe() == "if_present")
+            {
+                UNIT_ASSERT_C(!repair, NJson::WriteJson(pair.Final, false));
+                repair = expression;
             }
-            hasUnmatchedOuter = hasUnmatchedOuter || !matched;
         }
-        UNIT_ASSERT_C(
-            hasUnmatchedOuter,
-            NJson::WriteJson(pair.Verdict, false));
+        UNIT_ASSERT_C(repair, NJson::WriteJson(pair.Final, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*repair)["condition"]["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT((*repair)["condition"]["value"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*repair)["else"]["kind"].GetStringSafe(),
+            "null");
+        const auto& restored = (*repair)["then"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["optional"]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["present"]["kind"].GetStringSafe(),
+            "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["present"]["depth"].GetUIntegerSafe(),
+            0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["missing"]["type"].GetStringSafe(),
+            "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["missing"]["value"].GetUIntegerSafe(),
+            0);
+        UNIT_ASSERT(!restored["nullable"].GetBooleanSafe());
     }
 
     Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {

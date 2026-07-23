@@ -4580,6 +4580,163 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(LowersOnlyExactOptionalCountRepair) {
+        const auto exportExpression = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr expression)
+        {
+            const auto& table = AddTable(ctx, "/Root/CountRepair", {
+                {"x", "Uint64", false},
+                {"y", "Uint64", false},
+                {"i", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x", "y", "i"});
+            SetExactOutputType(ctx, *read, {
+                {"a.x", ScalarType(ctx, NUdf::EDataSlot::Uint64, true)},
+                {"a.y", ScalarType(ctx, NUdf::EDataSlot::Uint64)},
+                {"a.i", ScalarType(ctx, NUdf::EDataSlot::Int64, true)},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                std::move(expression));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            return FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+        };
+        const auto makeRepair = [](
+            TExportTestContext& ctx,
+            NUdf::EDataSlot slot,
+            TStringBuf callable,
+            TStringBuf member,
+            TStringBuf fallback,
+            bool directMember = true,
+            bool wrapJust = true)
+        {
+            const auto* valueType = ScalarType(ctx, slot);
+            const auto* optionalType = ScalarType(ctx, slot, true);
+            TExprNode::TPtr optional = directMember
+                ? TypedMember(ctx, member, optionalType)
+                : TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedMember(ctx, "a.y", valueType)},
+                    optionalType);
+            auto coalesce = TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    std::move(optional),
+                    TypedLiteral(ctx, callable, fallback, valueType),
+                },
+                valueType);
+            if (!wrapJust) {
+                return coalesce;
+            }
+            return TypedCallable(
+                ctx,
+                "Just",
+                {std::move(coalesce)},
+                optionalType);
+        };
+
+        {
+            TExportTestContext ctx;
+            const auto expression = exportExpression(
+                ctx,
+                makeRepair(
+                    ctx,
+                    NUdf::EDataSlot::Uint64,
+                    "Uint64",
+                    "a.x",
+                    "0"));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Uint64");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["condition"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["condition"]["type"].GetStringSafe(),
+                "Bool");
+            UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["type"].GetStringSafe(),
+                "Uint64");
+
+            const auto& repaired = expression["then"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["kind"].GetStringSafe(),
+                "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["optional"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["optional"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["present"]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["present"]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["missing"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["missing"]["type"].GetStringSafe(),
+                "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["missing"]["value"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                repaired["type"].GetStringSafe(),
+                "Uint64");
+            UNIT_ASSERT(!repaired["nullable"].GetBooleanSafe());
+        }
+
+        struct TNearMiss {
+            TString Name;
+            NUdf::EDataSlot Slot;
+            TString Callable;
+            TString Member;
+            TString Fallback;
+            bool DirectMember = true;
+            bool WrapJust = true;
+        };
+        const TVector<TNearMiss> nearMisses = {
+            {"nonzero fallback", NUdf::EDataSlot::Uint64, "Uint64", "a.x", "1"},
+            {"wrong scalar type", NUdf::EDataSlot::Int64, "Int64", "a.i", "0"},
+            {"non-direct optional", NUdf::EDataSlot::Uint64, "Uint64", "a.x", "0", false},
+            {"missing Just", NUdf::EDataSlot::Uint64, "Uint64", "a.x", "0", true, false},
+        };
+        for (const auto& test : nearMisses) {
+            TExportTestContext ctx;
+            const auto encoded = exportExpression(
+                ctx,
+                makeRepair(
+                    ctx,
+                    test.Slot,
+                    test.Callable,
+                    test.Member,
+                    test.Fallback,
+                    test.DirectMember,
+                    test.WrapJust));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                encoded["kind"].GetStringSafe(),
+                "opaque",
+                test.Name);
+        }
+    }
+
     Y_UNIT_TEST(FoldsExactConstantDecimalJust) {
         struct TCase {
             TString Value;

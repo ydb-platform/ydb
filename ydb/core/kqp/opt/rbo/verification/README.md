@@ -781,8 +781,8 @@ equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
 through the real host. Current full validation passes 463/463 verifier,
-169/169 C++ exporter, 45/45 inspector, 37/37 replay, and 28/28 real-host
-integration tests. Dynamic `IN`, multiple dependencies, and broader
+176/176 C++ exporter/rule tests, 45/45 inspector, 37/37 replay, and 28/28
+real-host integration tests. Dynamic `IN`, multiple dependencies, and broader
 correlations remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The next semantic milestone is exact
@@ -844,12 +844,23 @@ non-NULL zero for an empty input. Pull-up adds the correlation key, so the
 Aggregate becomes grouped and emits no row for an unmatched outer key.
 Scalar inlining then exposes the absent right side of its left join as NULL
 instead of restoring COUNT's zero identity. The real-host
-`RealHostFindsCorrelatedScalarCountEmptyInputBug` regression requires the
-verifier to return `COUNTEREXAMPLE` at row and task bound two and checks that
-the retained witness contains an outer row with no strict non-NULL inner-key
-match. It does not pin solver-chosen cell values. This is a focused finding and
-does not change the benchmark dashboard counts. The production repair remains
-open at this checkpoint.
+finding is preserved separately in commit `605dca7e9f0`: its regression
+required `COUNTEREXAMPLE` at row and task bound two and checked for an
+unmatched outer row without pinning solver-chosen cell values.
+
+The production repair records explicit originally-keyless provenance before
+pull-up changes the Aggregate shape, traces only unique exact Member aliases
+to the selected direct COUNT trait, and computes
+`Just(Coalesce(joined_count, Uint64(0)))` after the left join. The `Just`
+retains the scalar binding's `Optional<Uint64>` type. The semantic exporter
+normalizes only this exact generated shape to existing `if`/`if_present`
+semantics. The original finding now returns `VERIFIED_BOUNDED`; real execution
+covers projection and Filter consumers, while an originally grouped COUNT
+retains NULL for a missing group. Computed post-aggregate empty-row expressions
+such as `COUNT(*) + 1` require general reconstruction and fail closed in the
+new-RBO inliner. Legacy fallback shares this broader risk, so fallback is not
+claimed as a semantic repair. This focused fix does not change the benchmark
+dashboard counts.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

@@ -2039,6 +2039,82 @@ void ValidateExactDecimalCoalesceZeroMember(
     CheckScalarSafetyMetadata(*member.Child(1));
 }
 
+struct TExactUint64JustCoalesceZero {
+    const TExprNode* Optional = nullptr;
+    const TExprNode* Zero = nullptr;
+
+    explicit operator bool() const {
+        return Optional && Zero;
+    }
+};
+
+TExactUint64JustCoalesceZero ExactUint64JustCoalesceZero(
+    const TExprNode& node)
+{
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
+        return {};
+    }
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Uint64" ||
+        !resultNullable)
+    {
+        return {};
+    }
+
+    const auto& coalesce = *node.Child(0);
+    bool coalesceNullable = false;
+    if (!coalesce.IsCallable("Coalesce") ||
+        coalesce.ChildrenSize() != 2 ||
+        ScalarTypeName(coalesce, &coalesceNullable) != "Uint64" ||
+        coalesceNullable)
+    {
+        return {};
+    }
+
+    const auto& optional = *coalesce.Child(0);
+    bool optionalNullable = false;
+    if (!optional.IsCallable("Member") ||
+        optional.ChildrenSize() != 2 ||
+        ScalarTypeName(optional, &optionalNullable) != "Uint64" ||
+        !optionalNullable)
+    {
+        return {};
+    }
+
+    const auto& zero = *coalesce.Child(1);
+    bool zeroNullable = false;
+    if (!zero.IsCallable("Uint64") ||
+        zero.ChildrenSize() != 1 ||
+        !zero.Child(0)->IsAtom("0") ||
+        ScalarTypeName(zero, &zeroNullable) != "Uint64" ||
+        zeroNullable)
+    {
+        return {};
+    }
+    return {&optional, &zero};
+}
+
+void ValidateExactUint64JustCoalesceZeroMember(
+    const TExactUint64JustCoalesceZero& exact,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    if (!exact) {
+        Unsupported("Exact Uint64 Just/Coalesce zero shape is missing");
+    }
+    const auto& member = *exact.Optional;
+    if (!rowArgument ||
+        member.Child(0) != rowArgument ||
+        !member.Child(1)->IsAtom() ||
+        !visibleColumns.contains(TString(member.Child(1)->Content())))
+    {
+        Unsupported(
+            "Exact Uint64 Just/Coalesce zero requires a direct visible input member");
+    }
+    CheckScalarSafetyMetadata(member);
+    CheckScalarSafetyMetadata(*member.Child(1));
+}
+
 const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
     if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
         return nullptr;
@@ -3371,6 +3447,67 @@ NJson::TJsonValue ExportExprNode(
                 Unsupported("Date literal type annotation does not match its callable");
             }
         }
+        return result;
+    }
+
+    if (const auto exact = ExactUint64JustCoalesceZero(node); exact) {
+        // This is the exact optimizer repair for a missing group from an
+        // originally keyless correlated COUNT. The inner IfPresent restores
+        // COUNT's non-null zero identity; the outer always-taken If preserves
+        // the scalar binding's Optional<Uint64> type.
+        ValidateExactUint64JustCoalesceZeroMember(
+            exact,
+            rowArgument,
+            visibleColumns);
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported(
+                "Exact Uint64 Just/Coalesce zero binding depth exceeds the audit limit");
+        }
+
+        budget.Charge(normalizedDepth + 1, 3);
+        budget.Charge(normalizedDepth + 2);
+
+        auto repaired = JsonMap();
+        repaired["kind"] = "if_present";
+        repaired["optional"] = ExportExprNode(
+            *exact.Optional,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 2,
+            sourceDepth + 2);
+        repaired["present"] = BoundExpr(0);
+        repaired["missing"] = ExportExprNode(
+            *exact.Zero,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 2,
+            sourceDepth + 2);
+        repaired["type"] = "Uint64";
+        repaired["nullable"] = false;
+
+        auto condition = JsonMap();
+        condition["kind"] = "literal";
+        condition["type"] = "Bool";
+        condition["value"] = true;
+        auto unreachable = JsonMap();
+        unreachable["kind"] = "null";
+        unreachable["type"] = "Uint64";
+
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = std::move(condition);
+        result["then"] = std::move(repaired);
+        result["else"] = std::move(unreachable);
+        result["type"] = "Uint64";
+        result["nullable"] = true;
         return result;
     }
 

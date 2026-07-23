@@ -115,6 +115,8 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     } else if (input->Kind == EOperator::Aggregate) {
         auto aggregate = CastOperator<TOpAggregate>(input);
+        const bool wasKeyless = aggregate->KeyColumns.empty();
+        bool addedCorrelationKey = false;
 
         // Check that all filter conditions are pure equi-join conditions
         for (const auto& cond : dependentSubset) {
@@ -127,8 +129,11 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         for (const auto & corr : correlated) {
             if (std::find(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end(), corr) == aggregate->KeyColumns.end()) {
                 aggregate->KeyColumns.push_back(corr);
+                addedCorrelationKey = true;
             }
         }
+        aggregate->WasKeylessBeforeCorrelation |=
+            wasKeyless && addedCorrelationKey;
 
         filter->FilterExpr = newExpr;
         aggregate->SetInput(remainingFilter);

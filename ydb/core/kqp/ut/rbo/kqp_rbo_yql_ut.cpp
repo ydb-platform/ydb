@@ -7159,6 +7159,44 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo where foo.id == bar.id)) OR bar.id == 1;
             )",
+            // A keyless scalar COUNT returns zero when its correlated input is empty.
+            R"(
+                SELECT
+                    bar.id,
+                    (
+                        SELECT COUNT(*)
+                        FROM `/Root/foo` AS foo
+                        WHERE foo.id == bar.id AND foo.id < 2
+                    ) AS cnt
+                FROM `/Root/bar` AS bar
+                ORDER BY bar.id;
+            )",
+            // The same empty-input identity must be preserved when the scalar is
+            // consumed by a filter.
+            R"(
+                SELECT bar.id
+                FROM `/Root/bar` AS bar
+                WHERE (
+                    SELECT COUNT(*)
+                    FROM `/Root/foo` AS foo
+                    WHERE foo.id == bar.id AND foo.id < 2
+                ) == 0
+                ORDER BY bar.id;
+            )",
+            // An originally grouped COUNT has no empty-input identity row: a
+            // missing group remains NULL when used as a scalar subquery.
+            R"(
+                SELECT
+                    bar.id,
+                    (
+                        SELECT COUNT(*)
+                        FROM `/Root/foo` AS foo
+                        WHERE foo.id == bar.id AND foo.id < 2
+                        GROUP BY foo.id
+                    ) AS cnt
+                FROM `/Root/bar` AS bar
+                ORDER BY bar.id;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
@@ -7170,6 +7208,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0];[1];[2];[3]])",
             R"([[3]])",
             R"([[1]])",
+            R"([[0;[1u]];[1;[1u]];[2;[0u]];[3;[0u]]])",
+            R"([[2];[3]])",
+            R"([[0;[1u]];[1;[1u]];[2;#];[3;#]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

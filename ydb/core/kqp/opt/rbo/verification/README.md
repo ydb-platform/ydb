@@ -22,10 +22,11 @@ semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
 Decimal `MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
 explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
-and eager inherited errors, plus uncorrelated and one-equality-correlated
-relational `EXISTS`, plus the benchmark-dashboard parts of M4. The reviewed exact
-wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
-instead of being erased. The exporter also exactly folds the reviewed constant
+and eager inherited errors, exact one-equality-correlated scalar aggregate
+subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
+plus the benchmark-dashboard parts of M4. The reviewed exact wrapper forms
+retain their Optional schema through existing `IfPresent`/`If` IR instead of
+being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
 the corresponding direct Date-literal OLAP `just` wrapper, exactly folds direct
 numeric Date/Interval literal arithmetic, exactly folds the reviewed constant
@@ -42,35 +43,28 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-23
-after relational `EXISTS` support and the auditability consolidation. They
-establish formula construction for
-TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3,
-q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55,
-q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93,
-q96, and q99: 45/121 workload queries (37.2%). TPCH has twelve formulas, seven
-unsupported queries, and three optimizer failures; TPC-DS has thirty-three
-formulas, thirty-eight unsupported queries, and twenty-eight optimizer
-failures. Across both suites that is 45 unsupported queries and 31 optimizer
-failures. The complete TPCH dashboard spent 2,811/7,940 ms and produced report
-SHA-256
-`5d84a01f3aa2bba0be86415a176e7ba4f01f194c4d80c842d778a78fb5c93fe8`;
-TPC-DS spent 54,643/176,453 ms and produced
-`67d99fb092ef0d6686f2a9d838f9bb9a35e6b4935fad3459283461e0286e7198`.
-Together they spent 57,454/184,393 ms in preparation/verification.
-The only status changes are the four new formulas TPCH q4/q22 and TPC-DS
-q10/q69. TPC-DS q35 passes the new subplan gate and now fails closed on
-`Unsupported scalar type Double` at both snapshot boundaries. Fifty queries
-(41.3%) reach the verifier: the 45 formula rows plus five verifier-side resource
-preflight failures. No current row reports generic
-`Unsupported operator AddDependencies`; the remaining former cases are
-classified as correlated scalar, multi-dependency `EXISTS`, or q35's deeper
-`Double` blocker.
+after equality-correlated scalar support. They establish formula construction
+for TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q17, q19, and q22 plus
+TPC-DS q1, q3, q5, q10, q15, q19, q25, q29, q30, q32, q37, q40, q42, q43,
+q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80,
+q81, q82, q88, q90, q91, q92, q93, q96, and q99: 51/121 workload queries
+(42.1%). TPCH has thirteen formulas, six unsupported queries, and three
+optimizer failures; TPC-DS has thirty-eight formulas, thirty-three unsupported
+queries, and twenty-eight optimizer failures. Across both suites that is 39
+unsupported queries and 31 optimizer failures. The new formulas are TPCH q17
+and TPC-DS q1, q30, q32, q81, and q92. TPC-DS q6 passes the correlation gate
+and now fails closed on `DistinctAll`. Formula construction for q30 and q81
+took about 174,386 ms and 218,726 ms, respectively; those long runs are not
+solver proofs. The preceding relational-`EXISTS` complete reports and their
+timings/hashes remain historical records in
+[BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 Formula emission means that both snapshots were modeled and SMT was
-constructed; it is not a solver proof. The checked-in solver proof floor returns
-`VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus
-TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: eighteen obligations
-(14.9% of the workload). The canonical-first exact-branch portfolio's fresh
-TPCH proof-floor run spent 1,145/56,389 ms
+constructed; it is not a solver proof. The checked-in solver policy still
+requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and
+q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: eighteen
+obligations (14.9% of the workload). The post-correlation proof-floor rerun is
+green: TPCH passes 9/9 and TPC-DS passes 9/9, all `VERIFIED_BOUNDED`. The
+preceding retained canonical-first exact-branch TPCH run spent 1,145/56,389 ms
 and produced report SHA-256
 `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
 the TPC-DS run spent 1,446/36,036 ms and produced
@@ -115,8 +109,8 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The proof floor is the eighteen obligations above; formula coverage remains
-45/121 (37.2%).
+The eighteen-obligation proof floor is confirmed after the correlation slice;
+formula coverage is 51/121 (42.1%).
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -739,6 +733,28 @@ TPC-DS q24 still has the independent `Unsupported scalar callable Map` blocker.
 In the fresh complete dashboard, q54 fails initial export with
 `Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
 
+Equality-correlated scalar aggregation is exact for one deliberately narrow
+shape. The descriptor has exactly one outer dependency and one Project or
+Filter consumer. Its subplan root is a unary path matching
+`Project* -> Aggregate -> Project* -> Filter -> outer_bind`: there is exactly
+one ungrouped, phase-`undefined`, non-`DistinctAll` Aggregate, and `outer_bind`
+is an explicit typed snapshot node over the closed inner input. The Filter has
+exactly one dependency-bearing conjunct, a strict non-null-safe direct equality
+between the outer dependency and one inner column; every residual conjunct is
+inner-only.
+
+The evaluator instantiates the complete scalar root once per present outer row.
+Zero result rows yield typed NULL, one yields its value, and more than one
+raises the scalar-cardinality error. Both inherited and cardinality errors are
+gated by that outer row's presence. Repeated uses in the one consumer read the
+same per-row binding value. The model rejects Limit, Sort, scan `pushed_limit`,
+ordered `UnionAll`, `EnsureAtMostOne`, nested or staged bindings, and any
+per-invocation choice family. All invocations reuse one validated plan context
+and share one cumulative 16,384-pair outer/closed-inner construction budget.
+The optimized side remains the ordinary final StageGraph, without a
+scalar-specific equivalence shortcut. A real-host
+Decimal-AVG left-join case returns `VERIFIED_BOUNDED`.
+
 Relational `EXISTS` is now exact for uncorrelated bindings and for one
 equality-correlated shape. An uncorrelated descriptor has no dependency or
 predicate and returns the non-null Boolean presence of its root. A correlated
@@ -764,13 +780,14 @@ optimized side remains the ordinary final StageGraph, with no subplan-specific
 equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
-through the real host. The current complete suites pass 446/446 verifier tests,
-167/167 C++ exporter tests, 43/43 inspector tests, and 26/26 real-host
-integration tests. Dynamic `IN`, correlated scalar subplans, multiple
-dependencies, and broader correlations remain separate extensions.
+through the real host. Current full validation passes 463/463 verifier,
+169/169 C++ exporter, 45/45 inspector, 37/37 replay, and 27/27 real-host
+integration tests. Dynamic `IN`, multiple dependencies, and broader
+correlations remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
-`ebcfdbb1263`, and `4b7f27d492e`. The next focus is exact proof
-scaling/decomposition before adding another semantic family.
+`ebcfdbb1263`, and `4b7f27d492e`. The next semantic milestone is exact
+`DistinctAll` aggregation, exposed as TPC-DS q6's next blocker. The
+post-correlation eighteen-query proof-floor gate is green.
 
 The audit has found seven production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix

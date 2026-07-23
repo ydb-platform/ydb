@@ -318,6 +318,7 @@ void CreateExistsColumnTables(TKikimrRunner& kikimr) {
             Id Int64 NOT NULL,
             MatchKey Int64,
             Payload Int64,
+            Amount Decimal(7, 2),
             PRIMARY KEY (Id)
         ) WITH (STORE = COLUMN);
     )").GetValueSync();
@@ -661,6 +662,101 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             subplans[0]["dependencies"].GetArraySafe().size(),
             1);
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesEqualityCorrelatedScalarAvgLeftJoin) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT
+                outer_row.Id,
+                (
+                    SELECT Avg(inner_row.Amount)
+                    FROM `/Root/RboExistsInner` AS inner_row
+                    WHERE inner_row.MatchKey == outer_row.MatchKey
+                ) AS MeanAmount
+            FROM `/Root/RboExistsOuter` AS outer_row;
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(subplan["type"].GetStringSafe(), "Decimal(7,2)");
+        UNIT_ASSERT(subplan["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["output"]["type"].GetStringSafe(),
+            "Decimal(7,2)");
+        UNIT_ASSERT(subplan["output"]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["dependencies"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(subplan["consumers"].GetArraySafe().size(), 1);
+        const TString dependency =
+            subplan["dependencies"][0].GetStringSafe();
+
+        const auto outerBindings = PlanNodes(pair.Initial, "outer_bind");
+        UNIT_ASSERT_VALUES_EQUAL(outerBindings.size(), 1);
+        const auto& outerBinding = *outerBindings[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBinding["dependency"].GetStringSafe(),
+            dependency);
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBinding["type"].GetStringSafe(),
+            "Int64");
+        UNIT_ASSERT(!outerBinding["nullable"].GetBooleanSafe());
+
+        const auto* shape = &PlanNode(
+            pair.Initial,
+            subplan["root"].GetStringSafe());
+        const NJson::TJsonValue* scalarAggregate = nullptr;
+        while ((*shape)["op"].GetStringSafe() == "project" ||
+               (*shape)["op"].GetStringSafe() == "aggregate")
+        {
+            if ((*shape)["op"].GetStringSafe() == "aggregate") {
+                UNIT_ASSERT(!scalarAggregate);
+                scalarAggregate = shape;
+            }
+            shape = &PlanNode(
+                pair.Initial,
+                (*shape)["input"].GetStringSafe());
+        }
+        UNIT_ASSERT(scalarAggregate);
+        UNIT_ASSERT((*scalarAggregate)["keys"].GetArraySafe().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*scalarAggregate)["aggregates"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*scalarAggregate)["aggregates"][0]["function"].GetStringSafe(),
+            "avg");
+
+        const auto& correlationFilter = *shape;
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["input"].GetStringSafe(),
+            outerBinding["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["predicate"]["kind"].GetStringSafe(),
+            "eq");
+        const auto& left = correlationFilter["predicate"]["left"];
+        const auto& right = correlationFilter["predicate"]["right"];
+        UNIT_ASSERT_VALUES_EQUAL(left["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT_VALUES_EQUAL(right["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT(
+            left["column"].GetStringSafe() == dependency ||
+            right["column"].GetStringSafe() == dependency);
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        UNIT_ASSERT(PlanNodes(pair.Final, "outer_bind").empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*joins[0])["kind"].GetStringSafe(),
+            "left");
     }
 
     Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {

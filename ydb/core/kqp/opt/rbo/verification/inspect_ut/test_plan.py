@@ -241,6 +241,17 @@ class OperatorRendererTest(unittest.TestCase):
                 'right=literal(type="Int64", value=1), null_safe=false)',
             ),
             (
+                ir.OuterBind(
+                    "outer_bind",
+                    "scan",
+                    "outer.k",
+                    "Int64",
+                    True,
+                ),
+                'node "outer_bind" outer_bind input="scan" '
+                'dependency="outer.k" type="Int64" nullable=true',
+            ),
+            (
                 ir.Limit("limit", "scan", _u64(2), None, "final"),
                 'node "limit" limit input="scan" '
                 'count=literal(type="Uint64", value=2) offset=none phase=final '

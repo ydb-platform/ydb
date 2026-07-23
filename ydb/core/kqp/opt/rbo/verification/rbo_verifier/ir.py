@@ -143,6 +143,17 @@ class Filter:
 
 
 @dataclass(frozen=True, slots=True)
+class OuterBind:
+    """One typed outer value injected into a correlated subplan invocation."""
+
+    id: str
+    input: str
+    dependency: str
+    type: str
+    nullable: bool
+
+
+@dataclass(frozen=True, slots=True)
 class Limit:
     id: str
     input: str
@@ -223,7 +234,16 @@ class UnionAll:
 
 
 PlanNode: TypeAlias = (
-    EmptySource | Scan | Project | Filter | Limit | Sort | Aggregate | Join | UnionAll
+    EmptySource
+    | Scan
+    | Project
+    | Filter
+    | OuterBind
+    | Limit
+    | Sort
+    | Aggregate
+    | Join
+    | UnionAll
 )
 
 
@@ -236,12 +256,13 @@ class SubplanOutput:
 
 @dataclass(frozen=True, slots=True)
 class ScalarSubplan:
-    """One exact, uncorrelated scalar binding captured outside relational edges."""
+    """One exact scalar binding captured outside ordinary relational edges."""
 
     binding: str
     root: str
     output: SubplanOutput
     consumers: tuple[str, ...]
+    dependency: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -791,6 +812,20 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             _parse_expr(obj["predicate"], f"{path}.predicate"),
         )
 
+    if operation == "outer_bind":
+        _keys(
+            obj,
+            {"id", "op", "input", "dependency", "type", "nullable"},
+            path,
+        )
+        return OuterBind(
+            id=node_id,
+            input=_string(obj["input"], f"{path}.input"),
+            dependency=_string(obj["dependency"], f"{path}.dependency"),
+            type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
     if operation == "limit":
         _keys(
             obj,
@@ -1112,15 +1147,16 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
                 f"{path}.nullable",
                 "a scalar subplan binding must be nullable because zero rows yield NULL",
             )
-        if dependencies:
+        if len(dependencies) > 1:
             _fail(
                 f"{path}.dependencies",
-                "correlated scalar subplans are not modeled",
+                "scalar subplans support at most one outer dependency",
             )
         return ScalarSubplan(
             binding=binding,
             root=root,
             output=output,
+            dependency=dependencies[0] if dependencies else None,
             consumers=consumers,
         )
     if scalar_type != BOOL:
@@ -1443,7 +1479,7 @@ def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_na
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
-    if isinstance(node, (Project, Filter, Limit, Sort, Aggregate)):
+    if isinstance(node, (Project, Filter, OuterBind, Limit, Sort, Aggregate)):
         return (node.input,)
     if isinstance(node, Join):
         return (node.left, node.right)
@@ -1602,7 +1638,7 @@ def _validate_void_dataflow(
                 _fail(f"node {node.id!r}", message)
             continue
 
-        if isinstance(node, (Filter, Limit, Sort)):
+        if isinstance(node, (Filter, OuterBind, Limit, Sort)):
             continue
 
         if isinstance(node, Aggregate):
@@ -1984,6 +2020,56 @@ def _conjuncts(expression: Expr) -> tuple[Expr, ...]:
     )
 
 
+def _direct_correlation_inner_column(
+    predicate: Expr,
+    dependency: str,
+    inner_schema: Mapping[str, Column],
+    path: str,
+    label: str,
+    inner_source: str,
+) -> str:
+    """Validate the shared strict outer/inner equality contract."""
+
+    dependent_conjuncts = tuple(
+        conjunct
+        for conjunct in _conjuncts(predicate)
+        if dependency in _expression_columns(conjunct)
+    )
+    if len(dependent_conjuncts) != 1:
+        _fail(
+            path,
+            f"{label} requires exactly one dependency-bearing conjunct",
+        )
+    correlation = dependent_conjuncts[0]
+    if (
+        correlation.kind != "eq"
+        or correlation.null_safe
+        or len(correlation.args) != 2
+        or any(argument.kind != "column" for argument in correlation.args)
+    ):
+        _fail(
+            path,
+            f"{label} requires one non-null-safe column equality",
+        )
+    predicate_columns = tuple(
+        argument.column for argument in correlation.args
+    )
+    if predicate_columns.count(dependency) != 1:
+        _fail(
+            path,
+            f"{label} equality must reference its outer dependency once",
+        )
+    inner_column = next(
+        column for column in predicate_columns if column != dependency
+    )
+    if inner_column not in inner_schema:
+        _fail(
+            path,
+            f"inner column {inner_column!r} is not produced by {inner_source}",
+        )
+    return inner_column
+
+
 def _node_expression_columns(node: PlanNode) -> frozenset[str]:
     if isinstance(node, Scan):
         expressions = tuple(
@@ -2065,7 +2151,13 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"{path}.consumers",
                     "an EXISTS binding must have exactly one Filter consumer",
                 )
-        elif not isinstance(subplan, ScalarSubplan):
+        elif isinstance(subplan, ScalarSubplan):
+            if subplan.dependency is not None and len(subplan.consumers) != 1:
+                _fail(
+                    f"{path}.consumers",
+                    "a correlated scalar binding must have exactly one consumer",
+                )
+        else:
             raise AssertionError(f"unknown subplan class {type(subplan).__name__}")
 
         for consumer_id in subplan.consumers:
@@ -2196,6 +2288,19 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             )
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
+
+        elif isinstance(node, OuterBind):
+            result = dict(schema_for(node.input))
+            if node.dependency in result:
+                _fail(
+                    f"node {node.id!r}.dependency",
+                    f"outer dependency {node.dependency!r} collides with an inner column",
+                )
+            result[node.dependency] = Column(
+                node.dependency,
+                node.type,
+                node.nullable,
+            )
 
         elif isinstance(node, Limit):
             result = dict(schema_for(node.input))
@@ -2418,6 +2523,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     all_bindings = frozenset(
         subplan.binding for subplan in snapshot.plan.subplans
     )
+    outer_bind_owners: dict[str, list[str]] = {
+        node.id: []
+        for node in snapshot.plan.nodes
+        if isinstance(node, OuterBind)
+    }
     for node in snapshot.plan.nodes:
         if node.id not in main_nodes:
             continue
@@ -2474,6 +2584,191 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"{path}.output",
                     "declared scalar output schema does not match its root",
                 )
+            outer_binds = tuple(
+                nodes[node_id]
+                for node_id in subplan_nodes[subplan.binding]
+                if isinstance(nodes[node_id], OuterBind)
+            )
+            if subplan.dependency is None:
+                if outer_binds:
+                    _fail(
+                        f"{path}.root",
+                        "an uncorrelated scalar root may not contain outer_bind",
+                    )
+            else:
+                if len(outer_binds) != 1:
+                    _fail(
+                        f"{path}.root",
+                        "a correlated scalar root must contain exactly one outer_bind",
+                    )
+                outer_bind = outer_binds[0]
+                assert isinstance(outer_bind, OuterBind)
+                outer_bind_owners[outer_bind.id].append(subplan.binding)
+                if outer_bind.id in main_nodes:
+                    _fail(
+                        f"node {outer_bind.id!r}",
+                        "outer_bind may not be reachable from the main plan",
+                    )
+                if outer_bind.dependency != subplan.dependency:
+                    _fail(
+                        f"{path}.dependencies",
+                        "scalar dependency disagrees with outer_bind",
+                    )
+
+                correlated_nodes = subplan_nodes[subplan.binding]
+                parents: dict[str, list[str]] = {
+                    node_id: [] for node_id in correlated_nodes
+                }
+                for parent_id in correlated_nodes:
+                    for child_id in plan_node_inputs(nodes[parent_id]):
+                        if child_id in parents:
+                            parents[child_id].append(parent_id)
+
+                shape = nodes[subplan.root]
+                aggregate_count = 0
+                while isinstance(shape, (Project, Aggregate)):
+                    if (
+                        shape.id != subplan.root
+                        and len(parents[shape.id]) != 1
+                    ):
+                        _fail(
+                            f"{path}.root",
+                            "the correlated scalar root path must not fan out",
+                        )
+                    if isinstance(shape, Aggregate):
+                        aggregate_count += 1
+                        if (
+                            shape.keys
+                            or shape.phase != "undefined"
+                            or shape.distinct_all
+                        ):
+                            _fail(
+                                f"{path}.root",
+                                "the correlated scalar Aggregate must be "
+                                "ungrouped, undefined, and non-DistinctAll",
+                            )
+                    shape = nodes[shape.input]
+                if aggregate_count != 1:
+                    _fail(
+                        f"{path}.root",
+                        "a correlated scalar root path must contain exactly "
+                        "one Aggregate among Project wrappers",
+                    )
+                if (
+                    not isinstance(shape, Filter)
+                    or shape.input != outer_bind.id
+                ):
+                    _fail(
+                        f"{path}.root",
+                        "the correlated scalar unary path must end in Filter "
+                        "over outer_bind",
+                    )
+                correlation_filter = shape
+                if (
+                    len(parents[correlation_filter.id]) != 1
+                    or len(parents[outer_bind.id]) != 1
+                ):
+                    _fail(
+                        f"{path}.root",
+                        "the correlated scalar Filter and outer_bind must not fan out",
+                    )
+                if any(
+                    isinstance(nodes[node_id], (Limit, Sort))
+                    or (
+                        isinstance(nodes[node_id], Scan)
+                        and nodes[node_id].pushed_limit is not None
+                    )
+                    or (
+                        isinstance(nodes[node_id], UnionAll)
+                        and nodes[node_id].ordered
+                    )
+                    for node_id in subplan_nodes[subplan.binding]
+                ):
+                    _fail(
+                        f"{path}.root",
+                        "correlated scalar roots with per-invocation row "
+                        "selection are not modeled",
+                    )
+
+                consumer = nodes[subplan.consumers[0]]
+                assert isinstance(consumer, (Project, Filter))
+                outer_schema = schemas[consumer.input]
+                dependency = subplan.dependency
+                outer_column = outer_schema.get(dependency)
+                if outer_column is None:
+                    _fail(
+                        f"{path}.dependencies",
+                        f"outer column {dependency!r} is not available to the consumer",
+                    )
+                declared_dependency = Column(
+                    dependency,
+                    outer_bind.type,
+                    outer_bind.nullable,
+                )
+                if outer_column != declared_dependency:
+                    _fail(
+                        f"{path}.dependencies",
+                        "outer_bind type or nullability disagrees with its consumer input",
+                    )
+
+                inner_schema = schemas[outer_bind.input]
+                predicate = correlation_filter.predicate
+                inner_column = _direct_correlation_inner_column(
+                    predicate,
+                    dependency,
+                    inner_schema,
+                    f"node {correlation_filter.id!r}.predicate",
+                    "correlated scalar",
+                    "the outer_bind input",
+                )
+                if outer_column.type != inner_schema[inner_column].type:
+                    _fail(
+                        f"node {correlation_filter.id!r}.predicate",
+                        "correlated scalar equality column types must match exactly",
+                    )
+
+                for node_id in correlated_nodes:
+                    candidate = nodes[node_id]
+                    if candidate.id == correlation_filter.id:
+                        continue
+                    if isinstance(candidate, Aggregate):
+                        if dependency in candidate.keys:
+                            _fail(
+                                f"node {candidate.id!r}.keys",
+                                "a correlated scalar may not aggregate by "
+                                "its outer dependency",
+                            )
+                        if any(
+                            trait.input == dependency
+                            for trait in candidate.aggregates
+                        ):
+                            _fail(
+                                f"node {candidate.id!r}.aggregates",
+                                "a correlated scalar may not aggregate "
+                                "its outer dependency",
+                            )
+                    if isinstance(candidate, Project):
+                        invalid_use = any(
+                            dependency in _expression_columns(column.expression)
+                            and not (
+                                column.output == dependency
+                                and column.expression.kind == "column"
+                                and column.expression.column == dependency
+                            )
+                            for column in candidate.columns
+                        )
+                    else:
+                        invalid_use = (
+                            dependency
+                            in _node_expression_columns(candidate)
+                        )
+                    if invalid_use:
+                        _fail(
+                            f"node {candidate.id!r}",
+                            "a correlated scalar may use its outer dependency "
+                            "only in the correlation Filter; exact Project "
+                            "pass-through is allowed",
+                        )
         else:
             assert isinstance(subplan, ExistsSubplan)
             if subplan.predicate is not None:
@@ -2494,43 +2789,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"outer column {dependency!r} collides with an inner column",
                     )
                 predicate = subplan.predicate
-                dependent_conjuncts = tuple(
-                    conjunct
-                    for conjunct in _conjuncts(predicate)
-                    if dependency in _expression_columns(conjunct)
+                inner_column = _direct_correlation_inner_column(
+                    predicate,
+                    dependency,
+                    schema,
+                    f"{path}.predicate",
+                    "correlated EXISTS",
+                    "the subplan root",
                 )
-                if len(dependent_conjuncts) != 1:
-                    _fail(
-                        f"{path}.predicate",
-                        "correlated EXISTS requires exactly one dependency-bearing conjunct",
-                    )
-                correlation = dependent_conjuncts[0]
-                if (
-                    correlation.kind != "eq"
-                    or correlation.null_safe
-                    or len(correlation.args) != 2
-                    or any(argument.kind != "column" for argument in correlation.args)
-                ):
-                    _fail(
-                        f"{path}.predicate",
-                        "correlated EXISTS requires one non-null-safe column equality",
-                    )
-                predicate_columns = tuple(
-                    argument.column for argument in correlation.args
-                )
-                if predicate_columns.count(dependency) != 1:
-                    _fail(
-                        f"{path}.predicate",
-                        "correlated EXISTS equality must reference its outer dependency once",
-                    )
-                inner_column = next(
-                    column for column in predicate_columns if column != dependency
-                )
-                if inner_column not in schema:
-                    _fail(
-                        f"{path}.predicate",
-                        f"inner column {inner_column!r} is not produced by the subplan root",
-                    )
                 if outer_column.type != schema[inner_column].type:
                     _fail(
                         f"{path}.predicate",
@@ -2581,6 +2847,12 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             _fail(
                 f"{path}.consumers",
                 "subplan consumers must be reachable from the main root",
+            )
+    for node_id, owners in outer_bind_owners.items():
+        if len(owners) != 1:
+            _fail(
+                f"node {node_id!r}",
+                "outer_bind must belong to exactly one correlated scalar root",
             )
     _validate_average_state_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)

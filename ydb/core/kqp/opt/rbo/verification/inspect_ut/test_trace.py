@@ -11,6 +11,7 @@ from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
     Probes,
     _add_family,
     _family_json,
+    _scope_json,
     prepare,
 )
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import InspectionError
@@ -289,6 +290,34 @@ def _average_family(
 
 
 class ObserverTest(unittest.TestCase):
+    def test_correlated_scalar_scope_names_the_outer_outcome_and_row(self):
+        self.assertEqual(
+            _scope_json(
+                "before:logical:correlated_scalar:"
+                "_rbo_arg_1:outcome:2:row:3"
+            ),
+            {
+                "kind": "correlated_scalar_invocation",
+                "parent": {"kind": "logical"},
+                "binding": "_rbo_arg_1",
+                "outer_outcome": 2,
+                "row": 3,
+            },
+        )
+
+    def test_correlated_scalar_scopes_distinguish_outer_outcomes(self):
+        first = _scope_json(
+            "before:logical:correlated_scalar:"
+            "_rbo_arg_1:outcome:0:row:3"
+        )
+        second = _scope_json(
+            "before:logical:correlated_scalar:"
+            "_rbo_arg_1:outcome:1:row:3"
+        )
+        self.assertNotEqual(first, second)
+        self.assertEqual(first["outer_outcome"], 0)
+        self.assertEqual(second["outer_outcome"], 1)
+
     def test_probe_interning_is_iterative_exact_and_bounded(self):
         left = smt.symbol("same_probe", smt.INT)
         right = smt.symbol("same_probe", smt.INT)

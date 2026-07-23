@@ -76,27 +76,40 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, subplan, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
-| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, operator and StageGraph invariants. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
+| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, declarations, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, subplans, bags/sequences, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
-The post-portfolio 2026-07-23 physical-line audit recorded:
+The equality-correlated scalar slice adds one explicit typed `outer_bind`
+relational node. Its independently checked accepted path is
+`Project* -> Aggregate -> Project* -> Filter -> outer_bind`, with exactly one
+ungrouped phase-`undefined` non-`DistinctAll` Aggregate, one strict direct
+outer/inner equality, inner-only residuals, one dependency, and one
+Project/Filter consumer. Evaluation reruns the complete scalar root per present
+outer row, scalarizes zero/one/many rows to NULL/value/error, gates invocation
+errors by row presence, and shares repeated binding references. Limit, Sort,
+scan `pushed_limit`, ordered `UnionAll`, `EnsureAtMostOne`, and
+per-invocation choice families fail closed. Every invocation shares one
+validated immutable plan context and one cumulative 16,384-pair construction
+budget.
+
+The post-correlation 2026-07-23 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 9,774 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,492 |
-| **Proof-producing code total** | **17,266** |
-| Tests, outside the TCB | 39,906 |
-| Diagnostic/orchestration tools, outside the TCB | 5,086 |
-| Documentation, outside the TCB | 4,524 |
+| Nine trusted Python semantic modules | 10,340 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,879 |
+| **Proof-producing code total** | **18,219** |
+| Tests, outside the TCB | 41,470 |
+| Diagnostic/orchestration tools, outside the TCB | 5,119 |
+| Documentation, outside the TCB | 4,623 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by
@@ -115,6 +128,9 @@ the SMT obligation itself:
   optimization;
 - each accepted exporter encoding and Python semantic rule agrees with the
   corresponding YQL, RBO, KQP task-construction, and runtime behavior;
+- each accepted `outer_bind` represents one fresh correlated scalar invocation
+  with no hidden row-selection, ordering, error, or nondeterministic choice
+  semantics beyond the explicitly modeled root;
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
@@ -181,7 +197,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/exporter mutations; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, and error cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/exporter mutations; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, and real-host Decimal-AVG cases |
 | StageGraph and routing | `semantic_snapshot.cpp`; `ir.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

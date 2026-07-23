@@ -16,6 +16,7 @@ from ..rbo_verifier.ir import (
     Filter,
     Join,
     Limit,
+    OuterBind,
     Project,
     Scan,
     Snapshot,
@@ -192,7 +193,7 @@ def logical_root_is_ordered(snapshot: Snapshot) -> bool:
             node = nodes[node_id]
             if isinstance(node, Sort):
                 result = True
-            elif isinstance(node, (Project, Filter, Limit)):
+            elif isinstance(node, (Project, Filter, OuterBind, Limit)):
                 result = ordered(node.input)
             elif isinstance(node, UnionAll):
                 result = node.ordered

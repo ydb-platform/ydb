@@ -1930,6 +1930,230 @@ TString ExportDeterministicStageGraph() {
     return result.Json;
 }
 
+struct TCorrelatedScalarExportFixture {
+    TCorrelatedScalarExportFixture()
+        : Int32(ScalarType(Ctx, NUdf::EDataSlot::Int32))
+        , OptionalInt32(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Int32,
+              true))
+        , Int64(ScalarType(Ctx, NUdf::EDataSlot::Int64))
+        , OptionalInt64(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Int64,
+              true))
+        , Bool(ScalarType(Ctx, NUdf::EDataSlot::Bool))
+        , OptionalBool(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Bool,
+              true))
+        , String(ScalarType(Ctx, NUdf::EDataSlot::String))
+    {
+        const auto& outerTable = AddTable(
+            Ctx,
+            "/Root/CorrelatedScalarOuter",
+            {{"k", "Int32", false}});
+        const auto& innerTable = AddTable(
+            Ctx,
+            "/Root/CorrelatedScalarInner",
+            {
+                {"k", "Int32", false},
+                {"value", "Int64", true},
+                {"text", "String", true},
+                {"flag", "Bool", true},
+            });
+        OuterRead = MakeRead(
+            Ctx,
+            outerTable,
+            "outer",
+            {"k"});
+        InnerRead = MakeRead(
+            Ctx,
+            innerTable,
+            "inner",
+            {"k", "value", "text", "flag"});
+        SetExactOutputType(Ctx, *OuterRead, {
+            {"outer.k", OptionalInt32},
+        });
+        SetExactOutputType(Ctx, *InnerRead, {
+            {"inner.k", OptionalInt32},
+            {"inner.value", Int64},
+            {"inner.text", String},
+            {"inner.flag", Bool},
+        });
+
+        Root = std::make_unique<TOpRoot>(
+            OuterRead,
+            Pos,
+            TVector<TString>{"outer.k"});
+        OuterBind = MakeIntrusive<TOpAddDependencies>(
+            InnerRead,
+            Pos,
+            TVector<std::pair<
+                TInfoUnit,
+                const TTypeAnnotationNode*>>{{
+                Dependency,
+                OptionalInt32,
+            }});
+        SetExactOutputType(Ctx, *OuterBind, {
+            {"inner.k", OptionalInt32},
+            {"inner.value", Int64},
+            {"inner.text", String},
+            {"inner.flag", Bool},
+            {"outer.k", OptionalInt32},
+        });
+
+        Equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                Pos,
+                &Ctx.ExprCtx,
+                &Root->PlanProps),
+            MakeColumnAccess(
+                Dependency,
+                Pos,
+                &Ctx.ExprCtx,
+                &Root->PlanProps));
+        AnnotateBinaryExpression(
+            Equality,
+            OptionalInt32,
+            OptionalInt32,
+            OptionalBool);
+        Residual = MakeColumnAccess(
+            TInfoUnit("inner.flag"),
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(Residual, Bool);
+        CorrelationPredicate =
+            MakeConjunction({Residual, Equality});
+        AnnotateExpression(CorrelationPredicate, OptionalBool);
+        CorrelationFilter = MakeIntrusive<TOpFilter>(
+            OuterBind,
+            Pos,
+            CorrelationPredicate);
+        SetExactOutputType(Ctx, *CorrelationFilter, {
+            {"inner.k", OptionalInt32},
+            {"inner.value", Int64},
+            {"inner.text", String},
+            {"inner.flag", Bool},
+            {"outer.k", OptionalInt32},
+        });
+
+        auto mappedValue = MakeColumnAccess(
+            TInfoUnit("inner.value"),
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(mappedValue, Int64);
+        CorrelationMap = MakeIntrusive<TOpMap>(
+            CorrelationFilter,
+            Pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("mapped.value"),
+                    mappedValue),
+                TMapElement(
+                    TInfoUnit("mapped.text"),
+                    TExpression(
+                        StringConcat(
+                            Ctx,
+                            StringLiteral(Ctx, "prefix:"),
+                            NonNullStoredString(Ctx, "inner.text")),
+                        &Ctx.ExprCtx,
+                        &Root->PlanProps)),
+            });
+        SetExactOutputType(Ctx, *CorrelationMap, {
+            {"inner.k", OptionalInt32},
+            {"inner.value", Int64},
+            {"inner.text", String},
+            {"inner.flag", Bool},
+            {"outer.k", OptionalInt32},
+            {"mapped.value", Int64},
+            {"mapped.text", String},
+        });
+
+        ScalarAggregate = MakeIntrusive<TOpAggregate>(
+            CorrelationMap,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("mapped.value"),
+                "sum",
+                TInfoUnit("scalar.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            Pos);
+        SetExactOutputType(Ctx, *ScalarAggregate, {
+            {"scalar.value", OptionalInt64},
+        });
+        Root->PlanProps.Subplans.Add(
+            Binding,
+            TSubplanEntry{
+                ScalarAggregate,
+                {},
+                ESubplanType::EXPR,
+                Binding,
+                {Dependency}});
+
+        auto bindingValue = MakeColumnAccess(
+            Binding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        auto one = MakeConstant(
+            "Int64",
+            "1",
+            Pos,
+            &Ctx.ExprCtx);
+        ConsumerPredicate = MakeBinaryPredicate(
+            "==",
+            bindingValue,
+            one);
+        AnnotateBinaryExpression(
+            ConsumerPredicate,
+            OptionalInt64,
+            Int64,
+            OptionalBool);
+        Consumer = MakeIntrusive<TOpFilter>(
+            OuterRead,
+            Pos,
+            ConsumerPredicate);
+        SetExactOutputType(Ctx, *Consumer, {
+            {"outer.k", OptionalInt32},
+        });
+        Root->SetInput(Consumer);
+    }
+
+    TSubplanEntry& Entry() {
+        return Root->PlanProps.Subplans.PlanMap.at(Binding);
+    }
+
+    TExportTestContext Ctx;
+    const TPositionHandle Pos;
+    const TTypeAnnotationNode* const Int32;
+    const TTypeAnnotationNode* const OptionalInt32;
+    const TTypeAnnotationNode* const Int64;
+    const TTypeAnnotationNode* const OptionalInt64;
+    const TTypeAnnotationNode* const Bool;
+    const TTypeAnnotationNode* const OptionalBool;
+    const TTypeAnnotationNode* const String;
+    const TInfoUnit Binding{"_rbo_arg_correlated_scalar", true};
+    const TInfoUnit Dependency{"outer.k"};
+    TIntrusivePtr<TOpRead> OuterRead;
+    TIntrusivePtr<TOpRead> InnerRead;
+    std::unique_ptr<TOpRoot> Root;
+    TIntrusivePtr<TOpAddDependencies> OuterBind;
+    TExpression Equality;
+    TExpression Residual;
+    TExpression CorrelationPredicate;
+    TIntrusivePtr<TOpFilter> CorrelationFilter;
+    TIntrusivePtr<TOpMap> CorrelationMap;
+    TIntrusivePtr<TOpAggregate> ScalarAggregate;
+    TExpression ConsumerPredicate;
+    TIntrusivePtr<TOpFilter> Consumer;
+};
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -11157,6 +11381,359 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "Exact scalar expression exceeds the node audit limit");
     }
 
+    Y_UNIT_TEST(ExportsExactEqualityCorrelatedScalarSubplan) {
+        TCorrelatedScalarExportFixture fixture;
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx));
+        const auto& plan = snapshot["plan"];
+        const auto& descriptor =
+            plan["subplans"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(descriptor.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["binding"].GetStringSafe(),
+            "_rbo_arg_correlated_scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["kind"].GetStringSafe(),
+            "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(descriptor["dependencies"]),
+            TVector<TString>{"outer.k"});
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["type"].GetStringSafe(),
+            "Int64");
+        UNIT_ASSERT(descriptor["nullable"].GetBooleanSafe());
+        UNIT_ASSERT(!descriptor.Has("predicate"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["column"].GetStringSafe(),
+            "scalar.value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["type"].GetStringSafe(),
+            "Int64");
+        UNIT_ASSERT(
+            descriptor["output"]["nullable"].GetBooleanSafe());
+
+        const auto& outerBind = FindNode(snapshot, "outer_bind");
+        UNIT_ASSERT_VALUES_EQUAL(outerBind.GetMapSafe().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBind["dependency"].GetStringSafe(),
+            "outer.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBind["type"].GetStringSafe(),
+            "Int32");
+        UNIT_ASSERT(outerBind["nullable"].GetBooleanSafe());
+
+        const NJson::TJsonValue* correlationFilter = nullptr;
+        const NJson::TJsonValue* correlationProject = nullptr;
+        const NJson::TJsonValue* scalarAggregate = nullptr;
+        const NJson::TJsonValue* consumer = nullptr;
+        for (const auto& node : plan["nodes"].GetArraySafe()) {
+            const TString id = node["id"].GetStringSafe();
+            if (node["op"].GetStringSafe() == "filter" &&
+                node["input"].GetStringSafe() ==
+                    outerBind["id"].GetStringSafe())
+            {
+                correlationFilter = &node;
+            }
+            if (correlationFilter &&
+                node["op"].GetStringSafe() == "project" &&
+                node["input"].GetStringSafe() ==
+                    (*correlationFilter)["id"].GetStringSafe())
+            {
+                correlationProject = &node;
+            }
+            if (correlationProject &&
+                node["op"].GetStringSafe() == "aggregate" &&
+                node["input"].GetStringSafe() ==
+                    (*correlationProject)["id"].GetStringSafe())
+            {
+                scalarAggregate = &node;
+            }
+            if (id == descriptor["consumers"][0].GetStringSafe()) {
+                consumer = &node;
+            }
+        }
+        UNIT_ASSERT(correlationFilter);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*correlationFilter)["predicate"]["kind"].GetStringSafe(),
+            "and");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*correlationFilter)["predicate"]["args"].GetArraySafe().size(),
+            2);
+        UNIT_ASSERT(correlationProject);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ProjectionOutputs(*correlationProject),
+            TVector<TString>({
+                "inner.k",
+                "inner.value",
+                "inner.text",
+                "inner.flag",
+                "outer.k",
+                "mapped.value",
+                "mapped.text",
+            }));
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*correlationProject)["columns"][6]["expression"]["kind"]
+                .GetStringSafe(),
+            "opaque");
+        UNIT_ASSERT(scalarAggregate);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["root"].GetStringSafe(),
+            (*scalarAggregate)["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*scalarAggregate)["phase"].GetStringSafe(),
+            "undefined");
+        UNIT_ASSERT(
+            (*scalarAggregate)["keys"].GetArraySafe().empty());
+        UNIT_ASSERT(!(*scalarAggregate)["distinct_all"].GetBooleanSafe());
+        UNIT_ASSERT(consumer);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*consumer)["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_UNEQUAL(
+            (*consumer)["id"].GetStringSafe(),
+            (*correlationFilter)["id"].GetStringSafe());
+    }
+
+    Y_UNIT_TEST(CorrelatedScalarContractsFailClosed) {
+        TCorrelatedScalarExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "baseline correlated scalar must be supported");
+
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+        auto& entry = fixture.Entry();
+
+        const auto savedTypes = fixture.OuterBind->Types;
+        fixture.OuterBind->Types.clear();
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT(!sink.Results[0].IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            sink.Results[0].UnsupportedReason,
+            "equally sized nonempty dependency and type vectors");
+        fixture.OuterBind->Types = savedTypes;
+
+        entry.DependentIUs.push_back(TInfoUnit("outer.second"));
+        reject("exactly one outer dependency");
+        entry.DependentIUs.pop_back();
+
+        fixture.CorrelationFilter->FilterExpr = fixture.Residual;
+        reject("has no equality for its outer dependency");
+        fixture.CorrelationFilter->FilterExpr =
+            fixture.CorrelationPredicate;
+
+        auto notEqual = MakeBinaryPredicate(
+            "!=",
+            MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps),
+            MakeColumnAccess(
+                fixture.Dependency,
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps));
+        AnnotateBinaryExpression(
+            notEqual,
+            fixture.OptionalInt32,
+            fixture.OptionalInt32,
+            fixture.OptionalBool);
+        fixture.CorrelationFilter->FilterExpr = notEqual;
+        reject("strict column equality");
+        fixture.CorrelationFilter->FilterExpr =
+            fixture.CorrelationPredicate;
+
+        auto duplicateEquality =
+            MakeConjunction({fixture.Equality, fixture.Equality});
+        AnnotateExpression(
+            duplicateEquality,
+            fixture.OptionalBool);
+        fixture.CorrelationFilter->FilterExpr =
+            duplicateEquality;
+        reject("multiple conjuncts");
+        fixture.CorrelationFilter->FilterExpr =
+            fixture.CorrelationPredicate;
+
+        auto missingResidual = MakeColumnAccess(
+            TInfoUnit("inner.missing"),
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(missingResidual, fixture.Bool);
+        auto unavailablePredicate =
+            MakeConjunction({fixture.Equality, missingResidual});
+        AnnotateExpression(
+            unavailablePredicate,
+            fixture.OptionalBool);
+        fixture.CorrelationFilter->FilterExpr =
+            unavailablePredicate;
+        reject("residual predicate references unavailable column");
+        fixture.CorrelationFilter->FilterExpr =
+            fixture.CorrelationPredicate;
+
+        auto leakedDependency = MakeColumnAccess(
+            fixture.Dependency,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(
+            leakedDependency,
+            fixture.OptionalInt32);
+        auto leakingMap = MakeIntrusive<TOpMap>(
+            fixture.ScalarAggregate,
+            fixture.Pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("leaked.dependency"),
+                leakedDependency)});
+        SetExactOutputType(fixture.Ctx, *leakingMap, {
+            {"scalar.value", fixture.OptionalInt64},
+            {"leaked.dependency", fixture.OptionalInt32},
+        });
+        entry.Plan = leakingMap;
+        reject("uses its outer dependency outside the correlation Filter");
+        entry.Plan = fixture.ScalarAggregate;
+
+        fixture.ScalarAggregate->AggregationPhase =
+            EOpPhase::Final;
+        reject("Aggregate must be ungrouped, undefined");
+        fixture.ScalarAggregate->AggregationPhase =
+            EOpPhase::Undefined;
+
+        fixture.ScalarAggregate->KeyColumns.push_back(
+            TInfoUnit("mapped.value"));
+        reject("Aggregate must be ungrouped, undefined");
+        fixture.ScalarAggregate->KeyColumns.clear();
+
+        entry.Plan = fixture.CorrelationFilter;
+        reject("exactly one Aggregate among Map wrappers");
+        entry.Plan = fixture.ScalarAggregate;
+
+        auto secondAggregate = MakeIntrusive<TOpAggregate>(
+            fixture.ScalarAggregate,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("scalar.value"),
+                "sum",
+                TInfoUnit("scalar.second"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            fixture.Pos);
+        SetExactOutputType(fixture.Ctx, *secondAggregate, {
+            {"scalar.second", fixture.OptionalInt64},
+        });
+        entry.Plan = secondAggregate;
+        reject("exactly one Aggregate among Map wrappers");
+        entry.Plan = fixture.ScalarAggregate;
+
+        fixture.InnerRead->Props.EnsureAtMostOne = true;
+        reject("nondeterministic or error-bearing per-invocation semantics");
+        fixture.InnerRead->Props.EnsureAtMostOne = false;
+
+        auto one = MakeConstant(
+            "Uint64",
+            "1",
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx);
+        auto innerLimit = MakeIntrusive<TOpLimit>(
+            fixture.InnerRead,
+            fixture.Pos,
+            one,
+            EOpPhase::Undefined);
+        SetExactOutputType(fixture.Ctx, *innerLimit, {
+            {"inner.k", fixture.OptionalInt32},
+            {"inner.value", fixture.Int64},
+            {"inner.text", fixture.String},
+            {"inner.flag", fixture.Bool},
+        });
+        fixture.OuterBind->SetInput(innerLimit);
+        reject("nondeterministic or error-bearing per-invocation semantics");
+        fixture.OuterBind->SetInput(fixture.InnerRead);
+
+        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+            {"outer.k", fixture.Int32},
+        });
+        reject("dependency type or nullability disagrees with its consumer input");
+        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+            {"outer.k", fixture.OptionalInt32},
+        });
+
+        SetExactOutputType(fixture.Ctx, *fixture.OuterBind, {
+            {"inner.k", fixture.OptionalInt32},
+            {"inner.value", fixture.Int64},
+            {"inner.text", fixture.String},
+            {"inner.flag", fixture.Bool},
+            {"outer.k", fixture.Int32},
+        });
+        reject("outer_bind output type disagrees with AddDependencies");
+        SetExactOutputType(fixture.Ctx, *fixture.OuterBind, {
+            {"inner.k", fixture.OptionalInt32},
+            {"inner.value", fixture.Int64},
+            {"inner.text", fixture.String},
+            {"inner.flag", fixture.Bool},
+            {"outer.k", fixture.OptionalInt32},
+        });
+
+        auto secondBindingValue = MakeColumnAccess(
+            fixture.Binding,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        auto secondOne = MakeConstant(
+            "Int64",
+            "1",
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx);
+        auto secondPredicate = MakeBinaryPredicate(
+            "==",
+            secondBindingValue,
+            secondOne);
+        AnnotateBinaryExpression(
+            secondPredicate,
+            fixture.OptionalInt64,
+            fixture.Int64,
+            fixture.OptionalBool);
+        auto secondConsumer = MakeIntrusive<TOpFilter>(
+            fixture.Consumer,
+            fixture.Pos,
+            secondPredicate);
+        SetExactOutputType(fixture.Ctx, *secondConsumer, {
+            {"outer.k", fixture.OptionalInt32},
+        });
+        fixture.Root->SetInput(secondConsumer);
+        reject("exactly one Project or Filter consumer");
+        fixture.Root->SetInput(fixture.Consumer);
+
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "restored correlated scalar must remain supported");
+    }
+
     Y_UNIT_TEST(ExportsExactUncorrelatedAndEqualityCorrelatedExists) {
         TExportTestContext ctx;
         const auto& outerTable = AddTable(
@@ -11782,7 +12359,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         root.SetInput(consumer);
 
         root.SetInput(addDependencies);
-        reject("only admissible inside a normalized correlated EXISTS subplan");
+        reject("only admissible inside a validated correlated subplan");
         root.SetInput(consumer);
 
         UNIT_ASSERT_C(
@@ -11975,7 +12552,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             ctx.RboCtx,
             catalog.Catalog);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "is correlated");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "must contain exactly one AddDependencies");
         entry.DependentIUs.clear();
 
         entry.Tuple.push_back(TInfoUnit("outer.k"));

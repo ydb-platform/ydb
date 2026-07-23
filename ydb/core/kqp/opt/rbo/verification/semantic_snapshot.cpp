@@ -324,13 +324,49 @@ void ValidateSnapshotTopology(TOpRoot& root) {
         [](IOperator& op) {
             if (op.GetKind() == EOperator::AddDependencies) {
                 Unsupported(
-                    "AddDependencies is only admissible inside a normalized correlated EXISTS subplan");
+                    "AddDependencies is only admissible inside a validated "
+                    "correlated subplan");
             }
         });
     for (const auto& subplanRoot :
         OrderedSubplanRoots(root.PlanProps.Subplans))
     {
         ValidateOperatorTopology(*subplanRoot);
+        THashSet<const IOperator*> subplanNodes;
+        VisitOperators(
+            subplanRoot,
+            subplanNodes,
+            [](IOperator& op) {
+                if (op.GetKind() != EOperator::AddDependencies) {
+                    return;
+                }
+                const auto& addDependencies =
+                    static_cast<const TOpAddDependencies&>(op);
+                if (addDependencies.Dependencies.empty() ||
+                    addDependencies.Dependencies.size() !=
+                        addDependencies.Types.size())
+                {
+                    Unsupported(
+                        "AddDependencies must have equally sized nonempty "
+                        "dependency and type vectors");
+                }
+                TInfoUnitSet seen;
+                for (size_t index = 0;
+                     index < addDependencies.Dependencies.size();
+                     ++index)
+                {
+                    const auto& dependency =
+                        addDependencies.Dependencies[index];
+                    if (dependency.GetFullName().empty() ||
+                        !seen.insert(dependency).second ||
+                        !addDependencies.Types[index])
+                    {
+                        Unsupported(
+                            "AddDependencies has an empty or duplicate "
+                            "dependency or a missing type");
+                    }
+                }
+            });
     }
 }
 
@@ -4590,9 +4626,15 @@ private:
     };
 
     struct TScalarSubplanDetails {
+        struct TCorrelation {
+            TString Dependency;
+            const TTypeAnnotationNode* DependencyType = nullptr;
+        };
+
         TString OutputColumn;
         TString Type;
         bool OutputNullable = false;
+        std::optional<TCorrelation> Correlation;
     };
 
     struct TExistsCorrelation {
@@ -4788,6 +4830,336 @@ private:
         return name.empty() ? std::nullopt : std::optional<TString>(name);
     }
 
+    struct TDirectCorrelation {
+        TExpression Expression;
+        TString InnerColumn;
+    };
+
+    static TDirectCorrelation ExtractDirectCorrelation(
+        TStringBuf kind,
+        TStringBuf binding,
+        TStringBuf dependency,
+        const TExpression& predicate,
+        const THashSet<TString>& innerNames)
+    {
+        std::optional<TExpression> correlation;
+        TString innerColumn;
+        for (const auto& conjunct : predicate.SplitConjunct()) {
+            const auto columns = ExpressionColumns(conjunct);
+            if (!columns.contains(dependency)) {
+                for (const auto& column : columns) {
+                    if (!innerNames.contains(column)) {
+                        Unsupported(TStringBuilder()
+                            << kind << " subplan binding " << binding
+                            << " residual predicate references unavailable column "
+                            << column);
+                    }
+                }
+                continue;
+            }
+            if (correlation) {
+                Unsupported(TStringBuilder()
+                    << kind << " subplan binding " << binding
+                    << " references its outer dependency in multiple conjuncts");
+            }
+            const auto body = conjunct.GetExpressionBody();
+            if (!body->IsCallable("==") || body->ChildrenSize() != 2) {
+                Unsupported(TStringBuilder()
+                    << kind << " subplan binding " << binding
+                    << " correlation must be one strict column equality");
+            }
+            const auto left = DirectMemberName(*body->Child(0));
+            const auto right = DirectMemberName(*body->Child(1));
+            if (!left || !right ||
+                ((*left == dependency) == (*right == dependency)))
+            {
+                Unsupported(TStringBuilder()
+                    << kind << " subplan binding " << binding
+                    << " correlation must compare its dependency to one inner column");
+            }
+            innerColumn = *left == dependency ? *right : *left;
+            if (!innerNames.contains(innerColumn) || columns.size() != 2) {
+                Unsupported(TStringBuilder()
+                    << kind << " subplan binding " << binding
+                    << " correlation does not reference exactly one inner column");
+            }
+            correlation = conjunct;
+        }
+        if (!correlation) {
+            Unsupported(TStringBuilder()
+                << kind << " subplan binding " << binding
+                << " has no equality for its outer dependency");
+        }
+        return {
+            .Expression = std::move(*correlation),
+            .InnerColumn = std::move(innerColumn),
+        };
+    }
+
+    void ValidateCorrelationTypes(
+        TStringBuf kind,
+        TStringBuf binding,
+        TStringBuf dependency,
+        const TTypeAnnotationNode* dependencyType,
+        IOperator& innerRoot,
+        const TExpression& correlation,
+        TStringBuf innerColumn)
+    {
+        const auto body = correlation.GetExpressionBody();
+        const auto leftName = DirectMemberName(*body->Child(0));
+        const auto rightName = DirectMemberName(*body->Child(1));
+        Y_ENSURE(leftName && rightName);
+
+        const TExprNode* dependencyMember =
+            *leftName == dependency
+                ? body->Child(0)
+                : body->Child(1);
+        const TExprNode* innerMember =
+            *leftName == dependency
+                ? body->Child(1)
+                : body->Child(0);
+
+        const auto declaredDependency = ExactType(dependencyType);
+        bool memberNullable = false;
+        const TExactType dependencyMemberType{
+            ScalarTypeName(*dependencyMember, &memberNullable),
+            memberNullable,
+        };
+        if (!SameType(declaredDependency, dependencyMemberType)) {
+            Unsupported(TStringBuilder()
+                << kind << " subplan binding " << binding
+                << " dependency Member type disagrees with AddDependencies");
+        }
+
+        const auto innerOutput = ExactType(
+            OutputType(innerRoot, innerColumn));
+        memberNullable = false;
+        const TExactType innerMemberType{
+            ScalarTypeName(*innerMember, &memberNullable),
+            memberNullable,
+        };
+        if (!SameType(innerOutput, innerMemberType)) {
+            Unsupported(TStringBuilder()
+                << kind << " subplan binding " << binding
+                << " inner equality Member type disagrees with its input");
+        }
+        if (declaredDependency.Name != innerOutput.Name) {
+            Unsupported(TStringBuilder()
+                << kind << " subplan binding " << binding
+                << " equality column types do not match");
+        }
+
+        bool predicateNullable = false;
+        const TString predicateType =
+            ScalarTypeName(*body, &predicateNullable);
+        if (predicateType != "Bool" ||
+            predicateNullable !=
+                (declaredDependency.Nullable || innerOutput.Nullable))
+        {
+            Unsupported(TStringBuilder()
+                << kind << " subplan binding " << binding
+                << " has an invalid equality result type or nullability");
+        }
+    }
+
+    TScalarSubplanDetails::TCorrelation PrepareScalarCorrelation(
+        const TString& binding,
+        const TSubplanEntry& entry,
+        const TIntrusivePtr<IOperator>& plan)
+    {
+        if (entry.DependentIUs.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " must have exactly one outer dependency");
+        }
+        const auto& dependencyIU = entry.DependentIUs.front();
+        const TString dependency = dependencyIU.GetFullName();
+        if (dependency.empty()) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " has an empty outer dependency");
+        }
+
+        THashSet<const IOperator*> nodes;
+        THashMap<const IOperator*, TVector<IOperator*>> parents;
+        TVector<TOpAddDependencies*> outerBinds;
+        VisitOperators(plan, nodes, [&](IOperator& op) {
+            if (op.Props.EnsureAtMostOne ||
+                op.GetKind() == EOperator::Limit ||
+                op.GetKind() == EOperator::Sort ||
+                (op.GetKind() == EOperator::UnionAll &&
+                 static_cast<const TOpUnionAll&>(op).Ordered))
+            {
+                Unsupported(TStringBuilder()
+                    << "Correlated scalar subplan binding " << binding
+                    << " has nondeterministic or error-bearing "
+                       "per-invocation semantics");
+            }
+            CheckSnapshotProperties(op, false);
+            for (const auto& child : op.GetChildren()) {
+                parents[child.Get()].push_back(&op);
+            }
+            if (op.GetKind() == EOperator::AddDependencies) {
+                outerBinds.push_back(
+                    &static_cast<TOpAddDependencies&>(op));
+            }
+        });
+        if (outerBinds.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "Correlated scalar subplan binding " << binding
+                << " must contain exactly one AddDependencies");
+        }
+
+        auto* outerBind = outerBinds.front();
+        if (outerBind->Dependencies.size() != 1 ||
+            outerBind->Types.size() != 1 ||
+            !outerBind->Types.front() ||
+            outerBind->Dependencies.front() != dependencyIU)
+        {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " dependency registry disagrees with AddDependencies");
+        }
+
+        auto shape = plan;
+        size_t aggregateCount = 0;
+        while (shape->GetKind() == EOperator::Map ||
+               shape->GetKind() == EOperator::Aggregate)
+        {
+            if (shape->GetChildren().size() != 1) {
+                Unsupported(TStringBuilder()
+                    << "Correlated scalar subplan binding " << binding
+                    << " root path must be unary");
+            }
+            if (shape.Get() != plan.Get()) {
+                const auto* shapeParents = parents.FindPtr(shape.Get());
+                if (!shapeParents || shapeParents->size() != 1) {
+                    Unsupported(TStringBuilder()
+                        << "Correlated scalar subplan binding " << binding
+                        << " root path must not fan out");
+                }
+            }
+            if (shape->GetKind() == EOperator::Aggregate) {
+                ++aggregateCount;
+                const auto& aggregate =
+                    static_cast<const TOpAggregate&>(*shape);
+                if (aggregate.IsDistinctAll() ||
+                    !aggregate.GetKeyColumns().empty() ||
+                    aggregate.GetAggregationPhase() != EOpPhase::Undefined)
+                {
+                    Unsupported(TStringBuilder()
+                        << "Correlated scalar subplan binding " << binding
+                        << " Aggregate must be ungrouped, undefined, "
+                           "and non-DistinctAll");
+                }
+            }
+            shape = shape->GetChildren().front();
+        }
+        if (aggregateCount != 1) {
+            Unsupported(TStringBuilder()
+                << "Correlated scalar subplan binding " << binding
+                << " root path must contain exactly one Aggregate "
+                   "among Map wrappers");
+        }
+
+        const auto* bindParents = parents.FindPtr(outerBind);
+        if (!bindParents || bindParents->size() != 1 ||
+            bindParents->front()->GetKind() != EOperator::Filter)
+        {
+            Unsupported(TStringBuilder()
+                << "Correlated scalar subplan binding " << binding
+                << " must have one Filter directly above AddDependencies");
+        }
+        auto* filter = static_cast<TOpFilter*>(bindParents->front());
+        const auto* filterParents = parents.FindPtr(filter);
+        if (shape.Get() != filter ||
+            !filterParents ||
+            filterParents->size() != 1 ||
+            filter->GetInput().Get() != outerBind)
+        {
+            Unsupported(TStringBuilder()
+                << "Correlated scalar subplan binding " << binding
+                << " unary path must end in one Filter directly above "
+                   "AddDependencies without fanout");
+        }
+
+        auto innerPlan = outerBind->GetInput();
+        const auto innerNames = OutputNames(*innerPlan);
+        if (innerNames.contains(dependency)) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " outer dependency collides with an inner column");
+        }
+
+        const auto correlation = ExtractDirectCorrelation(
+            "Scalar",
+            binding,
+            dependency,
+            filter->FilterExpr,
+            innerNames);
+
+        THashSet<const IOperator*> expressionNodes;
+        VisitOperators(plan, expressionNodes, [&](IOperator& op) {
+            if (&op == filter) {
+                return;
+            }
+            for (const auto& expression : op.GetExpressions()) {
+                if (ExpressionColumns(expression.get()).contains(dependency)) {
+                    Unsupported(TStringBuilder()
+                        << "Scalar subplan binding " << binding
+                        << " uses its outer dependency outside the "
+                           "correlation Filter");
+                }
+            }
+            if (op.GetKind() == EOperator::Aggregate) {
+                const auto& candidate =
+                    static_cast<const TOpAggregate&>(op);
+                for (const auto& key : candidate.KeyColumns) {
+                    if (key == dependencyIU) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << binding
+                            << " aggregates by its outer dependency");
+                    }
+                }
+                for (const auto& trait : candidate.AggregationTraitsList) {
+                    if (trait.OriginalColName == dependencyIU) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << binding
+                            << " aggregates its outer dependency");
+                    }
+                }
+            }
+        });
+
+        const auto declaredDependency =
+            ExactType(outerBind->Types.front());
+        const auto bindOutput =
+            ExactType(OutputType(*outerBind, dependency));
+        if (!SameType(declaredDependency, bindOutput)) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " outer_bind output type disagrees with AddDependencies");
+        }
+        ValidateCorrelationTypes(
+            "Scalar",
+            binding,
+            dependency,
+            outerBind->Types.front(),
+            *innerPlan,
+            correlation.Expression,
+            correlation.InnerColumn);
+
+        if (!AuthorizedOuterBinds.insert(outerBind).second) {
+            Unsupported(TStringBuilder()
+                << "Correlated scalar subplan binding " << binding
+                << " shares AddDependencies with another subplan");
+        }
+        return {
+            .Dependency = dependency,
+            .DependencyType = outerBind->Types.front(),
+        };
+    }
+
     TVector<TString> ReferencedSubplanBindings(IOperator& op) {
         THashSet<TString> referenced;
         for (const auto& iu : op.GetSubplanIUs(Root.PlanProps)) {
@@ -4821,19 +5193,20 @@ private:
                 << "Scalar subplan binding " << binding
                 << " has tuple inputs");
         }
-        if (!entry.DependentIUs.empty()) {
-            Unsupported(TStringBuilder()
-                << "Scalar subplan binding " << binding
-                << " is correlated");
+        std::optional<TScalarSubplanDetails::TCorrelation> correlation;
+        if (entry.DependentIUs.empty()) {
+            THashSet<const IOperator*> nodes;
+            VisitOperators(plan, nodes, [&](IOperator& op) {
+                if (op.GetKind() == EOperator::AddDependencies) {
+                    Unsupported(TStringBuilder()
+                        << "Scalar subplan binding " << binding
+                        << " has residual AddDependencies");
+                }
+            });
+        } else {
+            correlation =
+                PrepareScalarCorrelation(binding, entry, plan);
         }
-        THashSet<const IOperator*> nodes;
-        VisitOperators(plan, nodes, [&](IOperator& op) {
-            if (op.GetKind() == EOperator::AddDependencies) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " has residual AddDependencies");
-            }
-        });
         const auto resultIUs = GetSubplanResultIUs(plan);
         if (resultIUs.size() != 1) {
             Unsupported(TStringBuilder()
@@ -4860,6 +5233,7 @@ private:
                 .OutputColumn = output,
                 .Type = type,
                 .OutputNullable = outputNullable,
+                .Correlation = std::move(correlation),
             },
         };
     }
@@ -4908,69 +5282,6 @@ private:
                     << " has a Map wrapper with inconsistent column types");
             }
             Y_UNUSED(ExportExpr(element.GetExpression(), inputNames));
-        }
-    }
-
-    void ValidateExistsCorrelationTypes(
-        const TSubplanDescriptor& subplan,
-        const TExistsCorrelation& details,
-        const TExpression& correlation,
-        TStringBuf innerColumn)
-    {
-        const auto body = correlation.GetExpressionBody();
-        const auto leftName = DirectMemberName(*body->Child(0));
-        const auto rightName = DirectMemberName(*body->Child(1));
-        Y_ENSURE(leftName && rightName);
-
-        const TExprNode* dependencyMember =
-            *leftName == details.Dependency
-                ? body->Child(0)
-                : body->Child(1);
-        const TExprNode* innerMember =
-            *leftName == details.Dependency
-                ? body->Child(1)
-                : body->Child(0);
-
-        const auto declaredDependency = ExactType(details.DependencyType);
-        bool memberNullable = false;
-        const TExactType dependencyMemberType{
-            ScalarTypeName(*dependencyMember, &memberNullable),
-            memberNullable,
-        };
-        if (!SameType(declaredDependency, dependencyMemberType)) {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << subplan.Binding
-                << " dependency Member type disagrees with AddDependencies");
-        }
-
-        const auto innerOutput = ExactType(
-            OutputType(*subplan.ExportedRoot, innerColumn));
-        memberNullable = false;
-        const TExactType innerMemberType{
-            ScalarTypeName(*innerMember, &memberNullable),
-            memberNullable,
-        };
-        if (!SameType(innerOutput, innerMemberType)) {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << subplan.Binding
-                << " inner equality Member type disagrees with its root");
-        }
-        if (declaredDependency.Name != innerOutput.Name) {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << subplan.Binding
-                << " equality column types do not match");
-        }
-
-        bool predicateNullable = false;
-        const TString predicateType =
-            ScalarTypeName(*body, &predicateNullable);
-        if (predicateType != "Bool" ||
-            predicateNullable !=
-                (declaredDependency.Nullable || innerOutput.Nullable))
-        {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << subplan.Binding
-                << " has an invalid equality result type or nullability");
         }
     }
 
@@ -5082,55 +5393,12 @@ private:
                 visible.insert(dependency);
                 return visible;
             }());
-
-        std::optional<TExpression> correlation;
-        TString innerColumn;
-        for (const auto& conjunct : filter->FilterExpr.SplitConjunct()) {
-            const auto columns = ExpressionColumns(conjunct);
-            if (!columns.contains(dependency)) {
-                for (const auto& column : columns) {
-                    if (!innerNames.contains(column)) {
-                        Unsupported(TStringBuilder()
-                            << "EXISTS subplan binding " << binding
-                            << " residual predicate references unavailable column "
-                            << column);
-                    }
-                }
-                continue;
-            }
-            if (correlation) {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " references its outer dependency in multiple conjuncts");
-            }
-            const auto body = conjunct.GetExpressionBody();
-            if (!body->IsCallable("==") || body->ChildrenSize() != 2) {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " correlation must be one strict column equality");
-            }
-            const auto left = DirectMemberName(*body->Child(0));
-            const auto right = DirectMemberName(*body->Child(1));
-            if (!left || !right ||
-                ((*left == dependency) == (*right == dependency)))
-            {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " correlation must compare its dependency to one inner column");
-            }
-            innerColumn = *left == dependency ? *right : *left;
-            if (!innerNames.contains(innerColumn) || columns.size() != 2) {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " correlation does not reference exactly one inner column");
-            }
-            correlation = conjunct;
-        }
-        if (!correlation) {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << binding
-                << " has no equality for its outer dependency");
-        }
+        const auto correlation = ExtractDirectCorrelation(
+            "EXISTS",
+            binding,
+            dependency,
+            filter->FilterExpr,
+            innerNames);
 
         TSubplanDescriptor result{
             .Binding = binding,
@@ -5149,11 +5417,14 @@ private:
         Y_ENSURE(
             details.Correlation,
             "Correlated EXISTS subplan descriptor has no correlation details");
-        ValidateExistsCorrelationTypes(
-            result,
-            *details.Correlation,
-            *correlation,
-            innerColumn);
+        ValidateCorrelationTypes(
+            "EXISTS",
+            result.Binding,
+            details.Correlation->Dependency,
+            details.Correlation->DependencyType,
+            *result.ExportedRoot,
+            correlation.Expression,
+            correlation.InnerColumn);
         return result;
     }
 
@@ -5179,6 +5450,33 @@ private:
             Unsupported(TStringBuilder()
                 << "EXISTS subplan binding " << subplan.Binding
                 << " dependency type or nullability disagrees with its consumer input");
+        }
+    }
+
+    void ValidateScalarConsumer(const TSubplanDescriptor& subplan) {
+        const auto& details = ScalarDetails(subplan);
+        if (!details.Correlation) {
+            return;
+        }
+        Y_ENSURE(subplan.Consumers.size() == 1);
+        auto* consumer = subplan.Consumers.front();
+        const TString& dependency = details.Correlation->Dependency;
+        auto& input = *consumer->GetChildren().front();
+        const auto inputNames = OutputNames(input);
+        if (!inputNames.contains(dependency)) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << subplan.Binding
+                << " dependency is absent from its consumer input");
+        }
+        const auto outerType =
+            ExactType(OutputType(input, dependency));
+        const auto declaredType =
+            ExactType(details.Correlation->DependencyType);
+        if (!SameType(outerType, declaredType)) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << subplan.Binding
+                << " dependency type or nullability disagrees with its "
+                   "consumer input");
         }
     }
 
@@ -5384,7 +5682,19 @@ private:
                     << " subplan binding " << subplan.Binding
                     << " has no consumer");
             }
-            if (SubplanKind(subplan) == ESubplanKind::Exists) {
+            if (SubplanKind(subplan) == ESubplanKind::Scalar) {
+                const auto& scalar = ScalarDetails(subplan);
+                if (scalar.Correlation) {
+                    if (subplan.Consumers.size() != 1) {
+                        Unsupported(TStringBuilder()
+                            << "Correlated scalar subplan binding "
+                            << subplan.Binding
+                            << " must have exactly one Project or Filter "
+                               "consumer");
+                    }
+                    ValidateScalarConsumer(subplan);
+                }
+            } else {
                 if (subplan.Consumers.size() != 1) {
                     Unsupported(TStringBuilder()
                         << "EXISTS subplan binding " << subplan.Binding
@@ -5500,7 +5810,13 @@ private:
 
             auto dependencies = JsonArray();
             const auto kind = SubplanKind(subplan);
-            if (kind == ESubplanKind::Exists) {
+            if (kind == ESubplanKind::Scalar) {
+                const auto& scalar = ScalarDetails(subplan);
+                if (scalar.Correlation) {
+                    dependencies.AppendValue(
+                        scalar.Correlation->Dependency);
+                }
+            } else {
                 const auto& exists = ExistsDetails(subplan);
                 if (exists.Correlation) {
                     dependencies.AppendValue(
@@ -5660,7 +5976,8 @@ private:
 
             case EOperator::Filter:
             case EOperator::Limit:
-            case EOperator::Sort: {
+            case EOperator::Sort:
+            case EOperator::AddDependencies: {
                 const auto& input = base.GetChildren().front();
                 const auto outputNames = OutputNames(base);
                 for (const auto& [name, provenance] : StoredStringOutputs(*input)) {
@@ -5824,6 +6141,75 @@ private:
                 node["pushed_limit"] = read.Limit
                     ? Uint64LiteralExpr(*read.Limit, "Read pushed limit")
                     : NJson::TJsonValue(NJson::JSON_NULL);
+                return node;
+            }
+
+            case EOperator::AddDependencies: {
+                if (children.size() != 1) {
+                    Unsupported("AddDependencies must have one input");
+                }
+                auto& outerBind =
+                    static_cast<TOpAddDependencies&>(base);
+                if (!AuthorizedOuterBinds.contains(&outerBind)) {
+                    Unsupported(
+                        "AddDependencies is not authorized as a correlated "
+                        "scalar outer_bind");
+                }
+                if (outerBind.Dependencies.size() != 1 ||
+                    outerBind.Types.size() != 1 ||
+                    !outerBind.Types.front())
+                {
+                    Unsupported(
+                        "A correlated scalar outer_bind must have exactly "
+                        "one typed dependency");
+                }
+
+                const TString dependency =
+                    outerBind.Dependencies.front().GetFullName();
+                const auto& inputIUs =
+                    outerBind.GetInput()->GetOutputIUs();
+                const auto& outputIUs = outerBind.GetOutputIUs();
+                if (dependency.empty() ||
+                    OutputNames(*outerBind.GetInput()).contains(dependency) ||
+                    outputIUs.size() != inputIUs.size() + 1 ||
+                    OutputStructType(outerBind)->GetItems().size() !=
+                        outputIUs.size())
+                {
+                    Unsupported(
+                        "A correlated scalar outer_bind has an invalid "
+                        "dependency or output shape");
+                }
+                for (size_t index = 0; index < inputIUs.size(); ++index) {
+                    const TString input = inputIUs[index].GetFullName();
+                    const TString output = outputIUs[index].GetFullName();
+                    if (input.empty() || input != output ||
+                        !SameType(
+                            ExactType(OutputType(
+                                *outerBind.GetInput(), input)),
+                            ExactType(OutputType(outerBind, output))))
+                    {
+                        Unsupported(
+                            "A correlated scalar outer_bind must preserve "
+                            "its input schema exactly and in order");
+                    }
+                }
+                if (outputIUs.back().GetFullName() != dependency ||
+                    !SameType(
+                        ExactType(outerBind.Types.front()),
+                        ExactType(OutputType(outerBind, dependency))))
+                {
+                    Unsupported(
+                        "A correlated scalar outer_bind dependency type or "
+                        "output position is inconsistent");
+                }
+
+                const auto dependencyType =
+                    ExactType(outerBind.Types.front());
+                node["op"] = "outer_bind";
+                node["input"] = children[0];
+                node["dependency"] = dependency;
+                node["type"] = dependencyType.Name;
+                node["nullable"] = dependencyType.Nullable;
                 return node;
             }
 
@@ -6242,6 +6628,7 @@ private:
     THashMap<const IOperator*, TStoredStringColumns> StoredStringOutputMap;
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
+    THashSet<const TOpAddDependencies*> AuthorizedOuterBinds;
     TVector<IOperator*> NodeOrder;
     TVector<TSubplanDescriptor> Subplans;
     THashMap<TString, size_t> SubplanIndices;

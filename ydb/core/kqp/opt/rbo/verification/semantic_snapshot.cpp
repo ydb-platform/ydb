@@ -352,10 +352,24 @@ bool ProvesAtMostOne(
     IOperator& op,
     EAtMostOneProofMode mode,
     THashSet<const IOperator*>& visiting,
-    const std::optional<int>* requiredStage)
+    std::optional<int> requiredStage,
+    const TVector<ui32>* stageTaskCounts)
 {
-    if (requiredStage && op.Props.StageId != *requiredStage) {
-        return false;
+    if (requiredStage && op.Props.StageId != requiredStage) {
+        // EnsureAtMostOne executes independently in each consumer task.
+        // TStageGraphExporter validates the exact logical boundary and its
+        // closed set of connection kinds before exposing these task counts.
+        // A structurally at-most-one stream from one producer task can
+        // therefore contribute at most one row to each consumer task.
+        if (mode != EAtMostOneProofMode::HarmlessCheckInput ||
+            !stageTaskCounts || !op.Props.StageId ||
+            *op.Props.StageId < 0 ||
+            static_cast<size_t>(*op.Props.StageId) >= stageTaskCounts->size() ||
+            stageTaskCounts->at(*op.Props.StageId) != 1)
+        {
+            return false;
+        }
+        requiredStage = op.Props.StageId;
     }
     if (!visiting.insert(&op).second) {
         return false;
@@ -394,7 +408,8 @@ bool ProvesAtMostOne(
                     *children.front(),
                     mode,
                     visiting,
-                    requiredStage));
+                    requiredStage,
+                    stageTaskCounts));
         }
 
         case EOperator::Map:
@@ -407,7 +422,8 @@ bool ProvesAtMostOne(
                     *children.front(),
                     mode,
                     visiting,
-                    requiredStage));
+                    requiredStage,
+                    stageTaskCounts));
         }
 
         default:
@@ -421,36 +437,47 @@ bool IsStaticallyAtMostOne(IOperator& op) {
         op,
         EAtMostOneProofMode::ScalarSubplan,
         visiting,
+        std::nullopt,
         nullptr);
 }
 
 bool IsHarmlessAtMostOneCheckInput(
     IOperator& op,
-    const std::optional<int>* requiredStage)
+    std::optional<int> requiredStage,
+    const TVector<ui32>* stageTaskCounts)
 {
     THashSet<const IOperator*> visiting;
     return ProvesAtMostOne(
         op,
         EAtMostOneProofMode::HarmlessCheckInput,
         visiting,
-        requiredStage);
+        requiredStage,
+        stageTaskCounts);
 }
 
-void CheckSnapshotProperties(IOperator& op, bool stageGraphPresent) {
+void CheckSnapshotProperties(
+    IOperator& op,
+    bool stageGraphPresent,
+    const TVector<ui32>* stageTaskCounts)
+{
+    if (stageGraphPresent && !stageTaskCounts) {
+        Unsupported("StageGraph task counts are required for property validation");
+    }
     const auto& props = op.Props;
     const bool joinPhysicalProps = props.JoinAlgo || props.UseBlockHashJoin ||
         props.LeftShuffleBy || props.RightShuffleBy;
     bool harmlessAtMostOneCheck = false;
     if (props.EnsureAtMostOne && op.GetKind() == EOperator::Limit) {
         const auto& children = op.GetChildren();
-        const auto* requiredStage =
-            stageGraphPresent ? &props.StageId : nullptr;
+        const auto requiredStage =
+            stageGraphPresent ? props.StageId : std::nullopt;
         harmlessAtMostOneCheck =
             children.size() == 1 &&
             (!stageGraphPresent || props.StageId.has_value()) &&
             IsHarmlessAtMostOneCheckInput(
                 *children.front(),
-                requiredStage);
+                requiredStage,
+                stageTaskCounts);
     }
     if ((!stageGraphPresent && props.StageId) || props.Algorithm || props.OrderEnforcer ||
         (props.EnsureAtMostOne && !harmlessAtMostOneCheck) ||
@@ -4727,7 +4754,7 @@ public:
     NJson::TJsonValue Export() {
         ValidateSnapshotTopology(Root);
         PrepareSubplans();
-        CheckSnapshotProperties(Root, false);
+        CheckSnapshotProperties(Root, false, nullptr);
         if (Root.ColumnOrder.empty()) {
             Unsupported("Root output order must not be empty");
         }
@@ -4762,6 +4789,15 @@ public:
 
     const TVector<IOperator*>& GetNodeOrder() const {
         return NodeOrder;
+    }
+
+    void ValidateStageProperties(const TVector<ui32>& stageTaskCounts) const {
+        if (!StageGraphPresent) {
+            Unsupported("Stage properties require a StageGraph");
+        }
+        for (auto* op : NodeOrder) {
+            CheckSnapshotProperties(*op, true, &stageTaskCounts);
+        }
     }
 
     const TString& GetRootId() const {
@@ -5111,7 +5147,9 @@ private:
             children.push_back(ExportNode(child));
         }
         Visiting.erase(op.Get());
-        CheckSnapshotProperties(*op, StageGraphPresent);
+        if (!StageGraphPresent) {
+            CheckSnapshotProperties(*op, false, nullptr);
+        }
 
         const TString id = TStringBuilder() << "n" << Ids.size();
         auto node = ExportOperator(*op, id, children);
@@ -5869,6 +5907,13 @@ public:
         return result;
     }
 
+    const TVector<ui32>& GetTaskCounts() const {
+        if (TaskCounts.size() != StageCount) {
+            Unsupported("StageGraph task counts are unavailable");
+        }
+        return TaskCounts;
+    }
+
 private:
     static TString StableStageId(ui32 stageId) {
         return TStringBuilder() << "s" << stageId;
@@ -6400,18 +6445,18 @@ private:
         }
     }
 
-    void ValidateTaskSemantics() const {
+    void ValidateTaskSemantics() {
         // Mirror CountComputeTasks with a bounded choice of two tasks for a
         // non-Map HashShuffle stage. Channel-builder constraints are checked
         // against the final count below.
-        TVector<ui32> taskCounts(StageCount, 0);
+        TaskCounts.assign(StageCount, 0);
         for (const auto stageId : TopologicalStages) {
             if (Graph.SourceStages.contains(stageId)) {
-                taskCounts[stageId] = 2;
+                TaskCounts[stageId] = 2;
                 continue;
             }
             if (Graph.StageInputs.at(stageId).empty()) {
-                taskCounts[stageId] = 1;
+                TaskCounts[stageId] = 1;
                 continue;
             }
 
@@ -6426,7 +6471,7 @@ private:
                 }
                 for (const auto& connection : Graph.GetConnections(producer, stageId)) {
                     if (dynamic_cast<const TMapConnection*>(connection.Get())) {
-                        taskCount = taskCounts[producer];
+                        taskCount = TaskCounts[producer];
                         forceMapTasks = true;
                         ++mapConnectionCount;
                     } else if (dynamic_cast<const TShuffleConnection*>(connection.Get())) {
@@ -6435,7 +6480,7 @@ private:
                         dynamic_cast<const TUnionAllConnection*>(connection.Get()))
                     {
                         if (unionAll->IsParallel()) {
-                            taskCount = std::max(taskCount, taskCounts[producer]);
+                            taskCount = std::max(taskCount, TaskCounts[producer]);
                         }
                     }
                 }
@@ -6458,7 +6503,7 @@ private:
                 }
                 for (const auto& connection : Graph.GetConnections(producer, stageId)) {
                     if (dynamic_cast<const TMapConnection*>(connection.Get())) {
-                        if (taskCounts[producer] != taskCount) {
+                        if (TaskCounts[producer] != taskCount) {
                             Unsupported(
                                 "StageGraph Map producer and consumer task counts must match");
                         }
@@ -6481,7 +6526,7 @@ private:
                     }
                 }
             }
-            taskCounts[stageId] = taskCount;
+            TaskCounts[stageId] = taskCount;
         }
     }
 
@@ -6499,6 +6544,7 @@ private:
     TVector<TVector<TString>> StageInputNodes;
     TVector<TVector<TString>> LogicalInputNodes;
     TVector<TMap<ui32, TString>> StageOutputNodes;
+    TVector<ui32> TaskCounts;
     TMap<TStagePair, TVector<TBoundary>> Boundaries;
     NJson::TJsonValue Edges = JsonArray();
 };
@@ -6567,13 +6613,17 @@ TString SerializeSnapshot(
     snapshot["version"] = 1;
     snapshot["schema"] = ExportCatalog(catalog);
     snapshot["plan"] = planExporter.Export();
-    snapshot["stage_graph"] = stageGraphPresent
-        ? TStageGraphExporter(
+    if (stageGraphPresent) {
+        TStageGraphExporter stageGraphExporter(
             root,
             planExporter.GetNodeIds(),
             planExporter.GetNodeOrder(),
-            planExporter.GetRootId()).Export()
-        : NJson::TJsonValue(NJson::JSON_NULL);
+            planExporter.GetRootId());
+        snapshot["stage_graph"] = stageGraphExporter.Export();
+        planExporter.ValidateStageProperties(stageGraphExporter.GetTaskCounts());
+    } else {
+        snapshot["stage_graph"] = NJson::TJsonValue(NJson::JSON_NULL);
+    }
 
     NJsonWriter::TBuf writer;
     writer.WriteJsonValue(&snapshot, true, PREC_NDIGITS, 17);

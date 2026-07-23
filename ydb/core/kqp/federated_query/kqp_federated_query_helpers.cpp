@@ -461,7 +461,7 @@ namespace {
                 endpoint,
                 NKikimr::CanonizePath(database),
                 useTls,
-                NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
+                NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false),
                 path,
                 false);
     };

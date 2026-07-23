@@ -18,7 +18,8 @@ public:
     // Returns false if finalize (Publish/Cancel wait) has sealed this state.
     bool TryOnWrite();
 
-    void OnAck();
+    // Returns WriteCount and AckCount after applying this ack.
+    std::pair<ui64, ui64> OnAck();
 
     // Drop unacked writes from an aborted write session; fails WaitAllAcks if already waiting.
     // Clears seal on wait failure so the client may write and finalize again.

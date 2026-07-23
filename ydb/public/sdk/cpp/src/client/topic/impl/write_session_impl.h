@@ -381,6 +381,14 @@ private:
 
     TStringBuilder LogPrefixImpl() const;
 
+    TString MakeOnAckPlainLogMessage(ui64 seqNo) const;
+    TString MakeOnAckTxLogMessage(ui64 seqNo, const TTransactionId& txId, ui64 writeCount, ui64 ackCount) const;
+    TString MakeOnAckDeferredLogMessage(
+        ui64 seqNo,
+        const TDeferredInFlightWrite& deferred,
+        ui64 writeCount,
+        ui64 ackCount) const;
+
     void UpdateTokenIfNeededImpl();
 
     void WriteInternal(TContinuationToken&& continuationToken, TWriteMessage&& message);
@@ -508,9 +516,15 @@ private:
 protected:
     uint64_t MessagesAcquired = 0;
 
+    struct TDeferredInFlightWrite {
+        std::shared_ptr<TDeferredPublicationAckState> AckState;
+        uint64_t IntPublicationId = 0;
+        std::optional<std::string> ExtPublicationId;
+    };
+
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
-    std::unordered_map<ui64, std::shared_ptr<TDeferredPublicationAckState>> WrittenInDeferred; // SeqNo -> ack state
+    std::unordered_map<ui64, TDeferredInFlightWrite> WrittenInDeferred; // SeqNo -> deferred write meta
 };
 
 } // namespace NYdb::NTopic

@@ -93,12 +93,16 @@ bool TDeferredPublicationAckState::TryOnWrite() {
     }
 }
 
-void TDeferredPublicationAckState::OnAck() {
+std::pair<ui64, ui64> TDeferredPublicationAckState::OnAck() {
     std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
     TStatus statusToSet = MakeCommitTransactionSuccess();
+    ui64 writeCount = 0;
+    ui64 ackCount = 0;
     with_lock (Lock_) {
         ++AckCount_;
         Y_ABORT_UNLESS(AckCount_ <= WriteCount_);
+        writeCount = WriteCount_;
+        ackCount = AckCount_;
         if (WriteCount_ == AckCount_ && WaitCalled_) {
             promiseToComplete = AllAcksReceived_;
             statusToSet = MakeCommitTransactionSuccess();
@@ -107,6 +111,7 @@ void TDeferredPublicationAckState::OnAck() {
     if (promiseToComplete) {
         promiseToComplete->TrySetValue(statusToSet);
     }
+    return {writeCount, ackCount};
 }
 
 void TDeferredPublicationAckState::OnUnackedAbort(ui64 unackedCount) {

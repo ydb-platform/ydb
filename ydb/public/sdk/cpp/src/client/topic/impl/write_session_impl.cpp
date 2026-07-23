@@ -701,16 +701,21 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
-        if (deferredIt->second) {
-            deferredIt->second->OnAck();
+        const auto& deferred = deferredIt->second;
+        ui64 writeCount = 0;
+        ui64 ackCount = 0;
+        if (deferred.AckState) {
+            std::tie(writeCount, ackCount) = deferred.AckState->OnAck();
         }
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", deferredPublication");
+                 MakeOnAckDeferredLogMessage(seqNo, deferred, writeCount, ackCount));
         return;
     }
 
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 MakeOnAckPlainLogMessage(seqNo));
         return;
     }
 
@@ -721,7 +726,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 MakeOnAckTxLogMessage(seqNo, txId, txInfo->WriteCount, txInfo->AckCount));
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -798,7 +803,11 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                     "Write after Publish/Cancel is not allowed for this deferred publication");
                 return;
             }
-            WrittenInDeferred[seqNo] = ackState;
+            WrittenInDeferred[seqNo] = TDeferredInFlightWrite{
+                .AckState = ackState,
+                .IntPublicationId = deferred->IntPublicationId,
+                .ExtPublicationId = deferred->ExtPublicationId,
+            };
             LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
                      LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
                                      << ", intPublicationId=" << deferred->IntPublicationId);
@@ -1171,6 +1180,39 @@ TStringBuilder TWriteSessionImpl::LogPrefixImpl() const {
     }
 
     return ret;
+}
+
+TString TWriteSessionImpl::MakeOnAckPlainLogMessage(ui64 seqNo) const {
+    return TStringBuilder() << LogPrefixImpl() << "OnAck: seqNo=" << seqNo;
+}
+
+TString TWriteSessionImpl::MakeOnAckTxLogMessage(
+    ui64 seqNo,
+    const TTransactionId& txId,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    return TStringBuilder()
+        << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", txId=" << txId
+        << ", WriteCount=" << writeCount
+        << ", AckCount=" << ackCount;
+}
+
+TString TWriteSessionImpl::MakeOnAckDeferredLogMessage(
+    ui64 seqNo,
+    const TDeferredInFlightWrite& deferred,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    TStringBuilder log;
+    log << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", int_publication_id=" << deferred.IntPublicationId;
+    if (deferred.ExtPublicationId) {
+        log << ", ext_publication_id=" << *deferred.ExtPublicationId;
+    }
+    log << ", WriteCount=" << writeCount << ", AckCount=" << ackCount;
+    return std::move(log);
 }
 
 template<>
@@ -2050,9 +2092,9 @@ void TWriteSessionImpl::CancelTransactions()
     Txs.clear();
 
     std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
-    for (const auto& [_, state] : WrittenInDeferred) {
-        if (state) {
-            ++unackedByState[state];
+    for (const auto& [_, deferred] : WrittenInDeferred) {
+        if (deferred.AckState) {
+            ++unackedByState[deferred.AckState];
         }
     }
     WrittenInDeferred.clear();

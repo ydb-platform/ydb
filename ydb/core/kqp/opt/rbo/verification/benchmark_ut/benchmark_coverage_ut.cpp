@@ -1240,10 +1240,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({1}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
-            std::set<ui32>({1, 3, 5, 6, 10, 12, 14, 19}));
+            std::set<ui32>({1, 3, 5, 6, 10, 11, 12, 14, 15, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
-            std::set<ui32>({3, 6, 12, 14, 19}));
+            std::set<ui32>({3, 6, 11, 12, 14, 15, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 65, 80}));
@@ -1448,8 +1448,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {5, "FORMULA_EMITTED"},
             {6, "FORMULA_EMITTED"},
             {10, "FORMULA_EMITTED"},
+            {11, "FORMULA_EMITTED"},
             {12, "FORMULA_EMITTED"},
             {14, "FORMULA_EMITTED"},
+            {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
         };
 
@@ -1493,8 +1495,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {5, "FORMULA_EMITTED"},
             {6, "FORMULA_EMITTED"},
             {10, "FORMULA_EMITTED"},
+            {11, "FORMULA_EMITTED"},
             {12, "FORMULA_EMITTED"},
             {14, "FORMULA_EMITTED"},
+            {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
         };
         const auto current = EvaluateCoveragePolicy(
@@ -1509,9 +1513,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(current.Violations.empty());
         UNIT_ASSERT(
             current.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 5, 6, 10, 12, 14, 19}));
+            std::set<ui32>({1, 3, 5, 6, 10, 11, 12, 14, 15, 19}));
 
-        for (const ui32 queryId : {1, 5, 6, 10, 12, 14}) {
+        for (const ui32 queryId : {1, 5, 6, 10, 11, 12, 14, 15}) {
             auto regressedStatuses = statuses;
             regressedStatuses[queryId] = "UNSUPPORTED";
             const auto regressed = EvaluateCoveragePolicy(

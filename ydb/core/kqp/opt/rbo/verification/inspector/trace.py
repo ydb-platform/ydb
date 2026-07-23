@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from ..rbo_verifier import ir, smt
 from ..rbo_verifier.relation import FamilyComparison, RelationFamily
+from ..rbo_verifier.scalar import DecimalAverageState, Value
 from ..rbo_verifier.stages import TASKS
 from ..rbo_verifier.types import family as type_family
 from ..rbo_verifier.verify import (
@@ -301,6 +302,10 @@ def _add_family(probes: Probes, result: RelationFamily) -> None:
             for value in row.values.values():
                 probes.add(value.is_null)
                 probes.add(value.value)
+                state = value.decimal_average_state
+                if state is not None:
+                    probes.add(state.sum)
+                    probes.add(state.count)
 
 
 def _execution_json(
@@ -369,18 +374,13 @@ def _family_json(
             rendered_row: dict[str, Any] = {"slot": slot, "present": present}
             if present:
                 rendered_row["values"] = [
-                    {
-                        "column": column.name,
-                        "type": column.type,
-                        "value": _cell_value(
-                            column.type,
-                            row.values[column.name].is_null,
-                            row.values[column.name].value,
-                            probes,
-                            values,
-                            literals,
-                        ),
-                    }
+                    _cell_json(
+                        column,
+                        row.values[column.name],
+                        probes,
+                        values,
+                        literals,
+                    )
                     for column in relation.columns
                 ]
             rows.append(rendered_row)
@@ -403,6 +403,58 @@ def _family_json(
         ],
         "disabled_outcome_count": disabled,
         "outcomes": enabled,
+    }
+
+
+def _cell_json(
+    column: ir.Column,
+    cell: Value,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+    literals: Mapping[int, str],
+) -> dict[str, Any]:
+    result = {
+        "column": column.name,
+        "type": column.type,
+        "value": _cell_value(
+            column.type,
+            cell.is_null,
+            cell.value,
+            probes,
+            values,
+            literals,
+        ),
+    }
+    if cell.decimal_average_state is not None:
+        result["average_state"] = _average_state_json(
+            cell.is_null,
+            cell.decimal_average_state,
+            probes,
+            values,
+        )
+    return result
+
+
+def _average_state_json(
+    is_null: smt.Term,
+    state: DecimalAverageState,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+) -> dict[str, Any]:
+    optional_value = None
+    if probes.value(is_null, values) is not True:
+        optional_value = {
+            "sum": probes.value(state.sum, values),
+            "count": probes.value(state.count, values),
+        }
+    return {
+        "sum_type": state.sum_type,
+        "count_type": "Uint64",
+        "value": optional_value,
+        "proof_bounds": {
+            "finite_sum_abs": state.finite_abs_bound,
+            "count": state.count_bound,
+        },
     }
 
 

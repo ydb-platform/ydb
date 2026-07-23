@@ -4965,16 +4965,46 @@ private:
                         Unsupported(TStringBuilder() << "Invalid Aggregate trait " << output);
                     }
                     expectedOutputOrder.push_back(output);
-                    bool nullable = false;
-                    const TString type = TypeName(OutputType(aggregate, output), &nullable);
+                    bool outputNullable = false;
+                    const TString outputType = TypeName(
+                        OutputType(aggregate, output),
+                        &outputNullable);
                     auto item = JsonMap();
                     item["input"] = input;
                     item["function"] = trait.AggFunction;
                     item["output"] = output;
-                    item["type"] = type;
-                    item["nullable"] = nullable;
+                    item["type"] = outputType;
+                    item["nullable"] = outputNullable;
                     item["distinct"] = trait.Distinct;
                     item["unwrap"] = trait.Unwrap;
+                    if (trait.AggFunction == "avg") {
+                        bool inputNullable = false;
+                        const TString inputType = TypeName(
+                            OutputType(*aggregate.GetInput(), input),
+                            &inputNullable);
+                        const auto inputDecimal =
+                            ParseCanonicalDecimalType(inputType);
+                        const auto outputDecimal =
+                            ParseCanonicalDecimalType(outputType);
+                        if (!inputDecimal || !outputDecimal ||
+                            inputType != outputType)
+                        {
+                            Unsupported(TStringBuilder()
+                                << "Aggregate avg requires identical canonical "
+                                << "Decimal input and output types, got "
+                                << inputType << " and " << outputType);
+                        }
+
+                        auto state = JsonMap();
+                        state["sum_type"] = TStringBuilder()
+                            << "Decimal("
+                            << static_cast<ui32>(NYql::NDecimal::MaxPrecision)
+                            << "," << static_cast<ui32>(inputDecimal->Scale)
+                            << ")";
+                        state["count_type"] = "Uint64";
+                        state["nullable"] = inputNullable;
+                        item["state"] = std::move(state);
+                    }
                     aggregates.AppendValue(std::move(item));
                 }
                 const auto& actualOutputIUs = aggregate.GetOutputIUs();

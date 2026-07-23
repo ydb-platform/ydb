@@ -691,6 +691,46 @@ class DecimalKernelTest(unittest.TestCase):
                     decimal.subtract(left, right, baseline),
                 )
 
+    def test_narrow_same_scale_preserves_values_specials_and_saturates(self):
+        source_type = "Decimal(35,2)"
+        result_type = "Decimal(3,2)"
+        cases = (
+            (-decimal.INF, -decimal.INF),
+            (-1000, -decimal.INF),
+            (-999, -999),
+            (0, 0),
+            (999, 999),
+            (1000, decimal.INF),
+            (decimal.INF, decimal.INF),
+            (decimal.NAN, decimal.NAN),
+        )
+        for value, expected in cases:
+            with self.subTest(value=value):
+                actual = decimal.narrow_same_scale(
+                    smt.int_value(value),
+                    source_type,
+                    result_type,
+                )
+                self.assertEqual(_ground(actual), expected)
+
+    def test_narrow_same_scale_rejects_unaudited_shapes(self):
+        for source_type, result_type in (
+            ("Int64", "Decimal(3,2)"),
+            ("Decimal(35,2)", "Int64"),
+            ("Decimal(35,2)", "Decimal(3,1)"),
+            ("Decimal(3,2)", "Decimal(4,2)"),
+        ):
+            with self.subTest(
+                source_type=source_type,
+                result_type=result_type,
+            ):
+                with self.assertRaisesRegex(ValueError, "Decimal narrowing"):
+                    decimal.narrow_same_scale(
+                        smt.ZERO,
+                        source_type,
+                        result_type,
+                    )
+
     def test_decimal_multiply_integral_preserves_scale_for_every_integer_type(self):
         decimal_type = "Decimal(35,2)"
         cases = (

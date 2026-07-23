@@ -213,6 +213,24 @@ def cast_integral(value: smt.Term, source_type: str, result_type: str) -> smt.Te
     return _saturate_finite(coefficient, decimal_type.precision)
 
 
+def narrow_same_scale(
+    value: smt.Term,
+    source_type: str,
+    result_type: str,
+) -> smt.Term:
+    """Exactly SafeCast a Decimal to lower precision at the same scale."""
+
+    source = parse_type(source_type)
+    result = parse_type(result_type)
+    if source is None or result is None:
+        raise ValueError("Decimal narrowing requires Decimal source and result types")
+    if source.scale != result.scale or result.precision > source.precision:
+        raise ValueError(
+            "Decimal narrowing requires the same scale and non-increasing precision"
+        )
+    return _check_bounds(value, result.precision)
+
+
 def sum_with_headroom(
     guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
     result_type: str,

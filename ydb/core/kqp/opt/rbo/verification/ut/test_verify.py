@@ -21,6 +21,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli, decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import stages as stage_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import verify as verifier
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
@@ -379,7 +380,9 @@ def aggregate_stage_snapshot(
     decimal_sum_type = decimal.sum_type(input_type)
     if function == "count":
         output_type = "Uint64"
-    elif function == "max":
+    elif function in {"avg", "max"}:
+        if function == "avg" and decimal_sum_type is None:
+            raise ValueError("the aggregate test fixture only models Decimal avg")
         output_type = input_type
     elif input_type.startswith("Uint"):
         output_type = "Uint64"
@@ -389,24 +392,29 @@ def aggregate_stage_snapshot(
         "sum" if staged and function == "count" else function
     )
     keys = ["a.k"] if grouped else []
-    nullable_aggregate = function in {"max", "sum"}
+    nullable_aggregate = function in {"avg", "max", "sum"}
     logical_nullable = nullable_aggregate and (nullable_input or not grouped)
+    trait = {
+        "input": "a.x",
+        "function": function,
+        "output": "result",
+        "type": output_type,
+        "nullable": logical_nullable,
+        "distinct": False,
+        "unwrap": False,
+    }
+    if function == "avg":
+        trait["state"] = {
+            "sum_type": decimal_sum_type,
+            "count_type": "Uint64",
+            "nullable": nullable_input,
+        }
     aggregate = {
         "id": "aggregate",
         "op": "aggregate",
         "input": "a",
         "keys": keys,
-        "aggregates": [
-            {
-                "input": "a.x",
-                "function": function,
-                "output": "result",
-                "type": output_type,
-                "nullable": logical_nullable,
-                "distinct": False,
-                "unwrap": False,
-            }
-        ],
+        "aggregates": [trait],
         "phase": "undefined",
         "distinct_all": False,
     }
@@ -1469,6 +1477,19 @@ def _evaluate_ground_term(term, constants, function_value=None):
         ) * _evaluate_ground_term(
             right, constants, function_value
         )
+    if term.operation == "div":
+        dividend = _evaluate_ground_term(
+            term.arguments[0], constants, function_value
+        )
+        divisor = _evaluate_ground_term(
+            term.arguments[1], constants, function_value
+        )
+        if dividend < 0 or divisor <= 0:
+            raise AssertionError(
+                "the concrete test evaluator only admits nonnegative "
+                "division by a positive integer"
+            )
+        return dividend // divisor
     if term.operation == "mod":
         return _evaluate_ground_term(
             term.arguments[0], constants, function_value
@@ -2111,6 +2132,118 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected = self._decimal_reference_bag(function, grouped, rows)
                     self.assertEqual(actual, expected)
 
+    def test_decimal_avg_matches_independent_exhaustive_reference(self):
+        for values, expected in (
+            ((0, 1), 0),
+            ((1, 2), 2),
+            ((-1, 0), 0),
+            ((-2, -1), -2),
+        ):
+            with self.subTest(tie=values):
+                self.assertEqual(
+                    self._reference_decimal_average(values),
+                    expected,
+                )
+
+        concrete_values = (
+            -REFERENCE_DECIMAL_INF,
+            -2,
+            -1,
+            0,
+            1,
+            2,
+            REFERENCE_DECIMAL_INF,
+            REFERENCE_DECIMAL_NAN,
+        )
+        for grouped in (False, True):
+            snapshot = aggregate_stage_snapshot(
+                "avg",
+                grouped,
+                False,
+                nullable_input=True,
+                input_type="Decimal(2,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            pair_bound = 3 if grouped else relation_model.MAX_RELATION_ROW_PAIRS
+            with mock.patch.object(
+                relation_model,
+                "MAX_RELATION_ROW_PAIRS",
+                pair_bound,
+            ):
+                relation = RelationEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                ).root().certain()
+            states = (None,) + tuple(
+                (0, value) for value in (None,) + concrete_values
+            )
+            for rows in product(states, repeat=2):
+                with self.subTest(
+                    grouped=grouped,
+                    rows=rows,
+                ):
+                    actual = self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    )
+                    expected = self._decimal_reference_bag("avg", grouped, rows)
+                    self.assertEqual(actual, expected)
+
+    def test_split_decimal_avg_weights_unequal_partial_counts(self):
+        for grouped, nullable_input in product((False, True), repeat=2):
+            rows = (
+                ((0, None), (0, 0), (0, 0), (0, 3))
+                if nullable_input
+                else ((0, 0), (0, 0), (0, 3))
+            )
+            placements = (
+                (False, False, False, True)
+                if nullable_input
+                else (False, False, True)
+            )
+            snapshot = aggregate_stage_snapshot(
+                "avg",
+                grouped,
+                True,
+                nullable_input=nullable_input,
+                input_type="Decimal(2,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, len(rows), script)
+            router = Router(script)
+            with mock.patch.object(
+                stage_model,
+                "MAX_EXPLICIT_TASK_COPY_ROWS",
+                0,
+            ):
+                relation = StageEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                    router,
+                ).root().certain()
+            constants = self._constants(database, rows)
+            for slot, placement in enumerate(placements):
+                constants[router.source_task("A", slot).atom] = placement
+
+            with self.subTest(
+                grouped=grouped,
+                nullable_input=nullable_input,
+            ):
+                actual = self._symbolic_bag(
+                    relation,
+                    constants,
+                    self._hash_choice,
+                )
+                expected = self._decimal_reference_bag("avg", grouped, rows)
+                self.assertEqual(actual, expected)
+                self.assertEqual(
+                    actual,
+                    Counter({(0, 1) if grouped else (1,): 1}),
+                )
+
     def test_split_decimal_aggregates_match_across_partial_states(self):
         values = (
             None,
@@ -2169,6 +2302,48 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected = self._decimal_reference_bag(function, grouped, rows)
                     self.assertEqual(actual, expected)
 
+    def test_split_decimal_avg_matches_special_state_table(self):
+        cases = (
+            ((0, REFERENCE_DECIMAL_INF), (0, -REFERENCE_DECIMAL_INF)),
+            ((0, REFERENCE_DECIMAL_NAN), (0, 1)),
+            ((0, REFERENCE_DECIMAL_INF), (0, -1)),
+            ((0, -REFERENCE_DECIMAL_INF), (0, 1)),
+            ((0, None), (0, 3)),
+            ((0, None), (0, None)),
+            (None, (0, 3)),
+        )
+        for grouped in (False, True):
+            snapshot = aggregate_stage_snapshot(
+                "avg",
+                grouped,
+                True,
+                nullable_input=True,
+                nullable_key=True,
+                input_type="Decimal(2,0)",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            router = Router(script)
+            relation = StageEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root().certain()
+
+            for rows in cases:
+                with self.subTest(grouped=grouped, rows=rows):
+                    constants = self._constants(database, rows)
+                    constants[router.source_task("A", 0).atom] = False
+                    constants[router.source_task("A", 1).atom] = True
+                    actual = self._symbolic_bag(
+                        relation,
+                        constants,
+                        self._hash_choice,
+                    )
+                    expected = self._decimal_reference_bag("avg", grouped, rows)
+                    self.assertEqual(actual, expected)
+
     def test_decimal_max_preserves_finite_bound_through_split_state(self):
         for staged in (False, True):
             snapshot = aggregate_stage_snapshot(
@@ -2218,6 +2393,32 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             RelationEvaluator(
                 snapshot,
                 two_row_database,
+                ScalarEncoder(two_row_script),
+            ).root()
+
+    def test_decimal_avg_fails_closed_when_sum_overflow_can_depend_on_order(self):
+        snapshot = aggregate_stage_snapshot(
+            "avg",
+            False,
+            False,
+            input_type="Decimal(35,0)",
+        )
+
+        one_row_script = smt.Script()
+        RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, one_row_script),
+            ScalarEncoder(one_row_script),
+        ).root()
+
+        two_row_script = smt.Script()
+        with self.assertRaisesRegex(
+            RelationError,
+            "Decimal avg sum may overflow",
+        ):
+            RelationEvaluator(
+                snapshot,
+                Database(snapshot, 2, two_row_script),
                 ScalarEncoder(two_row_script),
             ).root()
 
@@ -2493,6 +2694,10 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             elif function == "max":
                 # Decimal AggrMax compares the signed in-band codes directly.
                 aggregate = max(non_null)
+            elif function == "avg":
+                aggregate = AggregateConcreteDifferentialTest._reference_decimal_average(
+                    non_null
+                )
             elif function != "sum":
                 raise AssertionError(f"unsupported Decimal aggregate {function!r}")
             elif REFERENCE_DECIMAL_NAN in non_null:
@@ -2511,6 +2716,35 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             prefix = (key,) if grouped else ()
             result[prefix + (aggregate,)] += 1
         return result
+
+    @staticmethod
+    def _reference_decimal_average(values):
+        if REFERENCE_DECIMAL_NAN in values:
+            return REFERENCE_DECIMAL_NAN
+        if (
+            REFERENCE_DECIMAL_INF in values
+            and -REFERENCE_DECIMAL_INF in values
+        ):
+            return REFERENCE_DECIMAL_NAN
+        if REFERENCE_DECIMAL_INF in values:
+            return REFERENCE_DECIMAL_INF
+        if -REFERENCE_DECIMAL_INF in values:
+            return -REFERENCE_DECIMAL_INF
+
+        numerator = sum(values)
+        denominator = len(values)
+        sign = -1 if numerator < 0 else 1
+        quotient, remainder = divmod(abs(numerator), denominator)
+        twice_remainder = 2 * remainder
+        if (
+            twice_remainder > denominator
+            or (
+                twice_remainder == denominator
+                and quotient % 2 == 1
+            )
+        ):
+            quotient += 1
+        return sign * quotient
 
     @staticmethod
     def _hash_choice(_function, arguments):

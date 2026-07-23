@@ -17,7 +17,8 @@ either a direct comparison or a binary same-member String
 membership/complement predicate, exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
 semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
-Decimal `MAX`, plus the benchmark-dashboard parts of M4. The reviewed exact
+Decimal `MAX` and phase-aware Decimal `AVG`, plus the benchmark-dashboard parts
+of M4. The reviewed exact
 wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
 instead of being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -36,15 +37,15 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on current code
-on 2026-07-23. They establish formula construction for TPCH q3, q5, q6, q10,
-q12, q14, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37, q40, q42, q43,
-q46, q48, q50, q52, q55, q61, q62, q68, q71, q76, q77, q79, q80, q82, q88,
-q90, q91, q93, q96, and q99: 37/121 workload queries (30.6%). TPCH has seven
-formulas, twelve unsupported queries, and three optimizer failures; TPC-DS has
-thirty formulas, forty unsupported queries, and twenty-nine optimizer failures.
-Across both suites that is 52 unsupported queries and 32 optimizer failures.
-The complete TPCH dashboard spent 2,314/3,522 ms and TPC-DS spent
-41,207/151,635 ms in preparation/verification.
+on 2026-07-23. They establish formula construction for TPCH q1, q3, q5, q6,
+q10, q12, q14, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37, q40, q42,
+q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77, q79, q80,
+q82, q88, q90, q91, q93, q96, and q99: 39/121 workload queries (32.2%). TPCH
+has eight formulas, eleven unsupported queries, and three optimizer failures;
+TPC-DS has thirty-one formulas, thirty-nine unsupported queries, and twenty-nine
+optimizer failures. Across both suites that is 50 unsupported queries and 32
+optimizer failures. The complete TPCH dashboard spent 6,944/11,582 ms and
+TPC-DS spent 68,255/249,242 ms in preparation/verification.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42,
@@ -72,9 +73,9 @@ solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 neither the proof floor nor the formula count.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
-and reach the verifier. q5 and q80 now satisfy the stronger formula-construction
-floor, while TPCH q1 and TPC-DS q65 still stop at unmodeled aggregate `avg`.
-Later formula or proof results satisfy every weaker floor automatically.
+and reach the verifier. All four now satisfy the stronger formula-construction
+floor. Later formula or proof results satisfy every weaker floor automatically.
+The proof floor remains the thirteen obligations above.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -435,10 +436,9 @@ propagation moved q5 again to the 32,896-pair Merge construction cap. The later
 exact representation selector moves both through formula construction. q84
 remains unsupported on its
 two-cell allocation bound. Before constant DateTime2 calendar-shift folding,
-the dashboard covered 23/121 queries and the proof floor remained ten. TPCH q1
-passes both snapshot
-exporters and reaches unmodeled aggregate
-`avg`; q21 exposes `Double`; q72 still has a dynamic Date-fold
+the dashboard covered 23/121 queries and the proof floor remained ten. At that
+earlier milestone TPCH q1 passed both snapshot exporters and reached unmodeled
+aggregate `avg`; q21 exposed `Double`; q72 still had a dynamic Date-fold
 `SafeCast(Optional<Date>)` mismatch; and, at that earlier milestone, q77 passed
 export but failed the verifier's Decimal-SUM headroom gate.
 
@@ -530,28 +530,65 @@ most three candidate rows and the outcome cap also fits; four or more rows use
 the same exact bounded symbolic-ordinal language. The structural-ID walk is
 iterative, so deep exact terms do not depend on recursive Python hashing.
 
-The complete current-code TPC-DS dashboard is policy-valid at 30/99 formulas,
-40 unsupported queries, and 29 optimizer failures. The eight newly
-constructed formulas are q5, q25, q29, q46, q68, q77, q80, and q91. Their
-measured preparation/verifier times were 1,588/2,653, 249/11,564, 263/4,142,
-284/2,574, 276/2,301, 2,122/3,323, 1,810/42,847, and 227/3,754 ms,
-respectively. Together with TPCH's unchanged seven formulas this is 37/121
-(30.6%); the thirteen-query proof floor remains unchanged. Formula construction
-is not a proof, and the regenerated q5/q77 results do not extend that proof
-floor. Full TPC-DS solver runs returned `UNKNOWN` for q5 and q77 after
+At the preceding representation-selector milestone, the complete TPC-DS
+dashboard was policy-valid at 30/99 formulas, 40 unsupported queries, and 29
+optimizer failures. The eight newly constructed formulas were q5, q25, q29,
+q46, q68, q77, q80, and q91. Their measured preparation/verifier times were
+1,588/2,653, 249/11,564, 263/4,142, 284/2,574, 276/2,301, 2,122/3,323,
+1,810/42,847, and 227/3,754 ms, respectively. Together with TPCH's then-current
+seven formulas this was 37/121 (30.6%); the thirteen-query proof floor was
+unchanged. Formula construction is not a proof, and the regenerated q5/q77
+results did not extend that proof floor. Full TPC-DS solver runs returned
+`UNKNOWN` for q5 and q77 after
 1,552/64,916 and 2,035/66,344 ms of preparation/verification. Focused 60-second
 runs returned `UNKNOWN` for q25, q29, q46, q68, q80, and q91 after 302/86,108,
 272/68,174, 313/64,717, 293/64,427, 1,784/121,558, and 221/67,811 ms,
 respectively. All eight are formula-covered but neither proved nor current
 candidate divergences.
 
-The next implementation milestone is exact phase-aware Decimal `AVG`: carry
-an explicit `(sum, count)` through intermediate aggregation and HashShuffle,
-combine both components at the final aggregate, and only then perform Decimal
-division/casting. The first workload exit criterion is formula construction
-for TPCH q1 and TPC-DS q65 without regressing the current floors. Exact
-uncorrelated scalar/`IN`/`EXISTS` subplans are the subsequent coverage
-milestone; they currently block seven TPCH and thirteen TPC-DS queries.
+The completed phase-aware Decimal `AVG` milestone makes its hidden runtime
+state explicit and auditable. Every `avg` trait must have identical canonical
+Decimal input and output type `Decimal(p,s)` and carries exactly
+`state: {sum_type: "Decimal(35,s)", count_type: "Uint64", nullable:
+<input-nullability>}`; non-`avg` traits omit `state`. An intermediate state has
+one direct matching final-aggregate consumer with the same ordered keys and
+metadata, and it may cross StageGraph routing only as payload. The final phase
+adds partial sums and counts, so unequal partitions are weighted correctly
+rather than averaging partial averages. NULL inputs are skipped, and a group
+with no non-NULL input produces NULL. The Decimal kernel preserves NaN and signed
+infinities, reproduces signed round-to-nearest/ties-to-even division by the
+positive count, and applies the runtime's same-scale narrow cast to
+`Decimal(p,s)`, including finite overflow saturation. Finite sum headroom must
+remain below the `Decimal(35,s)` accumulator range and the count bound below
+`2^64`; otherwise verification fails closed before modeling non-associative
+overflow.
+
+Concrete inspector traces render every state-bearing cell with an
+`average_state` object containing its two types, optional `{sum, count}` value,
+and separate conservative `proof_bounds`. Both state terms are registered as
+probes; an incomplete trace fails closed instead of silently showing only the
+derived partial scalar.
+
+Independent exhaustive small-domain tests cover finite values, NULL, NaN,
+signed infinities, positive and negative ties, grouped and scalar aggregation,
+and unequal split-task counts. Strict decoder/dataflow mutations cover missing
+or incorrect state, non-Decimal and mismatched types, bad nullability, leaked
+state, and broken intermediate-to-final lineage. Focused C++ exporter tests
+pass 3/3 and the complete C++ exporter suite passes 147/147.
+
+The current dashboards add TPCH q1 and TPC-DS q65 to formula construction:
+TPCH is 8/22 formulas after 6,944/11,582 ms of preparation/verifier work, and
+TPC-DS is 31/99 after 68,255/249,242 ms. Focused q1 emits a formula after
+111/998 ms; its non-gating 60-second solver run is `UNKNOWN` after 159/63,937
+ms, not a proof or counterexample. Focused q65 emits a formula after
+687/30,318 ms. The combined formula slice is 39/121 (32.2%), while the
+thirteen-query proof floor remains unchanged. q7 and q8 remain visible at the
+deeper generic `Map` exporter blocker.
+
+The next implementation milestone is exact support for the captured
+uncorrelated scalar/`IN`/`EXISTS` subplans that currently block seven TPCH and
+thirteen TPC-DS queries. Solver/formula-size work then targets promotion of
+supported `UNKNOWN` obligations into the proof floor.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -705,11 +742,12 @@ outside the exact integral-`SafeCast` and constant normalization gates, and
 aggregate functions outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
-`sum`, and Decimal-only `max`, including NULL grouping and inputs and
-optimizer-generated intermediate/final phases. Signed inputs widen to `Int64`,
-unsigned inputs widen to `Uint64`, and both integer sums use the runtime's exact
-64-bit modular overflow. `sum(Decimal(p,s))` widens every input, partial state,
-and result to `Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
+`sum`, Decimal-only `max`, and phase-aware same-type Decimal `avg`, including
+NULL grouping and inputs and optimizer-generated intermediate/final phases.
+Signed inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both
+integer sums use the runtime's exact 64-bit modular overflow.
+`sum(Decimal(p,s))` widens every input, partial state, and result to
+`Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
 Decimal `AggrMax` keeps its input type and uses the runtime's raw signed
 128-bit-code order, `-Inf < finite < +Inf < NaN`; this is intentionally
 different from ordinary Decimal comparison. NULL inputs are ignored, and the
@@ -743,8 +781,9 @@ it may pass through routing and relational operators, but every path must
 terminate in a non-distinct, non-unwrapped `count`. Inspecting, dropping, or
 exposing that unit fails closed. `Void` is not a catalog, literal, NULL, or
 opaque-result type.
-`distinct`, `DistinctAll`, `unwrap`, min, non-Decimal max, average, and variance
-currently return `UNSUPPORTED` rather than use an approximation.
+`distinct`, `DistinctAll`, `unwrap`, min, non-Decimal max, non-Decimal or
+distinct average, and variance currently return `UNSUPPORTED` rather than use
+an approximation.
 Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.
@@ -842,6 +881,22 @@ phase explicitly:
   "distinct_all": false
 }
 ```
+
+Decimal `avg` is the only aggregate trait with an additional field:
+
+```json
+"state": {
+  "sum_type": "Decimal(35,2)",
+  "count_type": "Uint64",
+  "nullable": true
+}
+```
+
+The input and output must both be the same canonical `Decimal(p,s)`;
+`sum_type` must be `Decimal(35,s)`, `count_type` must be `Uint64`, and state
+nullability must equal input nullability. Intermediate AVG state is accepted
+only on one direct intermediate-to-final aggregate lineage with the same
+ordered keys and identical metadata.
 
 ## StageGraph v1 shape
 

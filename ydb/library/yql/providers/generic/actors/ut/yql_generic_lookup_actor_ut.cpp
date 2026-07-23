@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         TVector<bool> Pattern;
     };
 
-    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern) {
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern) {
         return std::make_shared<TMockStructuredTokenCredentialsFactory>(yqlToken, pattern);
     }
 

@@ -357,13 +357,8 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
 
 void TKafkaMetadataActor::EnsureBrokersAndController() {
     // Unknown topics used to return brokers=[]; AdminClient then cannot CreateTopics.
-    if (!WithProxy && Response->Brokers.empty()) {
-        for (const auto& [id, nodeInfo] : Nodes) {
-            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
-        }
-    }
-
-    if (!WithProxy && NeedAllNodes) {
+    // NeedAllNodes also requires the full discovered broker set.
+    if (!WithProxy && (Response->Brokers.empty() || NeedAllNodes)) {
         for (const auto& [id, nodeInfo] : Nodes) {
             AddBroker(id, nodeInfo.Host, nodeInfo.Port);
         }
@@ -379,6 +374,13 @@ void TKafkaMetadataActor::EnsureBrokersAndController() {
             return;
         }
     }
+
+    // Prefer keeping ControllerId if that node is known from discovery.
+    if (auto it = Nodes.find(Response->ControllerId); it != Nodes.end()) {
+        AddBroker(it->first, it->second.Host, it->second.Port);
+        return;
+    }
+
     Response->ControllerId = Response->Brokers.front().NodeId;
 }
 

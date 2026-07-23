@@ -1,6 +1,8 @@
 #include "harmonizer.h"
+#include "cpu_consumption.h"
 #include "debug.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_shared.h>
 #include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/actors/helpers/pool_stats_collector.h>
@@ -204,6 +206,233 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         auto stats = harmonizer->GetPoolStats(0);
         Y_UNUSED(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPool->ThreadCount, 4);  // Should start with default
+    }
+
+    Y_UNIT_TEST(TestDefaultNeedyCpuWindowIsOneSecond) {
+        ui64 currentTs = Us2Ts(1'000'000);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
+        TMockExecutorPoolParams hotParams {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 2,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 2.0f,
+        };
+        TMockExecutorPoolParams idleParams {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 1,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 1.0f,
+            .PoolId = 1,
+        };
+        auto hotPool = std::make_unique<TMockExecutorPool>(hotParams);
+        auto idlePool = std::make_unique<TMockExecutorPool>(idleParams);
+        harmonizer->AddPool(hotPool.get());
+        harmonizer->AddPool(idlePool.get());
+
+        harmonizer->Harmonize(currentTs);
+        hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 1);
+        currentTs += Us2Ts(1'000'000);
+        harmonizer->Harmonize(currentTs);
+
+        auto stats = harmonizer->GetPoolStats(hotParams.PoolId);
+        CHECK_IS_NEEDY(stats);
+        CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(hotPool->ThreadCount, 2);
+    }
+
+    Y_UNIT_TEST(TestThirtySecondNeedyCpuWindowBoundary) {
+        ui64 currentTs = Us2Ts(1'000'000);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
+        TMockExecutorPoolParams hotParams {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 2,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 2.0f,
+        };
+        TMockExecutorPoolParams idleParams {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 1,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 1.0f,
+            .PoolId = 1,
+        };
+        auto hotPool = std::make_unique<TMockExecutorPool>(hotParams);
+        auto idlePool = std::make_unique<TMockExecutorPool>(idleParams);
+        harmonizer->AddPool(hotPool.get(), nullptr, false, 30);
+        harmonizer->AddPool(idlePool.get());
+
+        harmonizer->Harmonize(currentTs);
+        for (ui8 second = 1; second <= 26; ++second) {
+            hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 1);
+            currentTs += Us2Ts(1'000'000);
+            harmonizer->Harmonize(currentTs);
+            UNIT_ASSERT_VALUES_EQUAL_C(hotPool->ThreadCount, 1, "second: " << static_cast<ui32>(second));
+        }
+
+        auto stats = harmonizer->GetPoolStats(hotParams.PoolId);
+        CHECK_IS_NOT_NEEDY(stats);
+        CHECK_CHANGING_THREADS(stats, 0, 0, 0, 0, 0);
+
+        hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 1);
+        currentTs += Us2Ts(1'000'000);
+        harmonizer->Harmonize(currentTs);
+
+        stats = harmonizer->GetPoolStats(hotParams.PoolId);
+        CHECK_IS_NEEDY(stats);
+        CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(hotPool->ThreadCount, 2);
+    }
+
+    Y_UNIT_TEST(TestThirtySecondNeedyWindowKeepsOneSecondSafetyBudget) {
+        ui64 currentTs = Us2Ts(1'000'000);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
+        TMockExecutorPoolParams hotParams {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 3,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 3.0f,
+        };
+        TMockExecutorPoolParams idleParams {
+            .DefaultFullThreadCount = 2,
+            .MinFullThreadCount = 2,
+            .MaxFullThreadCount = 2,
+            .DefaultThreadCount = 2.0f,
+            .MinThreadCount = 2.0f,
+            .MaxThreadCount = 2.0f,
+            .PoolId = 1,
+        };
+        auto hotPool = std::make_unique<TMockExecutorPool>(hotParams);
+        auto idlePool = std::make_unique<TMockExecutorPool>(idleParams);
+        harmonizer->AddPool(hotPool.get(), nullptr, false, 30);
+        harmonizer->AddPool(idlePool.get());
+
+        harmonizer->Harmonize(currentTs);
+        for (ui8 second = 1; second <= 27; ++second) {
+            hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 1);
+            currentTs += Us2Ts(1'000'000);
+            harmonizer->Harmonize(currentTs);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(hotPool->ThreadCount, 2);
+
+        for (ui8 second = 1; second <= 26; ++second) {
+            hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 2);
+            currentTs += Us2Ts(1'000'000);
+            harmonizer->Harmonize(currentTs);
+            UNIT_ASSERT_VALUES_EQUAL_C(hotPool->ThreadCount, 2, "second after first growth: " << static_cast<ui32>(second));
+        }
+
+        hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 2);
+        idlePool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 1);
+        currentTs += Us2Ts(1'000'000);
+        harmonizer->Harmonize(currentTs);
+
+        auto stats = harmonizer->GetPoolStats(hotParams.PoolId);
+        CHECK_IS_NEEDY(stats);
+        CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(hotPool->ThreadCount, 2);
+
+        hotPool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 2);
+        currentTs += Us2Ts(1'000'000);
+        harmonizer->Harmonize(currentTs);
+
+        stats = harmonizer->GetPoolStats(hotParams.PoolId);
+        CHECK_CHANGING_THREADS(stats, 2, 0, 0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(hotPool->ThreadCount, 3);
+    }
+
+    Y_UNIT_TEST(TestThirtySecondNeedyWindowDoesNotRegrowFromStaleStoppedWorkerHistory) {
+        ui64 currentTs = Us2Ts(1'000'000);
+        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
+        TMockExecutorPoolParams params {
+            .DefaultFullThreadCount = 2,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 2,
+            .DefaultThreadCount = 2.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 2.0f,
+        };
+        auto pool = std::make_unique<TMockExecutorPool>(params);
+        harmonizer->AddPool(pool.get(), nullptr, false, 30);
+
+        harmonizer->Harmonize(currentTs);
+        for (ui8 second = 1; second <= 27; ++second) {
+            pool->IncreaseThreadCpuConsumption({1'000'000.0, 1'000'000.0}, 0, 2);
+            currentTs += Us2Ts(1'000'000);
+            harmonizer->Harmonize(currentTs);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool->ThreadCount, 2);
+
+        for (ui8 second = 1; second <= 8; ++second) {
+            currentTs += Us2Ts(1'000'000);
+            harmonizer->Harmonize(currentTs);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool->ThreadCount, 1);
+
+        currentTs += Us2Ts(1'000'000);
+        harmonizer->Harmonize(currentTs);
+
+        auto stats = harmonizer->GetPoolStats(params.PoolId);
+        UNIT_ASSERT_VALUES_EQUAL(pool->ThreadCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.IncreasingThreadsByNeedyState, 0);
+    }
+
+    Y_UNIT_TEST(TestThirtySecondNeedyWindowIncludesSharedCpuHistory) {
+        TMockExecutorPoolParams params {
+            .DefaultFullThreadCount = 1,
+            .MinFullThreadCount = 1,
+            .MaxFullThreadCount = 1,
+            .DefaultThreadCount = 1.0f,
+            .MinThreadCount = 1.0f,
+            .MaxThreadCount = 1.0f,
+        };
+        auto pool = std::make_unique<TMockExecutorPool>(params);
+        auto poolInfo = std::make_unique<TPoolInfo>();
+        poolInfo->Pool = pool.get();
+        poolInfo->DefaultFullThreadCount = 1;
+        poolInfo->MinFullThreadCount = 1;
+        poolInfo->MaxFullThreadCount = 1;
+        poolInfo->DefaultThreadCount = 1.0f;
+        poolInfo->MinThreadCount = 1.0f;
+        poolInfo->MaxThreadCount = 1.0f;
+        poolInfo->ThreadQuota = 1.0f;
+        poolInfo->NeedyCpuWindowSeconds = 30;
+        poolInfo->ThreadInfo.resize(1);
+        poolInfo->SharedInfo.resize(1);
+
+        ui64 currentTs = Us2Ts(1'000'000);
+        poolInfo->ThreadInfo[0].UsedCpu.Register(currentTs, 0.0);
+        poolInfo->ThreadInfo[0].ElapsedCpu.Register(currentTs, 0.0);
+        poolInfo->SharedInfo[0].UsedCpu.Register(currentTs, 0.0);
+        poolInfo->SharedInfo[0].ElapsedCpu.Register(currentTs, 0.0);
+        for (ui8 second = 1; second <= 30; ++second) {
+            currentTs += Us2Ts(1'000'000);
+            poolInfo->ThreadInfo[0].UsedCpu.Register(currentTs, second * 0.9);
+            poolInfo->ThreadInfo[0].ElapsedCpu.Register(currentTs, second * 0.9);
+            poolInfo->SharedInfo[0].UsedCpu.Register(currentTs, second * 0.5);
+            poolInfo->SharedInfo[0].ElapsedCpu.Register(currentTs, second * 0.5);
+        }
+
+        std::vector<std::unique_ptr<TPoolInfo>> pools;
+        pools.emplace_back(std::move(poolInfo));
+        TSharedInfo sharedInfo;
+        sharedInfo.OwnedThreads.push_back(0);
+        sharedInfo.CpuConsumption.resize(1);
+        THarmonizerCpuConsumption cpuConsumption;
+        cpuConsumption.Init(1);
+        cpuConsumption.Pull(pools, sharedInfo);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(cpuConsumption.PoolFullThreadConsumption[0].NeedyWindowCpu, 1.0, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(cpuConsumption.PoolConsumption[0].NeedyWindowCpu, 1.5, 1e-6);
     }
 
     Y_UNIT_TEST(TestToNeedyNextToHoggish) {

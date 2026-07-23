@@ -51,6 +51,10 @@ NActors::EASProfile ConvertActorSystemProfile(NKikimrConfig::TActorSystemConfig:
 }  // anonymous namespace
 
 void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig, const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 poolId, NMonitoring::TDynamicCounterPtr counters) {
+    Y_ABORT_UNLESS(!poolConfig.HasHarmonizerNeedyCpuWindowSeconds()
+        || poolConfig.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC,
+        "HarmonizerNeedyCpuWindowSeconds is supported only for BASIC executors");
+
     switch (poolConfig.GetType()) {
         case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
             NActors::TBasicExecutorPoolConfig basic;
@@ -86,6 +90,11 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             basic.MaxThreadCount = poolConfig.GetMaxThreads();
             basic.DefaultThreadCount = poolConfig.GetThreads();
             basic.Priority = poolConfig.GetPriority();
+            const ui32 harmonizerNeedyCpuWindowSeconds = poolConfig.GetHarmonizerNeedyCpuWindowSeconds();
+            Y_ABORT_UNLESS(harmonizerNeedyCpuWindowSeconds >= 1 && harmonizerNeedyCpuWindowSeconds <= 32,
+                "HarmonizerNeedyCpuWindowSeconds must be in range [1, 32], got %" PRIu32,
+                harmonizerNeedyCpuWindowSeconds);
+            basic.HarmonizerNeedyCpuWindowSeconds = static_cast<ui8>(harmonizerNeedyCpuWindowSeconds);
             if (poolConfig.HasMinLocalQueueSize()) {
                 basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
             }

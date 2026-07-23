@@ -23,7 +23,6 @@ public:
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
-        Runtime->GetAppData(0).FeatureFlags.SetEnableTruncateTable(true);
 
         if (enableDebugLogs) {
             Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);

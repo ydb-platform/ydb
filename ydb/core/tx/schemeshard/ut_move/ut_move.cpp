@@ -598,6 +598,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     };
     static TTestRegistration_MoveReplace testRegistration_MoveReplace;
 
+    Y_UNIT_TEST(MoveReplaceOverColumnTableDisabledByDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        ui64 txId = 100;
+
+        TestCreateObject(CreateOpColumnTable(), runtime, ++txId, "/MyRoot", "Dst");
+        TestCreateObject(CreateOpRowTableWithIndexes(), runtime, ++txId, "/MyRoot", "Src");
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+
+        auto* dstDrop = DropTableRequest(txId + 1, "/MyRoot", "Dst");
+        auto* srcMove = MoveTableRequest(txId + 1, "/MyRoot/Src", "/MyRoot/Dst");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({dstDrop, srcMove}));
+        TestModificationResults(runtime, ++txId, {{
+            NKikimrScheme::StatusPreconditionFailed,
+            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off"
+        }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"), {NLs::PathExist, NLs::IsColumnTable});
+    }
+
     Y_UNIT_TEST(Replace2) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

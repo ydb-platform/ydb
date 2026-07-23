@@ -96,6 +96,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 }
 
 TVector<TRegionPtr> CreateRegions(
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -112,6 +113,7 @@ TVector<TRegionPtr> CreateRegions(
 
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
+            traceService,
             partitionDirectService,
             i,
             directBlockGroups,
@@ -149,6 +151,7 @@ TFastPathService::TFastPathService(
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
+          this,
           this,
           blockCount,
           blockSize,
@@ -192,7 +195,7 @@ NThreading::TFuture<void> TFastPathService::Run()
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        initialReadyFutures.push_back(dbg->Run(this));
+        initialReadyFutures.push_back(dbg->Run(this, this));
     }
     for (const auto& region: Regions) {
         region->Run();

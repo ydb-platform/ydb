@@ -117,6 +117,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::StatusIds::UNAUTHORIZED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::StatusIds::TIMEOUT:
+            return EKafkaErrors::REQUEST_TIMED_OUT;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }

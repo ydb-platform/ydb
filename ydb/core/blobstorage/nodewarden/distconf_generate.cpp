@@ -179,6 +179,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
             ui32 UsedSlots = 0;
             bool Usable = true;
+            bool Operational = false;
             TString WhyUnusable;
             i64 SpaceAvailable = 0;
             bool AdjustSpaceAvailable = false;
@@ -249,6 +250,12 @@ namespace NKikimr::NStorage {
 
         if (params.BaseConfig) {
             const auto& baseConfig = *params.BaseConfig;
+            THashSet<ui32> connectedNodes;
+            for (const auto& node : baseConfig.GetNode()) {
+                if (node.GetConnected()) {
+                    connectedNodes.insert(node.GetNodeId());
+                }
+            }
             std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
             ui32 pdiskSpaceMarginPromille = 150;
 
@@ -290,6 +297,8 @@ namespace NKikimr::NStorage {
                     if (pdisk.GetExpectedSlotSize()) {
                         pdiskMapperSettings[pdiskId].SlotSizeInBytes = pdisk.GetExpectedSlotSize();
                     }
+                    pdiskInfo.Operational = connectedNodes.contains(pdiskId.NodeId) && (!pdisk.HasPDiskMetrics() || !pdisk.GetPDiskMetrics().HasState() ||
+                                            pdisk.GetPDiskMetrics().GetState() == NKikimrBlobStorage::TPDiskState::Normal);
 
                     // this 'usable' logic repeats the one in BS_CONTROLLER
                     if (pdisk.GetDriveStatus() != NKikimrBlobStorage::EDriveStatus::ACTIVE) {
@@ -534,7 +543,7 @@ namespace NKikimr::NStorage {
                 .SlotSizeInBytes = settings.SlotSizeInBytes,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
-                .Operational = true,
+                .Operational = item.Operational,
                 .Decommitted = false,
                 .WhyUnusable = whyUnusable,
             });
@@ -559,8 +568,13 @@ namespace NKikimr::NStorage {
 
         NBsController::TGroupMapperError error;
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
-        if (!mapper.AllocateGroup(params.GroupId.GetRawId(), groupDefinition, replacedDisks,
-                params.ForbiddenPDisks, groupSizeInUnits, params.RequiredSpace, false, {}, error)) {
+        bool allocated = mapper.AllocateGroup(params.GroupId.GetRawId(), groupDefinition, replacedDisks,
+                                              params.ForbiddenPDisks, groupSizeInUnits, params.RequiredSpace, true, {}, error);
+        if (!allocated && !params.SettleOnlyOnOperationalDisks) {
+            allocated = mapper.AllocateGroup(params.GroupId.GetRawId(), groupDefinition, replacedDisks,
+                                             params.ForbiddenPDisks, groupSizeInUnits, params.RequiredSpace, false, {}, error);
+        }
+        if (!allocated) {
             throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }

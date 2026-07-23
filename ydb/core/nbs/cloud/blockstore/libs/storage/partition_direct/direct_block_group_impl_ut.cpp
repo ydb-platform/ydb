@@ -2,10 +2,10 @@
 
 #include "base_test_fixture.h"
 #include "direct_block_group_test_fixture.h"
+#include "partition_direct_service_mock.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -815,7 +815,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -858,7 +858,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -903,7 +903,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -948,7 +948,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = dbg->Run(TraceService.get(), &service);
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
@@ -1288,10 +1288,11 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         WaitReady(executor, initialReady);
 
         // A vchunk that still only knows the pre-add host count.
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(
             new ::NMonitoring::TDynamicCounters());
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             Service.get(),
             TVChunkConfig::MakeDefault(
                 100,

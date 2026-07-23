@@ -6,7 +6,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NYdb::NBS::NBlockStore {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,12 +32,6 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
         return VolumeConfig;
-    }
-
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override
-    {
-        Y_UNUSED(name);
-        return {};
     }
 
     void ScheduleAfterDelay(
@@ -82,4 +76,4 @@ using TPartitionDirectServiceMockPtr =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}   // namespace NYdb::NBS::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

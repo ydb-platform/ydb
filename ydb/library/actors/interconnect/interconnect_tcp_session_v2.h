@@ -118,7 +118,6 @@ namespace NActors {
         std::shared_ptr<TDirectSessionV2> DirectSession;
 
         // io_uring data plane
-        TUringEnginePtr Engine;
         ui64 EngineHandle = 0;
 
         ui64 BytesSent = 0;

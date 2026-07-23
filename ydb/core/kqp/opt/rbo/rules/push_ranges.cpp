@@ -220,6 +220,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
+    const auto tableKind = tableDesc->Metadata->Kind;
+    if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Datashard) {
+        return input;
+    }
+
     auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->FilterExpr.Node, read->Type, rboCtx));
     auto originalLambda = rboCtx.ExprCtx.DeepCopyLambda(*lambda.Ptr());
     // Predicate extract lib requires constraints.

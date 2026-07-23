@@ -20,6 +20,12 @@ namespace NActors {
 
     class IUringEngine : public TThrRefBase {
     public:
+        // Binds the engine to the actor system and arranges (via DeferPreStop) for the reaper threads to be
+        // stopped before the actor system is torn down. The engine is created before the actor system exists
+        // (see CreateUringEngine), so this must be called exactly once it is available, before any Register.
+        // Idempotent and thread-safe.
+        virtual void SetActorSystem(TActorSystem* actorSystem) = 0;
+
         // Registers a connected socket, arms receiving, and returns an opaque non-zero handle (0 on
         // failure). The engine holds a reference to the socket until Unregister fully drains. Thread-safe.
         virtual ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
@@ -41,8 +47,10 @@ namespace NActors {
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
 
-    // Creates the engine with `numShards` rings/reaper threads (clamped to >= 1). Returns nullptr when
-    // io_uring is unavailable (non-Linux or a kernel that cannot create a ring).
-    TUringEnginePtr CreateUringEngine(TActorSystem* actorSystem, ui32 numShards, NMonitoring::TDynamicCounterPtr counters);
+    // Creates the engine with `numShards` rings/reaper threads (clamped to >= 1). The engine is created
+    // without an actor system (it does not exist yet at startup); bind it later via SetActorSystem before the
+    // first Register. Returns nullptr when io_uring is unavailable (non-Linux or a kernel that cannot create
+    // a ring).
+    TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll);
 
 }

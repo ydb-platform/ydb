@@ -1,5 +1,7 @@
 #include "v2_event_serializer.h"
 
+#include <ydb/library/actors/util/datetime.h>
+
 #include <util/stream/format.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
@@ -26,8 +28,6 @@ namespace NActors {
     }
 
     size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce) {
-        Timer.Reset();
-
         size_t totalBytesProduced = 0;
         ui64 bufferProduced = 0;
 
@@ -80,17 +80,22 @@ namespace NActors {
             RefcountItems.push_back({
                 .EndOffset = bufferProduced,
                 .Scratch = buffer,
+                .EventReceivedTimestamp = 0,
             });
         }
 
-//        OtherTime += Timer.PassedReset() * 1e9;
         return totalBytesProduced;
     }
 
-    void TEventSerializer::CommitProducedBytes(size_t numBytes) {
+    void TEventSerializer::CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime) {
         CumulativeCommitted += numBytes;
         Y_ABORT_UNLESS(CumulativeCommitted <= CumulativeProduced);
+        const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty() && RefcountItems.front().EndOffset <= CumulativeCommitted) {
+            auto& front = RefcountItems.front();
+            if (Y_LIKELY(eventToWireTime) && front.EventReceivedTimestamp) {
+                eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
+            }
             RefcountItems.pop_front();
         }
     }
@@ -204,7 +209,7 @@ namespace NActors {
                     break;
 
                 case ESerializeStage::kBufferSerializer:
-//                    OtherTime += Timer.PassedReset() * 1e9;
+                    UpdateTimestamp();
 
                     while (maxBytesToProduce && queue.Iter.Valid()) {
                         const size_t numBytes = Min(maxBytesToProduce - (header ? 0 : sizeof(TChunkHeader)),
@@ -216,11 +221,11 @@ namespace NActors {
                         queue.SerializeStage = ESerializeStage::kHeader;
                     }
 
-//                    SerializeBufferTime += Timer.PassedReset() * 1e9;
+                    SerializeBufferTime += UpdateTimestamp();
                     break;
 
                 case ESerializeStage::kChunkSerializer: {
-//                    OtherTime += Timer.PassedReset() * 1e9;
+                    UpdateTimestamp();
 
                     // serialize as much as we can
                     TMutableContiguousSpan span = buffer.UnsafeGetContiguousSpanMut().SubSpan(sizeof(TChunkHeader),
@@ -240,7 +245,7 @@ namespace NActors {
                         queue.SerializeStage = ESerializeStage::kHeader;
                     }
 
-//                    SerializeEventTime += Timer.PassedReset() * 1e9;
+                    SerializeEventTime += UpdateTimestamp();
                     break;
                 }
 
@@ -270,6 +275,7 @@ namespace NActors {
                             .EndOffset = CumulativeProduced,
                             .Buffer = std::exchange(queue.Buffer, nullptr),
                             .Event{ev.ReleaseBase().Release()},
+                            .EventReceivedTimestamp = reinterpret_cast<const ui64&>(ev.OriginScopeId),
                         });
                         queue.Events.pop_front();
                         queue.SerializeStage = ESerializeStage::kInitial;
@@ -281,6 +287,11 @@ namespace NActors {
         }
 
         return numBytesProduced;
+    }
+
+    ui64 TEventSerializer::UpdateTimestamp() {
+        const ui64 prev = std::exchange(Timestamp, GetCycleCountFast());
+        return (Timestamp - prev) * Freq;
     }
 
     TEventDeserializer::TEventDeserializer(TScopeId peerScopeId)

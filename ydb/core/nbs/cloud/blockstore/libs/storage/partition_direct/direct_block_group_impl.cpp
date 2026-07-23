@@ -1,11 +1,12 @@
 #include "direct_block_group_impl.h"
 
+#include "partition_direct_service.h"
 #include "restore_request.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -256,8 +257,10 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 }
 
 NThreading::TFuture<void> TDirectBlockGroup::Run(
+    ITraceService* traceService,
     IPartitionDirectService* service)
 {
+    TraceService = traceService;
     Service = service;
 
     ScheduleOracleThinking();
@@ -1086,7 +1089,7 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 lsn,
                 self->PBufferConnections.size());
 
-            auto span = self->Service->CreteRootSpan(
+            auto span = self->TraceService->CreteRootSpan(
                 "NbsPartition.BarrierEraseFromPBuffer");
 
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {

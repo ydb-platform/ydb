@@ -890,6 +890,7 @@ message TBaseConfig {
         uint64 LastDisconnectTimestamp = 6; // TInstant
         uint64 LastSeenTimestamp = 7; // when seen working for the last time
         ENodeType Type = 8;
+        bool Connected = 9;
     }
     message TDevice {
         string SerialNumber = 1;

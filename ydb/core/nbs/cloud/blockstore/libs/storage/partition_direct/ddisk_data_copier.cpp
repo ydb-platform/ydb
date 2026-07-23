@@ -1,8 +1,10 @@
 #include "ddisk_data_copier.h"
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
@@ -44,13 +46,14 @@ struct TDDiskDataCopier::TCopyRangeRequestState
 
 TDDiskDataCopier::TDDiskDataCopier(
     NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlocksDirtyMap* dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
-    , PartitionDirectService(partitionDirectService)
+    , TraceService(traceService)
     , VChunkConfig(vChunkConfig)
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
     , DirectBlockGroup(std::move(directBlockGroup))
@@ -62,7 +65,8 @@ TDDiskDataCopier::TDDiskDataCopier(
               .DiskId = VolumeConfig->DiskId,
               .Destination = static_cast<int>(Destination)}}
 {
-    Y_ASSERT(Destination < VChunkConfig.GetHostCount());
+    Y_ABORT_UNLESS(traceService);
+    Y_ABORT_UNLESS(Destination < VChunkConfig.GetHostCount());
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
@@ -110,7 +114,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
-    auto span = PartitionDirectService->CreteRootSpan("CopyRange");
+    auto span = TraceService->CreteRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));

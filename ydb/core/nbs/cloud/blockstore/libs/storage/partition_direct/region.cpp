@@ -25,6 +25,7 @@ size_t VChunkIndexFromHeaders(const TRequestHeaders& headers)
 
 TRegion::TRegion(
     NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
@@ -54,6 +55,7 @@ TRegion::TRegion(
 
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
+            traceService,
             partitionDirectService,
             vChunkConfig,
             directBlockGroups[dbgIndex],

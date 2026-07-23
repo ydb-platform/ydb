@@ -251,6 +251,7 @@ namespace NKikimr::NStorage {
                         .ConvertToDonor = cmd.GetConvertToDonor(),
                         .IgnoreVSlotQuotaCheck = cmd.GetIgnoreVSlotQuotaCheck(),
                         .AllowUnusableDisks = cmd.GetAllowUnusableDisks(),
+                        .SettleOnlyOnOperationalDisks = cmd.GetSettleOnlyOnOperationalDisks(),
                         .IsSelfHealReasonDecommit = cmd.GetIsSelfHealReasonDecommit(),
                         .BridgePileId = bridgePileId,
                         .BridgeProxyGroupId = bridgeProxyGroupId,

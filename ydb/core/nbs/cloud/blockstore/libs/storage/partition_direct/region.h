@@ -21,6 +21,7 @@ class TRegion: public std::enable_shared_from_this<TRegion>
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,

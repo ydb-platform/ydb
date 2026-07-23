@@ -835,6 +835,10 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
                 node->MutableLocation()->SetDataCenter(dataCenter);
                 node->MutableLocation()->SetRack(rack);
             }
+
+            auto *baseNode = BaseConfig.AddNode();
+            baseNode->SetNodeId(nodeId);
+            baseNode->SetConnected(true);
         }
 
         void AddCandidatePDisk(ui32 nodeId, ui32 pdiskId) {
@@ -949,6 +953,26 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             }
             UNIT_FAIL("PDisk not found");
         }
+
+        void SetNodeConnected(ui32 nodeId, bool connected) {
+            for (auto& node : *BaseConfig.MutableNode()) {
+                if (node.GetNodeId() == nodeId) {
+                    node.SetConnected(connected);
+                    return;
+                }
+            }
+            UNIT_FAIL("Node not found");
+        }
+
+        void SetPDiskState(ui32 nodeId, NKikimrBlobStorage::TPDiskState::E state) {
+            for (auto& pdisk : *BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == nodeId) {
+                    pdisk.MutablePDiskMetrics()->SetState(state);
+                    return;
+                }
+            }
+            UNIT_FAIL("PDisk not found");
+        }
     };
 
     NKikimrBlobStorage::TGroupGeometry Geometry(ui32 numFailDomains) {
@@ -960,7 +984,8 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     }
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
-            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1, bool allowUnusableDisks = false) {
+            i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1,
+            bool allowUnusableDisks = false, bool settleOnlyOnOperationalDisks = false) {
         auto *selfManagementConfig = s.Config.MutableSelfManagementConfig();
         selfManagementConfig->MutableGeometry()->CopyFrom(Geometry(numFailDomains));
         selfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
@@ -980,6 +1005,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
             .AllowUnusableDisks = allowUnusableDisks,
+            .SettleOnlyOnOperationalDisks = settleOnlyOnOperationalDisks,
             .ApplySelfHealNodeAllowList = applyNodeAllowList,
         });
     }
@@ -1040,6 +1066,46 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
     Y_UNIT_TEST(EmptyAllowListMeansNoRestriction) {
         TSetup s = MakeSetup();
         UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), /*applyNodeAllowList=*/ true));
+    }
+
+    Y_UNIT_TEST(PrefersOperationalPDisk) {
+        TSetup s = MakeSetup();
+        s.SetNodeConnected(2, false);
+        s.SetNodeConnected(4, false);
+        s.SetNodeConnected(5, false);
+        Reallocate(s, NodeIds({}), false);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+    }
+
+    Y_UNIT_TEST(FallsBackToNonOperationalPDiskByDefault) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), false));
+    }
+
+    Y_UNIT_TEST(FailsWithoutOperationalPDiskWhenRequested) {
+        TSetup s = MakeSetup();
+        for (ui32 nodeId = 2; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(RejectsNonNormalPDiskWhenOperationalRequired) {
+        TSetup s = MakeSetup();
+        s.SetPDiskState(2, NKikimrBlobStorage::TPDiskState::OpenFileError);
+        for (ui32 nodeId = 3; nodeId <= 5; ++nodeId) {
+            s.SetNodeConnected(nodeId, false);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({}), false, TBlobStorageGroupType::ErasureNone, 1, false,
+                /*settleOnlyOnOperationalDisks=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
     Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {

@@ -84,6 +84,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -253,6 +254,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -595,6 +597,11 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
     }
 
+    result.EnableInterconnectSessionV2 = config.GetEnableInterconnectSessionV2();
+    result.ChecksumInterconnectSessionV2 = config.GetChecksumInterconnectSessionV2();
+    result.EnableSQPOLLv2 = config.GetEnableSQPOLLv2();
+    result.EnablePreserializeInV2 = config.GetEnablePreserializeInV2();
+
     return result;
 }
 
@@ -754,6 +761,21 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
+
+            if (settings.EnableInterconnectSessionV2) {
+                // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // The actor system does not exist yet, so the engine is bound to it later (once it is up,
+                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
+                icCommon->UringEngineV2 = CreateUringEngine(icConfig.GetUringEngineThreadsV2(),
+                    interconectCounters->GetSubgroup("subsystem", "uring"),
+                    settings.EnableSQPOLLv2);
+                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
+                    if (engine) {
+                        engine->SetActorSystem(actorSystem);
+                    }
+                });
+            }
             icCommon->DestructorId = GetDestructActorID();
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
@@ -2418,6 +2440,17 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
         MakeQuoterServiceID(),
         TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, appData->SystemPoolId))
     );
+}
+
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeServiceId(NodeId),
+        TActorSetupCmd(workloadManager, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 TKqpServiceInitializer::TKqpServiceInitializer(

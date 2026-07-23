@@ -32,7 +32,7 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
 
         # Verify bloom filters exist as scheme objects via describe_table
         def callee(session):
-            return session.describe_table(f"/{self.database_root}/{self.table_name}")
+            return session.describe_table(f"/{self.database_path}/{self.table_name}")
 
         with ydb.SessionPool(self.driver, size=1) as pool:
             desc = pool.retry_operation_sync(callee)
@@ -66,7 +66,7 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
 
         # Verify bloom filters still exist as scheme objects via describe_table after version change
         def callee_after(session):
-            return session.describe_table(f"/{self.database_root}/{self.table_name}")
+            return session.describe_table(f"/{self.database_path}/{self.table_name}")
 
         with ydb.SessionPool(self.driver, size=1) as pool:
             desc_after = pool.retry_operation_sync(callee_after)

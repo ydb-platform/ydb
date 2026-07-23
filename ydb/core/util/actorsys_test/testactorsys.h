@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/scheduler_queue.h>
 #include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/thread_context.h>
+#include <ydb/library/actors/core/execution_stats.h>
+#include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/should_continue.h>
@@ -107,6 +110,9 @@ class TTestActorSystem {
         std::unique_ptr<TMailboxTable> MailboxTable;
         std::unique_ptr<TExecutorThread> ExecutorThread;
         IExecutorPool* ExecutorPool = nullptr;
+        std::unique_ptr<TExecutorThreadStats> ExecutorThreadStats;
+        std::unique_ptr<TExecutionStats> ExecutionStats;
+        std::unique_ptr<TThreadContext> ThreadContext;
         std::unordered_map<ui32, TActorId> InterconnectProxy;
         TTestSchedulerThread *SchedulerThread;
         ui32 NextHint = 1;
@@ -330,6 +336,13 @@ public:
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
         info.ExecutorPool = pool;
+
+        info.ExecutorThreadStats = std::make_unique<TExecutorThreadStats>();
+        info.ExecutionStats = std::make_unique<TExecutionStats>();
+        info.ExecutionStats->Switch(info.ExecutorThreadStats.get());
+        info.ThreadContext = std::make_unique<TThreadContext>(
+            info.ExecutorThread->GetWorkerId(), info.ExecutorPool, nullptr);
+        info.ThreadContext->ExecutionStats = info.ExecutionStats.get();
     }
 
     void StartNode(ui32 nodeId) {
@@ -734,16 +747,12 @@ public:
             info->SchedulerThread->AdjustClock(Clock);
 
             const auto nowTs = GetCycleCountFast();
-            TExecutorThreadStats executorThreadStats;
-            TExecutionStats executionStats;
-            executionStats.Switch(&executorThreadStats);
-            TThreadContext threadCtx(info->ExecutorThread->GetWorkerId(), info->ExecutorPool, nullptr);
-            threadCtx.ExecutionStats = &executionStats;
-            threadCtx.SetMailboxScheduledTimestampTs(nowTs);
-            threadCtx.SetEventEnqueuedTimestampTs(nowTs);
-            threadCtx.SetActivationTimeUs(0);
-            threadCtx.SetEventDeliveryTimeUs(0);
-            TThreadContextGuard threadContextGuard(&threadCtx);
+            TThreadContext* threadCtx = info->ThreadContext.get();
+            threadCtx->SetMailboxScheduledTimestampTs(nowTs);
+            threadCtx->SetEventEnqueuedTimestampTs(nowTs);
+            threadCtx->SetActivationTimeUs(0);
+            threadCtx->SetEventDeliveryTimeUs(0);
+            TThreadContextGuard threadContextGuard(threadCtx);
 
             // allocate context and store its reference in TLS
             TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);

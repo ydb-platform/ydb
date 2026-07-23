@@ -12,10 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFastPathService;
-
-////////////////////////////////////////////////////////////////////////////////
-
 // Offset for the partition_direct actor's local-only events within
 // ES_NBS_V2_SERVICE, kept clear of the public TEvService event IDs.
 constexpr ui32 LocalEventsOffset = 1000;

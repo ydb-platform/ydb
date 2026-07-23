@@ -124,32 +124,54 @@ namespace {
         std::atomic_int& ProviderCount_;
     };
 
-    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    class TDeferredAuthProvider final : public ICredentialsProvider {
     public:
-        TDeferredCredentialsFactory()
-            : Provider_(NThreading::NewPromise<TCredentialsProviderPtr>())
+        TDeferredAuthProvider()
+            : AuthInfo_(NThreading::NewPromise<std::string>())
         {}
 
-        TCredentialsProviderPtr CreateProvider() const override {
-            return CreateInsecureCredentialsProviderFactory()->CreateProvider();
+        std::string GetAuthInfo() const override {
+            return AuthInfo_.GetFuture().GetValueSync();
         }
 
-        NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const override {
-            return Provider_.GetFuture();
+        NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+            return AuthInfo_.GetFuture();
+        }
+
+        bool IsValid() const override {
+            return true;
         }
 
         void SetReady() {
-            Provider_.SetValue(CreateProvider());
+            AuthInfo_.SetValue("token");
         }
 
     private:
-        NThreading::TPromise<TCredentialsProviderPtr> Provider_;
+        NThreading::TPromise<std::string> AuthInfo_;
+    };
+
+    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    public:
+        TDeferredCredentialsFactory()
+            : Provider_(std::make_shared<TDeferredAuthProvider>())
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            return Provider_;
+        }
+
+        void SetReady() {
+            Provider_->SetReady();
+        }
+
+    private:
+        std::shared_ptr<TDeferredAuthProvider> Provider_;
     };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
-    Y_UNIT_TEST(RequestWaitsForCredentials) {
+    Y_UNIT_TEST(RequestWaitsForAuthInfo) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")

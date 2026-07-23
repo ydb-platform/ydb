@@ -14,8 +14,9 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 DATABASE = "/Root"
-OLD_SECRET_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new one"
-OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Old secrets usage is disabled now. Please use the new one"
+OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new secrets"
+CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = "Old secrets are disabled for creating new objects. Please use the new secrets"
+OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use the new secrets"
 
 
 def setup_s3():
@@ -307,12 +308,12 @@ def test_disable_old_secret_creation(old_secrets_utils):
     # check that old secret can't be created
     with pytest.raises(Exception) as exc_info:
         old_secrets_utils.create_old_secret("NewOldSecret", value="")
-    assert OLD_SECRET_DISABLED_MESSAGE in str(exc_info.value)
+    assert OLD_SECRETS_CREATION_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that old secret can't be upserted
     with pytest.raises(Exception) as exc_info:
         old_secrets_utils.upsert_old_secret("NewOldSecretUpsert", value="")
-    assert OLD_SECRET_DISABLED_MESSAGE in str(exc_info.value)
+    assert OLD_SECRETS_CREATION_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that old objects are still OK
     old_secrets_utils.assert_path_ready(f"{DATABASE}/eds-old-secret")
@@ -322,7 +323,7 @@ def test_disable_old_secret_creation(old_secrets_utils):
     # check that old secrets can't be used for eds
     with pytest.raises(Exception) as exc_info:
         old_secrets_utils.create_eds("eds-with-old-secret", "OldSecret")
-    assert OLD_SECRET_DISABLED_MESSAGE in str(exc_info.value)
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that old secrets can't be used for replication
     with pytest.raises(Exception) as exc_info:
@@ -332,7 +333,7 @@ def test_disable_old_secret_creation(old_secrets_utils):
             "repl_dst_old",
             "OldSecret",
         )
-    assert OLD_SECRET_DISABLED_MESSAGE in str(exc_info.value)
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that old secrets can't be used for transfer
     with pytest.raises(Exception) as exc_info:
@@ -342,7 +343,7 @@ def test_disable_old_secret_creation(old_secrets_utils):
             "transfer_dst",
             "OldSecret",
         )
-    assert OLD_SECRET_DISABLED_MESSAGE in str(exc_info.value)
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that new secret can be still used
     old_secrets_utils.create_schema_secret(f"{DATABASE}/NewSecret", value="")

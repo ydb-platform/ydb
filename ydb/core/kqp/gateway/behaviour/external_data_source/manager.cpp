@@ -67,7 +67,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     if (disableOldSecretCreation && secretName && !NSecret::IsSchemeSecret(secretName)) {
         return TYqlConclusionStatus::Fail(
             NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            "Old secrets creation syntax is disabled now. Please use the new one");
+            "Old secrets are disabled for creating new objects. Please use the new secrets");
     }
     return TYqlConclusionStatus::Success();
 }

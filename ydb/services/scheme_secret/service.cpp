@@ -670,7 +670,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
         promise.SetValue(
             NKqp::TEvDescribeSecretsResponse::TDescription(
                 Ydb::StatusIds::BAD_REQUEST,
-                { NYql::TIssue("Old secrets usage is disabled now. Please use the new one") }
+                { NYql::TIssue("Usage of old secrets is disabled now. Please use the new secrets") }
             )
         );
         return promise.GetFuture();

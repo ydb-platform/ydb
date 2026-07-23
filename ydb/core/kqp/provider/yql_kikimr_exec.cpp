@@ -1094,7 +1094,7 @@ namespace {
                 // Keep in sync with NKikimr::NSecret::IsSchemeSecret.
                 if (secretName && !secretName.StartsWith('/')) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos),
-                        "Old secrets creation syntax is disabled now. Please use the new one"));
+                        "Old secrets are disabled for creating new objects. Please use the new secrets"));
                     return false;
                 }
                 return true;

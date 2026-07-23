@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/events.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -396,7 +397,7 @@ private:
         PrintFoundLeakedBlobsStats();
         PrintLeakedBlobIdsChunks();
         TActorContext::AsActorContext().Send(
-            CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TLeakedBlobsNormalizerChanges>(
+            CSActorId, std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TLeakedBlobsNormalizerChanges>(
                            std::move(BSBlobIds), CSTabletId, TablePathId, TablePath, DsGroupSelector, LogLevel)));
         PassAway();
     }

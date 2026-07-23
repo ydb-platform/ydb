@@ -1,7 +1,7 @@
 #include "cache_policy.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 

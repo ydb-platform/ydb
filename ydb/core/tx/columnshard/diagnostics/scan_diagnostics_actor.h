@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>

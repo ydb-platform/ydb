@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/events.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -116,7 +117,7 @@ protected:
 
         auto changes = std::make_shared<TNormalizerResult>(std::move(BrokenPortions), Schemas);
         TActorContext::AsActorContext().Send(
-            NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
+            NormContext.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
     }
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {

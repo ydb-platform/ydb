@@ -2,7 +2,7 @@
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <ydb/library/actors/core/log.h>
 

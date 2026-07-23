@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
     }
 
-    class TMockStructuredTokenCredentialsFactory : public NYql::IStructuredTokenCredentialsFactory {
+    class TMockStructuredTokenCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
         public:
         TMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern)
             : YqlToken(yqlToken)
@@ -557,14 +557,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 std::string YqlToken;
                 TVector<bool> Pattern;
         };
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& /*structuredToken*/, bool /*addBearer*/) override {
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
             return std::make_shared<TCredentialsProviderFactory>(YqlToken, Pattern);
         }
         std::string YqlToken;
         TVector<bool> Pattern;
     };
 
-    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern) {
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern) {
         return std::make_shared<TMockStructuredTokenCredentialsFactory>(yqlToken, pattern);
     }
 

@@ -3,6 +3,7 @@
 #include "configs_dispatcher.h"
 #include "console_audit.h"
 #include "console_configs_provider.h"
+#include "console_tenants_manager.h"
 #include "console_impl.h"
 #include "http.h"
 
@@ -77,8 +78,9 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
 
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
-            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
                     << " expected " << ClusterName
@@ -91,6 +93,7 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
                     << " but got " << opCtx.Version;
             }
 
+            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
             std::vector<TString> errors;
@@ -138,7 +141,12 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
         if (!force) {
             opCtx.Version = metadata.Version.value_or(0);
         } else {
-            opCtx.Version = YamlVersion;
+            ui32 currentVersion = 0;
+            if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end())
+            {
+                currentVersion = it->second.Version;
+            }
+            opCtx.Version = currentVersion;
         }
 
         opCtx.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TDatabaseMetadata{
@@ -153,10 +161,22 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
 void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx) {
     try {
         TString currentConfig;
+        ui32 currentVersion = 0;
+
         if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end()) {
             currentConfig = it->second.Config;
+            currentVersion = it->second.Version;
         }
+
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != currentConfig) {
+            if (opCtx.Version != currentVersion) {
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << currentVersion
+                    << " but got " << opCtx.Version;
+            }
+
             auto databaseTree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             auto databaseConfig = NYamlConfig::ParseConfig(databaseTree);
 
@@ -174,7 +194,27 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
                 ythrow yexception() << errors.front();
             }
 
-            // TODO: validate databaseConfig.AllowedLabels & databaseConfig.Selectors too
+            if (!databaseConfig.Selectors.empty() || !databaseConfig.AllowedLabels.empty()) {
+                if (!IsDatabaseConfigSelectorsAllowed(opCtx.TargetDatabase)) {
+                    ythrow yexception()
+                        << "Database config 'selector_config' and 'allowed_labels' are not allowed for database '"
+                        << opCtx.TargetDatabase << "'";
+                }
+
+                if (databaseConfig.AllowedLabels.contains("tenant")) {
+                    ythrow yexception()
+                        << "'tenant' label is forbidden (not applicable) for database configs";
+                }
+
+                for (const auto& selector : databaseConfig.Selectors) {
+                    if (selector.Selector.In.contains("tenant")
+                        || selector.Selector.NotIn.contains("tenant"))
+                    {
+                        ythrow yexception()
+                            << "'tenant' label is forbidden (not applicable) for database configs";
+                    }
+                }
+            }
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
@@ -212,6 +252,29 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
         opCtx.Error = e.what();
     }
 }
+
+
+bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) const
+{
+    auto* tm = Self.TenantsManager;
+    auto tenant = tm ? tm->GetTenant(database) : nullptr;
+
+    if (!tenant) {
+        return false;
+    }
+
+    for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
+        if (attr.GetKey() == TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS) {
+            bool value = false;
+            if (TryFromString<bool>(attr.GetValue(), value) && value) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {

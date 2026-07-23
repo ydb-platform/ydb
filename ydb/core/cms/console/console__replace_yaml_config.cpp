@@ -117,7 +117,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateConfigOpContext opCtx;
-        Self->ReplaceMainConfigMetadata(Config, false, opCtx);
+        Self->ReplaceMainConfigMetadata(Config, Force, opCtx);
         if (!Force) {
             Self->ValidateMainConfig(opCtx);
         }
@@ -265,7 +265,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateDatabaseConfigOpContext opCtx;
-        Self->ReplaceDatabaseConfigMetadata(Config, false, opCtx);
+        Self->ReplaceDatabaseConfigMetadata(Config, Force, opCtx);
         if (!Force) {
             Self->ValidateDatabaseConfig(opCtx);
         }
@@ -307,7 +307,7 @@ public:
                 DoInternalAudit(txc, ctx);
 
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::DatabaseYamlConfigs::Config>(Config);
+                    .Update<Schema::DatabaseYamlConfigs::Config>(UpdatedDatabaseConfig);
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version)

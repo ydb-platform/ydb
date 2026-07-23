@@ -5,7 +5,9 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/config/validation/validators.h>
 
@@ -51,19 +53,20 @@ void ResolveAndParseYamlConfig(
             hasMetadata = true;
         }
 
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
         if (databaseYamlConfig) {
             auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
+            NYamlConfig::ResolveDatabaseConfig(d, namedLabels);
             NYamlConfig::AppendDatabaseConfig(tree, d);
         }
 
         for (auto& [_, config] : volatileYamlConfigs) {
             auto d = NFyaml::TDocument::Parse(config);
             NYamlConfig::AppendVolatileConfigs(tree, d);
-        }
-
-        TSet<NYamlConfig::TNamedLabel> namedLabels;
-        for (auto& [name, label] : labels) {
-            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
         }
 
         auto config = NYamlConfig::Resolve(tree, namedLabels);

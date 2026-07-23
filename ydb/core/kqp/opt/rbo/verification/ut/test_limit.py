@@ -4,16 +4,24 @@ from itertools import combinations, permutations, product
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    Expr,
     SnapshotError,
     parse_snapshot,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    Column,
     Database,
     Evaluator as RelationEvaluator,
+    Outcome,
     Relation,
     RelationError,
+    RelationFamily,
     Row,
+    Value,
+    combine_families,
     family_equal,
+    limit_family,
+    map_family,
     single,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder as ScalarEncoder
@@ -394,6 +402,96 @@ class LimitIrTest(unittest.TestCase):
 
 
 class LimitOutcomeTest(unittest.TestCase):
+    def test_query_error_is_distinct_from_every_successful_result(self):
+        columns = (Column("a.value", "Int64", False),)
+        empty = Relation(columns, ())
+        row = Row(
+            smt.TRUE,
+            {"a.value": Value("Int64", smt.FALSE, smt.int_value(7))},
+        )
+        error = RelationFamily((Outcome(smt.TRUE, empty, smt.TRUE),))
+        empty_success = single(empty)
+        row_success = single(Relation(columns, (row,)))
+        other_error_payload = RelationFamily((
+            Outcome(smt.TRUE, Relation(columns, (row,)), smt.TRUE),
+        ))
+        scalar = ScalarEncoder(smt.Script())
+
+        self.assertFalse(_ground(family_equal(error, empty_success, scalar), {}))
+        self.assertFalse(_ground(family_equal(error, row_success, scalar), {}))
+        self.assertTrue(
+            _ground(family_equal(error, other_error_payload, scalar), {})
+        )
+
+    def test_family_combinators_preserve_and_join_query_errors(self):
+        columns = (Column("a.value", "Int64", False),)
+        relation = Relation(columns, ())
+        left_error = smt.symbol("left_error", smt.BOOL)
+        right_error = smt.symbol("right_error", smt.BOOL)
+        left = RelationFamily((Outcome(smt.TRUE, relation, left_error),))
+        right = RelationFamily((Outcome(smt.TRUE, relation, right_error),))
+
+        mapped = map_family(left, lambda item: item)
+        combined = combine_families((left, right), lambda items: items[0])
+
+        self.assertIs(mapped.outcomes[0].error, left_error)
+        for left_value, right_value in product((False, True), repeat=2):
+            self.assertEqual(
+                _ground(
+                    combined.outcomes[0].error,
+                    {
+                        "left_error": left_value,
+                        "right_error": right_value,
+                    },
+                ),
+                left_value or right_value,
+            )
+
+        limited = limit_family(
+            left,
+            Expr(
+                kind="literal",
+                value=0,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            "zero",
+        )
+        self.assertIs(limited.outcomes[0].error, left_error)
+
+    def test_query_error_remains_correlated_with_successful_payloads(self):
+        columns = (Column("a.value", "Int64", False),)
+
+        def payload(value):
+            return Relation(
+                columns,
+                (
+                    Row(
+                        smt.TRUE,
+                        {
+                            "a.value": Value(
+                                "Int64",
+                                smt.FALSE,
+                                smt.int_value(value),
+                            )
+                        },
+                    ),
+                ),
+            )
+
+        left = RelationFamily((
+            Outcome(smt.TRUE, payload(1), smt.TRUE, (("left", 0),)),
+            Outcome(smt.TRUE, payload(2), smt.FALSE, (("left", 1),)),
+        ))
+        right = RelationFamily((
+            Outcome(smt.TRUE, payload(2), smt.TRUE, (("right", 0),)),
+            Outcome(smt.TRUE, payload(1), smt.FALSE, (("right", 1),)),
+        ))
+        scalar = ScalarEncoder(smt.Script())
+
+        self.assertFalse(_ground(family_equal(left, right, scalar), {}))
+
     def test_ordered_union_limit_prefers_left_branch_and_uses_right_fallback(self):
         for omit_left, expected in ((False, 10), (True, 20)):
             nodes = [

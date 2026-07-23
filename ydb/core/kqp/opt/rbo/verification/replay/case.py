@@ -302,8 +302,16 @@ def _trace_outcome(
     path: str,
 ) -> Any:
     outcome = require_mapping(value, path)
-    if set(outcome) != {"index", "decisions", "sequence", "order", "rows"}:
+    required = {"index", "decisions", "sequence", "order", "rows"}
+    if set(outcome) not in (required, required | {"status"}):
         raise ReplayError(f"{path} has unknown or missing fields")
+    status = outcome.get("status", "success")
+    if status not in {"success", "error"}:
+        raise ReplayError(f"{path}.status is invalid")
+    if status == "error":
+        raise InconclusiveReplay(
+            "query-error outcomes require error-aware real-YDB replay"
+        )
     if outcome.get("sequence") is not ordered:
         raise ReplayError(f"{path} outcome has inconsistent sequence semantics")
     _trace_decisions(outcome.get("decisions"), f"{path}.decisions")

@@ -96,12 +96,19 @@ class OrdinalChoice:
 
 @dataclass(frozen=True, slots=True)
 class Outcome:
-    """One enabled relation and its correlated unordered-limit decisions."""
+    """One enabled query observation and its correlated relational choices."""
 
     enabled: smt.Term
     relation: Relation
+    error: smt.Term
     decisions: tuple[tuple[str, int], ...] = ()
     choices: tuple[OrdinalChoice, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.enabled.sort != smt.BOOL:
+            raise ValueError("outcome enabled condition must be Boolean")
+        if self.error.sort != smt.BOOL:
+            raise ValueError("outcome error condition must be Boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,10 +141,11 @@ class RelationFamily:
         if (
             len(self.outcomes) != 1
             or self.outcomes[0].enabled != smt.TRUE
+            or self.outcomes[0].error != smt.FALSE
             or self.outcomes[0].decisions
             or self.outcomes[0].choices
         ):
-            raise RelationError("relation has multiple conditional outcomes")
+            raise RelationError("relation has multiple, conditional, or error outcomes")
         return self.outcomes[0].relation
 
 
@@ -1289,7 +1297,7 @@ def _projected_order(
 
 
 def single(relation: Relation) -> RelationFamily:
-    return RelationFamily((Outcome(smt.TRUE, relation),))
+    return RelationFamily((Outcome(smt.TRUE, relation, smt.FALSE),))
 
 
 def _reject_correlated_limit_fanout(snapshot: Snapshot) -> None:
@@ -1349,6 +1357,7 @@ def map_family(
             Outcome(
                 outcome.enabled,
                 transform(outcome.relation),
+                outcome.error,
                 outcome.decisions,
                 outcome.choices,
             )
@@ -1367,22 +1376,24 @@ def combine_families(
         tuple[
             smt.Term,
             tuple[Relation, ...],
+            smt.Term,
             tuple[tuple[str, int], ...],
             tuple[OrdinalChoice, ...],
         ]
     ] = [
-        (smt.TRUE, (), (), ())
+        (smt.TRUE, (), smt.FALSE, (), ())
     ]
     for relation_family in families:
         expanded: list[
             tuple[
                 smt.Term,
                 tuple[Relation, ...],
+                smt.Term,
                 tuple[tuple[str, int], ...],
                 tuple[OrdinalChoice, ...],
             ]
         ] = []
-        for enabled, relations, decisions, choices in partials:
+        for enabled, relations, error, decisions, choices in partials:
             for outcome in relation_family.outcomes:
                 merged = _merge_decisions(decisions, outcome.decisions)
                 if merged is None:
@@ -1391,6 +1402,7 @@ def combine_families(
                     (
                         smt.and_(enabled, outcome.enabled),
                         relations + (outcome.relation,),
+                        smt.or_(error, outcome.error),
                         merged,
                         _merge_choices(choices, outcome.choices),
                     )
@@ -1405,8 +1417,8 @@ def combine_families(
         raise RelationError("relation family has no compatible outcomes")
     return RelationFamily(
         tuple(
-            Outcome(enabled, combine(relations), decisions, choices)
-            for enabled, relations, decisions, choices in partials
+            Outcome(enabled, combine(relations), error, decisions, choices)
+            for enabled, relations, error, decisions, choices in partials
         )
     )
 
@@ -1449,6 +1461,7 @@ def sort_family(
                         sequence=True,
                         order=order,
                     ),
+                    source_outcome.error,
                     source_outcome.decisions,
                     source_outcome.choices,
                 )
@@ -1488,6 +1501,7 @@ def sort_family(
                     order=order,
                     ordinals=ordinals,
                 ),
+                source_outcome.error,
                 source_outcome.decisions,
                 _merge_choices(source_outcome.choices, choices),
             )
@@ -1536,6 +1550,7 @@ def _enumerated_sort_family(
                         sequence=True,
                         order=order,
                     ),
+                    source_outcome.error,
                     tuple(sorted(
                         source_outcome.decisions + ((decision, choice),)
                     )),
@@ -1646,6 +1661,7 @@ def merge_family(
                     order=order,
                     ordinals=ordinals,
                 ),
+                source_outcome.error,
                 source_outcome.decisions,
                 _merge_choices(source_outcome.choices, choices),
             )
@@ -1690,6 +1706,7 @@ def _enumerated_merge_family(
                         sequence=True,
                         order=order,
                     ),
+                    source_outcome.error,
                     tuple(sorted(
                         source_outcome.decisions + ((decision, choice),)
                     )),
@@ -1866,12 +1883,13 @@ def limit_family(
             for outcome in source.outcomes
         )
     ):
-        return single(
-            Relation(
-                source.columns,
+        return map_family(
+            source,
+            lambda relation: Relation(
+                relation.columns,
                 (),
-                sequence=source.sequence,
-            )
+                sequence=relation.sequence,
+            ),
         )
     if (
         offset == 0
@@ -2011,6 +2029,7 @@ def _unordered_limit_family(
                     Outcome(
                         enabled,
                         Relation(source_outcome.relation.columns, output_rows),
+                        source_outcome.error,
                         decisions,
                         source_outcome.choices,
                     )
@@ -2219,6 +2238,7 @@ def _as_sequence_family(
                     sequence=True,
                     ordinals=ordinals,
                 ),
+                source_outcome.error,
                 source_outcome.decisions,
                 _merge_choices(source_outcome.choices, choices),
             )
@@ -2241,6 +2261,7 @@ def _enumerated_as_sequence_family(family: RelationFamily) -> RelationFamily:
                         tuple(relation.rows[index] for index in permutation),
                         sequence=True,
                     ),
+                    source_outcome.error,
                     source_outcome.decisions,
                     source_outcome.choices,
                 )
@@ -2281,15 +2302,30 @@ def _relations_equal(
     )
 
 
+def _outcomes_equal(
+    left: Outcome,
+    right: Outcome,
+    scalar: ScalarEncoder,
+    ordered: bool,
+) -> smt.Term:
+    """Compare the one observable status and, on success, the result relation."""
+
+    return smt.or_(
+        smt.and_(left.error, right.error),
+        smt.and_(
+            smt.not_(left.error),
+            smt.not_(right.error),
+            _relations_equal(left.relation, right.relation, scalar, ordered),
+        ),
+    )
+
+
 def _families_equivalent(
     left: RelationFamily,
     right: RelationFamily,
     scalar: ScalarEncoder,
     ordered: bool,
 ) -> smt.Term:
-    def relations_equal(left_relation: Relation, right_relation: Relation) -> smt.Term:
-        return _relations_equal(left_relation, right_relation, scalar, ordered)
-
     def choice_terms(outcome: Outcome) -> tuple[smt.Term, ...]:
         return tuple(choice.term for choice in outcome.choices)
 
@@ -2308,9 +2344,11 @@ def _families_equivalent(
                     choice_terms(target_outcome),
                     smt.and_(
                         target_outcome.enabled,
-                        relations_equal(
-                            source_outcome.relation,
-                            target_outcome.relation,
+                        _outcomes_equal(
+                            source_outcome,
+                            target_outcome,
+                            scalar,
+                            ordered,
                         ),
                     ),
                 )
@@ -2364,12 +2402,7 @@ def compare_families(
     )
     pair_equal = tuple(
         tuple(
-            _relations_equal(
-                left_outcome.relation,
-                right_outcome.relation,
-                scalar,
-                ordered,
-            )
+            _outcomes_equal(left_outcome, right_outcome, scalar, ordered)
             for right_outcome in right.outcomes
         )
         for left_outcome in left.outcomes

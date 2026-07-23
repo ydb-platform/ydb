@@ -283,6 +283,7 @@ def _average_family(
                     ),
                 ),
             ),
+            smt.FALSE,
         ),
     ))
 
@@ -379,17 +380,41 @@ class ObserverTest(unittest.TestCase):
     def test_every_simultaneously_enabled_outcome_is_retained(self):
         relation = Relation((Column("x", "Int64", False),), ())
         result = RelationFamily((
-            Outcome(smt.TRUE, relation, (("tie", 0),)),
-            Outcome(smt.TRUE, relation, (("tie", 1),)),
+            Outcome(smt.TRUE, relation, smt.FALSE, (("tie", 0),)),
+            Outcome(smt.TRUE, relation, smt.FALSE, (("tie", 1),)),
         ))
         probes = Probes(smt.Script())
-        for outcome in result.outcomes:
-            probes.add(outcome.enabled)
+        _add_family(probes, result)
         rendered = _family_json(result, probes, {}, {})
         self.assertEqual(
             [outcome["index"] for outcome in rendered["outcomes"]],
             [0, 1],
         )
+        self.assertEqual(
+            [outcome["status"] for outcome in rendered["outcomes"]],
+            ["success", "success"],
+        )
+
+    def test_query_error_status_is_probed_and_rendered(self):
+        query_error = smt.symbol("query_error", smt.BOOL)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation((Column("x", "Int64", False),), ()),
+                query_error,
+            ),
+        ))
+        probes = Probes(smt.Script())
+        _add_family(probes, family)
+
+        rendered = _family_json(
+            family,
+            probes,
+            {"query_error": True},
+            {},
+        )
+
+        self.assertEqual(rendered["outcomes"][0]["status"], "error")
 
     def test_symbolic_ordinals_are_probed_and_rendered_in_model_order(self):
         first_ordinal = smt.symbol("first_ordinal", smt.INT)
@@ -413,6 +438,7 @@ class ObserverTest(unittest.TestCase):
             Outcome(
                 smt.TRUE,
                 relation,
+                smt.FALSE,
                 choices=(
                     OrdinalChoice(first_ordinal, 2),
                     OrdinalChoice(second_ordinal, 2),
@@ -421,6 +447,7 @@ class ObserverTest(unittest.TestCase):
             Outcome(
                 smt.TRUE,
                 relation,
+                smt.FALSE,
                 decisions=(("alternative", 1),),
                 choices=(
                     OrdinalChoice(first_ordinal, 2),

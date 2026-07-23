@@ -125,6 +125,7 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
                 'queue': self.queue_name,
                 'sensor': 'ReceiveMessage_Duration',
             })
+            assert durations is not None
             duration_buckets = durations['hist']['buckets']
             assert any(map(lambda x: x > 0, duration_buckets))
 
@@ -132,6 +133,7 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
                 'queue': self.queue_name,
                 'sensor': 'ReceiveMessage_WorkingDuration',
             })
+            assert working_durations is not None
             working_duration_buckets = working_durations['hist']['buckets']
             assert any(map(lambda x: x > 0, working_duration_buckets))
 

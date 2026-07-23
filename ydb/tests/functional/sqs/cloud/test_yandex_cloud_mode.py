@@ -455,6 +455,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
                         continue
                     break
 
+                assert_that(messages_count_before, not_none())
                 assert_that(messages_count_before, greater_than(0))
 
                 for i in range(max_receive_count):

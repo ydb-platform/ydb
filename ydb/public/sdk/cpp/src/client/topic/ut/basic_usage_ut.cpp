@@ -20,6 +20,7 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -1132,6 +1133,42 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto acks = acksCount.load();
         UNIT_ASSERT_C(acks == messages, "AcksHandler does not work properly " + std::to_string(acks));
         UNIT_ASSERT_C(closedCount.load() > 0, "SessionClosedHandler was not called");
+    }
+
+    Y_UNIT_TEST(Producer_WriteWithoutDescribeSchemaPermission) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        const TString authToken = "x-producer-with-write-only@builtin";
+        setup.GetServer().AnnoyingClient->GrantConnect(authToken);
+
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, NACLib::TSID(authToken));
+        setup.GetServer().AnnoyingClient->ModifyACL("/Root", setup.GetTopicPath(TEST_TOPIC), acl.SerializeAsString());
+
+        auto driverConfig = setup.MakeDriverConfig().SetAuthToken(authToken);
+        TDriver producerDriver(driverConfig);
+        TTopicClient producerClient(producerDriver);
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
+
+        auto producer = producerClient.CreateProducer(writeSettings);
+
+        const std::string payload = "payload";
+        TWriteMessage msg("key", payload);
+        msg.SeqNo(1);
+        UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close producer");
+
+        auto readClient = setup.MakeClient();
+        ReadMessagesAndAssertOrderedBySeqNo(readClient, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, 1);
     }
 
     Y_UNIT_TEST(Producer_ProducerIdPrefixRequired) {

@@ -105,6 +105,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         };
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
+            LastDescribeShowPrivate = showPrivate;
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             if (!SetRequestToken(navigateRequest.get())) {
                 AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
@@ -120,7 +121,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
-                .Access = CheckAccessWithWriteTopicPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,
+                .Access = GetDescribeAccessRight(),
                 .Operation = NSchemeCache::TSchemeCacheNavigate::OpList,
                 .ShowPrivatePath = showPrivate,
                 .SyncVersion = true,
@@ -176,6 +177,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
+                if (CheckAccessWithDescribeOrWriteTopicPermission && !RetriedWithWriteTopicPermission) {
+                    RetriedWithWriteTopicPermission = true;
+                    return SendDescribeProposeRequest(NActors::TlsActivationContext->AsActorContext(), LastDescribeShowPrivate);
+                }
                 AddIssue(
                     FillIssue(
                         TStringBuilder() << "path '" << path <<
@@ -254,8 +259,17 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
     protected:
+        NACLib::EAccessRights GetDescribeAccessRight() const {
+            return CheckAccessWithWriteTopicPermission || RetriedWithWriteTopicPermission
+                ? NACLib::UpdateRow
+                : NACLib::DescribeSchema;
+        }
+
         bool IsDead = false;
         bool CheckAccessWithWriteTopicPermission = false;
+        bool CheckAccessWithDescribeOrWriteTopicPermission = false;
+        bool RetriedWithWriteTopicPermission = false;
+        bool LastDescribeShowPrivate = false;
         const TString TopicPath;
         const TString Database;
     };

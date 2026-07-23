@@ -224,6 +224,7 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
+            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
@@ -263,6 +264,7 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
+            this->BeginUserFacingPhase(EUserFacingTracePhase::Commit);
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(

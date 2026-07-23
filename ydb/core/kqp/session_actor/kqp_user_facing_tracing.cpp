@@ -282,6 +282,9 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
     if (runSpan) {
         runSpan.End();
     }
+    if (const auto& commit = tl.Phase(EUserFacingTracePhase::Commit)) {
+        EmitPhase(executeId, commit.Start, commit.End, "Commit");
+    }
     executeSpan.End();
 }
 

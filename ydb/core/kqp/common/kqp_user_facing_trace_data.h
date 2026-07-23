@@ -30,6 +30,7 @@ enum class EUserFacingTracePhase : size_t {
     ResolveShards,
     Snapshot,
     RunTasks,
+    Commit, // effects commit/flush via the buffer actor (covers the coordinator round-trip)
     Count,
 };
 

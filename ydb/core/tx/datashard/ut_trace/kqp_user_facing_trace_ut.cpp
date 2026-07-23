@@ -97,6 +97,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         // Compile is derived post-hoc as a top-level phase under the user root.
         UNIT_ASSERT_C(userRoot->FindOne("Compile"), "user Compile phase missing");
 
+        // Effects commit (buffer actor round-trip) is a phase of Execute.
+        UNIT_ASSERT_C(execute->get().FindOne("Commit"), "user Commit phase missing");
+
         // query -> stage -> task: at least one task span nests under a stage.
         auto run = execute->get().BFSFindOne("Run");
         UNIT_ASSERT(run);

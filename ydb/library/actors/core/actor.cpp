@@ -412,8 +412,10 @@ namespace NActors {
                         HandleCheckActorLiveness(ev);
                         break;
                     default:
-                        // Event flags are controlled by senders, so an unknown
-                        // system message must not terminate the actor system.
+                        // System messages must never reach actor
+                        // awaiters or user state functions. Event flags are
+                        // controlled by senders, so unknown values are ignored
+                        // instead of terminating the actor system.
                         break;
                 }
             } else if (!HandleRegisteredEvent(ev)) {

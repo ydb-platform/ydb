@@ -827,6 +827,42 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
         std::atomic<bool>* const DoneFlag;
     };
 
+    struct TRemoteProbeActor : TActorBootstrapped<TRemoteProbeActor> {
+        static constexpr ui64 Cookie = 1;
+
+        TRemoteProbeActor(TActorId target, TThreadParkPad& done)
+            : Target(target)
+            , Done(done)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            Send(new IEventHandle(
+                TEvents::TSystem::CheckActorLiveness,
+                TEvents::TEvCheckActorLiveness::RequestFlags,
+                Target,
+                SelfId(),
+                nullptr,
+                Cookie));
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvents::TEvActorLivenessUnsure, Handle)
+        )
+
+        void Handle(TEvents::TEvActorLivenessUnsure::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == Cookie);
+            Done.Unpark();
+            PassAway();
+        }
+
+        const TActorId Target;
+        TThreadParkPad& Done;
+    };
+
     Y_UNIT_TEST(ActorSystemHandlesLivenessCheck) {
         using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
 
@@ -843,6 +879,26 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
         TThreadParkPad done;
         actorSystem.Register(
             new TProbeActor(target, &done, nullptr),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ActorSystemReportsRemoteLivenessAsUnsure) {
+        using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const TActorId remoteTarget(2, 0, 1, 0);
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TRemoteProbeActor(remoteTarget, done),
             TMailboxType::HTSwap,
             0);
 

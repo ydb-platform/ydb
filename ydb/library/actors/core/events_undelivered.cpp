@@ -3,14 +3,16 @@
 
 namespace NActors {
     namespace {
-        std::unique_ptr<IEventHandle> CreateActorDeadResponse(
-                std::unique_ptr<IEventHandle> ev) {
+        std::unique_ptr<IEventHandle> CreateActorLivenessResponse(
+                std::unique_ptr<IEventHandle> ev,
+                ui32 responseType) {
             static_assert(
                 TEvents::TEvCheckActorLiveness::RequestFlags ==
-                (IEventHandle::FlagTrackDelivery | IEventHandle::FlagSystemMessage));
+                (IEventHandle::FlagTrackDelivery |
+                    IEventHandle::FlagSystemMessage));
 
             return std::make_unique<IEventHandle>(
-                TEvents::TSystem::ActorDead,
+                responseType,
                 0,
                 ev->Sender,
                 ev->Recipient,
@@ -70,7 +72,10 @@ namespace NActors {
 
         if (ev->Flags & FlagTrackDelivery) {
             if (ev->Type == TEvents::TSystem::CheckActorLiveness) {
-                return CreateActorDeadResponse(std::move(ev));
+                const ui32 responseType = reason == TEvents::TEvUndelivered::ReasonActorUnknown
+                    ? TEvents::TSystem::ActorDead
+                    : TEvents::TSystem::ActorLivenessUnsure;
+                return CreateActorLivenessResponse(std::move(ev), responseType);
             }
 
             const ui32 updatedFlags = ev->Flags & ~(

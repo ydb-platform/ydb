@@ -116,6 +116,7 @@ namespace NActors {
                 CheckActorLiveness,
                 ActorAlive,
                 ActorDead,
+                ActorLivenessUnsure,
                 End,
 
                 // Compatibility section
@@ -222,21 +223,25 @@ namespace NActors {
         };
 
         struct TEvCheckActorLiveness
-            : public TEventSimpleNonLocal<TEvCheckActorLiveness, TSystem::CheckActorLiveness>
-        {
+            : public TEventSimpleNonLocal<TEvCheckActorLiveness, TSystem::CheckActorLiveness> {
             static constexpr IEventHandle::TEventFlags RequestFlags =
                 IEventHandle::FlagTrackDelivery |
                 IEventHandle::FlagSystemMessage;
         };
 
         struct TEvActorAlive
-            : public TEventSimpleNonLocal<TEvActorAlive, TSystem::ActorAlive>
-        {
+            : public TEventSimpleNonLocal<TEvActorAlive, TSystem::ActorAlive> {
         };
 
+        // The actor registry confirmed that the requested actor does not exist.
         struct TEvActorDead
-            : public TEventSimpleNonLocal<TEvActorDead, TSystem::ActorDead>
-        {
+            : public TEventSimpleNonLocal<TEvActorDead, TSystem::ActorDead> {
+        };
+
+        // The target is remote and distributed liveness checks are not
+        // supported yet.
+        struct TEvActorLivenessUnsure
+            : public TEventSimpleNonLocal<TEvActorLivenessUnsure, TSystem::ActorLivenessUnsure> {
         };
 
         struct TEvInvokeResult;

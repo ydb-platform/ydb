@@ -292,6 +292,32 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
+        if (Y_UNLIKELY(ev->Flags & IEventHandle::FlagSystemMessage)) {
+            switch (ev->Type) {
+                case TEvents::TSystem::CheckActorLiveness: {
+                    const TActorId recipient = ev->GetRecipientRewrite();
+                    const ui32 recipientNodeId = recipient.NodeId();
+                    if (recipientNodeId != NodeId && recipientNodeId != 0) {
+                        // TODO: Support distributed actor liveness checks
+                        // through interconnect. Liveness events are local-only
+                        // for now.
+                        return Send(std::make_unique<IEventHandle>(
+                            TEvents::TSystem::ActorLivenessUnsure,
+                            0,
+                            ev->Sender,
+                            recipient,
+                            nullptr,
+                            ev->Cookie,
+                            nullptr,
+                            std::move(ev->TraceId)));
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();

@@ -124,7 +124,12 @@ def snapshot(nodes, root, stage_graph=None, nullable=False):
                 }
             ]
         },
-        "plan": {"nodes": nodes, "root": root, "output": ["a.value"]},
+        "plan": {
+            "nodes": nodes,
+            "root": root,
+            "output": ["a.value"],
+            "subplans": [],
+        },
         "stage_graph": stage_graph,
     }
 

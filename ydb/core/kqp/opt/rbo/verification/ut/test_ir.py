@@ -57,6 +57,7 @@ def minimal_snapshot():
             ],
             "root": "filter",
             "output": ["a.k"],
+            "subplans": [],
         },
         "stage_graph": None,
     }
@@ -349,6 +350,14 @@ class SnapshotTest(unittest.TestCase):
         snapshot = parse_snapshot(value)
         self.assertIsNone(snapshot.plan.nodes[0].predicate)
         self.assertIsNone(snapshot.plan.nodes[0].pushed_limit)
+
+    def test_legacy_v1_plan_without_subplans_defaults_to_empty(self):
+        value = minimal_snapshot()
+        del value["plan"]["subplans"]
+
+        snapshot = parse_snapshot(value)
+
+        self.assertEqual(snapshot.plan.subplans, ())
 
     def test_pushed_scan_predicate_is_strict_typed_and_column_only(self):
         value = minimal_snapshot()
@@ -1603,6 +1612,7 @@ class SnapshotTest(unittest.TestCase):
             ],
             "root": "union",
             "output": ["u.k"],
+            "subplans": [],
         }
         value["stage_graph"] = {
             "root_stage": "consumer",
@@ -1670,6 +1680,7 @@ class SnapshotTest(unittest.TestCase):
             ],
             "root": "union",
             "output": ["u.k"],
+            "subplans": [],
         }
         value["stage_graph"] = {
             "root_stage": "stage",
@@ -1707,6 +1718,7 @@ class SnapshotTest(unittest.TestCase):
             ],
             "root": "union",
             "output": ["u.k"],
+            "subplans": [],
         }
         with self.assertRaisesRegex(SnapshotError, "requires exactly two inputs"):
             parse_snapshot(value)
@@ -1729,6 +1741,7 @@ class SnapshotTest(unittest.TestCase):
             ],
             "root": "union",
             "output": ["u.k"],
+            "subplans": [],
         }
         value["stage_graph"] = None
         parsed = parse_snapshot(value)

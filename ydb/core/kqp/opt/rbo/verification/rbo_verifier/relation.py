@@ -20,6 +20,7 @@ from .ir import (
     PlanNode,
     Project,
     Scan,
+    ScalarSubplan,
     Snapshot,
     Sort,
     SortOrder,
@@ -302,6 +303,19 @@ class Evaluator:
         self.defer_pushed_limits = defer_pushed_limits
         self.node_observer = node_observer
         self.observed_nodes: set[str] = set()
+        self.subplans_by_consumer = {
+            node_id: tuple(
+                subplan
+                for subplan in snapshot.plan.subplans
+                if node_id in subplan.consumers
+            )
+            for node_id in {
+                consumer
+                for subplan in snapshot.plan.subplans
+                for consumer in subplan.consumers
+            }
+        }
+        self.scalar_subplan_values: dict[str, Value] = {}
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -384,6 +398,7 @@ class Evaluator:
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
+            bindings = self._consumer_subplan_values(node.id)
             return map_family(
                 source,
                 lambda relation: Relation(
@@ -393,7 +408,8 @@ class Evaluator:
                             row.present,
                             {
                                 projection.output: self.scalar.evaluate(
-                                    projection.expression, row.values
+                                    projection.expression,
+                                    dict(row.values) | bindings,
                                 )
                                 for projection in node.columns
                             },
@@ -410,6 +426,7 @@ class Evaluator:
 
         if isinstance(node, Filter):
             source = self._input(node.id, 0, node.input)
+            bindings = self._consumer_subplan_values(node.id)
             return map_family(
                 source,
                 lambda relation: Relation(
@@ -419,7 +436,10 @@ class Evaluator:
                             smt.and_(
                                 row.present,
                                 self.scalar.is_true(
-                                    self.scalar.evaluate(node.predicate, row.values)
+                                    self.scalar.evaluate(
+                                        node.predicate,
+                                        dict(row.values) | bindings,
+                                    )
                                 ),
                             ),
                             row.values,
@@ -950,6 +970,52 @@ class Evaluator:
         key = (parent, ordinal)
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
+    def _consumer_subplan_values(self, node_id: str) -> Mapping[str, Value]:
+        result: dict[str, Value] = {}
+        for subplan in self.subplans_by_consumer.get(node_id, ()):
+            value = self.scalar_subplan_values.get(subplan.binding)
+            if value is None:
+                value = self._evaluate_scalar_subplan(subplan)
+                self.scalar_subplan_values[subplan.binding] = value
+            result[subplan.binding] = value
+        return result
+
+    def _evaluate_scalar_subplan(self, subplan: ScalarSubplan) -> Value:
+        # The descriptor was strictly validated before evaluation.  Keeping the
+        # runtime checks here makes this semantic boundary fail closed even when
+        # an otherwise valid at-most-one shape expands to conditional choices.
+        binding = subplan.binding
+        family = self.node(subplan.root)
+        if len(family.outcomes) != 1:
+            raise RelationError(
+                f"scalar subplan {binding!r} has conditional relation outcomes"
+            )
+        outcome = family.outcomes[0]
+        if (
+            outcome.enabled != smt.TRUE
+            or outcome.decisions
+            or outcome.choices
+        ):
+            raise RelationError(
+                f"scalar subplan {binding!r} requires a relational decision or choice"
+            )
+        relation = outcome.relation
+        if len(relation.rows) > 1:
+            raise RelationError(
+                f"scalar subplan {binding!r} expands to more than one candidate row"
+            )
+        if not relation.rows:
+            return self.scalar.null(subplan.type)
+        row = relation.rows[0]
+        source = row.values[subplan.output.column]
+        return Value(
+            source.type,
+            smt.or_(smt.not_(row.present), source.is_null),
+            source.value,
+            source.decimal_finite_abs_bound,
+            source.decimal_average_state,
+        )
+
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
@@ -1361,6 +1427,33 @@ def sort_family(
 
     if not order:
         raise RelationError("sort order must not be empty")
+    if all(
+        len(outcome.relation.rows) <= 1
+        for outcome in source.outcomes
+    ):
+        outcomes: list[Outcome] = []
+        for source_outcome in source.outcomes:
+            relation = source_outcome.relation
+            columns = {column.name for column in relation.columns}
+            missing = [item.column for item in order if item.column not in columns]
+            if missing:
+                raise RelationError(
+                    f"sort columns are absent: {', '.join(missing)}"
+                )
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        relation.rows,
+                        sequence=True,
+                        order=order,
+                    ),
+                    source_outcome.decisions,
+                    source_outcome.choices,
+                )
+            )
+        return RelationFamily(tuple(outcomes))
     _require_relation_row_pairs(
         sum(
             _unordered_row_pairs(len(outcome.relation.rows))
@@ -1760,6 +1853,34 @@ def limit_family(
     offset_expression: Expr | None,
     decision: str,
 ) -> RelationFamily:
+    count = _uint64_literal(count_expression, "limit count")
+    offset = (
+        0
+        if offset_expression is None
+        else _uint64_literal(offset_expression, "limit offset")
+    )
+    if count == 0 or (
+        offset > 0
+        and all(
+            len(outcome.relation.rows) <= 1
+            for outcome in source.outcomes
+        )
+    ):
+        return single(
+            Relation(
+                source.columns,
+                (),
+                sequence=source.sequence,
+            )
+        )
+    if (
+        offset == 0
+        and all(
+            len(outcome.relation.rows) <= 1
+            for outcome in source.outcomes
+        )
+    ):
+        return source
     if source.sequence:
         return _ordered_limit_family(source, count_expression, offset_expression)
     return _unordered_limit_family(

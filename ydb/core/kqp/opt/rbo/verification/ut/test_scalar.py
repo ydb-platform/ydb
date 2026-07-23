@@ -1006,6 +1006,7 @@ class IntegerDomainTest(unittest.TestCase):
                         ],
                         "root": "scan",
                         "output": ["a.i"],
+                        "subplans": [],
                     },
                     "stage_graph": None,
                 }

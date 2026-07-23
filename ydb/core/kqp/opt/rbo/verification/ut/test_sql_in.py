@@ -51,6 +51,7 @@ def _snapshot(expression, scalar_type="Int64", nullable=False):
             ],
             "root": "project",
             "output": ["result"],
+            "subplans": [],
         },
         "stage_graph": None,
     }

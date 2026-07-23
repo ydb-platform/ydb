@@ -15,6 +15,7 @@ TEST_SRCS(
     test_stagegraph_reference.py
     test_string_order.py
     test_string_proof.py
+    test_subplans.py
     test_smt.py
     test_verify.py
 )

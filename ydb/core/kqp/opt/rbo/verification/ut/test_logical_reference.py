@@ -129,6 +129,7 @@ def _expected_plan(output):
         "nodes": [scan],
         "root": "expected",
         "output": list(output),
+        "subplans": [],
     }
 
 
@@ -162,6 +163,7 @@ def _pipeline_plan():
         "nodes": [scan, project, filter_node],
         "root": "filter",
         "output": ["y"],
+        "subplans": [],
     }
 
 
@@ -184,6 +186,7 @@ def _constant_plan():
         ],
         "root": "constant",
         "output": ["value"],
+        "subplans": [],
     }
 
 
@@ -200,7 +203,12 @@ def _union_plan():
         "output": ["value"],
         "ordered": False,
     }
-    return {"nodes": [left, right, union], "root": "union", "output": ["value"]}
+    return {
+        "nodes": [left, right, union],
+        "root": "union",
+        "output": ["value"],
+        "subplans": [],
+    }
 
 
 def _join_plan(kind):
@@ -225,7 +233,12 @@ def _join_plan(kind):
         output = ["b"]
     else:
         output = ["a", "b"]
-    return {"nodes": [left, right, join], "root": "join", "output": output}
+    return {
+        "nodes": [left, right, join],
+        "root": "join",
+        "output": output,
+        "subplans": [],
+    }
 
 
 def _expression(expression, row):

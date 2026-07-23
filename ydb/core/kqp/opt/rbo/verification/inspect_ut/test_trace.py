@@ -78,7 +78,7 @@ def _logical(expression=None, scalar_type="Int64", nullable=False):
         "format": "ydb-rbo-semantic-snapshot",
         "version": 1,
         "schema": _schema(scalar_type, nullable),
-        "plan": {"nodes": nodes, "root": root, "output": ["x"]},
+        "plan": {"nodes": nodes, "root": root, "output": ["x"], "subplans": []},
         "stage_graph": None,
     })
 
@@ -133,7 +133,12 @@ def _staged(
         "format": "ydb-rbo-semantic-snapshot",
         "version": 1,
         "schema": _schema(scalar_type, nullable),
-        "plan": {"nodes": nodes, "root": "project", "output": ["x"]},
+        "plan": {
+            "nodes": nodes,
+            "root": "project",
+            "output": ["x"],
+            "subplans": [],
+        },
         "stage_graph": {
             "root_stage": "root",
             "stages": stages,
@@ -163,6 +168,7 @@ def _staged_limit():
             ],
             "root": "limit",
             "output": ["x"],
+            "subplans": [],
         },
         "stage_graph": {
             "root_stage": "root",
@@ -236,6 +242,7 @@ def _constant(value, staged, include_table):
             ],
             "root": "project",
             "output": ["x"],
+            "subplans": [],
         },
         "stage_graph": graph,
     })

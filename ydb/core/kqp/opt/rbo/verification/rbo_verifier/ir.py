@@ -227,10 +227,32 @@ PlanNode: TypeAlias = (
 
 
 @dataclass(frozen=True, slots=True)
+class SubplanOutput:
+    column: str
+    type: str
+    nullable: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarSubplan:
+    """One exact, uncorrelated scalar binding captured outside relational edges."""
+
+    binding: str
+    kind: str
+    root: str
+    output: SubplanOutput
+    type: str
+    nullable: bool
+    dependencies: tuple[str, ...]
+    consumers: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Plan:
     nodes: tuple[PlanNode, ...]
     root: str
     output: tuple[str, ...]
+    subplans: tuple[ScalarSubplan, ...]
 
     def node_map(self) -> dict[str, PlanNode]:
         return {node.id: node for node in self.nodes}
@@ -1020,6 +1042,53 @@ def _parse_stage_graph(value: Any, path: str) -> StageGraph:
     )
 
 
+def _parse_subplan(value: Any, path: str) -> ScalarSubplan:
+    obj = _object(value, path)
+    _keys(
+        obj,
+        {
+            "binding",
+            "kind",
+            "root",
+            "output",
+            "type",
+            "nullable",
+            "dependencies",
+            "consumers",
+        },
+        path,
+    )
+    kind = _string(obj["kind"], f"{path}.kind")
+    if kind != "scalar":
+        _fail(f"{path}.kind", f"unsupported subplan kind {kind!r}")
+    raw_output = _object(obj["output"], f"{path}.output")
+    _keys(raw_output, {"column", "type", "nullable"}, f"{path}.output")
+    return ScalarSubplan(
+        binding=_string(obj["binding"], f"{path}.binding"),
+        kind=kind,
+        root=_string(obj["root"], f"{path}.root"),
+        output=SubplanOutput(
+            column=_string(raw_output["column"], f"{path}.output.column"),
+            type=_scalar_type(raw_output["type"], f"{path}.output.type"),
+            nullable=_bool(raw_output["nullable"], f"{path}.output.nullable"),
+        ),
+        type=_scalar_type(obj["type"], f"{path}.type"),
+        nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        dependencies=tuple(
+            _string(item, f"{path}.dependencies[{index}]")
+            for index, item in enumerate(
+                _array(obj["dependencies"], f"{path}.dependencies")
+            )
+        ),
+        consumers=tuple(
+            _string(item, f"{path}.consumers[{index}]")
+            for index, item in enumerate(
+                _array(obj["consumers"], f"{path}.consumers")
+            )
+        ),
+    )
+
+
 def parse_snapshot(value: Any) -> Snapshot:
     obj = _object(value, "snapshot")
     _keys(obj, {"format", "version", "schema", "plan", "stage_graph"}, "snapshot")
@@ -1034,7 +1103,12 @@ def parse_snapshot(value: Any) -> Snapshot:
         for index, table in enumerate(_array(schema["tables"], "snapshot.schema.tables"))
     )
     raw_plan = _object(obj["plan"], "snapshot.plan")
-    _keys(raw_plan, {"nodes", "root", "output"}, "snapshot.plan")
+    _keys(
+        raw_plan,
+        {"nodes", "root", "output"},
+        "snapshot.plan",
+        {"subplans"},
+    )
     nodes = tuple(
         _parse_node(node, f"snapshot.plan.nodes[{index}]")
         for index, node in enumerate(_array(raw_plan["nodes"], "snapshot.plan.nodes"))
@@ -1043,9 +1117,20 @@ def parse_snapshot(value: Any) -> Snapshot:
         _string(column, f"snapshot.plan.output[{index}]")
         for index, column in enumerate(_array(raw_plan["output"], "snapshot.plan.output"))
     )
+    subplans = tuple(
+        _parse_subplan(subplan, f"snapshot.plan.subplans[{index}]")
+        for index, subplan in enumerate(
+            _array(raw_plan.get("subplans", []), "snapshot.plan.subplans")
+        )
+    )
     snapshot = Snapshot(
         tables=tables,
-        plan=Plan(nodes=nodes, root=_string(raw_plan["root"], "snapshot.plan.root"), output=output),
+        plan=Plan(
+            nodes=nodes,
+            root=_string(raw_plan["root"], "snapshot.plan.root"),
+            output=output,
+            subplans=subplans,
+        ),
         stage_graph=(
             None
             if obj["stage_graph"] is None
@@ -1816,6 +1901,86 @@ def stage_task_counts(snapshot: Snapshot) -> dict[str, int]:
     return _infer_stage_task_counts(snapshot.stage_graph, "snapshot.stage_graph")
 
 
+def _expression_columns(expression: Expr) -> frozenset[str]:
+    columns = (
+        frozenset((expression.column,))
+        if expression.kind == "column" and expression.column is not None
+        else frozenset()
+    )
+    for argument in expression.args:
+        columns |= _expression_columns(argument)
+    return columns
+
+
+def _node_expression_columns(node: PlanNode) -> frozenset[str]:
+    if isinstance(node, Scan):
+        expressions = tuple(
+            expression
+            for expression in (node.predicate, node.pushed_limit)
+            if expression is not None
+        )
+    elif isinstance(node, Project):
+        expressions = tuple(column.expression for column in node.columns)
+    elif isinstance(node, Filter):
+        expressions = (node.predicate,)
+    elif isinstance(node, Limit):
+        expressions = tuple(
+            expression
+            for expression in (node.count, node.offset)
+            if expression is not None
+        )
+    elif isinstance(node, Sort):
+        expressions = () if node.limit is None else (node.limit,)
+    elif isinstance(node, Join):
+        expressions = (node.predicate,)
+    else:
+        expressions = ()
+    result = frozenset()
+    for expression in expressions:
+        result |= _expression_columns(expression)
+    return result
+
+
+def _static_row_upper_bound(
+    node_id: str,
+    nodes: Mapping[str, PlanNode],
+    memo: dict[str, int | None],
+) -> int | None:
+    """Conservatively prove a finite relational cardinality from plan shape."""
+
+    if node_id in memo:
+        return memo[node_id]
+    node = nodes[node_id]
+    # Cycles have already been rejected by schema inference.  Seed the memo so
+    # this helper remains total if it is reused independently.
+    memo[node_id] = None
+    if isinstance(node, EmptySource):
+        result: int | None = 1
+    elif isinstance(node, Scan):
+        result = None
+    elif isinstance(node, (Project, Filter, Sort)):
+        result = _static_row_upper_bound(node.input, nodes, memo)
+    elif isinstance(node, Limit):
+        assert type(node.count.value) is int
+        result = node.count.value if node.count.value <= 1 else None
+    elif isinstance(node, Aggregate):
+        result = (
+            1
+            if (
+                not node.keys
+                and not node.distinct_all
+                and node.phase != "intermediate"
+            )
+            else None
+        )
+    elif isinstance(node, (Join, UnionAll)):
+        result = None
+    else:
+        raise AssertionError(f"unknown node class {type(node).__name__}")
+    memo[node_id] = result
+    return result
+
+
 def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     """Validate references and types, returning every node's output schema."""
 
@@ -1838,6 +2003,65 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     if not snapshot.plan.output:
         _fail("snapshot.plan.output", "must not be empty")
     _unique(snapshot.plan.output, "snapshot.plan.output")
+
+    if snapshot.plan.subplans and snapshot.stage_graph is not None:
+        _fail(
+            "snapshot.plan.subplans",
+            "subplans must be fully eliminated before StageGraph capture",
+        )
+    _unique(
+        [subplan.binding for subplan in snapshot.plan.subplans],
+        "snapshot.plan.subplans",
+    )
+    virtual_columns: dict[str, dict[str, Column]] = {}
+    for index, subplan in enumerate(snapshot.plan.subplans):
+        path = f"snapshot.plan.subplans[{index}]"
+        if subplan.kind != "scalar":
+            _fail(f"{path}.kind", f"unsupported subplan kind {subplan.kind!r}")
+        if subplan.root not in nodes:
+            _fail(f"{path}.root", f"unknown node {subplan.root!r}")
+        if subplan.type != subplan.output.type:
+            _fail(
+                f"{path}.type",
+                "must exactly match the scalar subplan output type",
+            )
+        if not subplan.nullable:
+            _fail(
+                f"{path}.nullable",
+                "a scalar subplan binding must be nullable because zero rows yield NULL",
+            )
+        if subplan.dependencies:
+            _fail(
+                f"{path}.dependencies",
+                "correlated scalar subplans are not modeled",
+            )
+        if not subplan.consumers:
+            _fail(f"{path}.consumers", "scalar subplan binding is unused")
+        _unique(subplan.dependencies, f"{path}.dependencies")
+        _unique(subplan.consumers, f"{path}.consumers")
+        for consumer_id in subplan.consumers:
+            consumer = nodes.get(consumer_id)
+            if consumer is None:
+                _fail(
+                    f"{path}.consumers",
+                    f"references unknown node {consumer_id!r}",
+                )
+            if not isinstance(consumer, (Project, Filter)):
+                _fail(
+                    f"{path}.consumers",
+                    "scalar subplan consumers must be Project or Filter nodes",
+                )
+            if subplan.binding not in _node_expression_columns(consumer):
+                _fail(
+                    f"{path}.consumers",
+                    f"node {consumer_id!r} does not reference binding "
+                    f"{subplan.binding!r}",
+                )
+            virtual_columns.setdefault(consumer_id, {})[subplan.binding] = Column(
+                subplan.binding,
+                subplan.type,
+                True,
+            )
 
     schemas: dict[str, dict[str, Column]] = {}
     visiting: set[str] = set()
@@ -1882,6 +2106,15 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
 
         elif isinstance(node, Project):
             input_schema = schema_for(node.input)
+            expression_schema = dict(input_schema)
+            for binding, column in virtual_columns.get(node.id, {}).items():
+                if binding in input_schema:
+                    _fail(
+                        f"node {node.id!r}",
+                        f"scalar subplan binding {binding!r} collides with an "
+                        "input column",
+                    )
+                expression_schema[binding] = column
             _unique([column.output for column in node.columns], f"node {node.id!r} output")
             result = {}
             for index, column in enumerate(node.columns):
@@ -1890,17 +2123,34 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     value_type = ValueType(VOID, False)
                 elif (
                     column.expression.kind == "column"
-                    and column.expression.column in input_schema
-                    and input_schema[column.expression.column].type == VOID
+                    and column.expression.column in expression_schema
+                    and expression_schema[column.expression.column].type == VOID
                 ):
-                    value_type = input_schema[column.expression.column].value_type
+                    value_type = expression_schema[column.expression.column].value_type
                 else:
-                    value_type = _infer_expr(column.expression, input_schema, expression_path)
+                    value_type = _infer_expr(
+                        column.expression,
+                        expression_schema,
+                        expression_path,
+                    )
                 result[column.output] = Column(column.output, value_type.name, value_type.nullable)
 
         elif isinstance(node, Filter):
             result = dict(schema_for(node.input))
-            predicate_type = _infer_expr(node.predicate, result, f"node {node.id!r}.predicate")
+            expression_schema = dict(result)
+            for binding, column in virtual_columns.get(node.id, {}).items():
+                if binding in result:
+                    _fail(
+                        f"node {node.id!r}",
+                        f"scalar subplan binding {binding!r} collides with an "
+                        "input column",
+                    )
+                expression_schema[binding] = column
+            predicate_type = _infer_expr(
+                node.predicate,
+                expression_schema,
+                f"node {node.id!r}.predicate",
+            )
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
 
@@ -2091,6 +2341,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         return result
 
     root_schema = schema_for(snapshot.plan.root)
+    subplan_schemas = {
+        subplan.binding: schema_for(subplan.root)
+        for subplan in snapshot.plan.subplans
+    }
     unreachable = nodes.keys() - schemas.keys()
     if unreachable:
         _fail(
@@ -2100,6 +2354,98 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     for column in snapshot.plan.output:
         if column not in root_schema:
             _fail("snapshot.plan.output", f"column {column!r} is not produced by the root")
+
+    def descendants(root: str) -> frozenset[str]:
+        reached: set[str] = set()
+        pending = [root]
+        while pending:
+            node_id = pending.pop()
+            if node_id in reached:
+                continue
+            reached.add(node_id)
+            pending.extend(plan_node_inputs(nodes[node_id]))
+        return frozenset(reached)
+
+    main_nodes = descendants(snapshot.plan.root)
+    subplan_nodes = {
+        subplan.binding: descendants(subplan.root)
+        for subplan in snapshot.plan.subplans
+    }
+    subplan_roots = {subplan.root for subplan in snapshot.plan.subplans}
+    static_bounds: dict[str, int | None] = {}
+    all_bindings = frozenset(
+        subplan.binding for subplan in snapshot.plan.subplans
+    )
+    for node in snapshot.plan.nodes:
+        if node.id not in main_nodes:
+            continue
+        leaked_bindings = all_bindings & schemas[node.id].keys()
+        if leaked_bindings:
+            _fail(
+                f"node {node.id!r}",
+                "scalar subplan bindings must remain virtual and may not appear "
+                "in relational output: "
+                + ", ".join(sorted(leaked_bindings)),
+            )
+    for index, subplan in enumerate(snapshot.plan.subplans):
+        path = f"snapshot.plan.subplans[{index}]"
+        schema = subplan_schemas[subplan.binding]
+        actual = schema.get(subplan.output.column)
+        if actual is None:
+            _fail(
+                f"{path}.output",
+                "declared scalar output column is not produced by its root",
+            )
+        expected = Column(
+            subplan.output.column,
+            subplan.output.type,
+            subplan.output.nullable,
+        )
+        if actual != expected:
+            _fail(
+                f"{path}.output",
+                "declared scalar output schema does not match its root",
+            )
+        if subplan.root in main_nodes:
+            _fail(
+                f"{path}.root",
+                "scalar subplan root is nested in the main relational plan",
+            )
+        nested_roots = (
+            subplan_nodes[subplan.binding] & subplan_roots
+        ) - {subplan.root}
+        if nested_roots:
+            _fail(
+                f"{path}.root",
+                "nested scalar subplans are not modeled",
+            )
+        nested_bindings = frozenset().union(
+            *(
+                _node_expression_columns(nodes[node_id])
+                for node_id in subplan_nodes[subplan.binding]
+            )
+        ) & all_bindings
+        if nested_bindings:
+            _fail(
+                f"{path}.root",
+                "scalar subplan expressions may not reference subplan bindings",
+            )
+        non_main_consumers = set(subplan.consumers) - main_nodes
+        if non_main_consumers:
+            _fail(
+                f"{path}.consumers",
+                "scalar subplan consumers must be reachable from the main root",
+            )
+        upper_bound = _static_row_upper_bound(
+            subplan.root,
+            nodes,
+            static_bounds,
+        )
+        if upper_bound is None or upper_bound > 1:
+            _fail(
+                f"{path}.root",
+                "scalar subplan is not statically known to produce at most one row",
+            )
     _validate_average_state_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas)

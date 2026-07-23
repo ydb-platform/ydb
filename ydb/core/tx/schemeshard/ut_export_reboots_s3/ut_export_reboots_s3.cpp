@@ -1216,6 +1216,30 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithComplexTypesColumnTable, 2, 1, false) {
+        RunExport<false>(t, {
+            TTypedScheme{
+                EPathTypeColumnTable,
+                R"(
+                    Name: "ColumnTable"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key" Type: "Utf8" NotNull: true }
+                        Columns { Name: "value" Type: "Utf8" }
+                        Columns { Name: "int_value" Type: "Int32" }
+                        Columns { Name: "double_value" Type: "Double" }
+                        Columns { Name: "bool_value" Type: "Bool" }
+                        Columns { Name: "timestamp_value" Type: "Timestamp" }
+                        Columns { Name: "interval_value" Type: "Interval" }
+                        Columns { Name: "uuid_value" Type: "Uuid" }
+                        Columns { Name: "dynumber_value" Type: "DyNumber" }
+                        KeyColumnNames: "key"
+                    }
+                )"
+            },
+        }, {{"/MyRoot/ColumnTable", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
         CancelExport<false>(t, {
             R"(

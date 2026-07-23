@@ -9,6 +9,7 @@
 
 #include <util/digest/multi.h>
 #include <util/random/fast.h>
+#include <util/string/join.h>
 
 namespace {
     struct TRequestId {

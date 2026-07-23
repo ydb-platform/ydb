@@ -30,7 +30,7 @@ TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntr
     }
 
     auto sort = CastOperator<TOpSort>(limit->GetInput());
-    if (sort->LimitCond) {
+    if (!sort->IsSingleConsumer() || sort->LimitCond) {
         return input;
     }
 

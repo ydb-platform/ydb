@@ -194,7 +194,7 @@ namespace NOps {
             }
 
             void RunLoader() {
-                for (auto req : Loader->Run(false)) {
+                for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
                     Send(Owner, new TEvPrivate::TEvLoadPages(std::move(req)));
                     ++ReadsLeft;
                 }

@@ -15029,7 +15029,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new one",
+                "Old secrets creation syntax is disabled now. Please use the new secrets",
                 result.GetIssues().ToString());
         }
         { // upsert
@@ -15041,7 +15041,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new one",
+                "Old secrets creation syntax is disabled now. Please use the new secrets",
                 result.GetIssues().ToString());
         }
         { // alter

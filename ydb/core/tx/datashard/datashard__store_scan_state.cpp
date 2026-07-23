@@ -1,5 +1,7 @@
 #include "datashard_txs.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -21,25 +23,25 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     auto op = Self->Pipeline.FindOp(txId);
 
     if (!op) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Cannot find op " << txId << " to persist scan state at " <<
-                   Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "Cannot find op to persist scan state",
+            {"txId", txId},
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
     auto schemaOp = Self->FindSchemaTx(txId);
     if (!schemaOp) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Cannot find schema op " << txId << " to update scan state at " <<
-                   Self->TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Cannot find schema op to update scan state",
+            {"txId", txId},
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Persist scan progress for " << txId <<
-                " key size " << event->LastKey.size() <<
-                " status " << event->StatusCode << " at " <<
-                Self->TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "Persist scan progress for key size status",
+        {"txId", txId},
+        {"lastKeySize", event->LastKey.size()},
+        {"statusCode", event->StatusCode},
+        {"tabletId", Self->TabletID()});
 
     auto binaryIssues = SerializeIssues(event->Issues);
     NIceDb::TNiceDb db(txc.DB);

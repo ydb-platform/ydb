@@ -168,15 +168,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
 
-<<<<<<< HEAD
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
-=======
-    YDB_LOG_DEBUG("Create topics actor. Topic's response received",
-        {LogPrefix()},
-        {"path", eventPtr->Path},
-        {"status", std::to_string(eventPtr->Status)},
-        {"errorMessage", eventPtr->ErrorMessage});
->>>>>>> 9defd6908c3 (Fix Kafka Metadata broker list and ControllerId consistency (#47591))
+KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status) << " " << eventPtr->ErrorMessage);
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

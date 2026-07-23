@@ -1614,9 +1614,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                 SELECT Id, D
                 FROM `/Root/RboDate`
                 WHERE D BETWEEN
-                    (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(30))
+                    CAST('1998-08-04' AS Date)
                     AND
-                    (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(30));
+                    (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14));
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                         (*literal)["value"].GetUIntegerSafe()).second);
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(days, THashSet<ui64>({10'294, 10'354}));
+            UNIT_ASSERT_VALUES_EQUAL(days, THashSet<ui64>({10'442, 10'456}));
         };
 
         const auto& initialScan = OnlyPlanNode(initial, "scan");

@@ -2295,6 +2295,18 @@ std::optional<ui16> ParseDateSafeCast(const TExprNode& node) {
         : std::nullopt;
 }
 
+bool IsStringDateSafeCastCandidate(const TExprNode& node) {
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2 ||
+        !node.GetTypeAnn() || !node.Child(0)->GetTypeAnn())
+    {
+        return false;
+    }
+
+    const TString resultType = ScalarTypeName(node);
+    const TString sourceType = ScalarTypeName(*node.Child(0));
+    return resultType == "Date" && IsStringType(sourceType);
+}
+
 i32 ParseIntervalFromDays(const TExprNode& node) {
     CheckReviewedDateTimeApply(
         node,
@@ -3529,6 +3541,20 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (IsStringDateSafeCastCandidate(node)) {
+        auto result = ConstantDateValue(ParseDateSafeCast(node));
+
+        // Preserve the closed-world metadata and totality audit used for
+        // opaque expressions, while giving this fixed conversion its exact
+        // runtime value. Dynamic String-to-Date casts deliberately fail the
+        // direct-literal gate in ParseDateSafeCast.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        return result;
+    }
+
     if (IsPartialIntegralSafeCast(node)) {
         const TString resultType = CheckPartialIntegralSafeCastCallable(node);
 
@@ -4140,6 +4166,11 @@ NJson::TJsonValue ExportOlapScalar(
     if (node->IsCallable("Decimal")) {
         budget.Charge(normalizedDepth);
         return DecimalLiteralExpr(*node);
+    }
+
+    if (IsStringDateSafeCastCandidate(*node)) {
+        budget.Charge(normalizedDepth);
+        return ConstantDateValue(ParseDateSafeCast(*node));
     }
 
     if (node->IsCallable({"SafeCast", "Convert"}) &&

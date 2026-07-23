@@ -131,15 +131,19 @@ public:
 
         auto promise = NThreading::NewPromise<TBeginPublicationResult>();
         auto extractor = [promise, extPublicationId](google::protobuf::Any* any, TPlainStatus status) mutable {
+            TStatus ydbStatus(std::move(status));
+            if (!ydbStatus.IsSuccess()) {
+                promise.SetValue(TBeginPublicationResult(std::move(ydbStatus)));
+                return;
+            }
+
             BeginPublicationResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
 
             TDeferredPublication publication(result.int_publication_id(), extPublicationId);
-            promise.SetValue(TBeginPublicationResult(
-                TStatus(std::move(status)),
-                std::move(publication)));
+            promise.SetValue(TBeginPublicationResult(std::move(ydbStatus), std::move(publication)));
         };
 
         Connections_->RunDeferred<

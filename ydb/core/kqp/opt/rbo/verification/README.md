@@ -17,8 +17,9 @@ either a direct comparison or a binary same-member String
 membership/complement predicate, exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
 semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
-Decimal `MAX` and phase-aware Decimal `AVG`, plus the benchmark-dashboard parts
-of M4. The reviewed exact
+Decimal `MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
+and exact uncorrelated scalar subplans that are statically at most one row,
+plus the benchmark-dashboard parts of M4. The reviewed exact
 wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
 instead of being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -38,29 +39,34 @@ transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on current code
 on 2026-07-23. They establish formula construction for TPCH q1, q3, q5, q6,
-q10, q12, q14, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37, q40, q42,
-q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77, q79, q80,
-q82, q88, q90, q91, q93, q96, and q99: 39/121 workload queries (32.2%). TPCH
-has eight formulas, eleven unsupported queries, and three optimizer failures;
-TPC-DS has thirty-one formulas, thirty-nine unsupported queries, and twenty-nine
-optimizer failures. Across both suites that is 50 unsupported queries and 32
-optimizer failures. The complete TPCH dashboard spent 6,944/11,582 ms and
-TPC-DS spent 68,255/249,242 ms in preparation/verification.
+q10, q11, q12, q14, q15, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37,
+q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77,
+q79, q80, q82, q88, q90, q91, q93, q96, and q99: 41/121 workload queries
+(33.9%). TPCH has ten formulas, nine unsupported queries, and three optimizer
+failures; TPC-DS has thirty-one formulas, forty unsupported queries, and
+twenty-eight optimizer failures. Across both suites that is 49 unsupported
+queries and 31 optimizer failures. The complete TPCH dashboard spent
+2,754/6,017 ms and TPC-DS spent 54,058/178,875 ms in
+preparation/verification, or 56,812/184,892 ms together.
+Within TPC-DS, q9 is the only inventory-category change from the preceding
+complete run: optimizer preparation now succeeds and exposes unsupported final
+Read range/ordering semantics, so it moves from optimizer failure to
+unsupported without changing formula coverage.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
-`VERIFIED_BOUNDED` for TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42,
-q48, q52, q55, q90, q93, and q96: thirteen obligations (10.7% of the
+`VERIFIED_BOUNDED` for TPCH q3, q6, q11, q12, q14, q15, and q19 plus TPC-DS
+q3, q42, q48, q52, q55, q90, q93, and q96: fifteen obligations (12.4% of the
 workload). The latest TPCH proof-floor run prepared/verified q3 in
-105/2,642 ms, q6 in 56/684 ms, q12 in 77/1,704 ms, q14 in 80/30,141 ms,
-and q19 in 102/817 ms. Focused q12 took 108/38,880 ms. The latest TPC-DS
-proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90, q93,
-and q96 prepared/verified in 103/4,833, 90/4,527, 174/3,846, 107/4,189,
-96/3,747, 234/7,916, 110/2,215, and 150/426 ms, respectively.
+116/3,168 ms, q6 in 61/775 ms, q11 in 158/6,585 ms, q12 in 88/2,085 ms,
+q14 in 91/34,457 ms, q15 in 199/2,750 ms, and q19 in 118/872 ms. The latest
+TPC-DS proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90,
+q93, and q96 prepared/verified in 112/5,049, 101/4,726, 192/4,006, 99/4,599,
+116/4,194, 280/8,542, 102/2,319, and 117/508 ms, respectively.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
-65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
-q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. The new q37 and
-q82 obligations are likewise `UNKNOWN` at 60 seconds. q43 is formula-covered
+65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
+q62, q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. The q37
+and q82 obligations are likewise `UNKNOWN` at 60 seconds. q43 is formula-covered
 but returned `UNKNOWN` after 147/69,391 ms at that same budget. A separate non-gating
 q40 experiment with a 10-second solver budget reported `SOLVER_ERROR` after the
 external solver exceeded its 15.0-second process deadline; the focused `ya`
@@ -75,7 +81,7 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The proof floor remains the thirteen obligations above.
+The proof floor is the fifteen obligations above.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -143,6 +149,14 @@ partition into stages, each stage has one logical sink, every cross-stage child
 occurrence has one edge, and producer output indices are a bijection with
 outgoing edge occurrences. Shuffle-elimination/co-partitioning assumptions are
 rejected until the snapshot can substantiate them.
+
+Stage task counts are validated before staged physical properties are admitted.
+The `EnsureAtMostOne` check on a Limit is semantically erased only when its
+input passes the small structural at-most-one proof. That proof may stay in the
+Limit's stage or cross into a producer stage whose inferred task count is
+exactly one; every further crossing repeats the same check. A two-task producer
+remains unsafe because two task-local scalar rows can meet in one consumer and
+make the runtime check observable, so export fails closed.
 
 Version one preserves exact supported YQL scalar identities (`Bool`, signed and
 unsigned integer widths, `String`, `Utf8`, `Date`, and canonical parameterized
@@ -384,8 +398,9 @@ uses the same exact fold. Dynamic, nullable, malformed, differently annotated,
 or non-`SafeCast` forms fail closed. The fold introduces no new snapshot IR or
 Python evaluator semantics.
 
-Focused exporter tests pass 4/4, the complete `cpp_ut` run passes 144/144,
-and a q5-shaped actual-host pushed-filter integration passes 1/1 with
+Focused exporter tests passed 4/4, the complete `cpp_ut` run passed 144/144 at
+that Date-cast milestone, and a q5-shaped actual-host pushed-filter integration
+passed 1/1 with
 `VERIFIED_BOUNDED`. Regenerated q5 and q77 obligations contain the exact Date
 constants and return `UNKNOWN` rather than reproducing the old symbolic
 candidates. This refutes q5's saved witness; it does not turn q77's historical
@@ -515,7 +530,7 @@ now leaves those forms opaque before invoking the strict exact-cast exporter;
 targeted regressions and the repeated complete dashboard restore q40's formula
 and q80's verifier entry. No candidate or optimizer bug arose.
 
-The current exact-representation milestone assigns nonrecursive bottom-up
+The preceding exact-representation milestone assigned nonrecursive bottom-up
 structural IDs to SMT terms, then partitions grouped-aggregate candidates by
 the complete `(type, is-null term, value term)` structure of their ordered
 group keys. Aggregate membership still ranges over every original row, so bag
@@ -574,44 +589,90 @@ signed infinities, positive and negative ties, grouped and scalar aggregation,
 and unequal split-task counts. Strict decoder/dataflow mutations cover missing
 or incorrect state, non-Decimal and mismatched types, bad nullability, leaked
 state, and broken intermediate-to-final lineage. Focused C++ exporter tests
-pass 3/3 and the complete C++ exporter suite passes 147/147.
+passed 3/3 and the complete C++ exporter suite passed 147/147 at that
+Decimal-AVG milestone.
 
-The current dashboards add TPCH q1 and TPC-DS q65 to formula construction:
-TPCH is 8/22 formulas after 6,944/11,582 ms of preparation/verifier work, and
-TPC-DS is 31/99 after 68,255/249,242 ms. Focused q1 emits a formula after
-111/998 ms; its non-gating 60-second solver run is `UNKNOWN` after 159/63,937
-ms, not a proof or counterexample. Focused q65 emits a formula after
-687/30,318 ms. The combined formula slice is 39/121 (32.2%), while the
-thirteen-query proof floor remains unchanged. q7 and q8 remain visible at the
-deeper generic `Map` exporter blocker.
+The preceding Decimal-AVG dashboards added TPCH q1 and TPC-DS q65 to formula
+construction: TPCH was 8/22 formulas after 6,944/11,582 ms of
+preparation/verifier work, and TPC-DS was 31/99 after 68,255/249,242 ms.
+Focused q1 emits a formula after 111/998 ms; its non-gating 60-second solver run
+is `UNKNOWN` after 159/63,937 ms, not a proof or counterexample. Focused q65
+emits a formula after 687/30,318 ms. At that milestone the combined formula
+slice was 39/121 (32.2%) and the proof floor had thirteen queries. q7 and q8
+remain visible at the deeper generic `Map` exporter blocker in the current
+dashboard.
 
-The subplan audit found 32 source subqueries across the seven blocked TPCH and
-thirteen blocked TPC-DS queries: fifteen scalar, seventeen `EXISTS`,
+The subplan audit of the then-catalog-blocked slice found 32 source subqueries
+across seven TPCH and thirteen TPC-DS queries: fifteen scalar, seventeen `EXISTS`,
 twenty-five correlated, and only seven uncorrelated. There are no dynamic `IN`
 subplans in this workload slice. Only TPCH q11/q15 and TPC-DS q24/q54 are fully
 uncorrelated.
 
-Initial catalog capture now validates the subplan registry and follows every
-subplan root, so a failed initial semantic export no longer hides the final
-boundary. Focused captures show fully exportable optimized StageGraphs for q11,
-q15, and q54; q24 exposes a separate final callable `Map` blocker. Exact ordered
-logical UnionAll is also modeled, including independent input orderings and
-left-before-right branch precedence.
+Initial catalog capture validates the subplan registry and follows every subplan
+root, so a failed initial semantic export no longer hides the final boundary.
+The snapshot now records each scalar binding's root, selected output, exact type
+and nullability, dependencies, and consumers. The first deliberately narrow
+contract accepts only uncorrelated bindings with no dependencies, explicit
+Project/Filter consumers, and roots statically known to produce at most one
+row: `EmptySource`, an eligible ungrouped aggregate, a literal `Limit <= 1`, or
+Project/Filter/Sort wrappers over one of those shapes. Join, UnionAll,
+intermediate or `DistinctAll` aggregation, nested subplans, and staged subplans
+fail closed.
 
-The next implementation slice is exact uncorrelated scalar subplans that are
-statically at most one row, starting with TPCH q11 and q15. General scalar
-subplans require explicit query-error outcomes for the more-than-one-row case;
-restricted `IN`/`EXISTS` and correlated subplans follow separately.
-Solver/formula-size work then targets promotion of supported `UNKNOWN`
-obligations into the proof floor.
+The current exporter always emits the `plan.subplans` array. Its absence in a
+legacy-v1 snapshot means an empty array: the earlier version-one exporter could
+not encode a residual subplan and failed closed whenever one was present.
 
-The audit produced two confirmed new-RBO runtime defects. A stale negation flag
-could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
-and fix are committed in `95a2afad1d3`. Separately, a two-row uncorrelated
-scalar subquery raises the required error under the legacy optimizer but new RBO
-currently succeeds and selects the first row because `EnsureAtMostOne` is not
-consumed by physical lowering. The verifier will keep the query-error behavior
-explicit rather than accepting that truncation.
+Each admitted subplan is evaluated lazily once against the same symbolic
+database as the main plan. Zero rows produce a typed NULL and one row produces
+the selected value; cardinality, type/nullability, binding collisions, consumer
+scope, and nondeterministic direct outcomes are validated fail-closed across
+the exporter and trusted decoder/evaluator. The optimized form remains the
+ordinary main plan, so the proof compares that initial scalar semantics with
+the final StageGraph without adding a special equivalence shortcut.
+
+The optimized scalar lowering retains physical `EnsureAtMostOne` Limits. Their
+task-aware no-op audit runs only after the complete StageGraph and its task
+counts have been validated. TPCH q11 and q15 each propagate a final check
+across a serial UnionAll from a one-task aggregate stage, so the check is
+provably inert rather than ignored. The focused
+`*ProvenAtMostOneMarker*` C++ matrix passes 3/3: marker-off and marker-on
+snapshots are byte-identical for the one-task case, a graph-valid two-task
+producer is rejected only when the marker is enabled, and a grouped aggregate
+shows that one task permits traversal but does not itself prove cardinality.
+The complete exporter suite passes 161/161.
+
+This exact slice moves TPCH q11 and q15 through formula construction and into
+the checked-in proof floor. In the fresh complete formula dashboard they spent
+176/558 and 152/462 ms in preparation/verification. The post-hardening proof
+floor returns `VERIFIED_BOUNDED` after 158/6,585 and 199/2,750 ms,
+respectively. The complete dashboard remains 41/121 formulas (33.9%) and the
+proof floor remains 15/121 (12.4%).
+
+TPC-DS q24 remains unsupported because both boundaries reach the independent
+`Unsupported scalar callable Map` blocker. q54's initial scalar binding is not
+statically at most one row; its final boundary now fails closed because a
+`Limit` carries physical properties that logical snapshot v1 cannot represent.
+The next semantic milestone is general uncorrelated scalar subplans with
+explicit query-error outcomes for the more-than-one-row case. Restricted
+relational `EXISTS`, dynamic `IN`, and correlated subplans follow separately;
+solver/formula-size work then promotes supported `UNKNOWN` obligations.
+
+The audit found five production optimizer defects. A stale negation flag could
+turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
+are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
+a two-row scalar subquery select its first row instead of raising
+`PRECONDITION_FAILED`; the enforcement fix and real-YDB regressions are
+committed in `e1e3419012c`. While enabling direct scalar projection, the audit
+also found that `TOpMap::GetSubplanIUs()` passed the source and destination of
+`AddUnique` in reverse and that `ConvertTKqpOpMap` did not call
+`RemoveSubplans` on the projection lambda. Together those plumbing defects lost
+the binding metadata while leaving an inner query plan embedded in a scalar Map
+expression. The same regression then exposed that an empty nonaggregate YQL
+scalar projection constructed `Nothing<Int64>` instead of an optional NULL,
+causing type annotation to fail. Commit `52a1d7c4084` fixes those three
+projection-path defects and covers already-optional aggregation, a plain
+singleton, a computed projection, zero-row NULL, and the multirow error.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -930,8 +991,9 @@ ordered keys and identical metadata.
 
 ## StageGraph v1 shape
 
-The strict decoder rejects unknown fields and missing required fields (with the
-documented legacy-v1 scan exception above). The abbreviated shape is:
+The strict decoder rejects unknown fields and missing required fields, except
+for the documented legacy-v1 compatibility cases above. The abbreviated shape
+is:
 
 ```json
 {

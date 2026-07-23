@@ -56,6 +56,16 @@ class StreamingTestBase:
         super().change_cluster_version()
         self.ydb_client = YdbClient(self.driver)
 
+    def roll(self: Self) -> Generator[None, None, None]:
+        self.ydb_client.stop()
+
+        for result in super().roll():
+            self.ydb_client = YdbClient(self.driver)
+            yield result
+            self.ydb_client.stop()
+
+        self.ydb_client = YdbClient(self.driver)
+
     def create_objects(self: Self, external: bool) -> None:
         logger.debug("create_objects")
         self.input_topic = 'streaming_recipe/input_topic'
@@ -234,11 +244,12 @@ class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgrade
         self.create_simple_streaming_query()
         suffix = 'value1'
 
-        for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
-            #
-            # 2. check written data is correct during rolling upgrade
-            #
-            input_data = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
-            self.do_write_read(input_data, expected_data)
+        for i, _ in enumerate(self.roll()):
+            input_data = [
+                f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}',
+            ]
+            expected = [
+                f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}' + suffix,
+            ]
+            self.do_write_read(input_data, expected)
             time.sleep(0.5)

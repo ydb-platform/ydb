@@ -15,17 +15,12 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
+
 
 namespace NKikimr::NKqp::NRm {
 
 namespace {
-
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 
 using namespace NKikimr;
 using namespace NActors;
@@ -50,8 +45,9 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, HandleWait);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default:
-                LOG_C("Unexpected event type: " << ev->GetTypeRewrite()
-                    << ", event: " << ev->GetTypeName());
+                YDB_LOG_CRIT("Unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
         }
     }
 
@@ -62,17 +58,22 @@ public:
         TVector<NKikimrKqp::TKqpNodeResources> resources;
 
         if (event->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_I("WhiteBoard entries: " << event->InfoEntries.size());
+            YDB_LOG_INFO("WhiteBoard",
+                {"entries", event->InfoEntries.size()});
             resources.resize(event->InfoEntries.size());
 
             int i = 0;
             for (auto& [_, entry] : event->InfoEntries) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
-                LOG_D("WhiteBoard [" << i << "]: " << resources[i].ShortDebugString());
+                YDB_LOG_DEBUG("WhiteBoard resource entry",
+                    {"index", i},
+                    {"resource", resources[i].ShortDebugString()});
                 i++;
             }
         } else {
-            LOG_E("WhiteBoard error: " << (int) event->Status << ", path: " << event->Path);
+            YDB_LOG_ERROR("WhiteBoard",
+                {"error", (int) event->Status},
+                {"path", event->Path});
         }
 
         Callback(std::move(resources));

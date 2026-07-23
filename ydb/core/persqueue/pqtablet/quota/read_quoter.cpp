@@ -6,12 +6,12 @@
 namespace NKikimr::NPQ {
 
 void TReadQuoter::Bootstrap(const TActorContext& ctx) {
-    UpdateQuotaConfigImpl(true, ctx);
     TPartitionQuoterBase::Bootstrap(ctx);
     PartitionTotalMessageQuotaTracker = TQuotaTracker(
             GetTotalPartitionMessageSpeedBurst(PQTabletConfig, ctx),
             GetTotalPartitionMessageSpeed(PQTabletConfig, ctx),
             ctx.Now());
+    UpdateQuotaConfigImpl(true, ctx);
 }
 
 void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
@@ -163,7 +163,7 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
     if (PartitionTotalMessageQuotaTracker.Defined()) {
         totalMessagesSpeed = PartitionTotalMessageQuotaTracker->GetTotalSpeed();
     }
-    if (updatedQuotas.size() || totalQuotaUpdated) {
+    if (updatedQuotas.size() || updatedMessagesQuotas.size() || totalQuotaUpdated) {
         Send(Parent, new NQuoterEvents::TEvQuotaUpdated(updatedQuotas, totalSpeed, updatedMessagesQuotas, totalMessagesSpeed));
     }
 }

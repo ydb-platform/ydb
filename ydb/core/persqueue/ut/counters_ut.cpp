@@ -1616,8 +1616,6 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                                 ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
-            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
-            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             auto group_client1 = group->GetSubgroup("consumer", "client");
             group_client1->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
             group_client1->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
@@ -1627,6 +1625,11 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
             group_client2->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
             group_client2->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
             group_client2->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
+            auto group_without_consumer = group->GetSubgroup("consumer", "$without_consumer");
+            group_without_consumer->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group_without_consumer->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+            group_without_consumer->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
 
             TStringStream countersStr;
             dbGroup->OutputHtml(countersStr);

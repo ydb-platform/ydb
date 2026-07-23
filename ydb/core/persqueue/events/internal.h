@@ -1154,9 +1154,9 @@ struct TEvPQ {
             , IsOverhead(true)
         {}
 
-        ui64 ConsumedBytes;
-        ui64 ConsumedMessages;
-        ui64 RequestCookie;
+        ui64 ConsumedBytes {};
+        ui64 ConsumedMessages {};
+        ui64 RequestCookie {};
         TString Consumer;
         bool IsOverhead = false;
     };

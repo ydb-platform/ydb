@@ -330,6 +330,7 @@ TResult ApplyChangesInt(
     }
 
     pqTabletConfig->ClearConsumers();
+    pqTabletConfig->MutablePartitionConfig()->ClearReadQuota();
 
     for (const auto& rr : consumers) {
         auto result = AddConsumer(
@@ -382,25 +383,41 @@ TResult ApplyChangesInt(
         if (request.set_partition_total_read_speed_bytes_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_bytes_per_second can't be negative, provided " << request.set_partition_total_read_speed_bytes_per_second()};
         }
-        partConfig->SetReadSpeedInBytesPerSecond(request.set_partition_total_read_speed_bytes_per_second());
+        if (request.set_partition_total_read_speed_bytes_per_second() == 0) {
+            partConfig->ClearReadSpeedInBytesPerSecond();
+        } else {
+            partConfig->SetReadSpeedInBytesPerSecond(request.set_partition_total_read_speed_bytes_per_second());
+        }
     }
     if (request.has_set_partition_total_read_burst_bytes()) {
         if (request.set_partition_total_read_burst_bytes() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_burst_bytes can't be negative, provided " << request.set_partition_total_read_burst_bytes()};
         }
-        partConfig->SetReadBurstBytes(request.set_partition_total_read_burst_bytes());
+        if (request.set_partition_total_read_burst_bytes() == 0) {
+            partConfig->ClearReadBurstBytes();
+        } else {
+            partConfig->SetReadBurstBytes(request.set_partition_total_read_burst_bytes());
+        }
     }
     if (request.has_set_partition_total_read_speed_messages_per_second()) {
         if (request.set_partition_total_read_speed_messages_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_messages_per_second can't be negative, provided " << request.set_partition_total_read_speed_messages_per_second()};
         }
-        partConfig->SetReadSpeedInMessagesPerSecond(request.set_partition_total_read_speed_messages_per_second());
+        if (request.set_partition_total_read_speed_messages_per_second() == 0) {
+            partConfig->ClearReadSpeedInMessagesPerSecond();
+        } else {
+            partConfig->SetReadSpeedInMessagesPerSecond(request.set_partition_total_read_speed_messages_per_second());
+        }
     }
     if (request.has_set_partition_total_read_burst_messages()) {
         if (request.set_partition_total_read_burst_messages() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_burst_messages can't be negative, provided " << request.set_partition_total_read_burst_messages()};
         }
-        partConfig->SetReadBurstMessages(request.set_partition_total_read_burst_messages());
+        if (request.set_partition_total_read_burst_messages() == 0) {
+            partConfig->ClearReadBurstMessages();
+        } else {
+            partConfig->SetReadBurstMessages(request.set_partition_total_read_burst_messages());
+        }
     }
 
     // Read speed for reading a single partition without a consumer is stored in
@@ -409,25 +426,53 @@ TResult ApplyChangesInt(
         if (request.set_partition_read_without_consumer_speed_bytes_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_bytes_per_second can't be negative, provided " << request.set_partition_read_without_consumer_speed_bytes_per_second()};
         }
-        NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER)->SetSpeedInBytesPerSecond(request.set_partition_read_without_consumer_speed_bytes_per_second());
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (readQuota) {
+            if (request.set_partition_read_without_consumer_speed_bytes_per_second() == 0) {
+                readQuota->ClearSpeedInBytesPerSecond();
+            } else {
+                readQuota->SetSpeedInBytesPerSecond(request.set_partition_read_without_consumer_speed_bytes_per_second());
+            }
+        }
     }
     if (request.has_set_partition_read_without_consumer_burst_bytes()) {
         if (request.set_partition_read_without_consumer_burst_bytes() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_burst_bytes can't be negative, provided " << request.set_partition_read_without_consumer_burst_bytes()};
         }
-        NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER)->SetBurstSize(request.set_partition_read_without_consumer_burst_bytes());
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (readQuota) {
+            if (request.set_partition_read_without_consumer_burst_bytes() == 0) {
+                readQuota->ClearBurstSize();
+            } else {
+                readQuota->SetBurstSize(request.set_partition_read_without_consumer_burst_bytes());
+            }
+        }
     }
     if (request.has_set_partition_read_without_consumer_speed_messages_per_second()) {
         if (request.set_partition_read_without_consumer_speed_messages_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_messages_per_second can't be negative, provided " << request.set_partition_read_without_consumer_speed_messages_per_second()};
         }
-        NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER)->SetSpeedInMessagesPerSecond(request.set_partition_read_without_consumer_speed_messages_per_second());
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (readQuota) {
+            if (request.set_partition_read_without_consumer_speed_messages_per_second() == 0) {
+                readQuota->ClearSpeedInMessagesPerSecond();
+            } else {
+                readQuota->SetSpeedInMessagesPerSecond(request.set_partition_read_without_consumer_speed_messages_per_second());
+            }
+        }
     }
     if (request.has_set_partition_read_without_consumer_burst_messages()) {
         if (request.set_partition_read_without_consumer_burst_messages() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_burst_messages can't be negative, provided " << request.set_partition_read_without_consumer_burst_messages()};
         }
-        NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER)->SetBurstSizeInMessages(request.set_partition_read_without_consumer_burst_messages());
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (readQuota) {
+            if (request.set_partition_read_without_consumer_burst_messages() == 0) {
+                readQuota->ClearBurstSizeInMessages();
+            } else {
+                readQuota->SetBurstSizeInMessages(request.set_partition_read_without_consumer_burst_messages());
+            }
+        }
     }
 
     return {};

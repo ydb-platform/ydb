@@ -76,40 +76,69 @@ class Probes:
 
     def __init__(self, script: smt.Script) -> None:
         self.script = script
-        self._bound: dict[smt.Term, smt.Term] = {}
+        self._terms: dict[int, smt.Term] = {}
+        self._bound: dict[int, smt.Term] = {}
         self._requested: list[smt.Term] = []
+        self._sealed = False
 
     @property
     def requested(self) -> tuple[smt.Term, ...]:
+        self.seal()
         return tuple(self._requested)
 
     def add(self, term: smt.Term) -> None:
-        if term in self._bound:
+        if self._sealed:
+            raise InspectionError("cannot add a concrete trace probe after sealing")
+        identity = id(term)
+        if identity in self._terms:
             return
-        if len(self._bound) >= MAX_TRACE_PROBES:
+        # Retaining the term keeps its identity stable until exact structural
+        # compaction creates aliases in one iterative pass.
+        self._terms[identity] = term
+
+    def seal(self) -> None:
+        if self._sealed:
+            return
+        items = tuple(self._terms.items())
+        terms = tuple(term for _, term in items)
+        structural = smt.structural_ids(terms)
+        representatives: dict[int, smt.Term] = {}
+        for structural_id, term in zip(structural, terms):
+            representatives.setdefault(structural_id, term)
+        if len(representatives) > MAX_TRACE_PROBES:
             raise InspectionError(
                 f"concrete trace exceeds the {MAX_TRACE_PROBES} unique-probe audit bound"
             )
-        if term.operation in {"bool", "int"}:
-            bound = term
-        elif term.operation == "symbol":
-            bound = term
-            self._requested.append(bound)
-        else:
-            bound = self.script.fresh_constant(
-                f"concrete_trace_probe:{len(self._bound)}", term.sort
-            )
-            self.script.assert_(smt.eq(bound, term))
-            self._requested.append(bound)
-        self._bound[term] = bound
+
+        bound_by_structure: dict[int, smt.Term] = {}
+        for structural_id, term in representatives.items():
+            if term.operation in {"bool", "int"}:
+                bound = term
+            elif term.operation == "symbol":
+                bound = term
+                self._requested.append(bound)
+            else:
+                bound = self.script.fresh_constant(
+                    f"concrete_trace_probe:{len(bound_by_structure)}",
+                    term.sort,
+                )
+                self.script.assert_(smt.eq(bound, term))
+                self._requested.append(bound)
+            bound_by_structure[structural_id] = bound
+        self._bound = {
+            identity: bound_by_structure[structural_id]
+            for (identity, _), structural_id in zip(items, structural)
+        }
+        self._sealed = True
 
     def value(
         self,
         term: smt.Term,
         values: Mapping[str, bool | int | str],
     ) -> bool | int | str:
+        self.seal()
         try:
-            return term_value(self._bound[term], values)
+            return term_value(self._bound[id(term)], values)
         except KeyError as error:
             raise InspectionError("attempted to decode an unregistered trace term") from error
 
@@ -247,6 +276,7 @@ def prepare(
     for row in comparison.pair_equal:
         for term in row:
             probes.add(term)
+    probes.seal()
     return PreparedInspection(
         before,
         after,

@@ -224,6 +224,7 @@
 #include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
+#include <ydb/core/tx/limiter/grouped_memory/service/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -2565,7 +2566,7 @@ void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_SCAN_GROUPED_MEMORY_LIMITER");
 
-        auto service = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+        auto service = NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy>(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(NodeId),
@@ -2588,7 +2589,7 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_GROUPED_MEMORY_LIMITER");
 
-        auto service = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+        auto service = NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TCompMemoryLimiterPolicy>(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2611,7 +2612,7 @@ void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_DEDU_GROUPED_MEMORY_LIMITER");
 
-        auto service = NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+        auto service = NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterPolicy>(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));

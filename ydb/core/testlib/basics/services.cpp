@@ -21,6 +21,7 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/general_cache/service/service.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
@@ -169,14 +170,14 @@ namespace NKikimr {
     }
 
     void SetupCSMetadataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
-        auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(
+        auto* actor = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(
 			NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
 		runtime.AddLocalService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
 			TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
     }
 
     void SetupCSColumnDataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
-        auto* actor = NOlap::NColumnFetching::TGeneralCache::CreateService(
+        auto* actor = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(
             NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
         runtime.AddLocalService(NOlap::NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
             TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);

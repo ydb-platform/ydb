@@ -11,7 +11,7 @@ SRCS(
     codecs.h
     control_plane.h
     counters.h
-    deferred_publish_limits.h
+    deferred_publication_limits.h
     errors.h
     events_common.h
     executor.h
@@ -21,7 +21,7 @@ SRCS(
     write_events.h
     write_session.h
     producer.h
-    ydb_topic_deferred_publish.h
+    deferred_publications.h
 )
 
 PEERDIR(

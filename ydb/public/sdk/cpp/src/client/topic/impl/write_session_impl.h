@@ -1,7 +1,7 @@
 #pragma once
 
 #include "transaction.h"
-#include "deferred_publish_ack_tracker.h"
+#include "deferred_publication_ack_tracker.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>

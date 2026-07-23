@@ -1594,79 +1594,86 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
 
     def test_structural_key_classes_preserve_multiplicity_and_dynamic_equality(self):
         for function in ("count", "sum"):
-            with self.subTest(function=function):
-                snapshot = duplicated_grouped_aggregate_snapshot(
-                    function,
-                    nullable_key=True,
-                )
-                script = smt.Script()
-                database = Database(snapshot, 2, script)
-                evaluator = RelationEvaluator(
-                    snapshot,
-                    database,
-                    ScalarEncoder(script),
-                )
-                source = evaluator.node("union").certain()
-                self.assertIsNot(
-                    source.rows[0].values["u.k"].value,
-                    source.rows[2].values["u.k"].value,
-                )
-                self.assertEqual(
-                    relation_model._aggregate_key_classes(("u.k",), source.rows),
-                    ((0, 2), (1, 3)),
-                )
-                with (
-                    mock.patch.object(
-                        relation_model,
-                        "MAX_RELATION_ROW_PAIRS",
-                        8,
-                    ),
-                    mock.patch.object(
-                        evaluator,
-                        "_same_group",
-                        wraps=evaluator._same_group,
-                    ) as same_group,
-                    mock.patch.object(
-                        relation_model,
-                        "_require_relation_row_pairs",
-                        wraps=relation_model._require_relation_row_pairs,
-                    ) as require_pairs,
-                ):
-                    result = evaluator.root().certain()
-
-                self.assertEqual(len(result.rows), 2)
-                self.assertEqual(same_group.call_count, 3)
-                self.assertIn(
-                    mock.call(8, "grouped aggregate class membership"),
-                    require_pairs.call_args_list,
-                )
-                self.assertIn(
-                    mock.call(3, "grouped aggregate class comparison"),
-                    require_pairs.call_args_list,
-                )
-                self.assertTrue(all(row.occurrence is None for row in result.rows))
-                states = (None,) + tuple(product((None, 0, 1), (-2, 3)))
-                for rows in product(states, repeat=2):
-                    expanded = tuple(
-                        row
-                        for row in rows
-                        for _ in range(2)
+            for pair_bound in (8, 16):
+                with self.subTest(function=function, pair_bound=pair_bound):
+                    snapshot = duplicated_grouped_aggregate_snapshot(
+                        function,
+                        nullable_key=True,
+                    )
+                    script = smt.Script()
+                    database = Database(snapshot, 2, script)
+                    evaluator = RelationEvaluator(
+                        snapshot,
+                        database,
+                        ScalarEncoder(script),
+                    )
+                    source = evaluator.node("union").certain()
+                    self.assertIsNot(
+                        source.rows[0].values["u.k"].value,
+                        source.rows[2].values["u.k"].value,
                     )
                     self.assertEqual(
-                        self._symbolic_bag(
-                            result,
-                            self._constants(database, rows),
+                        relation_model._aggregate_key_classes(
+                            ("u.k",),
+                            source.rows,
                         ),
-                        self._reference_bag(
-                            function,
-                            True,
-                            expanded,
-                            False,
-                        ),
-                        rows,
+                        ((0, 2), (1, 3)),
                     )
+                    with (
+                        mock.patch.object(
+                            relation_model,
+                            "MAX_RELATION_ROW_PAIRS",
+                            pair_bound,
+                        ),
+                        mock.patch.object(
+                            evaluator,
+                            "_same_group",
+                            wraps=evaluator._same_group,
+                        ) as same_group,
+                        mock.patch.object(
+                            relation_model,
+                            "_require_relation_row_pairs",
+                            wraps=relation_model._require_relation_row_pairs,
+                        ) as require_pairs,
+                    ):
+                        result = evaluator.root().certain()
 
-    def test_structural_key_class_metadata_keeps_only_common_facts(self):
+                    self.assertEqual(len(result.rows), 2)
+                    self.assertEqual(same_group.call_count, 3)
+                    self.assertIn(
+                        mock.call(8, "grouped aggregate class membership"),
+                        require_pairs.call_args_list,
+                    )
+                    self.assertIn(
+                        mock.call(3, "grouped aggregate class comparison"),
+                        require_pairs.call_args_list,
+                    )
+                    self.assertTrue(all(
+                        row.occurrence is None
+                        for row in result.rows
+                    ))
+                    states = (None,) + tuple(product((None, 0, 1), (-2, 3)))
+                    for rows in product(states, repeat=2):
+                        expanded = tuple(
+                            row
+                            for row in rows
+                            for _ in range(2)
+                        )
+                        self.assertEqual(
+                            self._symbolic_bag(
+                                result,
+                                self._constants(database, rows),
+                            ),
+                            self._reference_bag(
+                                function,
+                                True,
+                                expanded,
+                                False,
+                            ),
+                            rows,
+                        )
+
+    def test_equal_cost_classes_stay_directional_and_shared_metadata_is_conservative(self):
         snapshot = duplicated_grouped_aggregate_snapshot("count")
         script = smt.Script()
         evaluator = RelationEvaluator(
@@ -1728,6 +1735,18 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         )
         classes = relation_model._aggregate_key_classes(("u.k",), source.rows)
         self.assertEqual(classes, ((0, 1), (2,)))
+        with mock.patch.object(
+            evaluator,
+            "_same_group",
+            wraps=evaluator._same_group,
+        ) as same_group:
+            directional = evaluator._grouped_aggregate_rows(
+                evaluator.nodes["aggregate"],
+                source,
+            )
+        self.assertEqual(len(directional), 3)
+        self.assertEqual(same_group.call_count, 12)
+
         result = evaluator._shared_grouped_aggregate_rows(
             evaluator.nodes["aggregate"],
             source,
@@ -1761,18 +1780,13 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 def observe(_edge, task, family):
                     edge_inputs.append((task, family.certain()))
 
-                with mock.patch.object(
-                    relation_model,
-                    "MAX_RELATION_ROW_PAIRS",
-                    2,
-                ):
-                    result = StageEvaluator(
-                        snapshot,
-                        database,
-                        ScalarEncoder(script),
-                        router,
-                        edge_observer=observe,
-                    ).root().certain()
+                result = StageEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                    router,
+                    edge_observer=observe,
+                ).root().certain()
 
                 self.assertEqual(
                     len(edge_inputs),

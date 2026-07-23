@@ -809,6 +809,23 @@ class SortConcreteDifferentialTest(unittest.TestCase):
                         _reference_sequences(rows, order),
                     )
 
+    def test_default_symbolic_sort_matches_four_row_ties(self):
+        order = [order_item("a.k1")]
+        parsed = logical_sort(order)
+        database, family = _logical_family(parsed, 4)
+        rows = (
+            (0, 0, 0),
+            (0, 1, 1),
+            (1, 0, 2),
+            (1, 1, 3),
+        )
+
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(
+            _sequences(family, _database_constants(database, rows)),
+            _reference_sequences(rows, order),
+        )
+
     def test_symbolic_sort_and_top_sort_match_tiny_reference(self):
         with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
             for ascending, nulls_first, top_limit in product(
@@ -1071,6 +1088,31 @@ class OrderedLimitTest(unittest.TestCase):
             _sequences(comparison.right, {}),
         )
 
+    def test_missing_four_row_order_uses_the_symbolic_sequence_language(self):
+        columns = (Column("value", "Int64", False),)
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {"value": Value("Int64", smt.FALSE, smt.int_value(value))},
+            )
+            for value in range(4)
+        )
+        script = smt.Script()
+        comparison = compare_families(
+            single(Relation(columns, rows, sequence=True)),
+            single(Relation(columns, rows)),
+            ScalarEncoder(script),
+        )
+
+        self.assertEqual(len(comparison.right.outcomes), 1)
+        outcome = comparison.right.outcomes[0]
+        self.assertEqual(len(outcome.choices), 4)
+        self.assertEqual(len(outcome.relation.ordinals), 4)
+        self.assertEqual(
+            _sequences(comparison.right, {}),
+            set(permutations(((0,), (1,), (2,), (3,)))),
+        )
+
 
 class SortMutationTest(unittest.TestCase):
     def test_direction_null_placement_key_order_and_top_limit_mutations_are_observable(self):
@@ -1230,9 +1272,9 @@ class SortMutationTest(unittest.TestCase):
             )
         )
 
-    def test_sort_uses_one_quadratic_outcome_at_forty_eight_slots(self):
+    def test_sort_enumerates_through_three_rows_then_uses_ordinals(self):
         parsed = logical_sort([order_item("a.k1")])
-        for row_bound in (6, 48):
+        for row_bound, outcome_count in ((3, 6), (4, 1), (48, 1)):
             with self.subTest(row_bound=row_bound):
                 script = smt.Script()
                 database = Database(parsed, row_bound, script)
@@ -1241,12 +1283,22 @@ class SortMutationTest(unittest.TestCase):
                     database,
                     ScalarEncoder(script),
                 ).root()
-                self.assertEqual(len(family.outcomes), 1)
-                self.assertEqual(len(family.outcomes[0].choices), row_bound)
-                self.assertEqual(
-                    len(family.outcomes[0].relation.ordinals),
-                    row_bound,
-                )
+                self.assertEqual(len(family.outcomes), outcome_count)
+                if row_bound == 3:
+                    self.assertTrue(all(
+                        not outcome.choices
+                        and outcome.relation.ordinals is None
+                        for outcome in family.outcomes
+                    ))
+                else:
+                    self.assertEqual(
+                        len(family.outcomes[0].choices),
+                        row_bound,
+                    )
+                    self.assertEqual(
+                        len(family.outcomes[0].relation.ordinals),
+                        row_bound,
+                    )
 
     def test_sort_and_latent_sequence_pair_bounds_precede_large_allocations(self):
         parsed = logical_sort([order_item("a.k1")])

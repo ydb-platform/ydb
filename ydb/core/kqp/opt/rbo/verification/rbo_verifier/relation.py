@@ -173,6 +173,7 @@ class RelationError(ValueError):
 
 MAX_OUTCOME_ALTERNATIVES = 256
 MAX_OUTCOME_COMPARISONS = 4096
+MAX_ENUMERATED_SEQUENCE_ROWS = 3
 MAX_RELATION_ROWS = 4096
 MAX_RELATION_ROW_PAIRS = 16384
 
@@ -554,6 +555,38 @@ class Evaluator:
     ) -> tuple[Row, ...]:
         row_count = len(source.rows)
         directional_pair_count = row_count * row_count
+        classes = _aggregate_key_classes(node.keys, source.rows)
+        class_count = len(classes)
+        class_memberships = class_count * row_count
+        class_comparisons = class_count * (class_count + 1) // 2
+        class_pair_count = class_memberships + class_comparisons
+        classes_fit = (
+            class_memberships <= MAX_RELATION_ROW_PAIRS
+            and class_comparisons <= MAX_RELATION_ROW_PAIRS
+        )
+        classes_cheaper = class_pair_count < directional_pair_count
+        # Above the directional cap, classes are an exact way to stay within
+        # the audit bound. Below it, change representation only when they
+        # strictly reduce the audited pair construction.
+        use_classes = (
+            class_count < row_count
+            and classes_fit
+            and (
+                directional_pair_count > MAX_RELATION_ROW_PAIRS
+                or classes_cheaper
+            )
+        )
+        if use_classes:
+            _require_relation_row_pairs(
+                class_memberships,
+                "grouped aggregate class membership",
+            )
+            _require_relation_row_pairs(
+                class_comparisons,
+                "grouped aggregate class comparison",
+            )
+            return self._shared_grouped_aggregate_rows(node, source, classes)
+
         if directional_pair_count <= MAX_RELATION_ROW_PAIRS:
             _require_relation_row_pairs(
                 directional_pair_count,
@@ -586,31 +619,15 @@ class Evaluator:
                 )
             return tuple(rows)
 
-        classes = _aggregate_key_classes(node.keys, source.rows)
-        class_count = len(classes)
-        class_memberships = class_count * row_count
-        class_comparisons = class_count * (class_count + 1) // 2
-        use_classes = (
-            class_count < row_count
-            and class_memberships <= MAX_RELATION_ROW_PAIRS
-            and class_comparisons <= MAX_RELATION_ROW_PAIRS
+        _require_relation_row_pairs(
+            row_count * (row_count + 1) // 2,
+            "grouped aggregate",
         )
-        if use_classes:
-            _require_relation_row_pairs(
-                class_memberships,
-                "grouped aggregate class membership",
-            )
-            _require_relation_row_pairs(
-                class_comparisons,
-                "grouped aggregate class comparison",
-            )
-        else:
-            _require_relation_row_pairs(
-                row_count * (row_count + 1) // 2,
-                "grouped aggregate",
-            )
-            classes = tuple((index,) for index in range(row_count))
-        return self._shared_grouped_aggregate_rows(node, source, classes)
+        return self._shared_grouped_aggregate_rows(
+            node,
+            source,
+            tuple((index,) for index in range(row_count)),
+        )
 
     def _shared_grouped_aggregate_rows(
         self,
@@ -1212,9 +1229,10 @@ def sort_family(
 ) -> RelationFamily:
     """Represent every tie-respecting Sort sequence exactly.
 
-    Small families stay quantifier-free for solver performance.  Once explicit
-    permutations would exceed the ordinary outcome audit cap, bounded ordinal
-    choices provide the same sequence language with quadratic construction.
+    Families with at most three candidate rows stay quantifier-free for solver
+    performance.  Larger inputs, or small families whose combined permutations
+    exceed the outcome audit cap, use bounded ordinal choices for the same
+    sequence language with quadratic construction.
     """
 
     if not order:
@@ -1226,9 +1244,7 @@ def sort_family(
         ),
         "sort construction",
     )
-    if sum(factorial(len(outcome.relation.rows)) for outcome in source.outcomes) <= (
-        MAX_OUTCOME_ALTERNATIVES
-    ):
+    if _use_enumerated_sequences(source):
         return _enumerated_sort_family(source, order, decision)
     outcomes: list[Outcome] = []
     for source_outcome in source.outcomes:
@@ -1262,6 +1278,20 @@ def sort_family(
     if not outcomes:
         raise RelationError("sort produced no outcomes")
     return RelationFamily(tuple(outcomes))
+
+
+def _use_enumerated_sequences(family: RelationFamily) -> bool:
+    """Keep only tiny sequence languages quantifier-free."""
+
+    if any(
+        len(outcome.relation.rows) > MAX_ENUMERATED_SEQUENCE_ROWS
+        for outcome in family.outcomes
+    ):
+        return False
+    return sum(
+        factorial(len(outcome.relation.rows))
+        for outcome in family.outcomes
+    ) <= MAX_OUTCOME_ALTERNATIVES
 
 
 def _enumerated_sort_family(
@@ -1921,9 +1951,7 @@ def _as_sequence_family(
         ),
         "latent sequence construction",
     )
-    if sum(factorial(len(outcome.relation.rows)) for outcome in family.outcomes) <= (
-        MAX_OUTCOME_ALTERNATIVES
-    ):
+    if _use_enumerated_sequences(family):
         return _enumerated_as_sequence_family(family)
     outcomes: list[Outcome] = []
     for index, source_outcome in enumerate(family.outcomes):

@@ -201,4 +201,6 @@ struct TSampleQueries {
 
 };
 
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex = 0);
+
 }  // namespace NKikimr::NWorkloadManager

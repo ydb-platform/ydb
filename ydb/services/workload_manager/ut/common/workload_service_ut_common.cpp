@@ -645,28 +645,6 @@ public:
         });
     }
 
-    void WaitForClassifierPropagation() const override {
-        const auto nodeIndex = 0;
-        auto* runtime = GetRuntime();
-        const ui32 nodeId = runtime->GetNodeId(nodeIndex);
-        const TActorId edgeActor = runtime->AllocateEdgeActor(nodeIndex);
-
-        runtime->Send(
-            NMetadata::NProvider::MakeServiceId(nodeId),
-            edgeActor,
-            new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()),
-            nodeIndex);
-
-        const auto response = runtime->GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(
-            edgeActor, FUTURE_WAIT_TIMEOUT);
-        UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
-
-        runtime->Send(
-            NKqp::MakeKqpProxyID(nodeId),
-            edgeActor,
-            new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
-            nodeIndex);
-    }
 
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
@@ -934,6 +912,33 @@ void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query
 
 void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
     WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
+}
+
+
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
+    const ui32 nodeId = runtime.GetNodeId(nodeIndex);
+    const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+
+    runtime.Send(
+        NMetadata::NProvider::MakeServiceId(nodeId),
+        edgeActor,
+        new NMetadata::NProvider::TEvAskSnapshot(
+            std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()),
+        nodeIndex);
+
+    const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(
+        edgeActor, FUTURE_WAIT_TIMEOUT);
+    UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
+
+    runtime.Send(
+        NKqp::MakeKqpProxyID(nodeId),
+        edgeActor,
+        new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
+        nodeIndex);
+}
+
+void WaitForClassifierPropagation() const override {
+    WaitForClassifierPropagation(*GetRuntime());
 }
 
 

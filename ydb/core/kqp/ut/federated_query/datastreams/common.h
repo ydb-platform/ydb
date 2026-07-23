@@ -143,6 +143,10 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
+    void WaitForClassifierPropagation() {
+        NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
+    }
+
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr);

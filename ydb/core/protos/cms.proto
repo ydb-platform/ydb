@@ -21,6 +21,10 @@ message TStatus {
         NO_SUCH_HOST = 10;
         NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
+        // Temporary disallow: the action would be allowed, but the node currently
+        // hosts a running system tablet. Such actions can still be granted to fill
+        // a batch when no tablet-free nodes are left.
+        DISALLOW_TEMP_SYS_TABLET = 13;
     }
 
     optional ECode   Code = 1;

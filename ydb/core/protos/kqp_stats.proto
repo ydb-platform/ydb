@@ -60,6 +60,7 @@ message TKqpLockStats {
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
     TKqpLockStats LockStats = 2;
+    uint32 ReadRetriesCount = 3; // shard read retries (read actor / stream lookup)
 }
 
 message TNodeExecutionStats {

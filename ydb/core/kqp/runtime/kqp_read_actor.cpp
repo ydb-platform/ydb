@@ -1566,14 +1566,19 @@ public:
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
-            // Add lock stats for broken locks from read operations
-            if (!BrokenLocks.empty()) {
+            // Add lock stats for broken locks and shard read retries
+            if (!BrokenLocks.empty() || TotalRetries > 0) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                if (!BrokenLocks.empty()) {
+                    extraStats.MutableLockStats()->SetBrokenAsVictim(
+                        extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                }
+                if (TotalRetries > 0) {
+                    extraStats.SetReadRetriesCount(extraStats.GetReadRetriesCount() + TotalRetries);
+                }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }

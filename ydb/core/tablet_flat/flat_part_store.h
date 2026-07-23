@@ -166,17 +166,25 @@ public:
     }
 
     /// TOuterPageCollection for the outer blob slot
-    static void Construct(TVector<TIntrusivePtr<TPageCollection>>& pageCollections, TVector<TPageCollectionComponents> components, ui32 outerIdx = Max<ui32>())
+    static void Construct(TVector<TIntrusivePtr<TPageCollection>>& pageCollections, TVector<TPageCollectionComponents> components, bool hasOuter)
     {
-        for (ui32 i = 0; i < components.size(); i++) {
-            if (i == outerIdx) {
-                auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
-                    components[i].PageCollection->LargeGlobId,
-                    TSharedData(components[i].PageCollection->Meta.Raw));
-                pageCollections.emplace_back(new TPageCollection(std::move(outerColl)));
-            } else {
-                pageCollections.emplace_back(new TPageCollection(std::move(components[i].PageCollection)));
-            }
+        if (components.empty() && hasOuter) {
+            auto& outer = pageCollections.back();
+            auto* plain = CheckedCast<const NPageCollection::TPageCollection*>(outer->PageCollection.Get());
+            auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
+                plain->LargeGlobId, TSharedData(plain->Meta.Raw));
+            outer = new TPageCollection(std::move(outerColl));
+            return;
+        }
+
+        for (ui32 i = 0; i < components.size() - hasOuter; i++) {
+            pageCollections.emplace_back(new TPageCollection(std::move(components[i].PageCollection)));
+        }
+        if (hasOuter) {
+            auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
+                components.back().PageCollection->LargeGlobId,
+                TSharedData(components.back().PageCollection->Meta.Raw));
+            pageCollections.emplace_back(new TPageCollection(std::move(outerColl)));
         }
     }
 

@@ -43,6 +43,7 @@ namespace NTable {
             , CutIndexKeys(conf.CutIndexKeys)
             , WriteBTreeIndex(conf.WriteBTreeIndex)
             , WriteBTreeIndexV2(conf.WriteBTreeIndexV2)
+            , WriteBTreeIndexV2KeepV1Shadow(conf.BTreeIndexV2KeepV1Shadow)
             , WriteFlatIndex(!conf.WriteBTreeIndexV2 && (conf.WriteFlatIndex || !conf.WriteBTreeIndex))
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
@@ -754,8 +755,9 @@ namespace NTable {
                 }
 
                 if (WriteBTreeIndex) {
-                    lay->SetBTreeIndexesFormatVersion(WriteBTreeIndexV2 ? NPage::TBtreeIndexNode::FormatVersionV2
-                                                                        : NPage::TBtreeIndexNode::FormatVersionV1);
+                    lay->SetBTreeIndexesFormatVersion(WriteBTreeIndexV2 && !WriteBTreeIndexV2KeepV1Shadow
+                        ? NPage::TBtreeIndexNode::FormatVersionV2
+                        : NPage::TBtreeIndexNode::FormatVersionV1);
                     for (bool history : {false, true}) {
                         for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                             auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
@@ -1170,6 +1172,7 @@ namespace NTable {
         const bool CutIndexKeys;
         const bool WriteBTreeIndex;
         const bool WriteBTreeIndexV2;
+        const bool WriteBTreeIndexV2KeepV1Shadow;
         const bool WriteFlatIndex;
         const ui32 SmallEdge;
         const ui32 LargeEdge;

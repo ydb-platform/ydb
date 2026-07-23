@@ -83,6 +83,8 @@ namespace NTabletFlatExecutor {
                 Stats.ToLoadPages++;
                 Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
                 Stats.ToLoadBytes += location.Size;
+            } else {
+                Y_ASSERT(res.first->Type == location.Type && res.first->Size == location.Size && res.first->Crc32 == location.Crc32);
             }
         }
 

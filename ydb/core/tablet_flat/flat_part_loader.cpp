@@ -161,12 +161,10 @@ void TLoader::StageParseMeta()
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
-    // Wrap remaining raw page collections — use TOuterPageCollection for the outer blob slot
-    if (RawComponents) {
-        auto groupsCount = Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size());
-        auto outerIdx = (SmallId != Max<TPageId>()) ? groupsCount - 1 : Max<ui32>();
-        TPartStore::Construct(PageCollections, std::move(RawComponents), outerIdx);
-    }
+    // Wrap RawComponents into page collections
+    // And replace TOuterPageCollection for the outer blob slot even RawComponents is empty
+    auto hasOuter = (SmallId != Max<TPageId>()) ? true : false;
+    TPartStore::Construct(PageCollections, std::move(RawComponents), hasOuter);
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())

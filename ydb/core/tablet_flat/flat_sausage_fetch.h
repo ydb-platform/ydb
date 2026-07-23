@@ -31,6 +31,7 @@ namespace NPageCollection {
         TSharedData Data;
     };
 
+    // Lightweight: offset+data only; Size/Type/Crc32 are authoritative in the cache's PageSet.
     struct TLoadedPageData {
         TLoadedPageData() = default;
 

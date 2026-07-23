@@ -42,8 +42,8 @@ namespace NPageCollection {
                 }
             }
 
-            bool pageSkipped = (type == ui32(NTable::NPage::EPage::BTreeIndexV2) ||
-                                (V2OnlyMode && type == ui32(NTable::NPage::EPage::DataPage)));
+            bool pageSkipped = V2OnlyMode && (type == ui32(NTable::NPage::EPage::BTreeIndexV2) ||
+                                              type == ui32(NTable::NPage::EPage::DataPage));
             /* No TEntry/TExtra entry created */
             if (pageSkipped) {
                 SkippedBytes += body.size();

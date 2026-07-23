@@ -32,7 +32,7 @@ public:
             bool isDataLevel = (LevelCount_ == 0) || (level >= LevelCount_);
 
             if (isDataLevel && skipDataPages) {
-                continue;
+                return true; // data level always last, walker is done
             }
 
             bool anyMissed = false;

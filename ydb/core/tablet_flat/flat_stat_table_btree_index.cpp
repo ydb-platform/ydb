@@ -4,8 +4,6 @@
 #include "flat_stat_table_btree_index.h"
 #include "util_fmt_abort.h"
 
-#include <util/system/backtrace.h>
-
 namespace NKikimr::NTable {
 
 namespace {
@@ -24,16 +22,6 @@ NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta
     return GetBTreeRootLocation(meta,
         part->GetPageCollection(0),          // btree index pages are always in room 0
         part->GetPageCollection(groupId.Index)); // data pages are in the group's room
-}
-
-// For V2 nodes, the location is inline in the child struct.
-// For V1 nodes, the location is resolved through Part->GetPageLocation().
-NPage::TPageLocation ChildLocation(const TPart* part, const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel, TGroupId groupId) {
-    auto ref = node.GetChild(pos, isLeafLevel);
-    if (auto* loc = std::get_if<NPage::TPageLocation>(&ref)) {
-        return *loc;
-    }
-    return part->GetPageLocation(std::get<NPage::TPageId>(ref), isLeafLevel ? groupId : TGroupId{});
 }
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
@@ -59,7 +47,7 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         auto pos = node.Seek(rowId);
 
         bool isLeafLevel = (height + 1 == meta.LevelCount);
-        location = ChildLocation(part, node, pos, isLeafLevel, groupId);
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
             prevDataSize = node.GetPrevChildDataSize(pos);
         }
@@ -106,7 +94,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
         bool isLeafLevel = (height + 1 == meta.LevelCount);
-        location = ChildLocation(part, node, pos, isLeafLevel, groupId);
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
             prevDataSize = node.GetPrevChildDataSize(pos);
             historicRowId = node.GetChildRowCount(pos - 1);

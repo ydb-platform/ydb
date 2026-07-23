@@ -92,6 +92,7 @@ public:
         }
 
         bool AddPage(TPageOffset offset, TSharedPageRef sharedBody) {
+            // GetBodySize() is safe: AddPage is always called after BIO loads the body
             return PageMap.emplace(MakeHolder<TPage>(
                 offset, sharedBody.GetBodySize(), std::move(sharedBody), this)).second;
         }
@@ -177,10 +178,10 @@ public:
         DropPage(pageCollection->PageCollection->GetLocation(pageId).Offset, pageCollection);
     }
     void DropPage(TPageOffset offset, TPageCollection *pageCollection);
-    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
-        AddPage(pageCollection->PageCollection->GetLocation(pageId).Offset, std::move(sharedBody), pageCollection);
+    void AddPage(TPageId pageId, const TSharedPageRef& sharedBody, TPageCollection *pageCollection) {
+        AddPage(pageCollection->PageCollection->GetLocation(pageId).Offset, sharedBody, pageCollection);
     }
-    void AddPage(TPageOffset offset, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddPage(TPageOffset offset, const TSharedPageRef& sharedBody, TPageCollection *pageCollection);
     void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
         AddStickyPage(pageCollection->PageCollection->GetLocation(pageId).Offset, std::move(sharedBody), pageCollection);
     }

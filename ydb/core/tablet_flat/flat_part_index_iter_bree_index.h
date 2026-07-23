@@ -339,19 +339,13 @@ private:
         return EReady::Gone;
     }
 
-    /// Resolve a child's TPageLocation from the parent node at pos.
-    /// V2 nodes carry inline locations; V1 nodes resolve through Part->GetPageLocation().
-    TPageLocation ChildLocation(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) const {
-        return ResolvePageLocation(Part, node.GetChild(pos, isLeafLevel), isLeafLevel ? GroupId : TGroupId{});
-    }
-
     void PushNextState(TRecIdx pos) {
         TNodeState& current = State.back();
         Y_ENSURE(pos < current.Node->GetChildrenCount(), "Should point to some child");
         current.Pos.emplace(pos);
 
         bool isLeafLevel = State.size() == Meta.LevelCount;
-        auto location = ChildLocation(*current.Node, pos, isLeafLevel);
+        auto location = current.Node->GetChildLocation(pos, isLeafLevel, Part, GroupId);
         TRowId beginRowId = pos ? current.Node->GetChildRowCount(pos - 1) : current.BeginRowId;
         TRowId endRowId = current.Node->GetChildRowCount(pos);
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;

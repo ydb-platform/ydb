@@ -396,7 +396,7 @@ namespace NFwd {
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    auto childLoc = GetChildLocation(node, pos, /* isLeafLevel */ false);
+                    auto childLoc = node.GetChildLocation(pos, false, Part, GroupId);
                     IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
                 }
             }
@@ -424,11 +424,6 @@ namespace NFwd {
                 default:
                     Y_TABLET_ERROR("Unknown page type");
             }
-        }
-
-        NPage::TPageLocation GetChildLocation(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) const {
-            auto ref = node.GetChild(pos, isLeafLevel);
-            return ResolvePageLocation(Part, ref, isLeafLevel ?  GroupId : TGroupId{0});
         }
 
         void DropPagesBefore(TLevel& level, TPageOffset offset)
@@ -475,7 +470,7 @@ namespace NFwd {
                         if (node.GetChildRowCount(pos) <= BeginRowId) {
                             continue;
                         }
-                        auto childLoc = GetChildLocation(node, pos, isLeaf);
+                        auto childLoc = node.GetChildLocation(pos, isLeaf, Part, GroupId);
                         Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().Offset < childLoc.Offset);
                         nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, node.GetChildDataSize(pos), childLoc.Crc32});
                         if (nextLevel.BeginOffset == TPageOffset::Max()) {

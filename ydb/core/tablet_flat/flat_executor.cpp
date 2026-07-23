@@ -1628,6 +1628,7 @@ void TExecutor::StartStickyBTreePreload(const NTable::TPartStore& partStore,
         return;  // preload already in flight
     }
     auto* state = new TStickyPreloadState;
+    // TIntrusiveConstPtr can't bind to const T*
     state->PartStore = TIntrusiveConstPtr<NTable::TPartStore>(
         const_cast<NTable::TPartStore*>(&partStore));
     state->IndexCollectionId = indexCollectionId;

@@ -32,7 +32,7 @@ namespace NPage {
         /** Factory: create from a real byte offset (pages in a blob sequence).
             Untagged — sorts before IndexTag-addressed pages. */
         static TPageOffset FromByteOffset(ui64 value) {
-            Y_ENSURE(value < IndexTag,
+            Y_DEBUG_ABORT_UNLESS(value < IndexTag,
                 "Byte offset is too large to be represented as TPageOffset");
             return TPageOffset(value);
         }

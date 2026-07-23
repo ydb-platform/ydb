@@ -879,6 +879,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TPage* page = collection.PageSet.FindPage(location.Offset);
 
         if (!page) {
+            Y_ENSURE(collection.PageSet.size() < collection.TotalPages);
             page = new TPage(location.Offset, location.Size, location.Type, location.Crc32, &collection);
             Y_ENSURE(collection.PageSet.emplace(page).second);
             page->CacheMode = initialMode;
@@ -1286,11 +1287,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
-        /* Walk the structural pages addressable by TPageId (MetaPages). The
-           collection may hold more pages than TMeta declares in v2: data/btree
-           pages absorbed into EPage::Skip entries are not TPageId-addressable
-           and are skipped here (they are already in PageSet when compaction
-           pre-saved them). Skip entries themselves have no GetLocation. */
+        /* Walk structural pages (MetaPages), skipping V2 pages absorbed with Skip entries */
         for (const auto& pageId : xrange(pageCollection->MetaPages())) {
             if (pageCollection->Page(pageId).Type == ui32(NTable::NPage::EPage::Skip))
                 continue;

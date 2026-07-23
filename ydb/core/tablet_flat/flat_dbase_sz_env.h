@@ -36,6 +36,7 @@ namespace NTable {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
             auto *collection = partStore->PageCollections.at(groupId.Index).Get();
 
+            // index pages must be loaded for traversal; data pages counted from metadata
             switch (location.Type) {
                 case EPage::FlatIndex:
                 case EPage::BTreeIndex:

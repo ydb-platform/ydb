@@ -11,7 +11,6 @@
 #include <util/generic/xrange.h>
 #include <util/generic/hash.h>
 #include <array>
-#include <util/system/backtrace.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -82,13 +81,9 @@ namespace NTest {
             } else {
                 pageId = offset.AsPageIndex();
             }
-            if (pageId >= PageCollections.at(room).size()) {
-                Cerr << "GetPage(offset) OOB: room=" << room << " pageId=" << pageId
-                     << " size=" << PageCollections.at(room).size()
-                     << " offset=" << (offset.IsPageIndex() ? offset.AsPageIndex() : offset.AsByteOffset())
-                     << " isByteOffset=" << offset.IsByteOffset() << Endl;
-                PrintBackTrace();
-            }
+            Y_ENSURE(pageId < PageCollections.at(room).size(),
+                "GetPage(offset) OOB: room=" << room << " pageId=" << pageId
+                << " size=" << PageCollections.at(room).size());
             return &PageCollections.at(room).at(pageId);
         }
 

@@ -77,7 +77,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             /*userTracing*/ true);
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        Cerr << "Traces: " << uploader->PrintTraces() << Endl;
 
         // Dev and user channels are independent trees (distinct trace-ids).
         UNIT_ASSERT_VALUES_EQUAL(2, uploader->Traces.size());

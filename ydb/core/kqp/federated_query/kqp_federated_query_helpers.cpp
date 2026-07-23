@@ -460,10 +460,7 @@ namespace {
         const TString& structuredTokenJson,
         const TString& path) {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database with endpoint",
-                {"path", path},
-                {"database", database},
-                {"endpoint", endpoint});
+            LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
         return GetSchemeEntryTypeImpl(
@@ -472,7 +469,7 @@ namespace {
                 endpoint,
                 NKikimr::CanonizePath(database),
                 useTls,
-                federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
+                NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false),
                 path,
                 false);
     };

@@ -32,6 +32,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -4588,19 +4589,29 @@ private:
         Exists,
     };
 
+    struct TScalarSubplanDetails {
+        TString OutputColumn;
+        TString Type;
+        bool OutputNullable = false;
+    };
+
+    struct TExistsCorrelation {
+        NJson::TJsonValue Predicate;
+        TString Dependency;
+        const TTypeAnnotationNode* DependencyType = nullptr;
+    };
+
+    struct TExistsSubplanDetails {
+        std::optional<TExistsCorrelation> Correlation;
+    };
+
     struct TSubplanDescriptor {
-        ESubplanKind Kind = ESubplanKind::Scalar;
         TString Binding;
         // RegistryRoot retains optimizer topology for nesting audits.
         // ExportedRoot is the closed relation actually serialized.
         TIntrusivePtr<IOperator> RegistryRoot;
         TIntrusivePtr<IOperator> ExportedRoot;
-        TString OutputColumn;
-        TString Type;
-        bool OutputNullable = false;
-        std::optional<NJson::TJsonValue> Predicate;
-        TVector<TString> Dependencies;
-        const TTypeAnnotationNode* DependencyType = nullptr;
+        std::variant<TScalarSubplanDetails, TExistsSubplanDetails> Details;
         TVector<IOperator*> Consumers;
     };
 
@@ -4680,8 +4691,51 @@ private:
         bool Nullable = false;
     };
 
-    static TString KindName(ESubplanKind kind) {
-        return kind == ESubplanKind::Scalar ? TString("Scalar") : TString("EXISTS");
+    static ESubplanKind SubplanKind(const TSubplanDescriptor& subplan) {
+        if (std::get_if<TScalarSubplanDetails>(&subplan.Details)) {
+            return ESubplanKind::Scalar;
+        }
+        if (std::get_if<TExistsSubplanDetails>(&subplan.Details)) {
+            return ESubplanKind::Exists;
+        }
+        Unsupported("Subplan descriptor has invalid details");
+    }
+
+    static TString KindName(const TSubplanDescriptor& subplan) {
+        return SubplanKind(subplan) == ESubplanKind::Scalar
+            ? TString("Scalar")
+            : TString("EXISTS");
+    }
+
+    static const TScalarSubplanDetails& ScalarDetails(
+        const TSubplanDescriptor& subplan)
+    {
+        const auto* result =
+            std::get_if<TScalarSubplanDetails>(&subplan.Details);
+        Y_ENSURE(result, "Scalar subplan descriptor has invalid details");
+        return *result;
+    }
+
+    static const TExistsSubplanDetails& ExistsDetails(
+        const TSubplanDescriptor& subplan)
+    {
+        const auto* result =
+            std::get_if<TExistsSubplanDetails>(&subplan.Details);
+        Y_ENSURE(result, "EXISTS subplan descriptor has invalid details");
+        return *result;
+    }
+
+    static const TString& SubplanType(const TSubplanDescriptor& subplan) {
+        if (const auto* scalar =
+                std::get_if<TScalarSubplanDetails>(&subplan.Details))
+        {
+            return scalar->Type;
+        }
+        if (std::get_if<TExistsSubplanDetails>(&subplan.Details)) {
+            static const TString BoolType = "Bool";
+            return BoolType;
+        }
+        Unsupported("Subplan descriptor has invalid details");
     }
 
     static TExactType ExactType(const TTypeAnnotationNode* type) {
@@ -4799,13 +4853,14 @@ private:
             OutputType(*plan, output),
             &outputNullable);
         return {
-            .Kind = ESubplanKind::Scalar,
             .Binding = binding,
             .RegistryRoot = plan,
             .ExportedRoot = plan,
-            .OutputColumn = output,
-            .Type = type,
-            .OutputNullable = outputNullable,
+            .Details = TScalarSubplanDetails{
+                .OutputColumn = output,
+                .Type = type,
+                .OutputNullable = outputNullable,
+            },
         };
     }
 
@@ -4858,6 +4913,7 @@ private:
 
     void ValidateExistsCorrelationTypes(
         const TSubplanDescriptor& subplan,
+        const TExistsCorrelation& details,
         const TExpression& correlation,
         TStringBuf innerColumn)
     {
@@ -4867,15 +4923,15 @@ private:
         Y_ENSURE(leftName && rightName);
 
         const TExprNode* dependencyMember =
-            *leftName == subplan.Dependencies.front()
+            *leftName == details.Dependency
                 ? body->Child(0)
                 : body->Child(1);
         const TExprNode* innerMember =
-            *leftName == subplan.Dependencies.front()
+            *leftName == details.Dependency
                 ? body->Child(1)
                 : body->Child(0);
 
-        const auto declaredDependency = ExactType(subplan.DependencyType);
+        const auto declaredDependency = ExactType(details.DependencyType);
         bool memberNullable = false;
         const TExactType dependencyMemberType{
             ScalarTypeName(*dependencyMember, &memberNullable),
@@ -4959,11 +5015,10 @@ private:
         }
         if (entry.DependentIUs.empty()) {
             TSubplanDescriptor result{
-                .Kind = ESubplanKind::Exists,
                 .Binding = binding,
                 .RegistryRoot = originalPlan,
                 .ExportedRoot = originalPlan,
-                .Type = "Bool",
+                .Details = TExistsSubplanDetails{},
             };
             ValidateClosedExistsRoot(result.ExportedRoot, binding, false);
             return result;
@@ -5078,27 +5133,38 @@ private:
         }
 
         TSubplanDescriptor result{
-            .Kind = ESubplanKind::Exists,
             .Binding = binding,
             .RegistryRoot = originalPlan,
             .ExportedRoot = innerPlan,
-            .Type = "Bool",
-            .Predicate = std::move(predicateJson),
-            .Dependencies = {dependency},
-            .DependencyType = addDependencies->Types.front(),
+            .Details = TExistsSubplanDetails{
+                .Correlation = TExistsCorrelation{
+                    .Predicate = std::move(predicateJson),
+                    .Dependency = dependency,
+                    .DependencyType = addDependencies->Types.front(),
+                },
+            },
         };
         ValidateClosedExistsRoot(result.ExportedRoot, binding, true);
-        ValidateExistsCorrelationTypes(result, *correlation, innerColumn);
+        const auto& details = ExistsDetails(result);
+        Y_ENSURE(
+            details.Correlation,
+            "Correlated EXISTS subplan descriptor has no correlation details");
+        ValidateExistsCorrelationTypes(
+            result,
+            *details.Correlation,
+            *correlation,
+            innerColumn);
         return result;
     }
 
-    void ValidateExistsConsumer(TSubplanDescriptor& subplan) {
-        if (subplan.Dependencies.empty()) {
+    void ValidateExistsConsumer(const TSubplanDescriptor& subplan) {
+        const auto& details = ExistsDetails(subplan);
+        if (!details.Correlation) {
             return;
         }
         Y_ENSURE(subplan.Consumers.size() == 1);
         auto* consumer = subplan.Consumers.front();
-        const TString& dependency = subplan.Dependencies.front();
+        const TString& dependency = details.Correlation->Dependency;
         const auto inputNames = OutputNames(*consumer->GetChildren().front());
         if (!inputNames.contains(dependency)) {
             Unsupported(TStringBuilder()
@@ -5107,7 +5173,8 @@ private:
         }
         const auto outerType = ExactType(
             OutputType(*consumer->GetChildren().front(), dependency));
-        const auto declaredType = ExactType(subplan.DependencyType);
+        const auto declaredType =
+            ExactType(details.Correlation->DependencyType);
         if (!SameType(outerType, declaredType)) {
             Unsupported(TStringBuilder()
                 << "EXISTS subplan binding " << subplan.Binding
@@ -5166,7 +5233,7 @@ private:
                 mainReachable.contains(subplan.ExportedRoot.Get()))
             {
                 Unsupported(TStringBuilder()
-                    << KindName(subplan.Kind)
+                    << KindName(subplan)
                     << " subplan root for binding "
                     << subplan.Binding
                     << " is reachable from the main plan");
@@ -5192,7 +5259,7 @@ private:
                         Subplans[inner].RegistryRoot.Get()))
                 {
                     Unsupported(TStringBuilder()
-                        << KindName(Subplans[inner].Kind)
+                        << KindName(Subplans[inner])
                         << " subplan root for binding "
                         << Subplans[inner].Binding
                         << " is reachable below distinct subplan binding "
@@ -5221,7 +5288,7 @@ private:
                         Subplans[inner].ExportedRoot.Get()))
                 {
                     Unsupported(TStringBuilder()
-                        << KindName(Subplans[inner].Kind)
+                        << KindName(Subplans[inner])
                         << " exported subplan root for binding "
                         << Subplans[inner].Binding
                         << " is reachable below distinct subplan binding "
@@ -5242,7 +5309,7 @@ private:
                 [&](IOperator& op) {
                     if (!ReferencedSubplanBindings(op).empty()) {
                         Unsupported(TStringBuilder()
-                            << KindName(subplan.Kind)
+                            << KindName(subplan)
                             << " subplan binding " << subplan.Binding
                             << " contains a nested subplan reference");
                     }
@@ -5259,10 +5326,11 @@ private:
                 const auto outputNames = OutputNames(op);
                 for (const auto& subplan : Subplans) {
                     if (outputNames.contains(subplan.Binding)) {
+                        const auto kind = SubplanKind(subplan);
                         Unsupported(TStringBuilder()
                             << op.GetExplainName()
                             << " output collides with "
-                            << (subplan.Kind == ESubplanKind::Scalar
+                            << (kind == ESubplanKind::Scalar
                                 ? "scalar"
                                 : "EXISTS")
                             << " subplan binding " << subplan.Binding);
@@ -5280,15 +5348,16 @@ private:
                 const auto inputNames = OutputNames(*op.GetChildren().front());
                 for (const auto& binding : bindings) {
                     auto& subplan = Subplans[SubplanIndices.at(binding)];
+                    const auto kind = SubplanKind(subplan);
                     const bool allowed =
-                        subplan.Kind == ESubplanKind::Scalar
+                        kind == ESubplanKind::Scalar
                             ? op.GetKind() == EOperator::Map ||
                                 op.GetKind() == EOperator::Filter
                             : op.GetKind() == EOperator::Filter;
                     if (!allowed) {
                         Unsupported(TStringBuilder()
                             << op.GetExplainName() << " cannot consume "
-                            << (subplan.Kind == ESubplanKind::Scalar
+                            << (kind == ESubplanKind::Scalar
                                 ? "a scalar"
                                 : "an EXISTS")
                             << " subplan binding");
@@ -5308,14 +5377,14 @@ private:
     }
 
     void ValidateSubplanConsumerContracts() {
-        for (auto& subplan : Subplans) {
+        for (const auto& subplan : Subplans) {
             if (subplan.Consumers.empty()) {
                 Unsupported(TStringBuilder()
-                    << KindName(subplan.Kind)
+                    << KindName(subplan)
                     << " subplan binding " << subplan.Binding
                     << " has no consumer");
             }
-            if (subplan.Kind == ESubplanKind::Exists) {
+            if (SubplanKind(subplan) == ESubplanKind::Exists) {
                 if (subplan.Consumers.size() != 1) {
                     Unsupported(TStringBuilder()
                         << "EXISTS subplan binding " << subplan.Binding
@@ -5390,9 +5459,10 @@ private:
                         const TString type = ScalarTypeName(node, &nullable);
                         const auto& subplan =
                             Subplans[SubplanIndices.at(name)];
+                        const auto kind = SubplanKind(subplan);
                         const bool expectedNullable =
-                            subplan.Kind == ESubplanKind::Scalar;
-                        if (type != subplan.Type ||
+                            kind == ESubplanKind::Scalar;
+                        if (type != SubplanType(subplan) ||
                             nullable != expectedNullable)
                         {
                             Unsupported(TStringBuilder()
@@ -5400,7 +5470,7 @@ private:
                                 << " subplan Member " << name
                                 << " must be "
                                 << (expectedNullable ? "Optional<" : "")
-                                << subplan.Type
+                                << SubplanType(subplan)
                                 << (expectedNullable ? ">" : ""));
                         }
                     }
@@ -5423,21 +5493,26 @@ private:
             const auto* rootId = Ids.FindPtr(subplan.ExportedRoot.Get());
             if (!rootId) {
                 Unsupported(TStringBuilder()
-                    << KindName(subplan.Kind)
+                    << KindName(subplan)
                     << " subplan root was not exported for binding "
                     << subplan.Binding);
             }
 
             auto dependencies = JsonArray();
-            for (const auto& dependency : subplan.Dependencies) {
-                dependencies.AppendValue(dependency);
+            const auto kind = SubplanKind(subplan);
+            if (kind == ESubplanKind::Exists) {
+                const auto& exists = ExistsDetails(subplan);
+                if (exists.Correlation) {
+                    dependencies.AppendValue(
+                        exists.Correlation->Dependency);
+                }
             }
             auto consumers = JsonArray();
             for (const auto* consumer : subplan.Consumers) {
                 const auto* consumerId = Ids.FindPtr(consumer);
                 if (!consumerId) {
                     Unsupported(TStringBuilder()
-                        << KindName(subplan.Kind)
+                        << KindName(subplan)
                         << " subplan consumer was not exported for binding "
                         << subplan.Binding);
                 }
@@ -5447,21 +5522,23 @@ private:
             auto descriptor = JsonMap();
             descriptor["binding"] = subplan.Binding;
             descriptor["root"] = *rootId;
-            descriptor["type"] = subplan.Type;
+            descriptor["type"] = SubplanType(subplan);
             descriptor["dependencies"] = std::move(dependencies);
             descriptor["consumers"] = std::move(consumers);
-            if (subplan.Kind == ESubplanKind::Scalar) {
+            if (kind == ESubplanKind::Scalar) {
+                const auto& scalar = ScalarDetails(subplan);
                 auto output = JsonMap();
-                output["column"] = subplan.OutputColumn;
-                output["type"] = subplan.Type;
-                output["nullable"] = subplan.OutputNullable;
+                output["column"] = scalar.OutputColumn;
+                output["type"] = scalar.Type;
+                output["nullable"] = scalar.OutputNullable;
                 descriptor["kind"] = "scalar";
                 descriptor["output"] = std::move(output);
                 descriptor["nullable"] = true;
             } else {
+                const auto& exists = ExistsDetails(subplan);
                 descriptor["kind"] = "exists";
-                descriptor["predicate"] = subplan.Predicate
-                    ? *subplan.Predicate
+                descriptor["predicate"] = exists.Correlation
+                    ? exists.Correlation->Predicate
                     : NJson::TJsonValue(NJson::JSON_NULL);
                 descriptor["nullable"] = false;
             }

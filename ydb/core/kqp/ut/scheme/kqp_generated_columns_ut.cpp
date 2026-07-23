@@ -86,6 +86,50 @@ void CheckGeneratedColumnRejected(const std::string& createTable, const TString&
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
 }
 
+std::string GeneratedColumnDDL(const std::string& expr, const std::string& prefix = "") {
+    return prefix + R"(
+        CREATE TABLE TestTable (
+            k Int32 NOT NULL,
+            a Int32,
+            s String,
+            v Int32 GENERATED ALWAYS AS ()" +
+           expr + R"() STORED,
+            PRIMARY KEY (k)
+        );
+    )";
+}
+
+void CheckGeneratedColumnsRejected(const std::vector<std::pair<std::string, TString>>& cases) {
+    auto appConfig = GeneratedColumnsAppConfig();
+    TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    for (const auto& [query, expectedError] : cases) {
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), "expected the generated column to be rejected: " << query);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, "query: " << query);
+    }
+}
+
+void CheckGeneratedColumnsAccepted(const std::vector<std::pair<std::string, std::string>>& exprAndPrefix) {
+    auto appConfig = GeneratedColumnsAppConfig();
+    TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    for (const auto& [expr, prefix] : exprAndPrefix) {
+        const std::string query = GeneratedColumnDDL(expr, prefix);
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "query: " << query << "\n" << result.GetIssues().ToString());
+
+        auto drop = session.ExecuteQuery("DROP TABLE TestTable;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+    }
+}
+
 void CheckGeneratedColumnPersisted(const std::string& createTable, bool expectStored) {
     auto appConfig = GeneratedColumnsAppConfig();
     TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -1038,15 +1082,12 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         }
     }
 
-    Y_UNIT_TEST(NonDeterministicRejected) {
-        CheckGeneratedColumnRejected(R"(
-            CREATE TABLE TestTable (
-                k Int32,
-                v Int32 GENERATED ALWAYS AS (RandomNumber(k)) STORED,
-                PRIMARY KEY (k)
-            );
-        )",
-            "deterministic");
+    Y_UNIT_TEST(NonDeterministicAccepted) {
+        CheckGeneratedColumnsAccepted({
+            {"CAST(RandomNumber(k) AS Int32)", ""},
+            {"CAST(Random(k) * 100 AS Int32)", ""},
+            {"k + CAST(RandomNumber(k) AS Int32)", ""},
+        });
     }
 
     Y_UNIT_TEST(SelfReferenceRejected) {
@@ -1081,6 +1122,131 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             );
         )",
             "references another generated column");
+    }
+
+    Y_UNIT_TEST(AggregateFunctionRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("SUM(k)"), "aggregate function"},
+            {GeneratedColumnDDL("COUNT(*)"), "aggregate function"},
+            {GeneratedColumnDDL("MAX(a) + 1"), "aggregate function"},
+            {GeneratedColumnDDL("ListLength(AGGREGATE_LIST(k))"), "aggregate function"},
+        });
+    }
+
+    Y_UNIT_TEST(WindowFunctionRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("SUM(k) OVER ()"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("ROW_NUMBER() OVER (ORDER BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("LAG(k) OVER (PARTITION BY a)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("SUM(k) OVER w"), "Failed to compile the expression of generated column v"},
+        });
+    }
+
+    Y_UNIT_TEST(SubqueryRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("IF(k IN (SELECT a FROM OtherTable), 1, 0)"), "subquery"},
+            {GeneratedColumnDDL("IF(EXISTS (SELECT a FROM OtherTable), 1, 0)"), "subquery"},
+        });
+    }
+
+    Y_UNIT_TEST(NamedExpressionWithReadRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("k + $x", "$x = SELECT MAX(a) FROM OtherTable;\n"), "subquery"},
+            {GeneratedColumnDDL("k + (SELECT COUNT(*) FROM $s())",
+                "DEFINE SUBQUERY $s() AS SELECT * FROM OtherTable; END DEFINE;\n"),
+                "Failed to compile the expression of generated column v"},
+        });
+    }
+
+    Y_UNIT_TEST(ParameterRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("k + $p", "DECLARE $p AS Int32;\n"), "Unknown name: $p"},
+        });
+    }
+
+    Y_UNIT_TEST(UnrelatedDeclareAccepted) {
+        CheckGeneratedColumnsAccepted({
+            {"k + 1", "DECLARE $p AS Int32;\n"},
+        });
+    }
+
+    Y_UNIT_TEST(NonRowDependentRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("CAST(TablePath() AS Int32)"), "TablePath"},
+            {GeneratedColumnDDL("CAST(TableName() AS Int32)"), "TableName"},
+            {GeneratedColumnDDL("CAST(TableRecordIndex() AS Int32)"), "TableRecord"},
+            {GeneratedColumnDDL("CAST(FileContent(\"f\") AS Int32)"), "FileContent"},
+            {GeneratedColumnDDL("EvaluateExpr(1 + 2)"), "EvaluateExpr"},
+            {GeneratedColumnDDL("CAST(CurrentAuthenticatedUser() AS Int32)"), "CurrentAuthenticatedUser"},
+            {GeneratedColumnDDL("CAST(SecureParam(\"token\") AS Int32)"), "SecureParam"},
+        });
+    }
+
+    Y_UNIT_TEST(AggregateFunctionVariantsRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("MIN(a)"), "aggregate function"},
+            {GeneratedColumnDDL("AVG(a)"), "aggregate function"},
+            {GeneratedColumnDDL("COUNT(a)"), "aggregate function"},
+            {GeneratedColumnDDL("COUNT(DISTINCT a)"), "aggregate function"},
+            {GeneratedColumnDDL("SUM(DISTINCT a)"), "aggregate function"},
+            {GeneratedColumnDDL("SOME(a)"), "aggregate function"},
+            {GeneratedColumnDDL("MAX_BY(a, k)"), "aggregate function"},
+            {GeneratedColumnDDL("PERCENTILE(a, 0.5)"), "aggregate function"},
+            {GeneratedColumnDDL("CORRELATION(a, k)"), "aggregate function"},
+            {GeneratedColumnDDL("VARIANCE(a)"), "aggregate function"},
+            {GeneratedColumnDDL("ListLength(AGGREGATE_LIST_DISTINCT(a))"), "aggregate function"},
+        });
+    }
+
+    Y_UNIT_TEST(WindowFunctionVariantsRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("RANK() OVER (ORDER BY a)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("DENSE_RANK() OVER (ORDER BY a)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("LEAD(a) OVER (ORDER BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("FIRST_VALUE(a) OVER (ORDER BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("LAST_VALUE(a) OVER (ORDER BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("NTILE(4) OVER (ORDER BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("CUME_DIST() OVER (ORDER BY a)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("AVG(a) OVER (PARTITION BY k)"), "Window and aggregation functions are not allowed"},
+            {GeneratedColumnDDL("COUNT(*) OVER ()"), "Window and aggregation functions are not allowed"},
+        });
+    }
+
+    Y_UNIT_TEST(SubqueryVariantsRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("k + (SELECT COUNT(*) FROM OtherTable)"), "subquery"},
+            {GeneratedColumnDDL("IF(k NOT IN (SELECT a FROM OtherTable), 1, 0)"), "subquery"},
+            {GeneratedColumnDDL("IF(NOT EXISTS (SELECT a FROM OtherTable), 1, 0)"), "subquery"},
+        });
+    }
+
+    Y_UNIT_TEST(NamedExpressionSubqueryVariantsRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("IF(k IN $ids, 1, 0)", "$ids = SELECT a FROM OtherTable;\n"), "subquery"},
+            {GeneratedColumnDDL("k + $doubled",
+                 "$base = SELECT MAX(a) FROM OtherTable;\n$doubled = $base * 2;\n"),
+                "subquery"},
+        });
+    }
+
+    Y_UNIT_TEST(ParameterVariantsRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("$p * a", "DECLARE $p AS Int32;\n"), "Unknown name: $p"},
+            {GeneratedColumnDDL("COALESCE($p, k)", "DECLARE $p AS Int32;\n"), "Unknown name: $p"},
+            {GeneratedColumnDDL("k + $p + $q", "DECLARE $p AS Int32;\nDECLARE $q AS Int32;\n"), "Unknown name"},
+        });
+    }
+
+    Y_UNIT_TEST(SingleRowExpressionsAccepted) {
+        CheckGeneratedColumnsAccepted({
+            {"k + 1", ""},
+            {"CASE WHEN k > 0 THEN COALESCE(a, 0) ELSE -1 END", ""},
+            {"CAST(ListLength(ListMap(AsList(k, k + 1), ($e) -> { RETURN $e * 2 })) AS Int32)", ""},
+            {"k + $c", "$c = 5;\n"},
+            {"CAST(Unicode::ToLower(CAST(s AS Utf8)) AS Int32)", ""},
+            {"k + 1", "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n"},
+            {"k + 1", "$unused = SELECT MAX(a) FROM OtherTable;\n"},
+        });
     }
 
     Y_UNIT_TEST(TypeMismatchRejected) {

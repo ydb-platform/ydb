@@ -574,39 +574,13 @@ namespace {
         return true;
     }
 
-    bool InspectGeneratedExprBody(const TExprNode& body, const TExprNode* rowArg, const TString& columnName,
-        TExprContext& ctx, THashSet<TString>& refs)
-    {
-        bool hasNonDeterministic = false;
-        TStringBuf badFunction;
-
+    void CollectGeneratedColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<TString>& refs) {
         VisitExpr(body, [&](const TExprNode& node) {
-            if (hasNonDeterministic) {
-                return false;
-            }
-
-            // Column references
             if (node.IsCallable("Member") && node.ChildrenSize() == 2 && node.Child(0) == rowArg && node.Child(1)->IsAtom()) {
                 refs.insert(TString(node.Child(1)->Content()));
             }
-
-            // Reject non-deterministic
-            if (TCoNonDeterministicBase::Match(&node)) {
-                badFunction = node.Content();
-                hasNonDeterministic = true;
-                return false;
-            }
-
             return true;
         });
-
-        if (hasNonDeterministic) {
-            ctx.AddError(TIssue(ctx.GetPosition(body.Pos()), TStringBuilder()
-                << "Generated column " << columnName << " expression must be deterministic, but uses " << badFunction));
-            return false;
-        }
-
-        return true;
     }
 
     IGraphTransformer::TStatus ValidateGeneratedExprType(const TString& columnName, const TTypeAnnotationNode& columnType,
@@ -724,11 +698,8 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            // Get referenced columns + check forbidden expressions
             THashSet<TString> refs;
-            if (!InspectGeneratedExprBody(lambda->Tail(), &lambda->Head().Head(), columnName, ctx, refs)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+            CollectGeneratedColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
 
             for (const auto& ref : refs) {
                 if (ref == columnName) {

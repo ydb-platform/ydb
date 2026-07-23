@@ -16,6 +16,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -195,13 +196,13 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // An index above MaxBlobSize of a blob storage is split into several chunks covering record subranges,
     // each fitting the limit, instead of being dropped.
     Y_UNIT_TEST(OversizedIndexOnDefaultStorageIsSplit) {
-        constexpr i64 blobLimit = 10240;
+        constexpr i64 blobLimit = 10_KB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
 
         // 512 records over 4 column chunks: the whole-portion filter is 32 KB (8 KB doubled twice), while
         // a 128-record subrange keeps the base 8 KB, which fits the 10 KB limit.
-        const auto schema = MakeSchemaWithNGrammIndex(1, 8192, 128);
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128);
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         for (ui32 i = 0; i < 4; ++i) {
             batches.emplace_back(MakeTestBatch(1 + i * 128, 128));

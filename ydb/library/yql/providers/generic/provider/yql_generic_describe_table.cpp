@@ -15,6 +15,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -62,7 +63,7 @@ private:
     TIssues FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
                                     const TGenericClusterConfig& clusterConfig, const TString& tablePath);
 
-    void FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+    NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> FillCredentials(NConnector::NApi::TDescribeTableRequest&& request,
                         const TGenericClusterConfig& clusterConfig);
 
     void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request);
@@ -77,7 +78,7 @@ TGenericDescribeTableTransformer::TGenericDescribeTableTransformer(TGenericState
     : State_(std::move(state))
 { }
 
-void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescribeTableRequest&& request,
                                                        const TGenericClusterConfig& clusterConfig) {
     auto dsi = request.mutable_data_source_instance();
 
@@ -85,7 +86,7 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
     // connector will use Basic Auth to access external data sources.
     if (clusterConfig.GetCredentials().Hasbasic()) {
         *dsi->mutable_credentials() = clusterConfig.GetCredentials();
-        return;
+        return NThreading::MakeFuture(std::move(request));
     }
 
     // If there are no Basic Auth parameters, two options can be considered:
@@ -95,7 +96,7 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
     if (iamToken) {
         *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
         *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
-        return;
+        return NThreading::MakeFuture(std::move(request));
     }
 
     // 2. Client provided other creds (service account, iam delegated cloud auth,...) that must be converted into IAM-token
@@ -120,11 +121,15 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
                 .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProvider())
                 .first;
     }
-
-    iamToken = providersIt->second->GetAuthInfo();
-    Y_ENSURE(iamToken, "empty IAM token");
-    *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
-    *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+    return providersIt->second->GetAuthInfoAsync()
+        .Apply([request=std::move(request)](const NThreading::TFuture<std::string>& future) mutable {
+            TString iamToken = ExtractFromConstFuture(future);
+            auto dsi = request.mutable_data_source_instance();
+            Y_ENSURE(iamToken, "empty IAM token");
+            *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
+            *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+            return std::move(request);
+        });
 }
 
 template <typename T>
@@ -414,36 +419,55 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
 
     auto promise = NThreading::NewPromise();
     handles.emplace_back(promise.GetFuture());
-    desc->DataSourceInstance = request.data_source_instance();
 
-    Y_ENSURE(State_->GenericClient);
+    FillCredentials(std::move(request), it->second).Subscribe([
+        tableAddress,
+        desc = std::move(desc),
+        promise = std::move(promise),
+        client = State_->GenericClient,
+        timeout = State_->Configuration->DescribeTableTimeout
+    ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& future) mutable {
+        try {
+            Y_ENSURE(client);
+            auto request = ExtractFromConstFuture(future);
+            desc->DataSourceInstance = request.data_source_instance();
 
-    State_->GenericClient->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
-    [desc, tableAddress, promise, client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
-        NConnector::TDescribeTableAsyncResult f2(f1);
-        auto result = f2.ExtractValueSync();
+            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise](const NConnector::TDescribeTableAsyncResult& future) mutable {
+                try {
+                    auto result = ExtractFromConstFuture(future);
 
-        // Check transport error
-        if (!result.Status.Ok()) {
-            desc->Issues.AddIssue(TStringBuilder()
-                << "Call DescribeTable for table " << tableAddress.ToString() << ": "
-                << result.Status.ToDebugString());
+                    // Check transport error
+                    if (!result.Status.Ok()) {
+                        desc->Issues.AddIssue(TStringBuilder()
+                            << "Call DescribeTable for table " << tableAddress.ToString() << ": "
+                            << result.Status.ToDebugString());
+                        promise.SetValue();
+                        return;
+                    }
+
+                    // Check logical error
+                    if (!NConnector::IsSuccess(*result.Response)) {
+                        desc->Issues.AddIssues(NConnector::ErrorToIssues(
+                            result.Response->error(),
+                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
+                        promise.SetValue();
+                        return;
+                    }
+
+                    // Preserve schema for the further usage
+                    desc->Schema = result.Response->schema();
+                    promise.SetValue();
+                } catch (const std::exception&) {
+                    desc->Issues.AddIssue(
+                            NYql::TIssue(TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
+                    promise.SetValue();
+                }
+            });
+        } catch (const std::exception&) {
+            desc->Issues.AddIssue(
+                    NYql::TIssue(TStringBuilder() << "Call FillCredentials for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
             promise.SetValue();
-            return;
         }
-
-        // Check logical error
-        if (!NConnector::IsSuccess(*result.Response)) {
-            desc->Issues.AddIssues(NConnector::ErrorToIssues(
-                result.Response->error(),
-                TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
-            promise.SetValue();
-            return;
-        }
-
-        // Preserve schema for the further usage
-        desc->Schema = result.Response->schema();
-        promise.SetValue();
     });
 
     return {};
@@ -460,7 +484,6 @@ TIssues TGenericDescribeTableTransformer::FillDescribeTableRequest(NConnector::N
     dsi->set_use_tls(clusterConfig.GetUseSsl());
     dsi->set_protocol(clusterConfig.GetProtocol());
 
-    FillCredentials(request, clusterConfig);
     FillTypeMappingSettings(request);
 
     auto issues = FillDataSourceOptions(request, clusterConfig);

@@ -75,7 +75,7 @@ public:
     double Rescale(double value) const;
     void Harmonize(ui64 ts) override;
     void DeclareEmergency(ui64 ts) override;
-    void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ignoreFullThreadQuota = false) override;
+    void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ignoreFullThreadQuota = false, ui8 needyCpuWindowSeconds = 1) override;
     void Enable(bool enable) override;
     TPoolHarmonizerStats GetPoolStats(i16 poolId) const override;
     THarmonizerStats GetStats() const override;
@@ -430,13 +430,15 @@ void THarmonizer::DeclareEmergency(ui64 ts) {
     NextHarmonizeTs = ts;
 }
 
-void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ignoreFullThreadQuota) {
+void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ignoreFullThreadQuota, ui8 needyCpuWindowSeconds) {
+    Y_ABORT_UNLESS(needyCpuWindowSeconds >= 1 && needyCpuWindowSeconds <= TThreadInfo::CpuHistorySize);
     TGuard<TSpinLock> guard(Lock);
     Pools.emplace_back(new TPoolInfo);
     TPoolInfo &poolInfo = *Pools.back();
     poolInfo.Pool = pool;
     poolInfo.Shared = Shared;
     poolInfo.BasicPool = dynamic_cast<TBasicExecutorPool*>(pool);
+    poolInfo.NeedyCpuWindowSeconds = needyCpuWindowSeconds;
 
     poolInfo.DefaultThreadCount = pool->GetDefaultThreadCount();
     poolInfo.ThreadQuota = ignoreFullThreadQuota ? 0 : poolInfo.DefaultThreadCount;

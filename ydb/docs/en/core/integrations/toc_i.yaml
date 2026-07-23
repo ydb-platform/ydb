@@ -49,5 +49,3 @@ items:
   include:
     mode: link
     path: sql-translation/toc-sql-translation.yaml
-- name: SQL Dialect Converter to YQL
-  href: sql-dialect-converter.md

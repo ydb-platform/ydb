@@ -83,8 +83,7 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::T
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Received query response from KQP DescribeGroups request");
     if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
-        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-            "Kafka metadata tables are not initialized yet. Please retry.");
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
         Die(ctx);
         return;
     }

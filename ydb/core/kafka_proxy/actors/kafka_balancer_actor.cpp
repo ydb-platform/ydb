@@ -7,10 +7,6 @@ using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
 void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D("TenantName=" << AppData()->TenantName << ", ResourceDatabasePath=" << Context->ResourceDatabasePath << ", DatabasePath=" << Context->DatabasePath <<
-            ", Context->InitialServerlessTransactionsFlagValue = " << Context->InitialServerlessTransactionsFlagValue.value() <<
-            ", NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()= " << NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions());
-
     if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
         Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
     } else {
@@ -128,8 +124,7 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
     auto status = record.GetYdbStatus();
 
     if (TryRequestConsumerMetadataTablesCreation(status, GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
-        SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-            "Kafka metadata tables are not initialized yet. Please retry.");
+        SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
         return;
     }
 

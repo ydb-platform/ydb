@@ -119,11 +119,9 @@ public:
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
-            KAFKA_LOG_D("Do not require authentication. Setting Context->ResourceDatabasePath = NKikimr::AppData()->TenantName.");
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
             Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
-            KAFKA_LOG_D("Setting InitialServerlessTransactionsFlagValue = " << Context->InitialServerlessTransactionsFlagValue.value());
         }
 
         MtlsAuthStage = NO_CERT_YET;
@@ -356,13 +354,6 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
-        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-        //     KAFKA_LOG_D("Flag changed on TAddPartitionsToTxnRequestData");
-        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-        //         NKafkaTransactions::BuildResponse<TAddPartitionsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-        //         EKafkaErrors::INVALID_TXN_STATE));
-        //     return;
-        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
             header->CorrelationId,
             message,
@@ -374,14 +365,6 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
-        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-        //     KAFKA_LOG_D("Flag changed on TAddOffsetsToTxnRequestData");
-        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-        //         NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-        //         EKafkaErrors::INVALID_TXN_STATE));
-        //     // CloseConnection = true;
-        //     return;
-        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
             header->CorrelationId,
             message,
@@ -393,14 +376,6 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
-        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-        //     KAFKA_LOG_D("Flag changed on TTxnOffsetCommitRequestData");
-        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-        //         NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-        //         EKafkaErrors::INVALID_TXN_STATE));
-        //     // CloseConnection = true;
-        //     return;
-        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
             header->CorrelationId,
             message,
@@ -412,14 +387,6 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
-        // if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
-        //     KAFKA_LOG_D("Flag changed on TEndTxnRequestData");
-        //     Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
-        //         NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::INVALID_TXN_STATE),
-        //         EKafkaErrors::INVALID_TXN_STATE));
-        //     // CloseConnection = true;
-        //     return;
-        // }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
             header->CorrelationId,
             message,

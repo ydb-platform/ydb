@@ -32,8 +32,7 @@ void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
     if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
         KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
-        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-            "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
         Die(ctx);
         return;
     }
@@ -73,8 +72,7 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr&
 void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Received query response from KQP ListGroups request");
     if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
-        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-            "Kafka metadata tables are not initialized yet. Please retry.");
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
         Die(ctx);
         return;
     }

@@ -172,6 +172,25 @@ const NJson::TJsonValue& PlanNode(
     return *match;
 }
 
+const NJson::TJsonValue& WitnessRows(
+    const NJson::TJsonValue& verdict,
+    TStringBuf tablePath)
+{
+    const TString identityPart = TStringBuilder()
+        << "path:" << tablePath.size() << ":" << tablePath << ";";
+    const NJson::TJsonValue* match = nullptr;
+    for (const auto& [table, rows] :
+        verdict["witness"].GetMapSafe())
+    {
+        if (table.Contains(identityPart)) {
+            UNIT_ASSERT_C(!match, tablePath);
+            match = &rows;
+        }
+    }
+    UNIT_ASSERT_C(match, tablePath);
+    return *match;
+}
+
 void CollectConjuncts(
     const NJson::TJsonValue& expression,
     TVector<const NJson::TJsonValue*>& conjuncts)
@@ -390,23 +409,38 @@ NJson::TJsonValue BuildVerificationProblem(
     command << "--solver" << HermeticSolver();
     command.Run();
     UNIT_ASSERT_C(
-        command.GetExitCode().Defined() && command.GetExitCode().GetRef() == 0,
+        command.GetExitCode().Defined(),
         command.GetError() << command.GetOutput());
-    UNIT_ASSERT(formulaPath.Exists());
 
     NJson::TJsonValue verdict;
     UNIT_ASSERT_C(
         NJson::ReadJsonTree(command.GetOutput(), &verdict, true),
         command.GetOutput());
+    const TString status = verdict["status"].GetStringSafe();
+    const int expectedExitCode =
+        status == "VERIFIED_BOUNDED"
+            ? 0
+            : status == "COUNTEREXAMPLE"
+                ? 1
+                : status == "UNKNOWN"
+                    ? 2
+                    : -1;
+    UNIT_ASSERT_C(expectedExitCode >= 0, command.GetOutput());
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        command.GetExitCode().GetRef(),
+        expectedExitCode,
+        command.GetError() << command.GetOutput());
+    UNIT_ASSERT_C(formulaPath.Exists(), command.GetOutput());
     return verdict;
 }
 
-struct TVerifiedSnapshotPair {
+struct TSnapshotPair {
     NJson::TJsonValue Initial;
     NJson::TJsonValue Final;
+    NJson::TJsonValue Verdict;
 };
 
-TVerifiedSnapshotPair VerifyRealHostSnapshotPair(
+TSnapshotPair CaptureRealHostSnapshotPair(
     TKikimrRunner& kikimr,
     const TString& query)
 {
@@ -434,16 +468,26 @@ TVerifiedSnapshotPair VerifyRealHostSnapshotPair(
     UNIT_ASSERT(initial["stage_graph"].IsNull());
     UNIT_ASSERT(final["stage_graph"].IsMap());
 
-    const auto verdict = BuildVerificationProblem(results[0], results[1]);
-    UNIT_ASSERT_VALUES_EQUAL(
-        verdict["status"].GetStringSafe(),
-        "VERIFIED_BOUNDED");
-    UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    auto verdict = BuildVerificationProblem(results[0], results[1]);
     return {
         .Initial = std::move(initial),
         .Final = std::move(final),
+        .Verdict = std::move(verdict),
     };
+}
+
+TSnapshotPair VerifyRealHostSnapshotPair(
+    TKikimrRunner& kikimr,
+    const TString& query)
+{
+    auto pair = CaptureRealHostSnapshotPair(kikimr, query);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        pair.Verdict["status"].GetStringSafe(),
+        "VERIFIED_BOUNDED",
+        NJson::WriteJson(pair.Verdict, false));
+    UNIT_ASSERT_VALUES_EQUAL(pair.Verdict["row_bound"].GetIntegerSafe(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(pair.Verdict["task_bound"].GetIntegerSafe(), 2);
+    return pair;
 }
 
 } // namespace
@@ -757,6 +801,80 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(
             (*joins[0])["kind"].GetStringSafe(),
             "left");
+    }
+
+    Y_UNIT_TEST(RealHostFindsCorrelatedScalarCountEmptyInputBug) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = CaptureRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT
+                outer_row.Id,
+                (
+                    SELECT COUNT(*)
+                    FROM `/Root/RboExistsInner` AS inner_row
+                    WHERE inner_row.MatchKey == outer_row.MatchKey
+                ) AS Matches
+            FROM `/Root/RboExistsOuter` AS outer_row;
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplans[0]["kind"].GetStringSafe(),
+            "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplans[0]["dependencies"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT(subplans[0]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT(!subplans[0]["output"]["nullable"].GetBooleanSafe());
+        const auto& aggregate = OnlyPlanNode(pair.Initial, "aggregate");
+        UNIT_ASSERT(aggregate["keys"].GetArraySafe().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"][0]["function"].GetStringSafe(),
+            "count");
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*joins[0])["kind"].GetStringSafe(),
+            "left");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            pair.Verdict["status"].GetStringSafe(),
+            "COUNTEREXAMPLE",
+            NJson::WriteJson(pair.Verdict, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            pair.Verdict["row_bound"].GetIntegerSafe(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            pair.Verdict["task_bound"].GetIntegerSafe(),
+            2);
+
+        const auto& outerRows =
+            WitnessRows(pair.Verdict, "/Root/RboExistsOuter").GetArraySafe();
+        const auto& innerRows =
+            WitnessRows(pair.Verdict, "/Root/RboExistsInner").GetArraySafe();
+        UNIT_ASSERT(!outerRows.empty());
+        bool hasUnmatchedOuter = false;
+        for (const auto& outer : outerRows) {
+            const i64 key = outer["MatchKey"].GetIntegerSafe();
+            bool matched = false;
+            for (const auto& inner : innerRows) {
+                const auto& innerKey = inner["MatchKey"];
+                matched = matched ||
+                    (!innerKey.IsNull() &&
+                     innerKey.GetIntegerSafe() == key);
+            }
+            hasUnmatchedOuter = hasUnmatchedOuter || !matched;
+        }
+        UNIT_ASSERT_C(
+            hasUnmatchedOuter,
+            NJson::WriteJson(pair.Verdict, false));
     }
 
     Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {

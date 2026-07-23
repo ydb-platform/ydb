@@ -107,9 +107,9 @@ The post-correlation 2026-07-23 physical-line audit recorded:
 | Nine trusted Python semantic modules | 10,340 |
 | C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,879 |
 | **Proof-producing code total** | **18,219** |
-| Tests, outside the TCB | 41,470 |
+| Tests, outside the TCB | 41,588 |
 | Diagnostic/orchestration tools, outside the TCB | 5,119 |
-| Documentation, outside the TCB | 4,623 |
+| Documentation, outside the TCB | 4,662 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by

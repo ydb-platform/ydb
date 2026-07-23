@@ -255,19 +255,25 @@ protected:
     TMap<ui64, THashSet<TActorId>> VacuumGenerationToSender;
     ui64 VacuumResetGeneration = 0; // needs to distinguish between vacuum clanups of different resets
 
-    // move data state
+    // move data operation state
     static constexpr ui64 MaxMoveDataRecordsInOneTx = 16 << 10;
-
+    static constexpr ui64 MaxMoveDataTrashCheckingBlobs = 128 << 10;
+    // current parameters
+    bool MoveDataIsInProgress = false;
     TSet<ui32> MoveDataGroups;
     TActorId MoveDataRequestSender;
-
-    bool MoveDataIsInProgress = false;
-    bool MoveDataNeedsAnotherPass = false;
+    // blob moving stage
+    bool MoveDataBlobMovingIsInProgress = false;
+    bool MoveDataBlobMovingNeedsAnotherPass = false;
     TString MoveDataKey;
     ui32 MoveDataChainIndex = 0;
     bool MoveDataRecordTouched = false;
     TLogoBlobID MoveDataBlobId;
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
+    // trash checking stage
+    std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
+    TLogoBlobID MoveDataTrashCheckingBlobId;
+    bool MoveDataTrashCheckingWaitingForGC = false;
 
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
@@ -410,16 +416,19 @@ public:
     void OnEvCompleteGC(bool repeat);
 
     // move data methods
-    void ClearMoveData();
     bool IsMoveDataInProgress() const { return MoveDataIsInProgress; }
+
+    void ClearMoveDataBlobMovingStage();
+    void ClearMoveDataTrashCheckingStage();
+
     void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& moveDataRequestSender);
-        bool NeedMoveBlob(const TLogoBlobID& blobId) const;
-    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> AdvanceMoveData(
-        ISimpleDb& db, const TActorContext& ctx);
+    bool NeedMoveBlob(const TLogoBlobID& blobId) const;
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> AdvanceMoveData(ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> BlobCopied(
-        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db, const TActorContext& ctx);
-    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryFinishMoveData(
-        const TActorContext& ctx);
+        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db);
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryCheckTrash();
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> CheckTrash();
+    void FinishMoveData(const TActorContext& ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

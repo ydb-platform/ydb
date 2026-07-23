@@ -1,0 +1,836 @@
+name: PR-check sharding core
+# Reusable sharding engine: main test_ya + plan/filter/merge.
+# Production: called from pr_check.yml (publish=true).
+# Also used by run_and_debug_tests (manual).
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: 'Commit SHA or branch to build and test'
+        required: true
+        type: string
+      test_targets:
+        description: 'Test scope (e.g. ydb/ or ydb/tests/olap/)'
+        required: false
+        type: string
+        default: 'ydb/'
+      test_size:
+        description: 'Test sizes passed to ya make (e.g. small,medium or large)'
+        required: false
+        type: string
+        default: 'small,medium'
+      build_preset:
+        description: 'relwithdebinfo or release-asan'
+        required: false
+        type: string
+        default: 'relwithdebinfo'
+      mode:
+        description: 'auto | single | sharded'
+        required: false
+        type: string
+        default: 'auto'
+      shard_count:
+        description: '"auto" or a number (sharded mode)'
+        required: false
+        type: string
+        default: 'auto'
+      shard_profile:
+        description: 'Adaptive profile when shard_count=auto: pr (4/8/12) or soft (2/4/8)'
+        required: false
+        type: string
+        default: 'pr'
+      increment:
+        description: 'Run only suites affected by graph_compare (like PR-check)'
+        required: false
+        type: boolean
+        default: false
+      pr_number:
+        description: 'PR number: used by the auto classifier and for publishing'
+        required: false
+        type: string
+        default: ''
+      history_branch:
+        description: 'Branch for duration history and cache prefixes'
+        required: false
+        type: string
+        default: 'main'
+      publish:
+        description: 'Publish github statuses / PR comments (real PR-check mode)'
+        required: false
+        type: boolean
+        default: false
+      status_sha:
+        description: 'PR head SHA for GitHub commit statuses (empty = checkout_ref / event head)'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      mode:
+        description: 'Resolved mode (single or sharded)'
+        value: ${{ jobs.params.outputs.mode }}
+      shard_count:
+        description: 'Actual shard count used (sharded mode)'
+        value: ${{ jobs.prepare.outputs.active_shard_count }}
+
+jobs:
+  params:
+    runs-on: ubuntu-latest
+    name: Resolve mode (${{ inputs.build_preset }})
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      runner: ${{ steps.preset.outputs.runner }}
+    steps:
+      - name: Resolve runner for preset
+        id: preset
+        run: |
+          case "${{ inputs.build_preset }}" in
+            relwithdebinfo) label=build-preset-relwithdebinfo ;;
+            release-asan)   label=build-preset-release-asan ;;
+            *) echo "Unsupported build_preset: ${{ inputs.build_preset }}" >&2; exit 1 ;;
+          esac
+          echo "runner=$(jq -nc --arg l "$label" '["self-hosted","auto-provisioned",$l]')" >> "$GITHUB_OUTPUT"
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/Indexer
+            .github/actions/s3cmd
+      - name: Classify change volume
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE_INPUT: ${{ inputs.mode }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+        run: |
+          set -euo pipefail
+          mkdir -p params_out
+          : > params_out/changed_files.txt
+          mode=""
+          reason=""
+          forced=false
+          total=0
+          if [ "$MODE_INPUT" != "auto" ]; then
+            mode="$MODE_INPUT"
+            forced=true
+            reason="forced_by_input"
+            echo "Mode forced by input: $MODE_INPUT"
+          elif [ -z "$PR_NUMBER" ]; then
+            # Branch run without a diff: assume full scope.
+            mode=sharded
+            reason="no_pr_full_scope"
+            echo "No PR number: full-scope run -> sharded"
+          else
+            # Paths whose changes ripple through most of the build graph.
+            heavy_re='^(ydb/core/|ydb/library/|ydb/public/|ydb/services/|ydb/apps/|yql/|util/|library/|contrib/|build/|devtools/|ya\.make$|ydb/ya\.make$)'
+            files_json=$(mktemp)
+            : > "$files_json"
+            for page in 1 2 3 4 5 6 7 8 9 10; do
+              resp=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}")
+              count=$(echo "$resp" | jq 'length')
+              echo "$resp" | jq -r '.[].filename' >> "$files_json"
+              total=$((total + count))
+              [ "$count" -lt 100 ] && break
+            done
+            cp "$files_json" params_out/changed_files.txt
+            echo "PR #$PR_NUMBER changed files: $total"
+            if [ "$total" -ge 500 ]; then
+              mode=sharded
+              reason="file_count_ge_500"
+            elif grep -qE "$heavy_re" "$files_json"; then
+              mode=sharded
+              reason="heavy_paths"
+              echo "Heavy paths touched:"
+              grep -m 10 -E "$heavy_re" "$files_json" || true
+            else
+              mode=single
+              reason="light_change"
+            fi
+          fi
+          jq -n \
+            --arg mode "$mode" \
+            --arg reason "$reason" \
+            --argjson forced "$forced" \
+            --argjson total_files "$total" \
+            --arg build_preset "$BUILD_PRESET" \
+            --arg mode_input "$MODE_INPUT" \
+            '{
+              mode: $mode,
+              reason: $reason,
+              forced: $forced,
+              total_files: $total_files,
+              build_preset: $build_preset,
+              mode_input: $mode_input
+            }' > params_out/mode.json
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Classifier decision: $mode ($reason)"
+      - name: Upload params decision
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-params-${{ github.run_id }}
+          path: params_out
+          retention-days: 3
+      - name: Install s3cmd
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq s3cmd
+      - name: Prepare S3 folder prefix
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd for params upload
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+          s3_subdir: params
+      - name: Upload params decision to S3
+        shell: bash
+        run: |
+          set -eux
+          staging=params_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp params_out/mode.json params_out/changed_files.txt "$staging/"
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Params decision (S3)"
+            echo "[Params index](${S3_URL_PREFIX}/index.html) | [mode.json](${S3_URL_PREFIX}/mode.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------- single --
+  single:
+    needs: params
+    if: needs.params.outputs.mode == 'single'
+    runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
+    name: Build and test ${{ inputs.build_preset }} (single)
+    timeout-minutes: 300
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 2
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build and test
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ inputs.build_preset }}
+          build_target: ${{ inputs.test_targets }}
+          increment: ${{ inputs.increment }}
+          run_tests: true
+          test_size: ${{ inputs.test_size }}
+          test_threads: 52
+          custom_branch_name: ${{ inputs.history_branch }}
+          put_build_results_to_cache: true
+          publish_github_status: ${{ inputs.publish }}
+          publish_pr_comment: ${{ inputs.publish }}
+          pull_number: ${{ inputs.pr_number }}
+          status_sha: ${{ inputs.status_sha }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+  # --------------------------------------------------------------- sharded --
+  # Prepare: build full/increment graph (-A, no tests), plan UID shards,
+  # then each test_shard replays its graph slice (same execution model as
+  # monolith -A, unlike the old suite-list -A suite1 suite2… path).
+  prepare:
+    needs: params
+    if: needs.params.outputs.mode == 'sharded'
+    runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
+    name: Prepare ${{ inputs.build_preset }} (build, plan)
+    timeout-minutes: 240
+    outputs:
+      shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 2
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Clean ya cache
+        run: rm -rf ~/.ya
+      - name: Build (no tests)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ inputs.build_preset }}
+          build_target: ${{ inputs.test_targets }}
+          increment: ${{ inputs.increment }}
+          run_tests: false
+          save_test_graph: true
+          s3_subdir: build
+          clean_ya_cache: false
+          test_size: ${{ inputs.test_size }}
+          test_threads: 52
+          custom_branch_name: ${{ inputs.history_branch }}
+          put_build_results_to_cache: true
+          publish_github_status: ${{ inputs.publish }}
+          publish_pr_comment: ${{ inputs.publish }}
+          pull_number: ${{ inputs.pr_number }}
+          status_sha: ${{ inputs.status_sha }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Upload build graph
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-graph-${{ github.run_id }}
+          path: |
+            graph.json
+            context.json
+          retention-days: 3
+      - name: Build shard plan
+        id: plan
+        env:
+          SHARD_COUNT: ${{ inputs.shard_count }}
+          SHARD_PROFILE: ${{ inputs.shard_profile }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          HISTORY_BRANCH: ${{ inputs.history_branch }}
+          HISTORY_DAYS_BACK: "14"
+          TEST_THREADS: "52"
+          # Optional hard cap via MAX_SHARDS (read by plan.py).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          python3 -m pip install pyyaml ydb --quiet
+          mkdir -p shard_plan_out
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            plan_mode=increment_graph
+          else
+            plan_mode=full_graph
+          fi
+          plan_args=(
+            graph.json
+            --shard-count "$SHARD_COUNT"
+            --profile "${SHARD_PROFILE:-pr}"
+            --plan-mode "$plan_mode"
+            -o shard_plan_out/shard_plan.json
+            --build-type "${BUILD_PRESET:-relwithdebinfo}"
+            --branch "${HISTORY_BRANCH:-main}"
+            --days-back "${HISTORY_DAYS_BACK:-14}"
+            --threads "${TEST_THREADS:-52}"
+            --weight-mode history
+          )
+          if [ -f context.json ]; then
+            plan_args+=(--context context.json)
+          fi
+          plan_args+=(--summary shard_plan_out/shard_plan_summary.md)
+          python3 .github/scripts/tests/sharding/plan.py "${plan_args[@]}"
+          echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Upload shard plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-shard-plan-${{ github.run_id }}
+          path: shard_plan_out
+          retention-days: 3
+      - name: Prepare S3 folder prefix
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd for plan upload
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+          s3_subdir: plan
+      - name: Upload graph and shard plan to S3
+        shell: bash
+        run: |
+          set -eux
+          staging=plan_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp graph.json "$staging/"
+          if [ -f context.json ]; then
+            cp context.json "$staging/"
+          fi
+          cp shard_plan_out/shard_plan.json "$staging/"
+          if [ -f shard_plan_out/shard_plan_summary.md ]; then
+            cp shard_plan_out/shard_plan_summary.md "$staging/"
+          fi
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Plan artifacts (S3)"
+            echo "[Plan index](${S3_URL_PREFIX}/index.html) | [shard_plan.json](${S3_URL_PREFIX}/shard_plan.json) | [summary](${S3_URL_PREFIX}/shard_plan_summary.md)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test_shard:
+    needs:
+      - params
+      - prepare
+    if: needs.params.outputs.mode == 'sharded' && needs.prepare.outputs.active_shard_count != '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_id: ${{ fromJSON(needs.prepare.outputs.shard_ids) }}
+    runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
+    name: Test ${{ inputs.build_preset }} shard ${{ matrix.shard_id }}
+    timeout-minutes: 300
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 2
+      - name: Download shard plan
+        uses: actions/download-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-shard-plan-${{ github.run_id }}
+          path: shard_plan
+      - name: Download build graph
+        uses: actions/download-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-graph-${{ github.run_id }}
+          path: build_graph
+      - name: Filter graph for shard
+        id: graph_shard
+        run: |
+          set -euo pipefail
+          mkdir -p shard_graph_out
+          filter_args=(
+            --graph build_graph/graph.json
+            --plan shard_plan/shard_plan.json
+            --shard-id ${{ matrix.shard_id }}
+            -o shard_graph_out/graph.json
+          )
+          if [ -f build_graph/context.json ]; then
+            filter_args+=(--context build_graph/context.json --context-output shard_graph_out/context.json)
+          fi
+          python3 .github/scripts/tests/sharding/filter.py "${filter_args[@]}"
+          echo "graph_path=$PWD/shard_graph_out/graph.json" >> "$GITHUB_OUTPUT"
+          if [ -f shard_graph_out/context.json ]; then
+            echo "context_path=$PWD/shard_graph_out/context.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "context_path=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Shard ${{ matrix.shard_id }} result nodes: $(jq '.result | length' shard_graph_out/graph.json)"
+          echo "Shard ${{ matrix.shard_id }} graph nodes: $(jq '.graph | length' shard_graph_out/graph.json)"
+      - name: Prepare S3 folder prefix
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd for shard decision
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+          s3_subdir: shard_${{ matrix.shard_id }}/decision
+      - name: Upload shard decision to S3
+        shell: bash
+        run: |
+          set -eux
+          staging=shard_decision_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp shard_graph_out/graph.json "$staging/"
+          if [ -f shard_graph_out/context.json ]; then
+            cp shard_graph_out/context.json "$staging/"
+          fi
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Shard ${{ matrix.shard_id }} decision (S3)"
+            echo "[Decision index](${S3_URL_PREFIX}/index.html) | [filtered graph](${S3_URL_PREFIX}/graph.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Run shard tests (with in-shard retries)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ inputs.build_preset }}
+          build_target: ${{ inputs.test_targets }}
+          increment: false
+          run_tests: true
+          test_size: ${{ inputs.test_size }}
+          test_threads: 52
+          custom_branch_name: ${{ inputs.history_branch }}
+          put_build_results_to_cache: true
+          skip_graph_compare: true
+          prebuilt_graph_path: ${{ steps.graph_shard.outputs.graph_path }}
+          prebuilt_context_path: ${{ steps.graph_shard.outputs.context_path }}
+          publish_github_status: false
+          publish_pr_comment: false
+          s3_subdir: shard_${{ matrix.shard_id }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      # Keep per-attempt reports separate (try_1 = full run, try_2..N = failed
+      # reruns), so the merge job can stitch try_N across shards back into the
+      # monolith's try_1/try_2/try_3 layout instead of one flattened report.
+      - name: Stage shard attempt reports
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p shard_artifact
+          found=0
+          for report in tmp/results/try_*/report.json; do
+            [ -f "$report" ] || continue
+            try_dir=$(basename "$(dirname "$report")")   # try_1, try_2, ...
+            mkdir -p "shard_artifact/$try_dir"
+            cp "$report" "shard_artifact/$try_dir/shard_${{ matrix.shard_id }}.json"
+            found=1
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "No attempt reports found in tmp/results" >&2
+            exit 1
+          fi
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-shard-report-${{ matrix.shard_id }}-${{ github.run_id }}
+          path: shard_artifact/
+          retention-days: 3
+
+  merge:
+    needs:
+      - params
+      - prepare
+      - test_shard
+    if: always() && needs.params.outputs.mode == 'sharded' && needs.prepare.result == 'success'
+    runs-on: [self-hosted, tiny-worker]
+    name: Merge shards ${{ inputs.build_preset }}
+    timeout-minutes: 60
+    outputs:
+      failed_count: ${{ steps.merge.outputs.failed_count }}
+      shard_count: ${{ steps.merge.outputs.shard_count }}
+    steps:
+      # Merge/publish only needs CI scripts: checkout the workflow branch.
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions
+            .github/config
+            .github/scripts/tests/sharding
+            .github/scripts/tests/fail-checker.py
+            .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/get_test_history.py
+            .github/scripts/tests/error_type_utils.py
+            .github/scripts/tests/templates
+            .github/scripts/analytics/testowners_utils.py
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/TESTOWNERS
+            .github/scripts/tests/comment-pr.py
+            .github/scripts/Indexer
+      # Mute/owners must match the ref under test (shards keep checkout mute via
+      # mute lists from the checkout ref under test (not the workflow-branch checkout).
+      - name: Align mute lists with tested ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          path: .tested_ref
+          sparse-checkout: |
+            .github/config
+            .github/TESTOWNERS
+      - name: Restore mute lists from tested ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/config
+          for f in muted_ya.txt muted_ya_asan.txt muted_ya_msan.txt muted_ya_tsan.txt; do
+            if [ -f ".tested_ref/.github/config/$f" ]; then
+              cp -a ".tested_ref/.github/config/$f" ".github/config/$f"
+            fi
+          done
+          if [ -f .tested_ref/.github/TESTOWNERS ]; then
+            cp -a .tested_ref/.github/TESTOWNERS .github/TESTOWNERS
+          fi
+          rm -rf .tested_ref
+      - name: Download shard reports
+        if: needs.prepare.outputs.active_shard_count != '0'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: parallel-${{ inputs.build_preset }}-shard-report-*-${{ github.run_id }}
+          merge-multiple: true
+          path: shard_reports
+      - name: Merge shard reports
+        id: merge
+        env:
+          EXPECTED_SHARDS: ${{ needs.prepare.outputs.active_shard_count }}
+        run: |
+          set -eux
+          mkdir -p merged
+          if [ "$EXPECTED_SHARDS" = "0" ]; then
+            echo '{"results":[]}' > merged/final_report.json
+            echo "failed_count=0" >> "$GITHUB_OUTPUT"
+            echo "shard_count=0" >> "$GITHUB_OUTPUT"
+            echo "## Merged final result" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Shards: 0 (increment had no runnable suites in scope)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Failed tests: 0" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Each shard uploaded try_*/shard_<id>.json. Every shard has try_1, so
+          # the shard count is the number of try_1 files.
+          mapfile -t try_dirs < <(ls -d shard_reports/try_*/ 2>/dev/null | sort -V)
+          if [ "${#try_dirs[@]}" -eq 0 ]; then
+            echo "No shard attempt reports found"
+            exit 1
+          fi
+          shard_count=$(ls shard_reports/try_1/shard_*.json 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$shard_count" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shards (try_1 reports), got $shard_count"
+            exit 1
+          fi
+          # Stitch try_N across shards into one try_N report (monolith layout:
+          # try_1 = full run, try_2/try_3 = failed-test reruns). Shards are
+          # disjoint so this is a plain union per attempt.
+          final_inputs=()
+          for td in "${try_dirs[@]}"; do
+            n=$(basename "$td")           # try_1, try_2, ...
+            mapfile -t shard_files < <(ls "$td"shard_*.json 2>/dev/null | sort)
+            [ "${#shard_files[@]}" -eq 0 ] && continue
+            python3 .github/scripts/tests/sharding/merge.py \
+              -o "merged/$n/report.json" \
+              "${shard_files[@]}"
+            final_inputs+=("merged/$n/report.json")
+          done
+          # Authoritative status: later attempts override earlier ones, so a
+          # test that failed try_1 but passed on retry counts as passed. Shards
+          # have heterogeneous attempt counts, hence latest-wins across the
+          # stitched per-try reports (not just the last try).
+          python3 .github/scripts/tests/sharding/merge.py \
+            --latest-wins \
+            -o merged/final_report.json \
+            "${final_inputs[@]}"
+          python3 .github/scripts/tests/fail-checker.py merged/final_report.json \
+            --output_path merged/failed_count.txt || true
+          failed_count=$(cat merged/failed_count.txt)
+          merged_test_count=$(jq '[.results[] | select(.type=="test")] | length' merged/final_report.json)
+          echo "failed_count=$failed_count" >> "$GITHUB_OUTPUT"
+          echo "shard_count=$shard_count" >> "$GITHUB_OUTPUT"
+          {
+            echo "ref=${{ inputs.checkout_ref }}"
+            echo "test_targets=${{ inputs.test_targets }}"
+            echo "test_size=${{ inputs.test_size }}"
+            echo "shard_reports=$shard_count"
+            echo "attempts=${#try_dirs[@]}"
+            echo "failed_tests_after_retries=$failed_count"
+            echo "merged_test_rows=$merged_test_count"
+          } > merged/meta.txt
+          echo "## Merged final result" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shards: $shard_count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Attempts merged: ${#try_dirs[@]} (try_1..${#try_dirs[@]})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failed tests (after in-shard retries): $failed_count" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload merged report
+        if: always() && steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-merged-${{ github.run_id }}
+          path: merged/
+          retention-days: 3
+      - name: Setup ydb access
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Prepare S3 folder prefix
+        if: steps.merge.outcome == 'success'
+        shell: bash
+        run: |
+          ref="${{ inputs.history_branch }}"
+          sanitized="${ref//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ inputs.build_preset }}
+      - name: Install publish dependencies
+        if: steps.merge.outcome == 'success'
+        run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly jinja2 pyyaml --quiet
+      - name: Publish merged final report
+        if: steps.merge.outcome == 'success'
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          BRANCH_NAME: ${{ inputs.history_branch }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PUBLIC_DIR: tmp/results
+          PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
+          S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
+          PR_NUMBER: ${{ inputs.publish && inputs.pr_number || '' }}
+          ORIGINAL_HEAD: ${{ inputs.checkout_ref }}
+          STATUS_SHA: ${{ inputs.status_sha != '' && inputs.status_sha || inputs.checkout_ref }}
+          SKIP_GITHUB_PUBLISH: ${{ inputs.publish && '0' || '1' }}
+          SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
+          SHARD_COUNT: ${{ steps.merge.outputs.shard_count }}
+        run: |
+          set -eux
+          REPORT_PATH=merged/final_report.json
+          TRIES_DIR=merged
+          PUBLIC_DIR="${PUBLIC_DIR:-tmp/results}"
+          SUMMARY_LINKS="$PUBLIC_DIR/summary_links.txt"
+          mkdir -p "$PUBLIC_DIR/final"
+          for td in "$TRIES_DIR"/try_*/; do
+            [ -f "$td/report.json" ] || continue
+            n=$(basename "$td")
+            mkdir -p "$PUBLIC_DIR/$n"
+            cp "$td/report.json" "$PUBLIC_DIR/$n/report.json"
+          done
+          cp "$REPORT_PATH" "$PUBLIC_DIR/final/report.json"
+          : > "$SUMMARY_LINKS"
+          if [ -n "${PUBLIC_DIR_URL:-}" ]; then
+            echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+            echo "01 [Params](${PUBLIC_DIR_URL}/params/index.html)" >> "$SUMMARY_LINKS"
+            echo "02 [Build](${PUBLIC_DIR_URL}/build/index.html)" >> "$SUMMARY_LINKS"
+            echo "03 [Plan](${PUBLIC_DIR_URL}/plan/index.html)" >> "$SUMMARY_LINKS"
+            if [ "${SHARD_COUNT:-0}" -gt 0 ]; then
+              for shard_id in $(seq 0 $((SHARD_COUNT - 1))); do
+                printf '%02d [Shard %s](%s/shard_%s/index.html)\n' \
+                  $((10 + shard_id)) "$shard_id" "$PUBLIC_DIR_URL" "$shard_id" >> "$SUMMARY_LINKS"
+                printf '%02d [Shard %s decision](%s/shard_%s/decision/index.html)\n' \
+                  $((40 + shard_id)) "$shard_id" "$PUBLIC_DIR_URL" "$shard_id" >> "$SUMMARY_LINKS"
+              done
+            fi
+          fi
+          IS_TEST_RESULT_IGNORED=0
+          case "$BUILD_PRESET" in release-asan|release-msan) IS_TEST_RESULT_IGNORED=1 ;; esac
+          gen_args=(
+            --summary_links "$SUMMARY_LINKS"
+            --public_dir "$PUBLIC_DIR"
+            --public_dir_url "$PUBLIC_DIR_URL"
+            --build_preset "$BUILD_PRESET"
+            --branch "$BRANCH_NAME"
+            --is_test_result_ignored "$IS_TEST_RESULT_IGNORED"
+          )
+          [ -n "${PR_NUMBER:-}" ] && gen_args+=(--pr_number "$PR_NUMBER")
+          [ -n "${GITHUB_RUN_ID:-}" ] && gen_args+=(--workflow_run_id "$GITHUB_RUN_ID")
+          mapfile -t try_reports < <(find "$TRIES_DIR" -mindepth 2 -maxdepth 2 -path '*/try_*/report.json' 2>/dev/null | sort -V)
+          if [ "${#try_reports[@]}" -gt 0 ]; then
+            try_idx=0
+            for report in "${try_reports[@]}"; do
+              try_idx=$((try_idx + 1))
+              try_name=$(basename "$(dirname "$report")")
+              is_retry=0
+              [ "$try_idx" -gt 1 ] && is_retry=1
+              python3 .github/scripts/tests/generate-summary.py \
+                "${gen_args[@]}" \
+                --status_report_file "$PUBLIC_DIR/.statusrep.try_${try_idx}.txt" \
+                --is_retry "$is_retry" --is_last_retry 0 \
+                --comment_color_file "$PUBLIC_DIR/.summary_color.try_${try_idx}.txt" \
+                --comment_text_file "$PUBLIC_DIR/.summary_text.try_${try_idx}.txt" \
+                "Tests" "${try_name}/ya-test.html" "$report"
+            done
+            python3 .github/scripts/tests/generate-summary.py \
+              "${gen_args[@]}" --no_step_summary \
+              --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+              --is_retry 0 --is_last_retry 1 \
+              --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+              --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+              "Tests" "final/ya-test.html" "$PUBLIC_DIR/final/report.json"
+          else
+            mkdir -p "$PUBLIC_DIR/try_1"
+            cp "$REPORT_PATH" "$PUBLIC_DIR/try_1/report.json"
+            python3 .github/scripts/tests/generate-summary.py \
+              "${gen_args[@]}" \
+              --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+              --is_retry 0 --is_last_retry 1 \
+              --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+              --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+              "Tests" "try_1/ya-test.html" "$REPORT_PATH"
+          fi
+          # Index after HTML generation so ya-test.html appears in folder indexes.
+          .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
+          python3 .github/scripts/tests/sharding/render_artifacts_nav.py \
+            --output "$PUBLIC_DIR/index.html" \
+            --tries-dir "$TRIES_DIR" \
+            --public-dir "$PUBLIC_DIR" \
+            --include-params \
+            --include-build \
+            --include-plan \
+            --shard-count "${SHARD_COUNT:-0}"
+          if [ -n "${S3_BUCKET_PATH:-}" ]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+              "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          fi
+          if [ -f "$SUMMARY_LINKS" ]; then
+            cat "$SUMMARY_LINKS" | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin if l.strip()], key=lambda a: (int(a[0]), a))]))' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${SKIP_GITHUB_PUBLISH:-}" != "1" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${PR_NUMBER:-}" ]; then
+            cat "$PUBLIC_DIR/summary_text.txt" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color "$(cat "$PUBLIC_DIR/summary_color.txt")"
+          fi
+          teststatus=$(cat "$PUBLIC_DIR/statusrep.txt")
+          if [ "$teststatus" = "success" ]; then testmessage="The check has been completed successfully"; else testmessage="The check has been failed"; fi
+          if [ "${SKIP_GITHUB_PUBLISH:-}" != "1" ] && [ -n "$STATUS_SHA" ]; then
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
+              -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"test_${BUILD_PRESET}\"}"
+          fi
+          if [ "${SKIP_FAIL_CHECK:-}" != "1" ] && [ "$IS_TEST_RESULT_IGNORED" -eq 0 ]; then
+            .github/scripts/tests/fail-checker.py "$REPORT_PATH"
+          fi
+      # Fail-closed: if merge/publish never completes, do not leave test_*
+      # missing/ambiguous when the run was meant to publish statuses.
+      - name: Fail closed test status
+        if: always() && inputs.publish && steps.merge.outcome != 'success'
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          STATUS_SHA: ${{ inputs.status_sha != '' && inputs.status_sha || inputs.checkout_ref }}
+        run: |
+          set -eux
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${STATUS_SHA}" \
+            -d "{\"state\":\"failure\",\"description\":\"Shard merge failed\",\"context\":\"test_${BUILD_PRESET}\"}"

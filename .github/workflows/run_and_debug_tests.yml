@@ -1,115 +1,316 @@
 name: Run and debug tests
+# Universal manual driver for pr_check_sharding_core.yml (not production).
+# Production path is pr_check.yml. Use this to exercise sharding over a PR or
+# branch (single preset or both, publish opt-in, timing summary).
 
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: 'PR number (e.g. "12345") or branch name (e.g. "main")'
+        required: true
+        type: string
+        default: 'main'
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'Test scope (e.g. "ydb/" or "ydb/tests/olap/")'
         required: false
         type: string
-        default: 'ydb/tests/olap/'
+        default: 'ydb/'
+      test_size:
+        description: 'Test sizes: small, medium, large (default: small,medium)'
+        required: false
+        type: string
+        default: small,medium
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset (both = rwdi + asan, like production PR-check)'
+        required: false
+        type: choice
+        options:
+          - relwithdebinfo
+          - release-asan
+          - both
+        default: 'relwithdebinfo'
+      mode:
+        description: 'Pipeline mode'
+        required: false
+        type: choice
+        options:
+          - auto
+          - single
+          - sharded
+        default: 'auto'
+      shard_count:
+        description: 'Shard count: "auto" (adaptive) or a number'
         required: false
         type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        default: 'auto'
+      shard_profile:
+        description: 'Adaptive profile when shard_count=auto'
+        required: false
+        type: choice
+        options:
+          - pr
+          - soft
+        default: 'pr'
+      increment:
+        description: 'auto = true for PR refs / false for branches; or force true/false'
+        required: false
+        type: choice
+        options:
+          - auto
+          - 'true'
+          - 'false'
+        default: auto
+      checkout_sha:
+        description: 'Optional pinned commit SHA (overrides PR merge commit or branch tip)'
         required: false
         type: string
         default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+      publish:
+        description: 'Post build_*/test_* commit statuses and PR test summary comment'
+        required: false
+        type: boolean
+        default: false
+      publish_integrated_status:
+        description: 'Also update checks_integrated (only when publish=true and both presets ran)'
         required: false
         type: boolean
         default: false
 
+concurrency:
+  group: run-and-debug-${{ inputs.ref }}-${{ inputs.build_preset }}
+  cancel-in-progress: true
+
 jobs:
-  prepare:
+  resolve:
     runs-on: ubuntu-latest
+    name: Resolve ref (${{ inputs.ref }})
+    timeout-minutes: 10
     outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
+      history_branch: ${{ steps.resolve.outputs.history_branch }}
+      presets: ${{ steps.resolve.outputs.presets }}
+      increment: ${{ steps.resolve.outputs.increment }}
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Resolve PR or branch
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_INPUT: ${{ inputs.ref }}
+          CHECKOUT_SHA_INPUT: ${{ inputs.checkout_sha }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          INCREMENT_INPUT: ${{ inputs.increment }}
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          ref="${REF_INPUT#pull/}"
+          ref="${ref#\#}"
+          checkout_ref=""
+          pr_number=""
+          pr_head_sha=""
+          history_branch=""
+          if [[ "$ref" =~ ^[0-9]+$ ]]; then
+            pr_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${ref}")
+            state=$(echo "$pr_json" | jq -r '.state')
+            if [ "$state" != "open" ]; then
+              echo "PR #$ref is not open (state=$state)" >&2
+              exit 1
+            fi
+            merge_sha=$(echo "$pr_json" | jq -r '.merge_commit_sha // empty')
+            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+            base_ref=$(echo "$pr_json" | jq -r '.base.ref')
+            if [ -z "$merge_sha" ]; then
+              echo "PR #$ref has no merge commit (conflicts or closed?)" >&2
+              exit 1
+            fi
+            checkout_ref="$merge_sha"
+            pr_number="$ref"
+            pr_head_sha="$head_sha"
+            history_branch="$base_ref"
+            echo "PR #$ref: merge=$merge_sha head=$head_sha base=$base_ref"
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
-            done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+            case "$ref" in
+              main|stable-*|stream-*|prestable-*|release-*) history_branch="$ref" ;;
+              *) history_branch=main ;;
+            esac
+            checkout_ref="$ref"
+            echo "Branch run: $ref (history: $history_branch)"
+          fi
+          if [ -n "$CHECKOUT_SHA_INPUT" ]; then
+            echo "Pinning checkout SHA: $CHECKOUT_SHA_INPUT (was: $checkout_ref)"
+            checkout_ref="$CHECKOUT_SHA_INPUT"
           fi
 
-      - name: Format build presets
-        id: format-build-preset
-        run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
-          fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
-          fi
+          case "$BUILD_PRESET" in
+            both) presets='["relwithdebinfo","release-asan"]' ;;
+            relwithdebinfo|release-asan) presets=$(jq -nc --arg p "$BUILD_PRESET" '[$p]') ;;
+            *) echo "Unsupported build_preset: $BUILD_PRESET" >&2; exit 1 ;;
+          esac
 
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
+          case "$INCREMENT_INPUT" in
+            auto)
+              if [ -n "$pr_number" ]; then increment=true; else increment=false; fi
+              ;;
+            true|false) increment="$INCREMENT_INPUT" ;;
+            *) echo "Unsupported increment: $INCREMENT_INPUT" >&2; exit 1 ;;
+          esac
+
+          echo "presets=$presets"
+          echo "increment=$increment"
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$pr_head_sha" >> "$GITHUB_OUTPUT"
+          echo "history_branch=$history_branch" >> "$GITHUB_OUTPUT"
+          echo "presets=$presets" >> "$GITHUB_OUTPUT"
+          echo "increment=$increment" >> "$GITHUB_OUTPUT"
+
+  run_check:
+    needs: resolve
+    if: needs.resolve.outputs.checkout_ref != ''
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
+        build_preset: ${{ fromJSON(needs.resolve.outputs.presets) }}
+    uses: ./.github/workflows/pr_check_sharding_core.yml
+    name: Build and test ${{ matrix.build_preset }}
+    secrets: inherit
     with:
+      checkout_ref: ${{ needs.resolve.outputs.checkout_ref }}
       test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
       build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+      mode: ${{ inputs.mode }}
+      shard_count: ${{ inputs.shard_count }}
+      shard_profile: ${{ inputs.shard_profile }}
+      test_size: ${{ inputs.test_size }}
+      increment: ${{ needs.resolve.outputs.increment == 'true' }}
+      pr_number: ${{ needs.resolve.outputs.pr_number }}
+      history_branch: ${{ needs.resolve.outputs.history_branch }}
+      status_sha: ${{ needs.resolve.outputs.pr_head_sha }}
+      publish: ${{ inputs.publish }}
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+  update_integrated_status:
+    runs-on: [self-hosted, tiny-worker]
+    needs:
+      - resolve
+      - run_check
+    if: >
+      always()
+      && needs.resolve.result == 'success'
+      && inputs.publish
+      && inputs.publish_integrated_status
+      && needs.resolve.outputs.pr_head_sha != ''
+      && inputs.build_preset == 'both'
+    steps:
+      - name: Gather required checks results
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ needs.resolve.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          integrated_status=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X GET \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${PR_HEAD_SHA}/status" | \
+            jq -cr '
+              .statuses
+              | group_by(.context)
+              | map(.[0])
+              | map(select(.context | (
+                  startswith("build_relwithdebinfo")
+                  or startswith("build_release-asan")
+                  or startswith("test_relwithdebinfo")
+                  or startswith("test_release-asan")
+                )))
+              | if length == 4 and all(.state == "success") then "success" else "failure" end
+            ')
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${PR_HEAD_SHA}" \
+            -d '{"state":"'"$integrated_status"'","description":"All checks completed","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+
+  timing_summary:
+    needs:
+      - resolve
+      - run_check
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    name: Timing summary
+    timeout-minutes: 10
+    steps:
+      - name: Collect job durations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ needs.resolve.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN")
+
+          jobs_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail -sL "${auth[@]}" \
+            "$api/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100")
+
+          {
+            echo "## Duration profile (this run)"
+            echo ""
+            echo "| Job | Status | Started | Duration, min |"
+            echo "|---|---|---|---|"
+            echo "$jobs_json" | jq -r '
+              .jobs[]
+              | select(.name != "Timing summary")
+              | select(.started_at != null)
+              | [
+                  .name,
+                  (.conclusion // .status),
+                  (.started_at | sub("T"; " ") | sub("Z"; "")),
+                  (if .completed_at then
+                     (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 * 10 | round / 10 | tostring)
+                   else "running" end)
+                ]
+              | "| \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"'
+            echo ""
+            run_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail -sL "${auth[@]}" \
+              "$api/actions/runs/${GITHUB_RUN_ID}")
+            start=$(echo "$run_json" | jq -r '.run_started_at | fromdateiso8601')
+            now=$(date +%s)
+            echo "Wall clock so far: $(( (now - start) / 60 )) min (run started $(echo "$run_json" | jq -r '.run_started_at'))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$PR_HEAD_SHA" ]; then
+            {
+              echo ""
+              echo "## Production PR-check of PR #$PR_NUMBER (for comparison)"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+            runs_json=$(curl --retry 3 --retry-delay 5 -sL "${auth[@]}" \
+              "$api/actions/runs?event=pull_request_target&head_sha=${PR_HEAD_SHA}&per_page=20" || echo '{}')
+            prcheck_run_id=$(echo "$runs_json" | jq -r '[.workflow_runs[]? | select(.name == "PR-check")] | sort_by(.run_started_at) | last | .id // empty')
+            if [ -n "$prcheck_run_id" ]; then
+              pj=$(curl --retry 3 --retry-delay 5 -sL "${auth[@]}" \
+                "$api/actions/runs/${prcheck_run_id}/jobs?per_page=100" || echo '{}')
+              {
+                echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${prcheck_run_id}"
+                echo ""
+                echo "| Job | Status | Duration, min |"
+                echo "|---|---|---|"
+                echo "$pj" | jq -r '
+                  .jobs[]?
+                  | select(.completed_at != null and .started_at != null)
+                  | [
+                      .name,
+                      (.conclusion // .status),
+                      (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 * 10 | round / 10 | tostring)
+                    ]
+                  | "| \(.[0]) | \(.[1]) | \(.[2]) |"'
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "No PR-check run found for head $PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi

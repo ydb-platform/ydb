@@ -1,4 +1,5 @@
 name: Run build and tests (ya make)
+# Sharding inputs: save_test_graph / skip_graph_compare / prebuilt_* / s3_subdir.
 description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
@@ -79,6 +80,39 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  status_sha:
+    type: string
+    required: false
+    default: ""
+    description: "PR head SHA for GitHub commit statuses (workflow_dispatch / workflow_call)"
+  skip_graph_compare:
+    type: boolean
+    default: false
+    description: "Use prebuilt graph/context instead of running graph_compare.py"
+  prebuilt_graph_path:
+    type: string
+    default: ""
+    description: "Path to graph.json when skip_graph_compare is true"
+  prebuilt_context_path:
+    type: string
+    default: ""
+    description: "Path to context.json when skip_graph_compare is true"
+  publish_github_status:
+    type: boolean
+    default: true
+    description: "Post build_* and test_* commit statuses"
+  publish_pr_comment:
+    type: boolean
+    default: true
+    description: "Append progress and summary to the PR comment"
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Build job saves graph for shard planning only; skip test loop (no -A on save)"
+  clean_ya_cache:
+    type: boolean
+    default: true
+    description: "rm -rf ~/.ya before the build. Disable when another ya process (e.g. background test listing) shares the cache in this job."
 
 outputs:
   success:
@@ -89,30 +123,49 @@ runs:
   using: "composite"
   steps:
     - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: (inputs.publish_pr_comment || inputs.publish_github_status) && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       shell: bash
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ inputs.pull_number }}
       run: |
         jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-        # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: Bearer ${{github.token}}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
+        # Parallel workflows expose many jobs whose names contain build_preset; jq without
+        # wrapping emits multiple lines and breaks markdown [check](url).
+        check_url=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: Bearer ${{github.token}}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '[.jobs[] | select(.name | contains($n)) | .html_url] | if length == 1 then .[0] else empty end')
+        if [ -z "$check_url" ]; then
+          check_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        fi
 
         platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
-        echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
+        if [ "${{ inputs.publish_pr_comment }}" = "true" ]; then
+          echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
+        fi
 
-        curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+        status_sha=$(git rev-parse HEAD)
+        if [ -n "${{ inputs.status_sha }}" ]; then
+          status_sha="${{ inputs.status_sha }}"
+        elif [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+          status_sha="${{ github.event.pull_request.head.sha }}"
+        fi
 
-        if [[ "${{inputs.run_tests}}" == "true" ]]; then
+        if [ "${{ inputs.publish_github_status }}" = "true" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+            https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
+            -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+
+          # Graph-only prepare (save_test_graph, !run_tests) must not leave test_*
+          # pending — terminal test status is posted only after merge publish.
+          if [[ "${{inputs.run_tests}}" == "true" ]]; then
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
+              -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+          fi
         fi
 
     - name: Clean ya cache
+      if: inputs.clean_ya_cache == 'true'
       shell: bash
       run: rm -rf ~/.ya
 
@@ -141,16 +194,6 @@ runs:
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
-
-    - name: Resolve analytics job name
-      shell: bash
-      env:
-        WORKFLOW_NAME: ${{ github.workflow }}
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ github.event_name }}
-      run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
-        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash
@@ -184,8 +227,6 @@ runs:
           ulimit -c 0
         fi
 
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
@@ -202,7 +243,6 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
-          --cleanup-child-processes
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -254,8 +294,36 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
+        START_RETRY=1
+
+        PUBLISH_PR_COMMENT=${{ inputs.publish_pr_comment }}
+        PUBLISH_GITHUB_STATUS=${{ inputs.publish_github_status }}
+        echo "PUBLISH_PR_COMMENT=$PUBLISH_PR_COMMENT" >> $GITHUB_ENV
+        echo "PUBLISH_GITHUB_STATUS=$PUBLISH_GITHUB_STATUS" >> $GITHUB_ENV
+        echo "START_RETRY=$START_RETRY" >> $GITHUB_ENV
+
+        if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+          echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        fi
+
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
+        fi
+
+        GRAPH_SAVE_REMOTE_OPTS=()
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-store)
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+        fi
+
+        GRAPH_ONLY_MODE=false
+        if [ "${{ inputs.save_test_graph }}" = "true" ] && [ "${{ inputs.run_tests }}" != "true" ]; then
+          GRAPH_ONLY_MODE=true
         fi
 
         params+=(
@@ -299,27 +367,60 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
+
+        GRAPH_SAVE_PARAMS=("${params[@]}")
+        # Graph-only prepare (run_tests=false, save_test_graph=true) must include
+        # test-program nodes for shard planning and graph replay on shards.
+        # -A stays out of YA_MAKE_COMMAND when run_tests=false, so add it here.
+        if [ "$GRAPH_ONLY_MODE" = "true" ]; then
+          case " ${GRAPH_SAVE_PARAMS[*]} " in
+            *" -A "*) ;;
+            *) GRAPH_SAVE_PARAMS+=(-A) ;;
+          esac
+        fi
+        GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]}"
+
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
-        if [ "${{ inputs.increment }}" = "true" ]; then
+        if [ "${{ inputs.skip_graph_compare }}" = "true" ]; then
+          if [ -n "${{ inputs.prebuilt_graph_path }}" ] && [ -f "${{ inputs.prebuilt_graph_path }}" ]; then
+            GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
+            CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
+          else
+            GRAPH_PATH=""
+            CONTEXT_PATH=""
+          fi
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+            if [ -e "$TARGET" ]; then
+              YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+            fi
+          done
+          if [ -z "$YA_MAKE_TARGET" ]; then
+            YA_MAKE_TARGET="ydb"
+          fi
+        elif [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$GRAPH_YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
+
+          git checkout -f "$ORIGINAL_HEAD"
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            fi
             exit $RC
           fi
 
-          git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -329,11 +430,29 @@ runs:
              fi
           done
           if [ true = ${{ inputs.run_tests }} ]; then
-            YA_MAKE_COMMAND+=" --retest"
+            GRAPH_YA_MAKE_COMMAND+=" --retest"
           fi
-          $YA_MAKE_COMMAND -k --cache-tests \
-            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-            $YA_MAKE_TARGET
+          if [ "$GRAPH_ONLY_MODE" = "true" ]; then
+            $GRAPH_YA_MAKE_COMMAND --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
+              $YA_MAKE_TARGET
+          else
+            $GRAPH_YA_MAKE_COMMAND -k --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
+              $YA_MAKE_TARGET
+          fi
+        fi
+
+        if [ "$GRAPH_ONLY_MODE" = "true" ]; then
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            echo "10 [Graph compare log]($PUBLIC_DIR_URL/graph_compare_log.txt)" >> $SUMMARY_LINKS
+          fi
+          echo "status=true" >> $GITHUB_OUTPUT
+          SKIP_TEST_LOOP=1
+        else
+          SKIP_TEST_LOOP=0
         fi
 
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
@@ -359,11 +478,16 @@ runs:
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
-        echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        if [ "$SKIP_TEST_LOOP" != "1" ]; then
+          echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        fi
 
         BUILD_FAILED=0
 
-        for RETRY in $(seq 1 $TEST_RETRY_COUNT)
+        if [ "$SKIP_TEST_LOOP" = "1" ]; then
+          :
+        else
+        for RETRY in $(seq $START_RETRY $TEST_RETRY_COUNT)
         do
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
@@ -380,12 +504,15 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
-          PREV_REPORT="$CURRENT_REPORT"
+          if [ "$RETRY" -gt "$START_RETRY" ]; then
+            PREV_REPORT="$CURRENT_REPORT"
+          fi
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
+          RETRY_YA_MAKE_TARGET="$YA_MAKE_TARGET"
+          RERUN_FAILED_OPT=""
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
-            RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
@@ -397,7 +524,9 @@ runs:
             fi
           fi
 
-          echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+            echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          fi
 
           monitor_memory() {
               set +x
@@ -427,7 +556,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            ./ya make "${params[@]}" $RETRY_YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
@@ -490,7 +619,9 @@ runs:
               | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            fi
             break
           fi
 
@@ -522,7 +653,9 @@ runs:
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            fi
           fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
@@ -555,7 +688,7 @@ runs:
 
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
-          if [ "${{ inputs.run_tests }}" = "true" ]; then
+          if [ "${{ inputs.run_tests }}" = "true" ] && [ "$PUBLISH_PR_COMMENT" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 
@@ -584,7 +717,7 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -594,23 +727,28 @@ runs:
               CONTEXT_PATH=""
           fi
         done;
+        fi
 
-        if [ $BUILD_FAILED = 0 ]; then
+        if [ $BUILD_FAILED = 0 ] && [ "$SKIP_TEST_LOOP" != "1" ]; then
           echo "status=true" >> $GITHUB_OUTPUT
-          echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+          if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+            echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+          fi
         fi
 
     - name: resolve-status-sha
       shell: bash
       run: |
         status_sha="$ORIGINAL_HEAD"
-        if [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
+        if [[ -n "${{ inputs.status_sha }}" ]]; then
+          status_sha="${{ inputs.status_sha }}"
+        elif [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
           status_sha="${{ github.event.pull_request.head.sha }}"
         fi
         echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: inputs.publish_github_status && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -628,6 +766,7 @@ runs:
         fi
 
     - name: analyze tests results
+      if: inputs.publish_github_status
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -663,8 +802,25 @@ runs:
       run: |
         set -x
         echo "::group::s3-sync"
+        # Graph-only prepare: keep the plan inputs next to build logs on S3.
+        if [ "${{ inputs.save_test_graph }}" = "true" ]; then
+          if [ -f graph.json ]; then
+            cp -f graph.json "$PUBLIC_DIR/graph.json"
+          fi
+          if [ -f context.json ]; then
+            cp -f context.json "$PUBLIC_DIR/context.json"
+          fi
+        fi
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        if [ true = ${{ inputs.run_tests }} ]; then
+          if [ -n "${S3_SUBDIR:-}" ]; then
+            echo "00 [Shard artifacts (${S3_SUBDIR})](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+          else
+            echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+          fi
+        else
+          echo "00 [Build logs](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        fi
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
@@ -688,7 +844,7 @@ runs:
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.publish_pr_comment
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
@@ -706,12 +862,12 @@ runs:
         read -ra comment_arr <<< "$comment_raw"
 
         printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]]; then
+        if [[ ${comment_raw} != "Error"* ]] && [ -n "${comment_arr[0]:-}" ]; then
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}
 
-          printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
+          printf "$comment" | .github/scripts/tests/comment-pr.py --color "$color"
 
         else
           echo "Skipped build size difference, comment_raw = ${comment_raw}"
@@ -719,7 +875,7 @@ runs:
 
     - name: comment-if-cancel
       shell: bash
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: cancelled() && inputs.publish_pr_comment && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}

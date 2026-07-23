@@ -2,23 +2,41 @@
 
 PY3_LIBRARY()
 
-VERSION(0.25.1)
+VERSION(0.26.8)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/annotated-doc
-    contrib/python/click
     contrib/python/rich
     contrib/python/shellingham
 )
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    typer._click._winconsole
+)
+
 PY_SRCS(
     TOP_LEVEL
     typer/__init__.py
     typer/__main__.py
+    typer/_click/__init__.py
+    typer/_click/_compat.py
+    typer/_click/_termui_impl.py
+    typer/_click/_textwrap.py
+    typer/_click/_winconsole.py
+    typer/_click/core.py
+    typer/_click/decorators.py
+    typer/_click/exceptions.py
+    typer/_click/formatting.py
+    typer/_click/globals.py
+    typer/_click/parser.py
+    typer/_click/shell_completion.py
+    typer/_click/termui.py
+    typer/_click/types.py
+    typer/_click/utils.py
     typer/_completion_classes.py
     typer/_completion_shared.py
     typer/_types.py
@@ -41,6 +59,8 @@ RESOURCE_FILES(
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
     typer/.agents/skills/typer/SKILL.md
+    typer/_click/LICENSE.txt
+    typer/_click/py.typed
     typer/py.typed
 )
 

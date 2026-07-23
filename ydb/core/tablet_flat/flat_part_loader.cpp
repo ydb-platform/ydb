@@ -120,25 +120,18 @@ void TLoader::StageParseMeta()
             FlatHistoricIndexes.clear();
         }
         if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) {
-            /* V2 read is disabled: revert every part back to its V1 index */
+            // V2 read disabled: for dual-root (V2+V1) parts, strip RootV2 to use V1 index
             for (auto& meta : BTreeGroupIndexes) {
-                if (meta.HasRootV2()) {
-                    if (meta.HasRootV1()) {
-                        meta.RootV2 = NPage::TPageLocation::Max();
-                    }
+                if (meta.HasRootV2() && meta.HasRootV1()) {
+                    meta.RootV2 = NPage::TPageLocation::Max();
                 }
             }
             for (auto& meta : BTreeHistoricIndexes) {
-                if (meta.HasRootV2()) {
-                    if (meta.HasRootV1()) {
-                        meta.RootV2 = NPage::TPageLocation::Max();
-                    }
+                if (meta.HasRootV2() && meta.HasRootV1()) {
+                    meta.RootV2 = NPage::TPageLocation::Max();
                 }
             }
-
-            /* Without a V1 b-tree the part has no usable index — this is the documented V2-only risk.
-               Don't remove V2-only indexes.
-             */
+            // V2-only parts: it's forbidden configuration but keep RootV2
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/opt/rbo)
 
 SRCS(
+    limit_pushdown_rules_ut.cpp
     semantic_snapshot_exporter_ut.cpp
 )
 

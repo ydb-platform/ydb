@@ -58,6 +58,7 @@ struct TPDiskMockState::TImpl {
     ESpaceColorPolicy SpaceColorPolicy;
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
     double Occupancy = 0;
+    bool ReportVDiskMetrics = false;
 
     struct TShredState {
         enum class EPhase : ui8 {
@@ -336,6 +337,10 @@ struct TPDiskMockState::TImpl {
         StatusFlags = SpaceColorToStatusFlag(spaceColor);
     }
 
+    void SetReportVDiskMetrics(bool reportVDiskMetrics) {
+        ReportVDiskMetrics = reportVDiskMetrics;
+    }
+
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
             ReadOnlyVDisks.insert(vDiskId.GroupID.GetRawId());
@@ -396,6 +401,10 @@ void TPDiskMockState::SetStatusFlags(NPDisk::TStatusFlags flags) {
 
 void TPDiskMockState::SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
     Impl->SetReadOnly(vDiskId, isReadOnly);
+}
+
+void TPDiskMockState::SetReportVDiskMetrics(bool reportVDiskMetrics) {
+    Impl->SetReportVDiskMetrics(reportVDiskMetrics);
 }
 
 bool TPDiskMockState::IsDiskReadOnly() const {
@@ -470,22 +479,24 @@ public:
         p->SetAvailableSize((ui64)(Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
         p->SetTotalSize((ui64)Impl.TotalChunks * Impl.ChunkSize);
         p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
-        // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
-        p->SetMaxIOPS(1000);
-        p->SetMaxReadThroughput(1'000'000'000);
-        p->SetMaxWriteThroughput(1'000'000'000);
+        if (Impl.ReportVDiskMetrics) {
+            // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
+            p->SetMaxIOPS(1000);
+            p->SetMaxReadThroughput(1'000'000'000);
+            p->SetMaxWriteThroughput(1'000'000'000);
 
-        // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
-        for (const auto& [ownerId, owner] : Impl.Owners) {
-            auto *m = record.AddVDisksMetrics();
-            VDiskIDFromVDiskID(owner.VDiskId, m->MutableVDiskId());
-            auto *vslotId = m->MutableVSlotId();
-            vslotId->SetNodeId(Impl.NodeId);
-            vslotId->SetPDiskId(Impl.PDiskId);
-            vslotId->SetVSlotId(owner.SlotId);
-            m->SetNormalizedOccupancy(GetOccupancy());
-            m->SetAllocatedSize((ui64)owner.CommittedChunks.size() * Impl.ChunkSize);
-            m->SetAvailableSize(p->GetAvailableSize());
+            // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
+            for (const auto& [ownerId, owner] : Impl.Owners) {
+                auto *m = record.AddVDisksMetrics();
+                VDiskIDFromVDiskID(owner.VDiskId, m->MutableVDiskId());
+                auto *vslotId = m->MutableVSlotId();
+                vslotId->SetNodeId(Impl.NodeId);
+                vslotId->SetPDiskId(Impl.PDiskId);
+                vslotId->SetVSlotId(owner.SlotId);
+                m->SetNormalizedOccupancy(GetOccupancy());
+                m->SetAllocatedSize((ui64)owner.CommittedChunks.size() * Impl.ChunkSize);
+                m->SetAvailableSize(p->GetAvailableSize());
+            }
         }
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
 

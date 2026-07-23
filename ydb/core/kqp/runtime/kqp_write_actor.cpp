@@ -4746,6 +4746,12 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+                    AFL_ENSURE(res->Record.HasStepId());
+                    AFL_ENSURE(res->Record.HasTxId());
+                    AFL_ENSURE(TxId && *TxId == res->Record.GetTxId());
+                    CommitTimestamp = TCommitTimestamp{res->Record.GetStepId(), res->Record.GetTxId()};
+                }
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
@@ -5507,7 +5513,8 @@ public:
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats()
+                BuildStats(),
+                std::move(CommitTimestamp)
             });
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
@@ -5899,6 +5906,7 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;

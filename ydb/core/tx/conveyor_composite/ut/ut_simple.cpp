@@ -1,5 +1,6 @@
 #include <library/cpp/retry/retry.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -151,7 +152,7 @@ public:
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
-        const auto actorId = actorSystem.Register(TServiceOperator::CreateService(config, counters));
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
 
         std::vector<std::shared_ptr<IRequestProcessor>> requests = GetRequests();
         for (auto&& i : requests) {

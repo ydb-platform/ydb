@@ -24,6 +24,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
@@ -240,8 +241,8 @@ public:
 };
 
 void EnableDeduplicationConveyorFlag() {
-    std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::TServiceOperator::CreateService(
-        NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    std::unique_ptr<NActors::IActor> unusedDistributor(
+        NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
     Y_UNUSED(unusedDistributor);
 }
 

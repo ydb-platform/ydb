@@ -63,9 +63,10 @@ correctness bug.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. Their current verifier-side results stop at aggregate
-`avg`, Decimal-SUM headroom, aggregate `avg`, and the 82,944-pair grouped-
-aggregate construction cap, respectively; none is counted as a formula. Later
-formula or proof results satisfy the same depth floor automatically.
+`avg`, the 32,896-pair Merge construction cap, aggregate `avg`, and the
+82,944-pair grouped-aggregate construction cap, respectively; none is counted
+as a formula. Later formula or proof results satisfy the same depth floor
+automatically.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -364,9 +365,11 @@ experiment retained a
 exceeded its 15.0-second process deadline; it is neither a proof nor a
 counterexample. Before restricted stored-String `Concat` was added, TPC-DS q5, q80,
 and q84 stopped at the generic callable. q5 and q80 now have the deeper outcomes
-described above, while q84 remains unsupported on its two-cell allocation
-bound. Before constant DateTime2 calendar-shift folding, the dashboard covered
-23/121 queries and the proof floor remained ten. TPCH q1 passes both snapshot
+described above; subsequent finite Decimal-bound propagation moves q5 again to
+the 32,896-pair Merge construction cap. q84 remains unsupported on its
+two-cell allocation bound. Before constant DateTime2 calendar-shift folding,
+the dashboard covered 23/121 queries and the proof floor remained ten. TPCH q1
+passes both snapshot
 exporters and reaches unmodeled aggregate
 `avg`; q21 exposes `Double`; q72 still has a dynamic Date-fold
 `SafeCast(Optional<Date>)` mismatch; and q77 passes export but fails the
@@ -597,8 +600,19 @@ finite overflow is possible. The verifier therefore carries a conservative
 absolute finite-code bound through partial states and admits a Decimal sum only
 when the total bound is strictly below `10^35`. Within that headroom every row
 order and distributed parenthesization has the same exact result; otherwise the
-query fails closed. A column-storage source is split into symbolic source tasks
-before a pushed intermediate aggregate executes. The separate manual runtime
+query fails closed. A known bound covers every non-NULL finite coefficient; it
+does not approximate NaN or infinities, whose exact value terms remain separate.
+Finite literals seed their absolute coefficient, while typed NULL and special
+literals seed the vacuous zero bound. Exact same-type `+` and `-` use the capped
+sum of operand bounds, and an exact integral-to-Decimal cast derives its bound
+from the complete signed or unsigned source-type domain, target scale, and
+finite saturation point. `If`/`IfPresent` branches and stage alternatives take
+conservative maxima, aliases preserve bounds, and Decimal `SUM` states
+accumulate them. Any missing operand proof remains unknown and can only make a
+later sum fail closed.
+
+A column-storage source is split into symbolic source tasks before a pushed
+intermediate aggregate executes. The separate manual runtime
 diagnostic deliberately crosses this rejected boundary with the same three
 valid rows in one- and two-partition column tables. Both optimizer modes return
 `M` in the former case and `inf` in the latter, confirming why the verifier must

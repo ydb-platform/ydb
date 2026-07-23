@@ -402,6 +402,17 @@ raw scaled-integer total. Partial states preserve the tighter bound through
 aliases and StageGraph connections. Missing provenance falls back to the full
 declared-type bound and can only make verification fail closed.
 
+The bound invariant covers every non-NULL finite Decimal coefficient and makes
+no numeric claim about exact NaN/infinity value terms. Finite literals seed
+their absolute coefficient; typed NULL and special literals seed a vacuous zero;
+same-type `+`/`-` use a precision-capped triangle bound; and exact non-null
+integral casts use the complete source-type domain, target scale, and saturation
+point. `If`/`IfPresent` select the maximum known alternative, while any unknown
+operand remains unknown. Focused scalar tests cover finite, NULL, special,
+additive, conditional, and signed/unsigned 8/64-bit cast cases. Relation tests
+consume literal arithmetic and integral-cast bounds through a two-row Decimal
+`SUM`, check special/NULL semantics, and retain the strict `10^35` rejection.
+
 An isolated manual real-YDB diagnostic exercises the rejected overflow domain
 without weakening that gate. For the same three `Decimal(35,0)` rows it observes
 `M` with one column-table partition and `inf` with two partitions under both the
@@ -900,6 +911,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and aggregate obligations cover this boundary. TPC-DS q90 exercises two
   `Uint64` count expressions cast to `Decimal(15,4)` and is
   `VERIFIED_BOUNDED` at the standard two-row/two-task bound.
+- Finite Decimal literals, specials, typed NULL, and complete non-null integral
+  casts now seed conservative finite-coefficient bounds. Exact same-type
+  `+`/`-` and `If`/`IfPresent` propagate them without treating special values as
+  finite numbers; unknown operands remain unknown. Scalar and relation tests
+  cover signed/unsigned 8/64-bit domains, saturation, typed-null wrappers, and
+  two-row `SUM` consumption. A focused TPC-DS q5 run clears its former
+  Decimal-SUM headroom rejection and reaches the deeper 32,896-pair Merge
+  construction cap after 1,720/42,044 ms. Coverage counts are unchanged.
 - Exact Decimal-only `max` has independent raw-code, NULL, grouped/global,
   split-state, wrong-shuffle, type, and phase-nullability tests. Focused TPC-DS
   q74 passes its former aggregate blocker and reaches the 65,536-pair join

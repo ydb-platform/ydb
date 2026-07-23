@@ -236,9 +236,9 @@ After both snapshots export, q4 fails before materializing a 13,824-row join
 output above the 4,096-row relation bound. q11's join matching and q25/q29's
 grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
-q5 fails closed because its Decimal `sum` cannot establish finite accumulator
-headroom. q80's grouped aggregate requires 82,944 candidate-row pairs above the
-16,384-pair construction bound.
+q5 passes Decimal `sum` headroom and then rejects a 32,896-pair Merge above the
+16,384-pair construction bound. q80's grouped aggregate requires 82,944
+candidate-row pairs above that same bound.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
 rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
@@ -480,6 +480,16 @@ Boolean trees opaque. q12 now emits a formula, raising TPCH formula coverage to
   shaped Boolean trees still fail closed. q12 now emits a formula and is
   `VERIFIED_BOUNDED`, raising formula coverage to 28/121 (23.1%) and the proof
   floor to 13/121 (10.7%). No candidate or optimizer bug arose.
+
+- Finite Decimal headroom now starts at exact finite/special/NULL literals and
+  complete non-null integral casts, propagates through exact `+`/`-` and
+  `If`/`IfPresent`, and remains unknown when any required operand bound is
+  unknown. The cast bound covers the complete signed/unsigned source-type
+  domain rather than the current symbolic value. A focused current-code TPC-DS
+  q5 run clears its former Decimal-SUM rejection and stops at the deeper
+  32,896-pair Merge construction cap after 1,720/42,044 ms of
+  preparation/verifier work. It remains verifier-side `UNSUPPORTED`, so formula
+  and proof coverage are unchanged.
 
 - Restricted stored-String `Concat` is admitted only as a Map-body root whose
   binary tree contains canonical String literals and one or two catalog-backed

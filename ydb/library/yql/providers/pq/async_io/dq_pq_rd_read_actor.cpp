@@ -636,7 +636,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         ColumnIndexes[index] = i;
     }
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
-    DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+    DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0, DefaultDatumValidationMode);
 
     InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
@@ -1752,7 +1752,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const THashMap<TString, TString>& secureParams,
     TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -1776,7 +1776,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         std::move(settings),
         std::move(readTaskParamsMsg),
         driver,
-        CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
+        credentialsFactory->Create(token, addBearerToToken),
         computeActorId,
         localRowDispatcherActorId,
         token,

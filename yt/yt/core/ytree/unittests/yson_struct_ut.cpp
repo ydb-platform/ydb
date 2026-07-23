@@ -3475,6 +3475,150 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
     EXPECT_EQ(drv2Ptr->Field2, 144);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPostprocessedPolyBase
+    : public TYsonStruct
+{
+    REGISTER_YSON_STRUCT(TPostprocessedPolyBase);
+
+    static void Register(TRegistrar)
+    { }
+};
+
+struct TPostprocessedPolyDerived
+    : public TPostprocessedPolyBase
+{
+    int Value;
+
+    REGISTER_YSON_STRUCT(TPostprocessedPolyDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default(0);
+        registrar.Postprocessor([] (TThis* config) {
+            if (config->Value < 0) {
+                THROW_ERROR_EXCEPTION("value must be non-negative");
+            }
+        });
+    }
+};
+
+DEFINE_POLYMORPHIC_YSON_STRUCT(PostprocessedPoly, TPostprocessedPolyBase,
+    ((Base)    (TPostprocessedPolyBase))
+    ((Derived) (TPostprocessedPolyDerived))
+);
+
+struct TPostprocessedPolyHolder
+    : public TYsonStruct
+{
+    TPostprocessedPoly Poly;
+    THashMap<TString, TPostprocessedPoly> PolyMap;
+
+    REGISTER_YSON_STRUCT(TPostprocessedPolyHolder);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("poly", &TThis::Poly)
+            .Default();
+        registrar.Parameter("poly_map", &TThis::PolyMap)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, PolymorphicYsonStructPostprocess)
+{
+    auto makeHolder = [] (INodePtr poly, INodePtr polyMap) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .DoIf(poly != nullptr, [&] (auto fluent) {
+                    fluent.Item("poly").Value(poly);
+                })
+                .DoIf(polyMap != nullptr, [&] (auto fluent) {
+                    fluent.Item("poly_map").Value(polyMap);
+                })
+            .EndMap();
+    };
+    auto derived = [] (int value) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("type").Value("derived")
+                .Item("value").Value(value)
+            .EndMap();
+    };
+    auto singleton = [] (INodePtr value) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("a").Value(value)
+            .EndMap();
+    };
+
+    // The concrete postprocessor runs for a directly-held polymorphic field.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(derived(1), nullptr)));
+    EXPECT_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(derived(-1), nullptr)), std::exception);
+
+    // ... and for a polymorphic field held in a map.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, singleton(derived(1)))));
+    EXPECT_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, singleton(derived(-1)))), std::exception);
+
+    // An empty polymorphic field is skipped, not dereferenced.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, nullptr)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr const char PolymorphicYsonStructCustomDiscriminatorFieldName[] = "test_type";
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(MyPolyCustomDiscriminator, PolymorphicYsonStructCustomDiscriminatorFieldName, TPolyBase,
+    ((Base) (TPolyBase))
+    ((Drv1) (TPolyDerived1))
+    ((Drv2) (TPolyDerived2))
+);
+
+TEST(TYsonStructTest, PolymorphicYsonStructCustomDiscriminator)
+{
+    EXPECT_EQ(TMyPolyCustomDiscriminator::TypeFieldName, "test_type");
+
+    TMyPolyCustomDiscriminator poly;
+
+    auto node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("test_type").Value("drv1")
+            .Item("base_field").Value(14)
+            .Item("field1").Value(111)
+        .EndMap();
+
+    Deserialize(poly, node->AsMap());
+    EXPECT_EQ(poly.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+
+    auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(drv1Ptr.operator bool());
+    EXPECT_EQ(drv1Ptr->BaseField, 14);
+    EXPECT_EQ(drv1Ptr->Field1, 111);
+
+    // Check serialization.
+    auto serialized = ConvertToYsonString(poly);
+    auto deserialized = ConvertTo<TMyPolyCustomDiscriminator>(serialized);
+    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+
+    auto deserializedDrv1Ptr = deserialized.TryGetConcrete<TPolyDerived1>();
+    EXPECT_TRUE(deserializedDrv1Ptr.operator bool());
+    EXPECT_EQ(deserializedDrv1Ptr->BaseField, 14);
+    EXPECT_EQ(deserializedDrv1Ptr->Field1, 111);
+
+    // The default "type" field is no longer special and is treated as unrecognized.
+    node = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("type").Value("drv2")
+            .Item("base_field").Value(17)
+        .EndMap();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        Deserialize(poly, node->AsMap()),
+        "Concrete type must be specified");
+}
+
 TEST(TYsonStructTest, PolymorphicYsonStructSaveLoad)
 {
     auto drv = New<TPolyDerived2>();

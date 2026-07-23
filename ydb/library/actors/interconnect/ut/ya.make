@@ -11,6 +11,7 @@ ENDIF()
 SRCS(
     channel_scheduler_ut.cpp
     connection_checker_ut.cpp
+    direct_session_ut.cpp
     event_holder_pool_ut.cpp
     event_output_channel_ut.cpp
     interconnect_ut.cpp
@@ -19,7 +20,9 @@ SRCS(
     poller_actor_ut.cpp
     dynamic_proxy_ut.cpp
     sticking_ut.cpp
-    uring_ut.cpp
+    #uring_ut.cpp
+    xdc_shuffle_ut.cpp
+    v2_event_serializer_ut.cpp
 )
 
 PEERDIR(

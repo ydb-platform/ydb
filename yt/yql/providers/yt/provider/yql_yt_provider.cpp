@@ -545,6 +545,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
         Names.insert(TYtStatOut::CallableName());
+        Names.insert(TYtMaterialize::CallableName());
+        Names.insert(TYtPersist::CallableName());
     }
 };
 
@@ -568,9 +570,13 @@ bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const 
     return Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
 }
 
+TDuration TYtState::GetHybridDqTimeSpentLimit() const {
+    return Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+}
+
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
-            > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+            > GetHybridDqTimeSpentLimit();
 }
 
 TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {

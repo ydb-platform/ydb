@@ -9,6 +9,8 @@
 
 #include <jwt-cpp/jwt.h>
 
+#include <exception>
+
 using namespace std::chrono_literals;
 
 namespace NYdb::inline Dev {
@@ -42,10 +44,12 @@ public:
     TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params);
     virtual std::string GetAuthInfo() const override;
     virtual bool IsValid() const override;
+    NThreading::TFuture<void> PrepareTokenAsync();
 
 private:
     void PrepareToken();
     void RequestToken();
+    void FinishRequest(Ydb::Auth::LoginResponse* response, TPlainStatus status, bool facilityAvailable);
     bool IsOk() const;
     void ParseToken();
     std::string GetToken() const;
@@ -62,7 +66,6 @@ private:
     TLoginCredentialsParams Params_;
     EState State_ = EState::Empty;
     std::mutex Mutex_;
-    std::condition_variable Notify_;
     std::atomic<ui64> TokenReceived_ = 1;
     std::atomic<ui64> TokenParsed_ = 0;
     std::optional<std::string> Token_;
@@ -71,11 +74,13 @@ private:
     TInstant TokenRequestAt_;
     TPlainStatus Status_;
     Ydb::Auth::LoginResponse Response_;
+    NThreading::TPromise<void> TokenReadyPromise_;
 };
 
 TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params)
     : Facility_(facility)
     , Params_(std::move(params))
+    , TokenReadyPromise_(NThreading::NewPromise<void>())
 {
     auto strongFacility = facility.lock();
     if (strongFacility) {
@@ -123,16 +128,7 @@ void TLoginCredentialsProvider::RequestToken() {
 
         auto responseCb = [facility = Facility_, this](Ydb::Auth::LoginResponse* resp, TPlainStatus status) {
             auto strongFacility = facility.lock();
-            if (strongFacility) {
-                std::lock_guard<std::mutex> lock(Mutex_);
-                Status_ = std::move(status);
-                if (resp != nullptr) {
-                    Response_ = std::move(*resp);
-                }
-                State_ = EState::Done;
-                TokenReceived_++;
-            }
-            Notify_.notify_all();
+            FinishRequest(resp, std::move(status), static_cast<bool>(strongFacility));
         };
 
         Ydb::Auth::LoginRequest request;
@@ -144,25 +140,61 @@ void TLoginCredentialsProvider::RequestToken() {
         TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,
             rpcSettings);
+    } else {
+        FinishRequest(nullptr, {}, false);
+    }
+}
+
+void TLoginCredentialsProvider::FinishRequest(
+    Ydb::Auth::LoginResponse* response,
+    TPlainStatus status,
+    bool facilityAvailable)
+{
+    std::optional<std::string> error;
+    {
+        std::lock_guard lock(Mutex_);
+        State_ = EState::Done;
+        ++TokenReceived_;
+        if (facilityAvailable) {
+            Status_ = std::move(status);
+            if (response) {
+                Response_ = std::move(*response);
+            }
+            ParseToken();
+        } else {
+            Token_.reset();
+            Error_ = "Login credentials provider response facility is not available";
+            TokenParsed_ = TokenReceived_.load();
+        }
+        error = Error_;
+    }
+    if (error) {
+        TokenReadyPromise_.TrySetException(std::make_exception_ptr(yexception() << *error));
+    } else {
+        TokenReadyPromise_.TrySetValue();
     }
 }
 
 void TLoginCredentialsProvider::PrepareToken() {
-    std::unique_lock<std::mutex> lock(Mutex_);
-    switch (State_) {
-        case EState::Empty:
+    PrepareTokenAsync().Wait();
+    std::lock_guard lock(Mutex_);
+    ParseToken();
+}
+
+NThreading::TFuture<void> TLoginCredentialsProvider::PrepareTokenAsync() {
+    bool requestToken = false;
+    auto future = TokenReadyPromise_.GetFuture();
+    {
+        std::unique_lock<std::mutex> lock(Mutex_);
+        if (State_ == EState::Empty) {
             State_ = EState::Requesting;
-            RequestToken();
-            [[fallthrough]];
-        case EState::Requesting:
-            Notify_.wait(lock, [&]{
-                return State_ == EState::Done;
-            });
-            [[fallthrough]];
-        case EState::Done:
-            ParseToken();
-            break;
+            requestToken = true;
+        }
     }
+    if (requestToken) {
+        RequestToken();
+    }
+    return future;
 }
 
 bool TLoginCredentialsProvider::IsOk() const {
@@ -226,6 +258,7 @@ public:
     TLoginCredentialsProviderFactory(TLoginCredentialsParams params);
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override;
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override;
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override;
 
 private:
     TLoginCredentialsParams Params_;
@@ -242,6 +275,12 @@ std::shared_ptr<ICredentialsProvider> TLoginCredentialsProviderFactory::CreatePr
 
 std::shared_ptr<ICredentialsProvider> TLoginCredentialsProviderFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
     return std::make_shared<TLoginCredentialsProvider>(std::move(facility), Params_);
+}
+
+NThreading::TFuture<TCredentialsProviderPtr> TLoginCredentialsProviderFactory::CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
+    auto provider = std::make_shared<TLoginCredentialsProvider>(std::move(facility), Params_);
+    TCredentialsProviderPtr result = provider;
+    return provider->PrepareTokenAsync().Return(std::move(result));
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params) {

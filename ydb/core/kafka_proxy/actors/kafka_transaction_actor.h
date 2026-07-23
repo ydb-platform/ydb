@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kafka_init_producer_id_actor.h"
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>

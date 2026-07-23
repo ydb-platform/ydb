@@ -533,6 +533,7 @@ config:
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+                appData->FeatureFlags.MergeFrom(Settings.FeatureFlags);
 
                 auto& icb = *appData->Icb;
 #define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
@@ -570,6 +571,10 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
                 ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
+
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageGeneration, false, false, true, false);
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageCollectionSlowRequests, false, false, true, false);
+                ADD_ICB_CONTROL(DSProxyControls.LongRequestThresholdMs, 50'000, 1, 1'000'000'000, 50'000);
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);

@@ -25,6 +25,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 template<>
 void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
     for (size_t i = 0; i < v.size(); ++i) {
@@ -271,10 +273,8 @@ public:
                     {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/config", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/compute", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/compute", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
@@ -293,6 +293,8 @@ public:
                     {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/json/autocomplete", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},
@@ -836,7 +838,8 @@ private:
         if (actor) {
             Register(actor);
         } else {
-            BLOG_ERROR("Unable to process EvViewerRequest");
+            YDB_LOG_ERROR("Unable to process EvViewerRequest",
+                {"logPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
         }
     }

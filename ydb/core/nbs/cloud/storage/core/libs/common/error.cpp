@@ -1,5 +1,7 @@
 #include "error.h"
 
+#include "error_utils.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 
 #include <util/stream/format.h>
@@ -182,9 +184,20 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
     return EDiagnosticsErrorKind::ErrorFatal;
 }
 
+bool IsCancelledError(const NProto::TError& e)
+{
+    return e.GetCode() == E_CANCELLED;
+}
+
 bool IsConnectionError(const NProto::TError& e)
 {
     return e.GetCode() == E_GRPC_UNAVAILABLE;
+}
+
+bool IsSessionBlockedError(const NProto::TError& e)
+{
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == TabletGenerationBlockedErrorMessage;
 }
 
 NJson::TJsonValue FormatErrorJson(const NProto::TError& e)

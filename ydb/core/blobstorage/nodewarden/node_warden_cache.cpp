@@ -1,7 +1,8 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
-
 #include <util/system/sysstat.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -79,7 +80,9 @@ std::function<std::function<void()>(const TActorContext&)> TNodeWarden::WrapCach
                 }
             }
         } catch (...) {
-            STLOG(PRI_WARN, BS_NODE, NW06, "WrapCacheOp failed to update cache", (Error, CurrentExceptionMessage()));
+            YDB_LOG_WARN("WrapCacheOp failed to update cache",
+                {"marker", "NW06"},
+                {"error", CurrentExceptionMessage()});
             if (writeError) {
                 writeError->Set(1);
             }
@@ -140,7 +143,7 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
                             pred = item.GetGroupGeneration() <= it->second->GetGroupGeneration();
                         }
                         if (pred) {
-                            cache->Mutable(i)->CopyFrom(item);
+                            cache->Mutable(i)->CopyFrom(*it->second);
                         }
                     } else {
                         cache->DeleteSubrange(i--, 1);
@@ -176,8 +179,13 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
             std::map<TVSlotId, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk*> vdisks;
             for (const auto& x : newServices.GetVDisks()) {
                 const TVSlotId key(x.GetVDiskLocation());
-                Y_ABORT_UNLESS(!pdisksToDestroy.count({key.NodeId, key.PDiskId}) || x.GetDoDestroy(), "inconsistent ServiceSet");
-                vdisks.emplace(key, pdisksToDestroy.count({key.NodeId, key.PDiskId}) ? nullptr : &x);
+                const bool pdiskDestroyed = pdisksToDestroy.count({key.NodeId, key.PDiskId});
+                const bool vdiskDestroyed = x.GetDoDestroy() ||
+                    (x.HasEntityStatus() && x.GetEntityStatus() == NKikimrBlobStorage::DESTROY);
+                Y_ABORT_UNLESS(!pdiskDestroyed || vdiskDestroyed, "inconsistent ServiceSet");
+                const bool destroy = pdiskDestroyed || vdiskDestroyed;
+                // applyDiff treats nullptr as a tombstone: it removes the matching VDisk from the cache and skips insertion.
+                vdisks.emplace(key, destroy ? nullptr : &x);
             }
             applyDiff(services->MutableVDisks(), vdisks);
         }

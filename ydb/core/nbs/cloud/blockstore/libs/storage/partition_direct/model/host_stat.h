@@ -1,8 +1,9 @@
 #pragma once
 
 #include <util/datetime/base.h>
-#include <util/generic/vector.h>
 #include <util/system/types.h>
+
+#include <array>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,6 +28,9 @@ enum class EOperation
 inline constexpr size_t OperationCount =
     static_cast<size_t>(EOperation::Count_);
 
+// Indexed by EOperation.
+using TInflightByOperation = std::array<size_t, OperationCount>;
+
 class THostStat
 {
 public:
@@ -34,7 +38,8 @@ public:
     {
         TDuration FromFirstError;
         TDuration FromLastError;
-        size_t ErrorCount = 0;
+        size_t ConsecutiveErrorCount = 0;
+        size_t ConsecutiveSuccessCount = 0;
     };
 
     // Called right before a request is sent to the host for the given
@@ -47,14 +52,24 @@ public:
     // OnRequest.
     void OnSuccess(TInstant now, TDuration executionTime, EOperation operation);
     void OnError(TInstant now, EOperation operation);
+    void OnCancelled(TInstant now, EOperation operation);
 
     // Returns how much time has passed since the first error was received and
     // the number and total size of errors.
     [[nodiscard]] TErrorsInfo GetErrorsInfo(TInstant now) const;
 
+    // Number of consecutive successful completions since the last error
+    // (reset to 0 on the first error after a success streak).
+    [[nodiscard]] size_t GetConsecutiveSuccessCount() const;
+    // Number of consecutive failed completions since the last success
+    // (reset to 0 on the first success after a error streak).
+    [[nodiscard]] size_t GetConsecutiveErrorCount() const;
+
     // Number of currently inflight requests of a given operation type for
     // this host (i.e. OnRequest calls without a matching OnSuccess/OnError).
     [[nodiscard]] size_t InflightCount(EOperation operation) const;
+
+    [[nodiscard]] const TInflightByOperation& GetInflightByOperation() const;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrint() const;
@@ -65,9 +80,10 @@ private:
     TInstant LastSuccessAt;
     TInstant FirstErrorAt;
     TInstant LastErrorAt;
-    size_t ErrorCount = 0;
+    size_t ConsecutiveErrorCount = 0;
+    size_t ConsecutiveSuccessCount = 0;
 
-    TVector<size_t> InflightByOperation = TVector<size_t>(OperationCount, 0);
+    TInflightByOperation InflightByOperation{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

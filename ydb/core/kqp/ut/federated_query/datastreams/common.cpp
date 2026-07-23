@@ -110,7 +110,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
             .DynamicNodeCount = DynamicNodeCount,
-            .CredentialsFactory = CreateCredentialsFactory(),
+            .CredentialsFactory = CreateCredentialsFactory(BUILTIN_ACL_ROOT),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
@@ -689,6 +689,7 @@ NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const s
 
     const auto& graphProto = graph->Get()->PhysicalGraph;
     UNIT_ASSERT(graphProto);
+    UNIT_ASSERT_VALUES_EQUAL(graphProto->GetPreparedQuery().GetVersion(), static_cast<ui32>(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1));
 
     return *graphProto;
 }
@@ -834,23 +835,6 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
     }
 }
 
-// Other helpers
-
-std::function<void(const std::string&)> TStreamingTestFixture::AstChecker(ui64 txCount, ui64 stagesCount) {
-    const auto stringCounter = [](const std::string& str, const std::string& subStr) {
-        ui64 count = 0;
-        for (size_t i = str.find(subStr); i != std::string::npos; i = str.find(subStr, i + subStr.size())) {
-            ++count;
-        }
-        return count;
-    };
-
-    return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-    };
-}
-
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {
     UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
 }
@@ -918,7 +902,11 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
 
         const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
         if (expectExecutions || row.CheckPlan) {
-            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            if (row.CheckPlan || IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status)) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            } else {
+                UNIT_ASSERT(resultSet.ColumnParser("Plan").GetOptionalUtf8());
+            }
             UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
         }
 
@@ -942,7 +930,7 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
         }
 
         result.ExecutionId = *resultSet.ColumnParser("LastExecutionId").GetOptionalUtf8();
-        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions);
+        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions && IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status));
 
         const auto previousExecutionIds = *resultSet.ColumnParser("PreviousExecutionIds").GetOptionalUtf8();
         NJson::TJsonValue value;

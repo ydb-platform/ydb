@@ -3,6 +3,7 @@
 #include "blob_constructor.h"
 #include "put_status.h"
 
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/defs.h>
 
@@ -63,7 +64,9 @@ public:
     }
 
     void Abort(const TString& reason) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "IWriteController aborted")("reason", reason);
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "IWriteController aborted"},
+            {"reason", reason});
         for (auto&& i : WritingActions) {
             i.second->Abort();
         }

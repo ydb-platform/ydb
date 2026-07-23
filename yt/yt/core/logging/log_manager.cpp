@@ -712,7 +712,8 @@ private:
                     writerConfig->EnableSourceLocation,
                     writerConfig->EnableSystemFields,
                     writerConfig->EnableHostField,
-                    writerConfig->JsonFormat);
+                    writerConfig->JsonFormat,
+                    writerConfig->YsonFormat);
 
             default:
                 YT_ABORT();

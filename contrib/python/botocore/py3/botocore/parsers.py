@@ -114,6 +114,7 @@ Each call to ``parse()`` returns a dict has this form::
     }
 
 """
+
 import base64
 import http.client
 import json
@@ -123,6 +124,7 @@ import re
 from botocore.compat import ETree, XMLParseError
 from botocore.eventstream import EventStream, NoInitialResponseError
 from botocore.utils import (
+    ensure_boolean,
     is_json_value_header,
     lowercase_dict,
     merge_dicts,
@@ -315,7 +317,7 @@ class ResponseParser:
         }
 
     def _do_parse(self, response, shape):
-        raise NotImplementedError("%s._do_parse" % self.__class__.__name__)
+        raise NotImplementedError(f"{self.__class__.__name__}._do_parse")
 
     def _do_error_parse(self, response, shape):
         raise NotImplementedError(f"{self.__class__.__name__}._do_error_parse")
@@ -355,6 +357,9 @@ class ResponseParser:
         if shape.is_tagged_union:
             cleaned_value = value.copy()
             cleaned_value.pop("__type", None)
+            cleaned_value = {
+                k: v for k, v in cleaned_value.items() if v is not None
+            }
             if len(cleaned_value) != 1:
                 error_msg = (
                     "Invalid service response: %s must have one and only "
@@ -362,7 +367,11 @@ class ResponseParser:
                 )
                 raise ResponseParserError(error_msg % shape.name)
             tag = self._get_first_key(cleaned_value)
-            if tag not in shape.members:
+            serialized_member_names = [
+                shape.members[member].serialization.get('name', member)
+                for member in shape.members
+            ]
+            if tag not in serialized_member_names:
                 msg = (
                     "Received a tagged union response with member "
                     "unknown to client: %s. Please upgrade SDK for full "
@@ -398,7 +407,7 @@ class BaseXMLResponseParser(ResponseParser):
                 elif tag_name == value_location_name:
                     val_name = self._parse_shape(value_shape, single_pair)
                 else:
-                    raise ResponseParserError("Unknown tag: %s" % tag_name)
+                    raise ResponseParserError(f"Unknown tag: {tag_name}")
             parsed[key_name] = val_name
         return parsed
 
@@ -506,9 +515,8 @@ class BaseXMLResponseParser(ResponseParser):
             root = parser.close()
         except XMLParseError as e:
             raise ResponseParserError(
-                "Unable to parse response (%s), "
-                "invalid XML received. Further retries may succeed:\n%s"
-                % (e, xml_string)
+                f"Unable to parse response ({e}), "
+                f"invalid XML received. Further retries may succeed:\n{xml_string}"
             )
         return root
 
@@ -707,6 +715,8 @@ class BaseJSONParser(ResponseParser):
             # code has a couple forms as well:
             # * "com.aws.dynamodb.vAPI#ProvisionedThroughputExceededException"
             # * "ResourceNotFoundException"
+            if ':' in code:
+                code = code.split(':', 1)[0]
             if '#' in code:
                 code = code.rsplit('#', 1)[1]
             if 'x-amzn-query-error' in headers:
@@ -1020,19 +1030,29 @@ class RestJSONParser(BaseRestParser, BaseJSONParser):
         # The "Code" value can come from either a response
         # header or a value in the JSON body.
         body = self._initial_body_parse(response['body'])
+        code = None
         if 'x-amzn-errortype' in response['headers']:
             code = response['headers']['x-amzn-errortype']
-            # Could be:
-            # x-amzn-errortype: ValidationException:
-            code = code.split(':')[0]
-            error['Error']['Code'] = code
         elif 'code' in body or 'Code' in body:
-            error['Error']['Code'] = body.get('code', body.get('Code', ''))
+            code = body.get('code', body.get('Code', ''))
+        if code is not None:
+            if ':' in code:
+                code = code.split(':', 1)[0]
+            if '#' in code:
+                code = code.rsplit('#', 1)[1]
+            error['Error']['Code'] = code
+
+    def _handle_boolean(self, shape, value):
+        return ensure_boolean(value)
 
     def _handle_integer(self, shape, value):
         return int(value)
 
+    def _handle_float(self, shape, value):
+        return float(value)
+
     _handle_long = _handle_integer
+    _handle_double = _handle_float
 
 
 class RestXMLParser(BaseRestParser, BaseXMLResponseParser):

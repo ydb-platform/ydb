@@ -49,6 +49,27 @@ namespace NKikimr::NSchemeShard::NOlap {
                     column.GetType().data(), column.GetName().data()));
         }
 
+        if (column.GetType() == "Interval" &&
+            !appData->FeatureFlags.GetEnableColumnshardInterval()) {
+            return std::unexpected(std::format(
+                "Type '{}' specified for column '{}', but support for interval is disabled (EnableColumnshardInterval feature flag is off)",
+                column.GetType().data(), column.GetName().data()));
+        }
+
+        if (column.GetType() == "Uuid" &&
+            !appData->FeatureFlags.GetEnableColumnshardUuid()) {
+            return std::unexpected(std::format(
+                "Type '{}' specified for column '{}', but support for uuid is disabled (EnableColumnshardUuid feature flag is off)",
+                column.GetType().data(), column.GetName().data()));
+        }
+
+        if (column.GetType() == "DyNumber" &&
+            !appData->FeatureFlags.GetEnableColumnshardDyNumber()) {
+            return std::unexpected(std::format(
+                "Type '{}' specified for column '{}', but support for dynumber is disabled (EnableColumnshardDyNumber feature flag is off)",
+                column.GetType().data(), column.GetName().data()));
+        }
+
         return {};
     }
 

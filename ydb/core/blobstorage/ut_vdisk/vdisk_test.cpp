@@ -17,6 +17,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/valgrind.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 namespace NKikimr {
 namespace NPDisk {
     extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
@@ -454,7 +456,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "====================== Initial step");
+        YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "====================== Initial step");
         TCheckDbIsEmptyManyPutGet test(true, false, MIDDLE_MSG_NUM, 100, UNK); // DB must be empty
         bool success1 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT);
         UNIT_ASSERT(success1);
@@ -462,7 +464,8 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 
         for (unsigned i = 0; i < numIterations; i++) {
             Conf.Prepare(&vdiskSetup, false);
-            LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "====================== Iteration %u", i);
+            YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "====================== Iteration",
+                {"iteration", i});
             TCheckDbIsEmptyManyPutGet test(false, false, 1000, 100, UNK); // DB must no be empty
             bool success2 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT);
             UNIT_ASSERT(success2);
@@ -625,7 +628,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
 
         TChaoticManyPutsTest w(parallel, msgNum, msgSize, cls, workingTime, requestTimeout);
         bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, TDuration::Seconds(600));
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "Chaotic write done");
+        YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Chaotic write done");
         UNIT_ASSERT(success1);
         Conf.Shutdown();
     }
@@ -676,7 +679,7 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
 
         TChaoticManyPutsTest w(parallel, msgNum, msgSize, cls, workingTime, requestTimeout);
         bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, TDuration::Seconds(600));
-        LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "Chaotic write done");
+        YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Chaotic write done");
         UNIT_ASSERT(success1);
         // we have this tabletId in data
         ui64 tabletId = 30;
@@ -869,14 +872,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     //         }
     //     }
 
-    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting writer");
+    //     YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Starting writer");
     //     generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
     //             Conf.GroupInfo, vdisks));
     //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
     //     TTestReplDataWriteAndSync testLoad(dataSetPtr.Get());
     //     bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
     //     UNIT_ASSERT(success1);
-    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer");
+    //     YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Stopped writer");
     //     Conf.Shutdown();
 
     //     Conf.PDisks->EraseDisk(3, 678);
@@ -886,7 +889,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     //     generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 0, 1,
     //             Conf.GroupInfo, vdisks));
     //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
-    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass");
+    //     YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Starting first read pass");
     //     TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
     //     TInstant begin = Now();
     //     bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
@@ -901,8 +904,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     //             Conf.GroupInfo, vdisks));
     //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
 
-    //     LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
-    //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
+    //     YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "first read pass w/repl took",
+    //           {"data", timedelta.ToString().data()});
+    //     YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Starting second read pass");
     //     TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
     //     begin = Now();
     //     bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT);

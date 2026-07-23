@@ -14,6 +14,8 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr {
 
 TString TGroupID::ToString() const {
@@ -111,7 +113,8 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
             const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
-            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
+            const std::optional<TString> diskScope = slot->PDisk ? slot->PDisk->DiskScope : std::nullopt;
+            layout.AddDisk({mapper, location, diskScope, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
@@ -202,10 +205,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
             occupancy = Max(occupancy.value_or(0), vm.GetNormalizedOccupancy());
         }
 
-        const bool hasAllMetrics = metrics.HasMaxIOPS()
-            && metrics.HasMaxReadThroughput()
-            && metrics.HasMaxWriteThroughput()
-            && vslot->Metrics.HasNormalizedOccupancy();
+        const bool hasAllMetrics = pdisk->HasFullMetrics() && vslot->Metrics.HasNormalizedOccupancy();
         if (hasAllMetrics) {
             vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
         }
@@ -224,7 +224,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *readThroughput * factor));
     }
     if (writeThroughput) {
-        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *writeThroughput * factor));
+        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetWriteThroughput() : Max<ui64>(), *writeThroughput * factor));
     }
     if (occupancy) {
         pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
@@ -451,6 +451,14 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
             return false;
         }
 
+        std::optional<TString> diskScope;
+        if (drive.HasDiskScope()) {
+            diskScope = drive.GetDiskScope();
+        }
+        if (diskScope != it->second->DiskScope) {
+            return false;
+        }
+
         TMaybe<TString> pdiskConfig;
         if (drive.HasPDiskConfig()) {
             const bool success = drive.GetPDiskConfig().SerializeToString(&pdiskConfig.ConstructInPlace());
@@ -504,7 +512,9 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 
     command->MutableUpdateSettings()->CopyFrom(FromBscConfig(bsConfig.GetBscSettings()));
 
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC39, "ApplyBSCSettings", (Request, r));
+    YDB_LOG_DEBUG("ApplyBSCSettings",
+        {"marker", "BSC39"},
+        {"request", r});
     Send(SelfId(), ev.release());
 }
 
@@ -631,7 +641,9 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     }
 
     if (auto ev = BuildConfigRequestFromStorageConfig(*StorageConfig, HostRecords, false)) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, ev->Record));
+        YDB_LOG_DEBUG("ApplyStorageConfig",
+            {"marker", "BSC14"},
+            {"request", ev->Record});
         Send(SelfId(), ev.release());
     }
 }
@@ -681,7 +693,8 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
             case TConfigValidationInfo::ESource::ConsoleInteraction:
                 if (!ConsoleInteraction) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSC38, "Received console interaction validation response, but ConsoleInteraction is not set");
+                    YDB_LOG_ERROR("Received console interaction validation response, but ConsoleInteraction is not set",
+                        {"marker", "BSC38"});
                     return;
                 }
                 ConsoleInteraction->ProcessDryRunResponse(rollbackSuccess, std::move(errorReason));
@@ -693,13 +706,16 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
     auto& record = ev->Get()->Record;
     auto& response = record.GetResponse();
-    STLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse",
-        (Response, response));
+    YDB_LOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, "TEvControllerConfigResponse",
+        {"marker", "BSC15"},
+        {"response", response});
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
     const auto& record = ev->Get()->Record;
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "received TEvControllerDistconfRequest", (Operation, record.GetOperation()));
+    YDB_LOG_DEBUG("Received TEvControllerDistconfRequest",
+        {"marker", "BSC52"},
+        {"operation", record.GetOperation()});
 
     // prepare the response
     auto response = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
@@ -843,7 +859,8 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat
 }
 
 void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC01, "Handle TEvInterconnect::TEvNodesInfo");
+    YDB_LOG_DEBUG("Handle TEvInterconnect::TEvNodesInfo",
+        {"marker", "BSC01"});
     SetHostRecords(std::make_shared<THostRecordMap::element_type>(ev->Get()));
 }
 
@@ -1012,8 +1029,10 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
-                    (Event, ev->ToString()));
+                YDB_LOG_ERROR("StateWork unexpected event",
+                    {"marker", "BSC06"},
+                    {"type", type},
+                    {"event", ev->ToString()});
             }
         break;
     }
@@ -1022,8 +1041,10 @@ STFUNC(TBlobStorageController::StateWork) {
     ProcessSyncers();
 
     if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-        STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),
-            (Duration, time));
+        YDB_LOG_ERROR("StateWork event processing took too much time",
+            {"marker", "BSC00"},
+            {"type", type},
+            {"duration", time});
     }
 }
 
@@ -1246,7 +1267,15 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
+        TPDiskId fullPDiskId(nodeId, pdiskId);
+        std::optional<TString> diskScope;
+        if (const TPDiskInfo* pdiskInfo = controller->FindPDisk(fullPDiskId)) {
+            diskScope = pdiskInfo->DiskScope;
+        } else if (const auto it = controller->StaticPDisks.find(fullPDiskId); it != controller->StaticPDisks.end()) {
+            diskScope = it->second.DiskScope;
+        }
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), diskScope,
+            {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();
@@ -1332,7 +1361,10 @@ bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGrou
 void TBlobStorageController::InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)>&& callback) {
     const ui64 cookie = NextInvokeOnRootCookie++;
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC42, "InvokeOnRoot", (Request, request), (Cookie, cookie));
+    YDB_LOG_DEBUG("InvokeOnRoot",
+        {"marker", "BSC42"},
+        {"request", request},
+        {"cookie", cookie});
     const auto [it, inserted] = InvokeOnRootCommands.emplace(cookie, TInvokeOnRootCommand{
         .Request = std::move(request),
         .Callback = std::move(callback),
@@ -1352,8 +1384,12 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     const bool retriable =
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
         status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
-    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC41, "TEvNodeConfigInvokeOnRootResult",
-        (Cookie, ev->Cookie), (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
+    YDB_LOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, "TEvNodeConfigInvokeOnRootResult",
+        {"marker", "BSC41"},
+        {"cookie", ev->Cookie},
+        {"response", ev->Get()->Record},
+        {"success", success},
+        {"retriable", retriable});
     if (retriable) {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);

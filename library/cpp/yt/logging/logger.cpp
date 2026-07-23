@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 #include <library/cpp/yt/system/thread_name.h>
 
 #include <util/system/compiler.h>
@@ -149,16 +151,34 @@ ELogLevel GetThreadMinLogLevel()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_THREAD_LOCAL(std::string, ThreadMessageTag);
+YT_DEFINE_THREAD_LOCAL(bool, ThreadMessageTagDestroyed, false);
+
+struct TThreadMessageTagStorage
+{
+    std::string Tag;
+
+    ~TThreadMessageTagStorage()
+    {
+        ThreadMessageTagDestroyed() = true;
+    }
+};
+
+YT_DEFINE_THREAD_LOCAL(TThreadMessageTagStorage, ThreadMessageTag);
 
 void SetThreadMessageTag(std::string messageTag)
 {
-    ThreadMessageTag() = std::move(messageTag);
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return;
+    }
+    ThreadMessageTag().Tag = std::move(messageTag);
 }
 
 std::string& GetThreadMessageTag()
 {
-    return ThreadMessageTag();
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return *LeakySingleton<std::string>();
+    }
+    return ThreadMessageTag().Tag;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,23 +240,23 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const std::string& tag)
+void TLogger::AddRawTag(TStringBuf tag)
 {
     auto* state = GetMutableCoWState();
     if (!state->Tag.empty()) {
         state->Tag += ", ";
     }
-    state->Tag += tag;
+    state->Tag.append(tag.data(), tag.size());
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) const &
+TLogger TLogger::WithRawTag(TStringBuf tag) const &
 {
     auto result = *this;
     result.AddRawTag(tag);
     return result;
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) &&
+TLogger TLogger::WithRawTag(TStringBuf tag) &&
 {
     AddRawTag(tag);
     return std::move(*this);

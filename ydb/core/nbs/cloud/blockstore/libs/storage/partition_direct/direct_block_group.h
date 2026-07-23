@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -43,12 +44,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
-        EWellKnownResultCodes code,
-        TString reason);
-
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError OverallError;
 };
 
 struct TDBGFlushResponse
@@ -170,7 +166,7 @@ public:
     virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -215,6 +211,17 @@ public:
 
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    // Result of the DBG's AddHost request. On success (empty error) applies the
+    // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
+    virtual void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+
+    // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

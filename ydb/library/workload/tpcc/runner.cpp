@@ -89,7 +89,7 @@ private:
     TLogBackendWithCapture* LogBackend;
     std::shared_ptr<TLog> Log;
 
-    std::vector<TDriver> Drivers;
+    std::vector<NConsoleClient::TScopedDriver> Drivers;
 
     std::stop_source TerminalsStopSource;
 
@@ -265,6 +265,10 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             Config.SimulateTransactionMs,
             Config.SimulateTransactionSelect1Count,
             Config.TxMode,
+            Config.MixedTxMode,
+            Config.TxModeWeightSerializable,
+            Config.TxModeWeightSnapshot,
+            Config.TxModeWeightReadCommitted,
             TerminalsStopSource.get_token(),
             StopWarmup,
             PerThreadTerminalStats[i % threadCount],

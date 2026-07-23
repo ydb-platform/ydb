@@ -22,7 +22,7 @@ struct TSamplerConfig
     THashMap<std::string, double> UserSampleRate;
 
     //! Spans are sent to specified endpoint.
-    THashMap<std::string, TString> UserEndpoint;
+    THashMap<std::string, std::string> UserEndpoint;
 
     //! Additionally, sample first N requests for each user in the window.
     ui64 MinPerUserSamples;

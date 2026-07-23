@@ -89,6 +89,38 @@ namespace NKikimr::NDDisk {
             }
         }
 
+        if (record.ChecksumsSize() > 0) {
+            // Checksum validation is opt-in (see TEvWritePersistentBuffer for details); checked here,
+            // before any chunk allocation queueing or disk I/O, and the checksums are not persisted.
+            // Note: an event parked in PendingEventsForChunk below re-enters this handler in full once
+            // the chunk is allocated, so its checksums get validated twice. This is harmless (validation
+            // stays right next to the actual write) and intentional, not an oversight.
+            Y_ABORT_UNLESS(instr.PayloadId, "TEvWrite without a payload, but with checksums");
+            const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
+            if (const auto result = ValidatePayloadChecksums(record, payload)) {
+                const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+                Counters.Interface.Write.Request(0);
+                Counters.Interface.Write.Reply(false);
+                if (isCorrupted) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
+                    (isCorrupted
+                        ? "TDDiskActor::Handle(TEvWrite) checksum mismatch"
+                        : "TDDiskActor::Handle(TEvWrite) checksum count mismatch"),
+                    {"marker", "BSDD52"},
+                    {"DDiskId", DDiskId},
+                    {"tabletId", creds.TabletId},
+                    {"vChunkIndex", selector.VChunkIndex},
+                    {"offsetInBytes", selector.OffsetInBytes},
+                    {"checksumCount", result->ChecksumCount},
+                    {"selectorSize", selector.Size},
+                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                SendReply(*ev, std::make_unique<TEvWriteResult>(result->Status, result->ErrorReason));
+                return;
+            }
+        }
+
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
@@ -388,6 +420,10 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupProcessPersistentBufferBatchWrite: {
                 ProcessPersistentBufferBatchWrite();
+                break;
+            }
+            case EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk: {
+                ProcessDeallocatePersistentBufferChunk(true);
                 break;
             }
         }

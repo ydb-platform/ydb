@@ -237,6 +237,8 @@ public:
     }
 
 protected:
+    TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+
     TKeyValueStoredStateData StoredState;
     ui32 NextLogoBlobStep;
     ui32 NextLogoBlobCookie;
@@ -252,6 +254,20 @@ protected:
     ui64 CompletedVacuumTrashGeneration = 0;
     TMap<ui64, THashSet<TActorId>> VacuumGenerationToSender;
     ui64 VacuumResetGeneration = 0; // needs to distinguish between vacuum clanups of different resets
+
+    // move data state
+    static constexpr ui64 MaxMoveDataRecordsInOneTx = 16 << 10;
+
+    TSet<ui32> MoveDataGroups;
+    TActorId MoveDataRequestSender;
+
+    bool MoveDataIsInProgress = false;
+    bool MoveDataNeedsAnotherPass = false;
+    TString MoveDataKey;
+    ui32 MoveDataChainIndex = 0;
+    bool MoveDataRecordTouched = false;
+    TLogoBlobID MoveDataBlobId;
+    THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
 
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
@@ -277,7 +293,22 @@ protected:
     TActorId ChannelBalancerActorId;
     ui64 InitialCollectsSent = 0;
 
-    TDeque<TAutoPtr<TIntermediate>> Queue;
+    struct TPostponedChannel {
+        TPostponedChannel() = default;
+        TPostponedChannel(TPostponedChannel&& other) noexcept;
+        TPostponedChannel& operator=(TPostponedChannel&& other) noexcept;
+        TPostponedChannel(const TPostponedChannel&) = delete;
+        TPostponedChannel& operator=(const TPostponedChannel&) = delete;
+        ~TPostponedChannel();
+
+        void ClearQueue();
+
+        TDeque<TIntermediate*> Queue;
+        ui64 IntermediatesInFlight = 0;
+    };
+
+    TVector<TPostponedChannel> PostponedChannels;
+    ui64 PostponedIntermediatesCount = 0;
     ui64 IntermediatesInFlight;
     ui64 RoInlineIntermediatesInFlight;
     ui64 DeletesPerRequestLimit;
@@ -303,6 +334,8 @@ protected:
     TMemorizableControlWrapper UsePayload;
     TControlWrapper RejectNonExistentStorageChannel_Base;
     TMemorizableControlWrapper RejectNonExistentStorageChannel;
+    TControlWrapper UsePerChannelReadQueues_Base;
+    TMemorizableControlWrapper UsePerChannelReadQueues;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
@@ -310,6 +343,7 @@ protected:
 
 public:
     TKeyValueState();
+    void SetTabletInfo(TTabletStorageInfo* tabletInfo);
     void Clear();
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
@@ -374,6 +408,18 @@ public:
     bool OnEvCollect(const TActorContext &ctx);
     void OnEvCollectDone(const TActorContext &ctx);
     void OnEvCompleteGC(bool repeat);
+
+    // move data methods
+    void ClearMoveData();
+    bool IsMoveDataInProgress() const { return MoveDataIsInProgress; }
+    void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& moveDataRequestSender);
+        bool NeedMoveBlob(const TLogoBlobID& blobId) const;
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> AdvanceMoveData(
+        ISimpleDb& db, const TActorContext& ctx);
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> BlobCopied(
+        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db, const TActorContext& ctx);
+    std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryFinishMoveData(
+        const TActorContext& ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
@@ -450,8 +496,9 @@ public:
     }
 
     void Dereference(const TIndexRecord& record, ISimpleDb& db);
-    void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
     void Dereference(const TLogoBlobID& id, ISimpleDb& db, bool initial);
+    void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db);
+    void EraseKey(const TString& key, ISimpleDb& db);
 
     ui32 GetPerGenerationCounter() {
         return PerGenerationCounter;
@@ -474,7 +521,8 @@ public:
     void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
 
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
+        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
+        const TVector<ui32> &acquiredChannels);
     void CancelInFlight(ui64 requestUid);
 
     void OnEvIntermediate(TIntermediate &intermediate);
@@ -628,7 +676,8 @@ public:
         if (info) {
             intermediate->UpdateStat();
             OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
-                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat);
+                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat,
+                    intermediate->AcquiredChannels);
         } else { //metrics change report in OnRequestComplete is not done
             ResourceMetrics->TryUpdate(ctx);
             RequestInputTime.erase(intermediate->RequestUid);
@@ -648,11 +697,13 @@ public:
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate);
 
-    template <typename TRequestType>
-    void PostponeIntermediate(THolder<TIntermediate> &&intermediate) {
-        intermediate->Stat.EnqueuedAs = Queue.size() + 1;
-        Queue.push_back(std::move(intermediate));
-    }
+    TVector<ui32> GetAcquiredChannels(const TIntermediate &intermediate) const;
+    bool TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx);
+    void StartChannelLimitedIntermediate(const TIntermediate &intermediate);
+    void ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels);
+    void ProcessPostponedChannel(ui32 channel, const TActorContext &ctx, const TTabletStorageInfo *info);
+    void ProcessPostponedChannels(const TVector<ui32> &channels, const TActorContext &ctx,
+        const TTabletStorageInfo *info);
     void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
              const TTabletStorageInfo *info);
 

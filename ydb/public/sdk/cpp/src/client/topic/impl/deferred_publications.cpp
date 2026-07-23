@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/ydb_topic_deferred_publish.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publications.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
@@ -9,7 +9,7 @@
 #include <ydb/public/api/grpc/draft/ydb_topic_deferred_publish_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_topic_deferred_publish.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publish_ack_tracker.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publication_ack_tracker.h>
 
 namespace NYdb::inline Dev::NTopic::NDeferredPublish {
 

@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 #include "counters.h"
-#include "deferred_publish_limits.h"
+#include "deferred_publication_limits.h"
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"

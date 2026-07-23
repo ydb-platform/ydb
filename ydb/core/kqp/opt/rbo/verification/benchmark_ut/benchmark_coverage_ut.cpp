@@ -1237,10 +1237,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({1}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 5, 6, 10, 14, 19}));
+            std::set<ui32>({3, 5, 6, 10, 12, 14, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
-            std::set<ui32>({3, 6, 14, 19}));
+            std::set<ui32>({3, 6, 12, 14, 19}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 65, 80}));
@@ -1436,6 +1436,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {5, "FORMULA_EMITTED"},
             {6, "FORMULA_EMITTED"},
             {10, "FORMULA_EMITTED"},
+            {12, "FORMULA_EMITTED"},
             {14, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
         };
@@ -1467,7 +1468,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "q1 regressed before verifier entry with status UNSUPPORTED"));
     }
 
-    Y_UNIT_TEST(PolicyPinsTpchShiftedDatesAtFormulaConstruction) {
+    Y_UNIT_TEST(PolicyPinsTpchFormulaFloor) {
         const auto policy = LoadCoveragePolicy();
         std::set<ui32> selected;
         for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
@@ -1479,6 +1480,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {5, "FORMULA_EMITTED"},
             {6, "FORMULA_EMITTED"},
             {10, "FORMULA_EMITTED"},
+            {12, "FORMULA_EMITTED"},
             {14, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
         };
@@ -1494,9 +1496,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(current.Violations.empty());
         UNIT_ASSERT(
             current.FormulaEmittedQueries ==
-            std::set<ui32>({3, 5, 6, 10, 14, 19}));
+            std::set<ui32>({3, 5, 6, 10, 12, 14, 19}));
 
-        for (const ui32 queryId : {5, 6, 10, 14}) {
+        for (const ui32 queryId : {5, 6, 10, 12, 14}) {
             auto regressedStatuses = statuses;
             regressedStatuses[queryId] = "UNSUPPORTED";
             const auto regressed = EvaluateCoveragePolicy(

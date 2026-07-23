@@ -1582,7 +1582,10 @@ void CheckOpaqueCallable(
     Unsupported(TStringBuilder() << "Unsupported scalar callable " << name);
 }
 
-void CheckScalarSafetyMetadata(const TExprNode& node) {
+void CheckScalarSafetyMetadata(
+    const TExprNode& node,
+    bool allowUnorderedChildren = false)
+{
     if (node.HasResult()) {
         Unsupported("Scalar expression contains an executed Result node");
     }
@@ -1592,27 +1595,56 @@ void CheckScalarSafetyMetadata(const TExprNode& node) {
     if (node.HasSideEffects() || !node.IsCseeSafe()) {
         Unsupported("Scalar expression contains a side-effecting or CSE-unsafe node");
     }
-    if ((node.IsCallable() || node.IsList()) && node.UnorderedChildren()) {
+    if (!allowUnorderedChildren &&
+        (node.IsCallable() || node.IsList()) &&
+        node.UnorderedChildren())
+    {
         Unsupported("Scalar expression contains a node with unordered children");
     }
 }
 
-const TExprNode* ExactComparisonCoalesceFalseArgument(const TExprNode& node) {
+enum class EExactCoalesceFalseArgument : ui8 {
+    None,
+    Comparison,
+    BinaryStringMembership,
+};
+
+struct TExactCoalesceFalse {
+    const TExprNode* Argument = nullptr;
+    EExactCoalesceFalseArgument Kind = EExactCoalesceFalseArgument::None;
+};
+
+TExactCoalesceFalse ExactCoalesceFalseArgument(const TExprNode& node) {
     if (!node.IsCallable("Coalesce") || node.ChildrenSize() != 2) {
-        return nullptr;
+        return {};
     }
 
     const auto& fallback = *node.Child(1);
     if (!fallback.IsCallable("Bool") || fallback.ChildrenSize() != 1 ||
         !fallback.Child(0)->IsAtom("false"))
     {
-        return nullptr;
+        return {};
     }
 
     const auto& argument = *node.Child(0);
-    if (!argument.IsCallable({"==", "!=", "<", "<=", ">", ">="}))
+    EExactCoalesceFalseArgument kind = EExactCoalesceFalseArgument::None;
+    if (argument.IsCallable({"==", "!=", "<", "<=", ">", ">="}) &&
+        argument.ChildrenSize() == 2)
     {
-        return nullptr;
+        kind = EExactCoalesceFalseArgument::Comparison;
+    } else if (argument.ChildrenSize() == 2 &&
+        ((argument.IsCallable("Or") &&
+          argument.Child(0)->IsCallable("==") &&
+          argument.Child(1)->IsCallable("==")) ||
+         (argument.IsCallable("And") &&
+          argument.Child(0)->IsCallable("!=") &&
+          argument.Child(1)->IsCallable("!="))) &&
+        argument.Child(0)->ChildrenSize() == 2 &&
+        argument.Child(1)->ChildrenSize() == 2)
+    {
+        kind = EExactCoalesceFalseArgument::BinaryStringMembership;
+    } else {
+        return {};
     }
 
     bool resultNullable = false;
@@ -1624,12 +1656,74 @@ const TExprNode* ExactComparisonCoalesceFalseArgument(const TExprNode& node) {
         ScalarTypeName(fallback, &fallbackNullable) != "Bool" ||
         fallbackNullable)
     {
-        return nullptr;
+        return {};
     }
 
     CheckScalarSafetyMetadata(node);
     CheckScalarSafetyMetadata(fallback);
-    return &argument;
+    return {&argument, kind};
+}
+
+void ValidateExactBinaryStringMembership(
+    const TExprNode& argument,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    CheckScalarSafetyMetadata(argument);
+    std::optional<TString> commonMemberName;
+    for (const auto& comparison : argument.Children()) {
+        CheckComparisonCallable(*comparison);
+        CheckScalarSafetyMetadata(*comparison, true);
+
+        const TExprNode* member = nullptr;
+        const TExprNode* literal = nullptr;
+        for (const auto& operand : comparison->Children()) {
+            if (operand->IsCallable("Member") && !member) {
+                member = operand.Get();
+            } else if (operand->IsCallable("String") && !literal) {
+                literal = operand.Get();
+            } else {
+                Unsupported(
+                    "Exact binary String membership comparison must contain one Member and one literal");
+            }
+        }
+        if (!member || !literal || member->ChildrenSize() != 2 ||
+            member->Child(0) != rowArgument ||
+            !member->Child(1)->IsAtom() ||
+            !visibleColumns.contains(TString(member->Child(1)->Content())))
+        {
+            Unsupported(
+                "Exact binary String membership Member is malformed or not a direct input value");
+        }
+
+        CheckScalarSafetyMetadata(*member);
+        CheckScalarSafetyMetadata(*member->Child(1));
+        CheckScalarSafetyMetadata(*literal);
+        if (literal->ChildrenSize() != 1 || !literal->Child(0)->IsAtom()) {
+            Unsupported("Exact binary String membership literal is malformed");
+        }
+        CheckScalarSafetyMetadata(*literal->Child(0));
+        CheckOpaqueCallable(*literal);
+
+        bool memberNullable = false;
+        bool literalNullable = false;
+        const TString memberType = ScalarTypeName(*member, &memberNullable);
+        const TString literalType = ScalarTypeName(*literal, &literalNullable);
+        if (!memberNullable || literalNullable ||
+            memberType != "String" || literalType != "String")
+        {
+            Unsupported(
+                "Exact binary String membership requires one Optional<String> member and matching literals");
+        }
+
+        const TString memberName(member->Child(1)->Content());
+        if (!commonMemberName) {
+            commonMemberName = memberName;
+        } else if (memberName != *commonMemberName) {
+            Unsupported(
+                "Exact binary String membership comparisons must reference the same member");
+        }
+    }
 }
 
 const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
@@ -2991,17 +3085,45 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
-    if (const auto* argument = ExactComparisonCoalesceFalseArgument(node)) {
+    if (const auto exactCoalesce = ExactCoalesceFalseArgument(node);
+        exactCoalesce.Argument)
+    {
+        const auto* argument = exactCoalesce.Argument;
         // Coalesce(p, false) is the identity handler for a present Boolean and
         // false for NULL.  Reuse the existing exact IfPresent semantics rather
         // than erasing the wrapper, which would be wrong in value-sensitive
-        // positions such as Not or projection.  The gate stays limited to one
-        // reviewed comparison; larger Boolean trees retain their shared opaque
-        // identity until their solver cost is reviewed separately.
-        TOpaqueExpressionEncoder(
-            rowArgument,
-            visibleColumns,
-            boundArguments).Validate(node);
+        // positions such as Not or projection.  Besides one comparison, admit
+        // only the reviewed two-literal String membership/complement trees used
+        // by TPCH q12.  Larger Boolean trees retain their shared opaque identity.
+        if (exactCoalesce.Kind == EExactCoalesceFalseArgument::Comparison) {
+            TOpaqueExpressionEncoder encoder(
+                rowArgument,
+                visibleColumns,
+                boundArguments);
+            if (argument->UnorderedChildren()) {
+                // YQL marks equality operands unordered because equality is
+                // commutative.  The explicit eq/not-eq IR has the same
+                // symmetry, so this one marker is semantic rather than an
+                // evaluation-order ambiguity. Keep every operand subtree under
+                // the ordinary closed-world audit.
+                if (!argument->IsCallable({"==", "!="})) {
+                    Unsupported(
+                        "Exact Coalesce false allows unordered children only on equality");
+                }
+                CheckScalarSafetyMetadata(*argument, true);
+                encoder.Validate(*argument->Child(0));
+                encoder.Validate(*argument->Child(1));
+            } else {
+                encoder.Validate(node);
+            }
+        } else {
+            // Validate the two direct leaves separately so their equality
+            // commutativity markers never relax the global opaque encoder.
+            ValidateExactBinaryStringMembership(
+                *argument,
+                rowArgument,
+                visibleColumns);
+        }
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported("Exact Coalesce false binding depth exceeds the audit limit");
         }

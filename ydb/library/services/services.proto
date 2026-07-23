@@ -480,6 +480,8 @@ enum EServiceKikimr {
     // BlobChecker
     BLOB_CHECKER_ORCHESTRATOR = 4300;
     BLOB_CHECKER_WORKER = 4301;
+
+    DBS_CONTROLLER = 4400;
 };
 
 message TActivity {

@@ -11,6 +11,4 @@ PEERDIR(
     ydb/core/protos
 )
 
-#CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)
-
 END()

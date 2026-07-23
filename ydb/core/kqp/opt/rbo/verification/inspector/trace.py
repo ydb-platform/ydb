@@ -292,6 +292,7 @@ def prepare(
 def _add_family(probes: Probes, result: RelationFamily) -> None:
     for outcome in result.outcomes:
         probes.add(outcome.enabled)
+        probes.add(outcome.error)
         for choice in outcome.choices:
             probes.add(choice.term)
         if outcome.relation.ordinals is not None:
@@ -387,6 +388,11 @@ def _family_json(
         enabled.append(
             {
                 "index": index,
+                "status": (
+                    "error"
+                    if probes.value(outcome.error, values) is True
+                    else "success"
+                ),
                 "decisions": [
                     {"id": decision, "choice": choice}
                     for decision, choice in outcome.decisions

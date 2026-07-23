@@ -280,6 +280,19 @@ class CaseTest(unittest.TestCase):
         with self.assertRaises(InconclusiveReplay):
             prepared(before, after, value, query)
 
+    def test_query_error_trace_fails_closed_until_replay_models_errors(self):
+        value = trace()
+        value["trace"]["comparison"]["before"]["outcomes"][0]["status"] = "error"
+        before = snapshot(False)
+        after = snapshot(True)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+
+        with self.assertRaisesRegex(
+            InconclusiveReplay,
+            "error-aware real-YDB replay",
+        ):
+            prepared(before, after, value, query)
+
     def test_equal_trace_results_and_incomplete_mismatches_are_rejected(self):
         before = snapshot(False)
         after = snapshot(True)

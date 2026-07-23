@@ -1388,6 +1388,7 @@ class MergeEncodingTest(unittest.TestCase):
                     order=self.ORDER,
                     ordinals=(smt.ONE, smt.ZERO),
                 ),
+                smt.FALSE,
             ),
         ))
 

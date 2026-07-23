@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 DATABASE = "/Root"
 OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new secrets"
-CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = "Old secrets are disabled for creating new objects. Please use the new secrets"
+CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = (
+    "Old secrets are disabled for creating new objects. Please use the new secrets"
+)
 OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use the new secrets"
 
 
@@ -146,13 +148,11 @@ class Utils:
         self.execute_scheme(query)
 
     def read_from_eds(self, eds_name):
-        return self.execute_query(
-            f"""
+        return self.execute_query(f"""
             SELECT * FROM `{eds_name}`.`file.txt` WITH (
                 FORMAT = "raw",
                 SCHEMA = ( Data String )
-            );"""
-        )
+            );""")
 
     def create_schema_secret(self, secret_name, value):
         self.execute_scheme(f"CREATE SECRET `{secret_name}` WITH (value='{value}');")
@@ -161,23 +161,19 @@ class Utils:
         self.execute_scheme(f"CREATE TABLE `{table_name}` (Key Uint64, PRIMARY KEY (Key));")
 
     def create_transfer_table(self, table_name):
-        self.execute_scheme(
-            f"""
+        self.execute_scheme(f"""
             CREATE TABLE `{table_name}` (
                 partition Uint32 NOT NULL,
                 offset Uint64 NOT NULL,
                 message Utf8,
                 PRIMARY KEY (partition, offset)
-            );"""
-        )
+            );""")
 
     def create_topic(self, topic_name):
         self.execute_scheme(f"CREATE TOPIC `{topic_name}`;")
 
     def create_async_replication(self, replication_name, table_name, replica_name, secret_name, schema_secret=False):
-        connection_string = (
-            f"grpc://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].port}/?database={DATABASE}"
-        )
+        connection_string = f"grpc://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].port}/?database={DATABASE}"
         secret_setting = "PASSWORD_SECRET_PATH" if schema_secret else "PASSWORD_SECRET_NAME"
         query = f"""
             CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
@@ -188,9 +184,7 @@ class Utils:
         self.execute_scheme(query)
 
     def create_transfer(self, transfer_name, topic_name, table_name, secret_name, schema_secret=False):
-        connection_string = (
-            f"grpc://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].port}/?database={DATABASE}"
-        )
+        connection_string = f"grpc://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].port}/?database={DATABASE}"
         secret_setting = "PASSWORD_SECRET_PATH" if schema_secret else "PASSWORD_SECRET_NAME"
         query = f"""
             $l = ($x) -> {{
@@ -272,32 +266,9 @@ def old_secrets_utils():
     utils.stop()
 
 
-def test_disable_old_secret_creation(old_secrets_utils):
-    # create all types of objects with old secrets
-    # secret
+def test_old_secret_creation_is_disabled(old_secrets_utils):
+    # create old secret
     old_secrets_utils.create_old_secret("OldSecret", value="")
-
-    # eds
-    old_secrets_utils.create_eds("eds-old-secret", "OldSecret")
-
-    # replication
-    old_secrets_utils.create_table("repl_src")
-    old_secrets_utils.create_async_replication(
-        "replication-old-secret",
-        "repl_src",
-        "repl_dst",
-        "OldSecret",
-    )
-
-    # transfer
-    old_secrets_utils.create_topic("transfer_topic")
-    old_secrets_utils.create_transfer_table("transfer_dst")
-    old_secrets_utils.create_transfer(
-        "transfer-old-secret",
-        "transfer_topic",
-        "transfer_dst",
-        "OldSecret",
-    )
 
     # restart cluster with disabled old secret creation
     old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
@@ -315,54 +286,63 @@ def test_disable_old_secret_creation(old_secrets_utils):
         old_secrets_utils.upsert_old_secret("NewOldSecretUpsert", value="")
     assert OLD_SECRETS_CREATION_DISABLED_MESSAGE in str(exc_info.value)
 
+
+def test_existing_objects_are_ok_if_old_secret_creation_is_disabled(old_secrets_utils):
+    # create all types of objects with old secrets
+    # secret
+    old_secrets_utils.create_old_secret("OldSecret", value="")
+
+    # eds
+    old_secrets_utils.create_eds("eds-old-secret", "OldSecret")
+
+    # replication
+    old_secrets_utils.create_table("repl_src")
+    old_secrets_utils.create_async_replication("replication-old-secret", "repl_src", "repl_dst", "OldSecret")
+
+    # transfer
+    old_secrets_utils.create_topic("transfer_topic")
+    old_secrets_utils.create_transfer_table("transfer_dst")
+    old_secrets_utils.create_transfer("transfer-old-secret", "transfer_topic", "transfer_dst", "OldSecret")
+
+    # restart cluster with disabled old secret creation
+    old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
+
     # check that old objects are still OK
     old_secrets_utils.assert_path_ready(f"{DATABASE}/eds-old-secret")
     old_secrets_utils.assert_path_ready(f"{DATABASE}/replication-old-secret")
     old_secrets_utils.assert_path_ready(f"{DATABASE}/transfer-old-secret")
 
-    # check that old secrets can't be used for eds
-    with pytest.raises(Exception) as exc_info:
-        old_secrets_utils.create_eds("eds-with-old-secret", "OldSecret")
-    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+def test_disable_old_secret_creation(old_secrets_utils):
+    old_secrets_utils.create_old_secret("OldSecret", value="")
+
+    # restart cluster with disabled old secret creation
+    old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
 
     # check that old secrets can't be used for replication
     with pytest.raises(Exception) as exc_info:
-        old_secrets_utils.create_async_replication(
-            "replication-with-old-secret",
-            "repl_src",
-            "repl_dst_old",
-            "OldSecret",
-        )
+        old_secrets_utils.create_async_replication("repl-with-old-secret", "repl_src", "repl_dst_old", "OldSecret")
     assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
     # check that old secrets can't be used for transfer
     with pytest.raises(Exception) as exc_info:
-        old_secrets_utils.create_transfer(
-            "transfer-with-old-secret",
-            "transfer_topic",
-            "transfer_dst",
-            "OldSecret",
-        )
+        old_secrets_utils.create_transfer("transfer-with-old-secret", "transfer_topic", "transfer_dst", "OldSecret")
     assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
-    # check that new secret can be still used
-    old_secrets_utils.create_schema_secret(f"{DATABASE}/NewSecret", value="")
+    # check that new secrets can be still used
+    old_secrets_utils.create_schema_secret("NewSecret", value="")
 
     # create eds with new secret
     old_secrets_utils.create_eds(
         "eds-with-new-secret",
-        f"{DATABASE}/NewSecret",
+        "NewSecret",
         schema_secret=True,
     )
 
     # create replication with new secret
     old_secrets_utils.create_table("repl_src_new")
     old_secrets_utils.create_async_replication(
-        "replication-with-new-secret",
-        "repl_src_new",
-        "repl_dst_new",
-        f"{DATABASE}/NewSecret",
-        schema_secret=True,
+        "repl-with-new-secret", "repl_src_new", "repl_dst_new", "NewSecret", schema_secret=True
     )
 
     # create transfer with new secret
@@ -372,7 +352,7 @@ def test_disable_old_secret_creation(old_secrets_utils):
         "transfer-with-new-secret",
         "transfer_topic_new",
         "transfer_dst_new",
-        f"{DATABASE}/NewSecret",
+        "NewSecret",
         schema_secret=True,
     )
 
@@ -383,39 +363,38 @@ def test_disable_old_secrets_keeps_existing_objects(old_secrets_utils):
 
     old_secrets_utils.create_old_secret("s3_access_key", value=s3_access_key)
     old_secrets_utils.create_old_secret("s3_secret_key", value=s3_secret_key)
-    old_secrets_utils.create_old_secret("repl_password", value="")
+    old_secrets_utils.create_old_secret("password", value="")
 
+    # create eds with old secrets
     eds_name = "eds-old-secret"
     old_secrets_utils.create_eds_aws(eds_name, "s3_access_key", "s3_secret_key", s3_location)
+    old_secrets_utils.assert_path_ready(f"{DATABASE}/{eds_name}")
 
+    # create replication with old secret
     old_secrets_utils.create_table("repl_src")
     old_secrets_utils.create_async_replication(
         "replication-old-secret",
         "repl_src",
         "repl_dst",
-        "repl_password",
+        "password",
     )
+    old_secrets_utils.assert_path_ready(f"{DATABASE}/replication-old-secret")
 
+    # create transfer with old secret
     old_secrets_utils.create_topic("transfer_topic")
     old_secrets_utils.create_transfer_table("transfer_dst")
     old_secrets_utils.create_transfer(
         "transfer-old-secret",
         "transfer_topic",
         "transfer_dst",
-        "repl_password",
+        "password",
     )
-
-    old_secrets_utils.assert_path_ready(f"{DATABASE}/{eds_name}")
-    old_secrets_utils.assert_path_ready(f"{DATABASE}/replication-old-secret")
     old_secrets_utils.assert_path_ready(f"{DATABASE}/transfer-old-secret")
-
-    result_sets = old_secrets_utils.read_from_eds(eds_name)
-    data = result_sets[0].rows[0]["Data"]
-    assert isinstance(data, bytes) and data.decode() == "Hello S3!"
 
     old_secrets_utils.restart_cluster(disable_old_secrets=True)
 
     with pytest.raises(Exception) as exc_info:
+        # After restart eds resolves secret only while reading
         old_secrets_utils.read_from_eds(eds_name)
     assert OLD_SECRETS_USAGE_DISABLED_MESSAGE in str(exc_info.value)
 

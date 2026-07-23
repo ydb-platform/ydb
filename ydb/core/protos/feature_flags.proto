@@ -355,4 +355,5 @@ message TFeatureFlags {
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
 }

@@ -2326,6 +2326,13 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             for key in node.keys:
                 if key not in input_schema:
                     _fail(f"node {node.id!r}.keys", f"column {key!r} is not available")
+            if node.distinct_all and (
+                not node.keys or len(node.aggregates) != len(node.keys)
+            ):
+                _fail(
+                    f"node {node.id!r}",
+                    "DistinctAll requires one distinct trait for each ordered key",
+                )
 
             output_names = (() if node.distinct_all else node.keys) + tuple(
                 trait.output for trait in node.aggregates
@@ -2353,7 +2360,31 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         "void may only flow transparently to a canonical count aggregate",
                     )
 
-                if trait.function == "count":
+                if node.distinct_all:
+                    if trait.function != "distinct":
+                        _fail(trait_path, "DistinctAll traits must use distinct")
+                    if (
+                        trait.input != node.keys[index]
+                        or trait.distinct
+                        or trait.unwrap
+                    ):
+                        _fail(
+                            trait_path,
+                            "DistinctAll traits must be plain distinct aliases "
+                            "of their corresponding ordered keys",
+                        )
+                    if (
+                        trait.output_type != input_column.type
+                        or trait.output_nullable != input_column.nullable
+                    ):
+                        _fail(
+                            trait_path,
+                            "DistinctAll output type and nullability must "
+                            "match its input key",
+                        )
+                elif trait.function == "distinct":
+                    _fail(trait_path, "distinct aggregate requires DistinctAll")
+                elif trait.function == "count":
                     if trait.output_type != "Uint64" or trait.output_nullable:
                         _fail(trait_path, "count output must be non-nullable Uint64")
                 elif trait.function == "sum":

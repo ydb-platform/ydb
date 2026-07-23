@@ -1621,7 +1621,7 @@ class LimitOutcomeTest(unittest.TestCase):
                 "take",
             )
 
-    def test_unordered_enumerator_ignores_static_dead_padding(self):
+    def test_limit_at_candidate_bound_is_exact_noop_with_dead_padding(self):
         left = smt.symbol("left_present", smt.BOOL)
         right = smt.symbol("right_present", smt.BOOL)
         columns = (Column("a.value", "Int64", False),)
@@ -1642,8 +1642,11 @@ class LimitOutcomeTest(unittest.TestCase):
             )
             for index in range(300)
         )
+        source = single(
+            Relation(columns, (live_rows[0], *dead, live_rows[1]))
+        )
         family = limit_family(
-            single(Relation(columns, (live_rows[0], *dead, live_rows[1]))),
+            source,
             Expr(
                 kind="literal",
                 value=2,
@@ -1655,7 +1658,8 @@ class LimitOutcomeTest(unittest.TestCase):
             "take",
         )
 
-        self.assertEqual(len(family.outcomes), 4)
+        self.assertIs(family, source)
+        self.assertEqual(len(family.outcomes), 1)
         self.assertEqual(
             {len(outcome.relation.rows) for outcome in family.outcomes},
             {302},
@@ -1937,7 +1941,7 @@ class LimitOutcomeTest(unittest.TestCase):
             )
 
     def test_alternative_cap_fails_closed(self):
-        parsed = logical_limit(9)
+        parsed = logical_limit(8)
         with self.assertRaisesRegex(VerificationError, "alternative audit bound"):
             build_logical_kernel_problem_for_tests(parsed, parsed, 9)
 

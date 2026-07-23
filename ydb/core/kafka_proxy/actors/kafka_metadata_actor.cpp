@@ -355,6 +355,33 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
     }
 }
 
+void TKafkaMetadataActor::EnsureBrokersAndController() {
+    // Unknown topics used to return brokers=[]; AdminClient then cannot CreateTopics.
+    if (!WithProxy && Response->Brokers.empty()) {
+        for (const auto& [id, nodeInfo] : Nodes) {
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
+        }
+    }
+
+    if (!WithProxy && NeedAllNodes) {
+        for (const auto& [id, nodeInfo] : Nodes) {
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
+        }
+    }
+
+    // ControllerId must be one of Brokers (SelfID may differ from discovery node ids).
+    if (Response->Brokers.empty()) {
+        return;
+    }
+
+    for (const auto& broker : Response->Brokers) {
+        if (broker.NodeId == Response->ControllerId) {
+            return;
+        }
+    }
+    Response->ControllerId = Response->Brokers.front().NodeId;
+}
+
 void TKafkaMetadataActor::ApplyPendingTopicResponses() {
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
@@ -379,6 +406,7 @@ void TKafkaMetadataActor::ApplyPendingTopicResponses() {
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     auto Respond = [&] {
+        EnsureBrokersAndController();
         CancelRequestTimeout();
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
@@ -397,12 +425,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     }
 
     ApplyPendingTopicResponses();
-
-    if (NeedAllNodes) {
-        for (const auto& [id, nodeInfo] : Nodes)
-            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
-    }
-
     Respond();
 }
 
@@ -417,6 +439,7 @@ void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorCo
 
 void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
     ApplyPendingTopicResponses();
+    EnsureBrokersAndController();
 
     ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
     for (auto& topic : Response->Topics) {

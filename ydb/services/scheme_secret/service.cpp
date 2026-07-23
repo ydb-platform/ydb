@@ -667,6 +667,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     }
 
     if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+        // Just in case - when we disable old secrets, we'll make sure they are not needed any more
         promise.SetValue(
             NKqp::TEvDescribeSecretsResponse::TDescription(
                 Ydb::StatusIds::BAD_REQUEST,
@@ -682,6 +683,10 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
 
 IActor* TDescribeSchemaSecretsServiceFactory::CreateService() {
     return new TDescribeSchemaSecretsService();
+}
+
+bool IsSchemeSecret(const TString& secretName) {
+    return secretName.StartsWith('/');
 }
 
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames) {

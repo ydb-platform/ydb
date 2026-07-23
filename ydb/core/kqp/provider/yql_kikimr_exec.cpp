@@ -1091,10 +1091,13 @@ namespace {
 
         if (disableOldSecretCreation) {
             auto checkSecret = [&](const TString& secretName) {
-                // Keep in sync with NKikimr::NSecret::IsSchemeSecret.
                 if (secretName && !secretName.StartsWith('/')) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos),
-                        "Old secrets are disabled for creating new objects. Please use the new secrets"));
+                    ctx.AddError(
+                        TIssue(
+                            ctx.GetPosition(pos),
+                            "Old secrets are disabled for creating new objects. Please use the new secrets"
+                        )
+                    );
                     return false;
                 }
                 return true;
@@ -3416,8 +3419,9 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos(),
-                    SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())) {
+            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx,
+                createReplication.Pos(), SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3473,8 +3477,10 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
-                    SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3530,7 +3536,8 @@ public:
             };
 
             if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos(),
-                    SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())) {
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3588,7 +3595,8 @@ public:
             settings.TranformLambda = alterTransfer.TransformLambda();
 
             if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos(),
-                    SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())) {
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 

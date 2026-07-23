@@ -83,8 +83,8 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 
-    const bool disableOldSecretCreation = actorSystem
-        && AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
+    const bool disableOldSecretCreation = actorSystem &&
+        AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
 
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
@@ -93,14 +93,20 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, sa.GetSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation,sa.GetSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else if (authMethod == "BASIC") {
         auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
         basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, basic.GetPasswordSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else if (authMethod == "MDB_BASIC") {
@@ -109,10 +115,16 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation,mdbBasic.GetServiceAccountSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetPasswordSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else if (authMethod == "AWS") {
@@ -120,16 +132,25 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
         aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else if (authMethod == "IAM") {
@@ -138,7 +159,10 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         iam.SetInitialTokenSecretName(GetSecretName(settings, "initial_token_secret"));
         // Note: user must not be allowed to specify resource_id;
         // database authorization relies on resource_id lookup;
-        if (auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail()) {
+        if (const auto status =
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, iam.GetInitialTokenSecretName());
+            status.IsFail()
+        ) {
             return status;
         }
     } else {

@@ -61,6 +61,7 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
         } else if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+            // Just in case - when we disable old secrets, we'll make sure they are not needed any more
             return Reply(false, "Usage of old secrets is disabled now. Please use the new secrets");
         } else {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),

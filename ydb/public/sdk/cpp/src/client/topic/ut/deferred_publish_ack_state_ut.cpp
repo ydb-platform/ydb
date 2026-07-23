@@ -29,6 +29,10 @@ Y_UNIT_TEST(WaitAllAcksRetryAfterAbort) {
     state.OnUnackedAbort(1);
     UNIT_ASSERT(firstWait.HasValue());
     UNIT_ASSERT(!firstWait.GetValue().IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(firstWait.GetValue().GetStatus(), EStatus::SESSION_EXPIRED);
+    UNIT_ASSERT_STRING_CONTAINS(
+        firstWait.GetValue().GetIssues().ToString(),
+        "Cannot finalize deferred publication: associated write session was aborted");
     UNIT_ASSERT(!state.IsSealed());
 
     UNIT_ASSERT(state.TryOnWrite());

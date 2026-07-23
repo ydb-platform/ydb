@@ -1,15 +1,380 @@
-#include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
+#include "schemeshard__tenant_shred_manager.h"
+#include "schemeshard__operation_copy_table.h"  // for TShardProposal and TShardProposalInputs
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
+// Per-partition proposal building for the CopyTable ConfigureParts phase, expressed on the
+// plain-data TShardProposalInputs so it runs without a live SchemeShard tablet (see the
+// benchmark). TConfigureParts::ProgressState extracts the inputs and dispatches the result.
+namespace NKikimr::NSchemeShard::NCopyTable {
+
+// Free (SchemeShard-independent) building blocks used both by the CopyTable proposal builders
+// and by the tablet-free benchmark. They take every input explicitly so they can run without a
+// live TSchemeShard/tablet/actor. The TSchemeShard members of the same name gather the data from
+// `this` and forward here.
+void ApplyPartitionConfigStoragePatch(
+    NKikimrSchemeOp::TPartitionConfig& config,
+    const NKikimrSchemeOp::TPartitionConfig& patch
+) {
+    THashMap<ui32, ui32> familyRooms;
+    for (const auto& family : patch.GetColumnFamilies()) {
+        familyRooms[family.GetId()] = family.GetRoom();
+    }
+
+    // Patch column families
+    for (size_t i = 0; i < config.ColumnFamiliesSize(); ++i) {
+        auto& family = *config.MutableColumnFamilies(i);
+        auto it = familyRooms.find(family.GetId());
+        if (it != familyRooms.end()) {
+            family.SetRoom(it->second);
+        } else {
+            family.ClearRoom();
+        }
+    }
+
+    // Copy storage rooms as is
+    config.ClearStorageRooms();
+    if (patch.StorageRoomsSize()) {
+        config.MutableStorageRooms()->CopyFrom(patch.GetStorageRooms());
+    }
+}
+
+// Base CreateTable description fill for one shard's range (no child indexes/cdc/sequences).
+void FillTableDescriptionForShardIdx(
+    TTableInfo& tableInfo,
+    TShardIdx shardIdx,
+    NKikimrSchemeOp::TTableDescription* tableDescr,
+    TString rangeBegin,
+    TString rangeEnd,
+    bool rangeBeginInclusive,
+    bool rangeEndInclusive,
+    const TString& path,
+    const TString& name,
+    TPathId pathId
+) {
+    TVector<ui32> keyColumnIds = tableInfo.FillDescriptionCache(name, pathId);
+    if (!tableInfo.TableDescription.HasPath()) {
+        tableInfo.TableDescription.SetPath(path);
+    }
+    tableDescr->CopyFrom(tableInfo.TableDescription);
+
+    if (rangeBegin.empty()) {
+        // First partition starts with <NULL, NULL, ..., NULL> key
+        TVector<TCell> nullKey(keyColumnIds.size());
+        rangeBegin = TSerializedCellVec::Serialize(nullKey);
+    }
+
+    tableDescr->SetPartitionRangeBegin(std::move(rangeBegin));
+    tableDescr->SetPartitionRangeEnd(std::move(rangeEnd));
+    tableDescr->SetPartitionRangeBeginIsInclusive(rangeBeginInclusive);
+    tableDescr->SetPartitionRangeEndIsInclusive(rangeEndInclusive);
+
+    // Patch partition config for new-style shards
+    if (const auto* patch = tableInfo.PerShardPartitionConfig.FindPtr(shardIdx)) {
+        ApplyPartitionConfigStoragePatch(
+            *tableDescr->MutablePartitionConfig(),
+            *patch);
+    }
+
+    if (tableInfo.IsBackup) {
+        tableDescr->SetIsBackup(true);
+    }
+
+    if (tableInfo.IsRestore) {
+        tableDescr->SetIsRestore(true);
+    }
+
+    if (tableInfo.HasReplicationConfig()) {
+        tableDescr->MutableReplicationConfig()->CopyFrom(tableInfo.ReplicationConfig());
+    }
+
+    if (tableInfo.HasIncrementalBackupConfig()) {
+        tableDescr->MutableIncrementalBackupConfig()->CopyFrom(tableInfo.IncrementalBackupConfig());
+    }
+}
+
+// Base CreateTable description fill for one partition (ranges derived from the partition),
+// plus the table schema version. No child indexes/cdc/sequences.
+void FillTableDescription(
+    TTableInfo& tableInfo,
+    ui32 partitionIdx,
+    ui64 schemaVersion,
+    const TString& path,
+    const TString& name,
+    TPathId pathId,
+    NKikimrSchemeOp::TTableDescription* tableDescr
+) {
+    TString rangeBegin = (partitionIdx != 0)
+        ? tableInfo.GetPartitions()[partitionIdx-1]->EndOfRange
+        : TString();
+    TString rangeEnd = tableInfo.GetPartitions()[partitionIdx]->EndOfRange;
+
+    // For uniform partitioning we include range start and exclude range end
+    FillTableDescriptionForShardIdx(
+        tableInfo,
+        tableInfo.GetPartitions()[partitionIdx]->ShardIdx,
+        tableDescr,
+        std::move(rangeBegin),
+        std::move(rangeEnd),
+        true /* rangeBeginInclusive */, false /* rangeEndInclusive */,
+        path, name, pathId);
+    tableDescr->SetTableSchemaVersion(schemaVersion);
+}
+
+// The proposal event is created with an empty body; the caller appends the
+// serialized pieces directly into Record.MutableTxBody(), avoiding an
+// intermediate serialization buffer and a copy.
+THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(
+    ui64 tabletId,
+    const TActorId& selfId,
+    TTxId txId,
+    const NKikimrSubDomains::TProcessingParams& processingParams
+) {
+    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        NKikimrTxDataShard::TX_KIND_SCHEME, tabletId, selfId,
+        ui64(txId), TStringBuf(""), processingParams
+    );
+}
+
+// TShardProposal and TShardProposalInputs are declared in schemeshard__operation_copy_table.h.
+
+namespace {
+
+// A "piece" is a serialized TFlatSchemeTransaction with exactly one top-level
+// field set. Concatenating pieces of the same message type is equivalent to
+// merging them under protobuf parse semantics (repeated fields concatenate,
+// scalars last-win, message fields merge), which is how the per-partition body
+// is assembled: a precomputed invariant part (serialized once per call) plus a
+// small per-partition delta. The delta must never contain a repeated field, and
+// PartitionConfig must live in the delta only (a duplicated message field would
+// merge on parse instead of overriding).
+void SerializePiece(TString& out, NKikimrTxDataShard::TFlatSchemeTransaction& t) {
+    out.clear();
+    Y_PROTOBUF_SUPPRESS_NODISCARD t.SerializeToString(&out);
+}
+
+// SeqNo is identical for all partitions in one round.
+TString BuildSeqNoPiece(const TShardProposalInputs& in) {
+    NKikimrTxDataShard::TFlatSchemeTransaction t;
+    TSchemeShard::FillSeqNo(t, in.SeqNo);
+    TString piece;
+    SerializePiece(piece, t);
+    return piece;
+}
+
+// Invariant part of the dst CreateTable description: the cached description
+// (primed via FillDescriptionCache), the dst path, the backup/restore and
+// replication/incremental-backup flags, and the child index/cdc/sequence
+// template. Per-partition fields (ranges, schema version, PartitionConfig) are
+// stripped — the delta supplies them.
+TString BuildCreateTableCommonPiece(const TShardProposalInputs& in) {
+    NKikimrTxDataShard::TFlatSchemeTransaction t;
+    auto* createTable = t.MutableCreateTable();
+    // Partition 0's full description is exactly the invariant base...
+    FillTableDescription(in.DstTable, 0, in.DstSchemaVersion, in.DstPath, in.DstName, in.TargetPathId, createTable);
+    // ...minus the per-partition delta fields (see BuildCreateTableDelta) and
+    // minus PartitionConfig (a duplicated message field merges on parse, so it
+    // must be emitted by the delta only).
+    createTable->ClearPartitionConfig();
+    createTable->ClearPartitionRangeBegin();
+    createTable->ClearPartitionRangeEnd();
+    createTable->ClearPartitionRangeBeginIsInclusive();
+    createTable->ClearPartitionRangeEndIsInclusive();
+    createTable->ClearTableSchemaVersion();
+    // Merge pre-resolved child index/cdc/sequence descriptions (replaces any
+    // from the cache — same as the per-partition full build did).
+    if (in.DstChildrenTemplate.TableIndexesSize()) {
+        createTable->MutableTableIndexes()->CopyFrom(in.DstChildrenTemplate.GetTableIndexes());
+    }
+    if (in.DstChildrenTemplate.CdcStreamsSize()) {
+        createTable->MutableCdcStreams()->CopyFrom(in.DstChildrenTemplate.GetCdcStreams());
+    }
+    if (in.DstChildrenTemplate.SequencesSize()) {
+        createTable->MutableSequences()->CopyFrom(in.DstChildrenTemplate.GetSequences());
+    }
+    TString piece;
+    SerializePiece(piece, t);
+    return piece;
+}
+
+// Invariant part of the dst ReceiveSnapshot: the target table id. The
+// ReceiveFrom shard list is per-partition (repeated — concatenates).
+TString BuildReceiveSnapshotCommonPiece(const TShardProposalInputs& in) {
+    NKikimrTxDataShard::TFlatSchemeTransaction t;
+    auto* snapshot = t.MutableReceiveSnapshot();
+    snapshot->SetTableId_Deprecated(in.TargetPathId.LocalPathId);
+    snapshot->MutableTableId()->SetOwnerId(in.TargetPathId.OwnerId);
+    snapshot->MutableTableId()->SetTableId(in.TargetPathId.LocalPathId);
+    TString piece;
+    SerializePiece(piece, t);
+    return piece;
+}
+
+// Invariant part of the src proposal: SendSnapshot with the source table id
+// plus ReadOnly (plain copy), or CreateIncrementalBackupSrc with the source
+// table id and the drop/create notices (incremental backup). The SendTo shard
+// is per-partition (repeated — concatenates).
+TString BuildSrcCommonPiece(const TShardProposalInputs& in) {
+    NKikimrTxDataShard::TFlatSchemeTransaction t;
+    if (in.UseIncrementalBackup) {
+        auto& combined = *t.MutableCreateIncrementalBackupSrc();
+        auto& snapshot = *combined.MutableSendSnapshot();
+        snapshot.SetTableId_Deprecated(in.SourcePathId.LocalPathId);
+        snapshot.MutableTableId()->SetOwnerId(in.SourcePathId.OwnerId);
+        snapshot.MutableTableId()->SetTableId(in.SourcePathId.LocalPathId);
+
+        const bool hasDrop = !in.StreamsToDrop.empty();
+        const bool hasCreate = (in.CdcPathId != InvalidPathId);
+
+        if (hasDrop) {
+            auto& dropNotice = *combined.MutableDropCdcStreamNotice();
+            in.SourcePathId.ToProto(dropNotice.MutablePathId());
+            dropNotice.SetTableSchemaVersion(in.CoordVersion);
+
+            for (const auto& id : in.StreamsToDrop) {
+                id.ToProto(dropNotice.AddStreamPathId());
+            }
+        }
+
+        if (hasCreate) {
+            *combined.MutableCreateCdcStreamNotice() = in.CreateCdcNotice;
+            combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(in.CoordVersion);
+        }
+    } else {
+        auto& snapshot = *t.MutableSendSnapshot();
+        snapshot.SetTableId_Deprecated(in.SourcePathId.LocalPathId);
+        snapshot.MutableTableId()->SetOwnerId(in.SourcePathId.OwnerId);
+        snapshot.MutableTableId()->SetTableId(in.SourcePathId.LocalPathId);
+        t.SetReadOnly(true);
+    }
+    TString piece;
+    SerializePiece(piece, t);
+    return piece;
+}
+
+// Per-partition dst CreateTable delta: the shard's range, the schema version,
+// and the full (possibly per-shard-patched) PartitionConfig.
+void BuildCreateTableDelta(const TShardProposalInputs& in, ui32 partitionIdx, NKikimrTxDataShard::TFlatSchemeTransaction& t) {
+    auto* delta = t.MutableCreateTable();
+
+    TString rangeBegin = (partitionIdx != 0)
+        ? in.DstTable.GetPartitions()[partitionIdx-1]->EndOfRange
+        : TString();
+    if (rangeBegin.empty()) {
+        // First partition starts with <NULL, NULL, ..., NULL> key
+        TVector<TCell> nullKey(in.DstTable.KeyColumnIds.size());
+        rangeBegin = TSerializedCellVec::Serialize(nullKey);
+    }
+    delta->SetPartitionRangeBegin(std::move(rangeBegin));
+    delta->SetPartitionRangeEnd(in.DstTable.GetPartitions()[partitionIdx]->EndOfRange);
+    delta->SetPartitionRangeBeginIsInclusive(true);
+    delta->SetPartitionRangeEndIsInclusive(false);
+    delta->SetTableSchemaVersion(in.DstSchemaVersion);
+
+    // Patch partition config for new-style shards. Emitted here only (never in
+    // the common piece): a duplicated message field would merge on parse.
+    if (const auto* patch = in.DstTable.PerShardPartitionConfig.FindPtr(in.DstTable.GetPartitions()[partitionIdx]->ShardIdx);
+        patch || in.DstTable.TableDescription.HasPartitionConfig())
+    {
+        auto* config = delta->MutablePartitionConfig();
+        if (in.DstTable.TableDescription.HasPartitionConfig()) {
+            config->CopyFrom(in.DstTable.TableDescription.GetPartitionConfig());
+        }
+        if (patch) {
+            ApplyPartitionConfigStoragePatch(*config, *patch);
+        }
+    }
+}
+
+}
+
+TVector<TShardProposal> BuildConfigurePartsProposals(const TShardProposalInputs& in) {
+    const auto& srcPartitions = in.SrcTable.GetPartitions();
+    const auto& dstPartitions = in.DstTable.GetPartitions();
+
+    TVector<TShardProposal> proposals;
+    if (dstPartitions.empty()) {
+        return proposals;
+    }
+    proposals.reserve(dstPartitions.size() * 2);
+
+    // Invariant pieces, serialized once per call and shared by all partitions.
+    const TString seqNoPiece = BuildSeqNoPiece(in);
+    const TString createTableCommon = BuildCreateTableCommonPiece(in);
+    const TString receiveSnapshotCommon = BuildReceiveSnapshotCommonPiece(in);
+    const TString srcCommon = BuildSrcCommonPiece(in);
+
+    // Per-partition scratch, reused across iterations. The scratch message
+    // lives on a per-call arena: Clear() between partitions then keeps the
+    // allocated string storage (e.g. the PartitionConfig copy) instead of
+    // freeing and reallocating it for every partition.
+    google::protobuf::Arena arena;
+    auto* scratchTx = google::protobuf::Arena::CreateMessage<NKikimrTxDataShard::TFlatSchemeTransaction>(&arena);
+    TString scratch;
+
+    for (ui32 i = 0; i < dstPartitions.size(); ++i) {
+        const TShardIdx srcShardIdx = srcPartitions[i]->ShardIdx;
+        const TTabletId srcDatashardId = in.ShardToTablet(srcShardIdx);
+        const TShardIdx dstShardIdx = dstPartitions[i]->ShardIdx;
+        const TTabletId dstDatashardId = in.ShardToTablet(dstShardIdx);
+
+        // Dst "CreateTable + ReceiveParts" proposal.
+        {
+            scratchTx->Clear();
+            BuildCreateTableDelta(in, i, *scratchTx);
+            SerializePiece(scratch, *scratchTx);
+
+            auto ev = MakeDataShardProposal(in.SelfTabletId, in.SelfId, in.TxId, in.DstProcessingParams);
+            TString& body = *ev->Record.MutableTxBody();
+            body.append(createTableCommon);
+            body.append(scratch);
+            body.append(receiveSnapshotCommon);
+
+            scratchTx->Clear();
+            scratchTx->MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
+            SerializePiece(scratch, *scratchTx);
+            body.append(scratch);
+
+            body.append(seqNoPiece);
+
+            if (in.DstSubDomainPathId) {
+                ev->Record.SetSubDomainPathId(in.DstSubDomainPathId);
+            }
+            proposals.push_back({dstDatashardId, dstShardIdx, std::move(ev)});
+        }
+
+        // Src "SendParts" / incremental-backup proposal.
+        {
+            scratchTx->Clear();
+            if (in.UseIncrementalBackup) {
+                scratchTx->MutableCreateIncrementalBackupSrc()->MutableSendSnapshot()->AddSendTo()->SetShard(ui64(dstDatashardId));
+            } else {
+                scratchTx->MutableSendSnapshot()->AddSendTo()->SetShard(ui64(dstDatashardId));
+            }
+            SerializePiece(scratch, *scratchTx);
+
+            auto ev = MakeDataShardProposal(in.SelfTabletId, in.SelfId, in.TxId, in.DstProcessingParams);
+            TString& body = *ev->Record.MutableTxBody();
+            body.append(srcCommon);
+            body.append(scratch);
+            body.append(seqNoPiece);
+            proposals.push_back({srcDatashardId, srcShardIdx, std::move(ev)});
+        }
+    }
+
+    return proposals;
+}
+
+}
 
 namespace {
 
@@ -27,13 +392,6 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
     schema->SetSystemColumnNamesAllowed(true);
-}
-
-void FillSrcSnapshot(const TTxState* const txState, ui64 dstDatashardId, NKikimrTxDataShard::TSendSnapshot& snapshot) {
-    snapshot.SetTableId_Deprecated(txState->SourcePathId.LocalPathId);
-    snapshot.MutableTableId()->SetOwnerId(txState->SourcePathId.OwnerId);
-    snapshot.MutableTableId()->SetTableId(txState->SourcePathId.LocalPathId);
-    snapshot.AddSendTo()->SetShard(dstDatashardId);
 }
 
 class TConfigureParts: public TSubOperationState {
@@ -72,96 +430,103 @@ public:
 
         Y_ABORT_UNLESS(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
                  "CopyTable partition counts don't match");
-        const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
+        // Collect CDC streams being dropped on the source table by this operation (read-only scan).
+        // Done once before the per-partition loop since it is the same for all partitions.
+        TVector<TPathId> streamsToDrop;
 
-        for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
-            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
-            TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
+        TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+            if (context.SS->PathsById.contains(id)) {
+                auto childPath = context.SS->PathsById.at(id);
+                if (childPath->IsCdcStream() &&
+                    childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                    childPath->DropTxId == OperationId.GetTxId()) {
+                    streamsToDrop.push_back(id);
+                }
+            }
+        }
 
-            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i]->ShardIdx;
-            TTabletId dstDatashardId = context.SS->ShardInfos[dstShardIdx].TabletID;
+        const bool hasDrop = !streamsToDrop.empty();
+        const bool hasCreate = (txState->CdcPathId != InvalidPathId);
+        const bool useIncrementalBackup = hasDrop || hasCreate;
 
-            auto seqNo = context.SS->StartRound(*txState);
+        // Derive the coordinated schema version and persist the source table's AlterData.
+        // Kept out of BuildConfigurePartsProposals so proposal building stays free of DB/mem changes.
+        ui64 coordVersion = 0;
+        NKikimrTxDataShard::TCreateCdcStreamNotice createCdcNotice;
+        if (useIncrementalBackup) {
+            // Get coordinated version from source table's AlterData (shared across both drop and create).
+            auto srcTable = context.SS->Tables.at(txState->SourcePathId);
+            srcTable->InitAlterData(OperationId);
+            coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
 
-            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on dstDatashard",
-                {"dstDatashard", dstDatashardId},
-                {"dstShardIdx", dstShardIdx},
-                {"srcDatashard", srcDatashardId},
-                {"srcShardIdx", srcShardIdx},
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
+
+            if (hasCreate) {
+                NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, createCdcNotice);
+            }
+        }
+
+        // Resolve the dst path string and name for FillTableDescription.
+        TPath dstPath = TPath::Init(txState->TargetPathId, context.SS);
+        const TString dstPathString = context.SS->PathToString(dstPath.Base());
+        const TString dstName = dstPath.Base()->Name;
+
+        // Build the shard-to-tablet resolver lambda (captures ShardInfos by reference).
+        auto shardToTablet = [&context](TShardIdx idx) -> TTabletId {
+            return context.SS->ShardInfos[idx].TabletID;
+        };
+
+        // Empty children template for the base case (no indexes/cdc/sequences on the dst table).
+        // The rich path (incremental backup with CDC children) is handled via UseIncrementalBackup
+        // and the StreamsToDrop/CreateCdcNotice fields instead.
+        NKikimrSchemeOp::TTableDescription emptyChildrenTemplate;
+
+        // Resolve the seqNo once (StartRound advances the round internally; the returned value
+        // is the same for all partitions in this ProgressState call).
+        const auto seqNo = context.SS->StartRound(*txState);
+
+        // Resolve the dst subdomain path id and processing params.
+        const ui64 dstSubDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
+        const NKikimrSubDomains::TProcessingParams& dstProcessingParams =
+            context.SS->SelectProcessingParams(txState->TargetPathId);
+
+        // Assemble the plain-data inputs and build all proposals in one shot.
+        const NCopyTable::TShardProposalInputs inputs = {
+            .SrcTable = *srcTableInfo,
+            .DstTable = *dstTableInfo,
+            .ShardToTablet = shardToTablet,
+            .SourcePathId = txState->SourcePathId,
+            .TargetPathId = txState->TargetPathId,
+            .CdcPathId = txState->CdcPathId,
+            .DstSubDomainPathId = dstSubDomainPathId,
+            .DstProcessingParams = dstProcessingParams,
+            .SelfTabletId = ui64(context.SS->SelfTabletId()),
+            .SelfId = context.Ctx.SelfID,
+            .SeqNo = seqNo,
+            .DstSchemaVersion = NEW_TABLE_ALTER_VERSION,
+            .TxId = OperationId.GetTxId(),
+            .DstPath = dstPathString,
+            .DstName = dstName,
+            .DstChildrenTemplate = emptyChildrenTemplate,
+            .UseIncrementalBackup = useIncrementalBackup,
+            .StreamsToDrop = streamsToDrop,
+            .CoordVersion = coordVersion,
+            .CreateCdcNotice = createCdcNotice,
+        };
+
+        auto proposals = NCopyTable::BuildConfigurePartsProposals(inputs);
+
+        for (auto& p : proposals) {
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard",
+                {"datashard", p.TabletId},
+                {"shardIdx", p.ShardIdx},
+                {"operationId", OperationId},
                 {"seqNo", seqNo},
             );
 
-            // Send "CreateTable + ReceiveParts" transaction to destination datashard
-            NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
-            context.SS->FillSeqNo(newShardTx, seqNo);
-            context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable());
-            newShardTx.MutableReceiveSnapshot()->SetTableId_Deprecated(txState->TargetPathId.LocalPathId);
-            newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
-            newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
-            newShardTx.MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
-
-            auto dstEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, newShardTx.SerializeAsString(), context.Ctx);
-            if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
-                dstEvent->Record.SetSubDomainPathId(subDomainPathId);
-            }
-            context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.Release());
-
-            // Send "SendParts" transaction to source datashard
-            NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
-            context.SS->FillSeqNo(oldShardTx, seqNo);
-
-            TVector<TPathId> streamsToDrop;
-            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
-            for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
-                if (context.SS->PathsById.contains(id)) {
-                    auto childPath = context.SS->PathsById.at(id);
-                    if (childPath->IsCdcStream() &&
-                        childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
-                        childPath->DropTxId == OperationId.GetTxId()) {
-                        streamsToDrop.push_back(id);
-                    }
-                }
-            }
-
-            bool hasDrop = !streamsToDrop.empty();
-            bool hasCreate = (txState->CdcPathId != InvalidPathId);
-
-            if (hasDrop || hasCreate) {
-                auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
-                FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-
-                // Get coordinated version from source table's AlterData (shared across both drop and create)
-                // NOTE: no MemChanges.GrabTable here: this runs in the progress/reply transaction,
-                // where TMemoryChanges::UnDo is never invoked, so a Grab would be inert.
-                auto srcTable = context.SS->Tables.at(txState->SourcePathId);
-                srcTable->InitAlterData(OperationId);
-                ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
-
-                NIceDb::TNiceDb db(context.GetDB());
-                context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
-
-                if (hasDrop) {
-                    auto& dropNotice = *combined.MutableDropCdcStreamNotice();
-                    txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    dropNotice.SetTableSchemaVersion(coordVersion);
-
-                    for (const auto& id : streamsToDrop) {
-                        id.ToProto(dropNotice.AddStreamPathId());
-                    }
-                }
-
-                if (hasCreate) {
-                    NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
-                    combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(coordVersion);
-                }
-
-            } else {
-                FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
-                oldShardTx.SetReadOnly(true);
-            }
-
-            auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
-            context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
+            context.OnComplete.BindMsgToPipe(OperationId, p.TabletId, p.ShardIdx, p.Event.Release());
         }
 
         txState->UpdateShardsInProgress();

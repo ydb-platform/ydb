@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
@@ -191,6 +192,8 @@ public:
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;

@@ -164,7 +164,6 @@
 /ydb/core/resource_pools @ydb-platform/fq
 /ydb/services/workload_manager @ydb-platform/fq
 
-
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

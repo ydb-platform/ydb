@@ -8,11 +8,16 @@ import tempfile
 import unittest
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    UnionAll,
+    UnionInput,
+    parse_snapshot,
+)
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import snapshot_digest
 from ydb.core.kqp.opt.rbo.verification.replay import cli as replay_cli
 from ydb.core.kqp.opt.rbo.verification.replay.case import (
@@ -111,6 +116,7 @@ def snapshot(staged, ordered=False, columns=None, key=("id",), storage="column")
             "nodes": nodes,
             "root": root,
             "output": [column["name"] for column in table_columns],
+            "subplans": [],
         },
         "stage_graph": graph,
     })
@@ -233,6 +239,35 @@ class CaseTest(unittest.TestCase):
         before = snapshot(False, ordered=True)
         after = snapshot(True, ordered=True)
         query = f"SELECT * FROM `{table_path(TABLE)}` ORDER BY id;"
+        with self.assertRaisesRegex(ReplayError, "semantics disagree"):
+            prepared(before, after, trace(ordered=False), query)
+
+    def test_ordered_union_initial_root_uses_sequence_semantics(self):
+        base = snapshot(False)
+        columns = tuple(column.name for column in base.output_schema())
+        union = UnionAll(
+            "union",
+            (
+                UnionInput("scan", columns),
+                UnionInput("scan", columns),
+            ),
+            columns,
+            True,
+        )
+        before = replace(
+            base,
+            plan=replace(
+                base.plan,
+                nodes=base.plan.nodes + (union,),
+                root="union",
+            ),
+        )
+        after = snapshot(True)
+        query = f"SELECT * FROM `{table_path(TABLE)}` UNION ALL SELECT * FROM `{table_path(TABLE)}`;"
+
+        case = prepared(before, after, trace(ordered=True), query)
+
+        self.assertTrue(case.ordered)
         with self.assertRaisesRegex(ReplayError, "semantics disagree"):
             prepared(before, after, trace(ordered=False), query)
 

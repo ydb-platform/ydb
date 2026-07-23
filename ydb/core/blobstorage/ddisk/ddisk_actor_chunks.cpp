@@ -30,21 +30,11 @@ namespace NKikimr::NDDisk {
         auto it = std::find(PersistentBufferChunks.begin(), PersistentBufferChunks.end(), chunkIdx);
         Y_DEBUG_ABORT_UNLESS(it != PersistentBufferChunks.end());
         PersistentBufferChunks.erase(it);
-        IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
+        IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, 0
             , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
             Send(PersistentBufferActorId, new TEvPrivate::TEvDeallocatePersistentBufferChunkResult(chunkIdx));
             --*Counters.Chunks.ChunksOwned;
-        });
-        Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkForget(PDiskParams->Owner, PDiskParams->OwnerRound,
-            {chunkIdx}));
-    }
-
-    void TDDiskActor::Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
-        auto& msg = *ev->Get();
-        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvChunkForgetResult)",
-            {"marker", "BSDD04"},
-            {"DDiskId", DDiskId},
-            {"msg", msg});
+        }, {chunkIdx});
     }
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {

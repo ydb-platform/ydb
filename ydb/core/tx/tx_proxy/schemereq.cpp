@@ -126,9 +126,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
         auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
 
-        if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-        }
+        request->Record.SetOwner(ChooseAppropriateOwner(request->Record, AppData(), UserToken));
 
         request->Record.SetPeerName(GetRequestProto().GetPeerName());
         if (GetRequestEv().HasModifyScheme()) {
@@ -1306,6 +1304,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return msg;
     }
 
+    // If the missing access includes GrantAccessRights and permissions are managed via IDM,
+    // the message returned to the user points the user to use IDM instead.
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, ui32 neededAccess) {
+        const TString msg = MakeAccessDeniedError(ctx, path, TStringBuilder()
+            << "with access " << NACLib::AccessRightsToString(neededAccess)
+        );
+
+        if ((neededAccess & NACLib::EAccessRights::GrantAccessRights) && AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
+            return "All access rights are managed via roles in IDM, please use IDM to change them";
+        } else {
+            return msg;
+        }
+    }
+
     void InterpretResolveError(const NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext &ctx) {
         for (const auto& entry: navigate->ResultSet) {
             switch (entry.Status) {
@@ -1540,9 +1552,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                    << "with access " << NACLib::AccessRightsToString(access)
-                );
+                const auto errString = MakeAccessDeniedError(ctx, entry.Path, access);
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 return false;
@@ -1757,6 +1767,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
                         targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1772,6 +1783,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
                         targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else if (targetUser.HasPassword()) {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;

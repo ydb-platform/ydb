@@ -896,7 +896,7 @@ public:
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
@@ -1017,13 +1017,32 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
+    bool IsCancelled = false;
+    TString CancellationReason;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }
 
+    bool IsFinished() const override {
+        return IsDone();
+    }
+
+    bool IsCloseToCompletion() const {
+        return OperationState == EOperationState::Done
+            || OperationState == EOperationState::Unlocking
+            || OperationState == EOperationState::Finishing;
+    }
+
     bool IsSetColumnConstraint() const override {
         return true;
+    }
+
+    void MarkAsCancelled(TString&& reason) {
+        if (!IsCancelled) {
+            IsCancelled = true;
+            CancellationReason = std::move(reason);
+        }
     }
 };
 

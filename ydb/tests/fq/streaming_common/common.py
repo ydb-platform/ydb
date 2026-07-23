@@ -71,6 +71,7 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
         },
         replication_config={
             "iam_service_control": {
@@ -102,6 +103,9 @@ class YdbClient:
         )
         self.driver = None
         self.session_pool = None
+        self.retry_settings = ydb.RetrySettings(
+            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}")
+        )
         self.start()
 
     def start(self):
@@ -116,13 +120,15 @@ class YdbClient:
         self.driver.wait(timeout, fail_fast=True)
 
     def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement)
+        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
 
     def query_async(self, statement: str, timeout: Optional[float] = None):
         settings = None
         if timeout is not None:
             settings = ydb.BaseRequestSettings().with_timeout(timeout)
-        return self.session_pool.execute_with_retries_async(statement, settings=settings)
+        return self.session_pool.execute_with_retries_async(
+            statement, settings=settings, retry_settings=self.retry_settings
+        )
 
 
 class Kikimr:

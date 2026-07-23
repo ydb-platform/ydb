@@ -307,6 +307,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
+        optional bool AlwaysSetSystemOwner = 23 [default = false];
     }
 
     repeated TDomain Domain = 1;
@@ -392,13 +393,25 @@ message TSelfManagementConfig {
     optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
     optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
     optional bool AutomaticStaticGroupManagement = 23; // whether distconf/SelfHeal can change static group on its behalf
-    optional bool AutomaticStateStorageManagement = 24; // the same for state storage
-    optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
-    optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
+    optional bool AutomaticStateStorageManagement = 24 [default = true]; // the same for state storage; if disabled, SelfHeal must not change current state storage config
+    optional bool AutomaticStateStorageBoardManagement = 25 [default = true]; // the same for state storage board; if disabled, SelfHeal must not change current state storage board config
+    optional bool AutomaticSchemeBoardManagement = 26 [default = true]; // the same for scheme board; if disabled, SelfHeal must not change current scheme board config
 
     // node ids onto which vdisks of static groups may be relocated during self-heal;
     // empty list means no restriction
     repeated uint32 StaticGroupSelfHealAllowedNodes = 27;
+
+    // node ids onto which state storage may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 StateStorageSelfHealAllowedNodes = 28;
+
+    // node ids onto which state storage board may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 StateStorageBoardSelfHealAllowedNodes = 29;
+
+    // node ids onto which state storage scheme board may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 SchemeBoardSelfHealAllowedNodes = 30;
 }
 
 message TBlobStorageFormatConfig {
@@ -414,6 +427,7 @@ message TBlobStorageFormatConfig {
         optional uint64 RoomId = 9;
         optional uint64 BodyId = 10;
         optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 11;
+        optional string DiskScope = 12;
     }
 
     repeated TDrive Drive = 1;
@@ -534,6 +548,11 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     optional bool UseUring = 62 [default = false];
     optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
+    optional bool EnableInterconnectSessionV2 = 64 [default = false];
+    optional bool ChecksumInterconnectSessionV2 = 65 [default = false];
+    optional bool EnableSQPOLLv2 = 66 [default = true];
+    optional bool EnablePreserializeInV2 = 67 [default = false];
+    optional uint32 UringEngineThreadsV2 = 68 [default = 4];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -638,6 +657,7 @@ message TMonitoringConfig {
     optional bool RequireHealthcheckAuthentication = 22 [default = false];
     optional string MonitoringCaFile = 23;
     repeated string CompressContentTypes = 24; // by default most text types are compressed
+    optional bool ClientCertificateRequired = 25 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -1621,6 +1641,11 @@ message TImmediateControlsConfig {
             MinValue: -1,
             MaxValue: 604800,
             DefaultValue: 86400 }];
+        optional uint64 TolerateOrphanedPaths = 19 [(ControlOptions) = {
+            Description: "Emergency recovery only: tolerate SchemeShard local database inconsistencies (orphaned paths, references to missing paths) instead of failing fast. Enable to boot and repair a broken SchemeShard, then disable again",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTCMallocControls {
@@ -2154,6 +2179,12 @@ message TImmediateControlsConfig {
         }];
         optional uint64 RejectNonExistentStorageChannel = 4 [(ControlOptions) = {
             Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1
+        }];
+        optional uint64 UsePerChannelReadQueues = 5 [(ControlOptions) = {
+            Description: "Use separate KeyValue read request queues per storage channel",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
@@ -3086,20 +3117,14 @@ message TClientCertificateAuthorization {
     repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
     optional bool RequestClientCertificate = 2 [default = false];
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
-}
-
-message TLocalPgWireConfig {
-    optional int32 ListeningPort = 1 [default = 5432];
-    optional string SslCertificate = 5 [(Ydb.sensitive) = true];
-    optional string Address = 6 [default = "::"];
-    optional bool TcpNotDelay = 7 [default = true];
-    optional bool EnableLocalPgWire = 8 [default = false];
+    optional bool ClientCertificateRequired = 4 [default = false];
 }
 
 message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
+    optional string ListeningAddress = 20 [default = "::"];
 
     // You can either specify the path to the certificate, which will contain both the certificate and the private key,
     // or specify them separately in parameters Cert and Key.
@@ -3257,6 +3282,13 @@ message TOpaqueConfig {
     // Empty
 }
 
+message TUdfStoreConfig {
+    optional bool Enabled = 1 [default = false];
+    optional string KvStorageMedia = 2 [default = "ssd"];
+    optional bool EnableUnsafeNativeUdf = 3 [default = false];
+    optional string UnsafeNativeUdfDir = 4;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3321,7 +3353,7 @@ message TAppConfig {
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
-    optional TLocalPgWireConfig LocalPgWireConfig = 69;
+    reserved 69; // LocalPgWireConfig
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
     optional TConveyorConfig CompConveyorConfig = 72;
@@ -3347,6 +3379,7 @@ message TAppConfig {
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
     optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
+    optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

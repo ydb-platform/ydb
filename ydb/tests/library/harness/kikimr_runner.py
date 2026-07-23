@@ -75,13 +75,33 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
         self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
+        self._monitor_ca_file = self.__configurator.monitoring_tls_ca_path
+        if self.__configurator.monitoring_tls_client_certificate_required:
+            # Without proper client cert the cluster setup cannot be checked via monitoring:
+            # __wait_for_bs_controller_to_start polls /counters/json and hangs.
+            missing = []
+            if not self.__configurator.monitoring_tls_admin_client_cert_path:
+                missing.append('monitoring_tls_admin_client_cert_path')
+            if not self.__configurator.monitoring_tls_admin_client_key_path:
+                missing.append('monitoring_tls_admin_client_key_path')
+            if not self.__configurator.monitoring_tls_ca_path:
+                missing.append('monitoring_tls_ca_path')
+            if missing:
+                raise ValueError(
+                    'monitoring TLS client certificate is required, but the following configurator '
+                    'fields are not set: %s' % ', '.join(missing)
+                )
+            self._monitor_client_cert_file = self.__configurator.monitoring_tls_admin_client_cert_path
+            self._monitor_client_key_file = self.__configurator.monitoring_tls_admin_client_key_path
+        else:
+            self._monitor_client_cert_file = None
+            self._monitor_client_key_file = None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
-        self.pgwire_port = port_allocator.pgwire_port
         self.http_proxy_port = None
         self.kafka_api_port = None
         if configurator.kafka_proxy_enabled:
-            self.kafka_api_port = port_allocator.kafka_api_port
+            self.kafka_api_port = configurator.get_kafka_api_port(node_id)
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
@@ -153,9 +173,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
             ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
-
-        if hasattr(self, 'pgwire_port') and self.pgwire_port:
-            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
 
         if hasattr(self, 'sqs_port') and self.sqs_port:
             ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
@@ -284,9 +301,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
             )
-
-        if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
-            command.append("--pgwire-port=%d" % self.pgwire_port)
 
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])
@@ -812,6 +826,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
+    def restart_slots(self):
+        for slot in list(self.slots.values()):
+            slot.stop()
+            slot.start()
+
     def prepare_node(self, configurator=None, seed_nodes_file=None):
         try:
             new_node_object = self.__register_node(configurator, seed_nodes_file)
@@ -1016,7 +1035,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 node.host,
                 node.mon_port,
                 use_https=getattr(node, 'mon_uses_https', False),
-                token=token
+                token=token,
+                client_cert_file=getattr(node, '_monitor_client_cert_file', None),
+                client_key_file=getattr(node, '_monitor_client_key_file', None),
+                ca_file=getattr(node, '_monitor_ca_file', None),
             )
             for node in self.nodes.values()
         ]

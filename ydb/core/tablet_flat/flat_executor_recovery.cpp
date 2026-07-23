@@ -1,5 +1,6 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_direct_part_writer.h"
 #include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
 #include "flat_part_iface.h"
@@ -23,10 +24,8 @@
 
 #include <util/stream/file.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_RECOVERY
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
 
@@ -308,6 +307,8 @@ public:
     ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    THolder<TDirectPartWriter> BeginWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ReleaseWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
@@ -325,6 +326,7 @@ public:
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
     void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
     void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void AttachPart(ui32, THolder<TDirectPartResult>) override { Y_TABLET_ERROR("Not supported"); }
     void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
@@ -371,7 +373,7 @@ private:
     NTable::TDatabase DB;
     TDryRunPages Pages;
     TDryRunStats Stats;
-    
+
     bool ProcessPendingScheduled = false;
     TDeque<TAutoPtr<ITransaction>> PendingTx;
 };
@@ -386,8 +388,11 @@ public:
     ITransaction *CreateTxUploadSnapshot(TEvSnapshotData::TPtr ev, size_t startLine = 0);
     ITransaction *CreateTxUploadChangelog(TEvChangelogData::TPtr ev, size_t startLine = 0);
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletID() << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TRecoveryShard"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletID()});
     }
 
     explicit TRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info)
@@ -421,6 +426,8 @@ public:
     void DefaultSignalTabletActive(const TActorContext &) override {}
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRestoreBackup, Handle);
             hFunc(TEvBackupReaderResult, Handle);
@@ -447,7 +454,9 @@ public:
 
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
-        LOG_D("Backup info" << " TotalBytes# " << TotalBytes << " DryRun# " << DryRun);
+        YDB_LOG_DEBUG("Backup info",
+            {"totalBytes", TotalBytes},
+            {"dryRun", DryRun});
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
@@ -461,22 +470,27 @@ public:
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
-        LOG_D("Uploading schema");
+        YDB_LOG_DEBUG("Uploading schema");
         Execute(CreateTxUploadSchema(ev));
     }
 
     void Handle(TEvSnapshotData::TPtr& ev) {
-        LOG_D("Uploading snapshot" << " Table# " << ev->Get()->TableName);
+        YDB_LOG_DEBUG("Uploading snapshot",
+            {"table", ev->Get()->TableName});
         Execute(CreateTxUploadSnapshot(ev));
     }
 
     void Handle(TEvChangelogData::TPtr& ev) {
-        LOG_D("Uploading changelog" << " Lines# " << ev->Get()->Lines.size());
+        YDB_LOG_DEBUG("Uploading changelog",
+            {"lines", ev->Get()->Lines.size()});
         Execute(CreateTxUploadChangelog(ev));
     }
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
-        LOG_N("Starting restore" << " Path# " << backupPath << " SkipChecksum# " << skipChecksumValidation << " DryRun# " << dryRun);
+        YDB_LOG_NOTICE("Starting restore",
+            {"path", backupPath},
+            {"skipChecksum", skipChecksumValidation},
+            {"dryRun", dryRun});
         RestoreState = ERestoreState::InProgress;
         SkipChecksumValidation = skipChecksumValidation;
         DryRun = dryRun;
@@ -490,15 +504,17 @@ public:
     void CompleteRestore(bool success, const TString& error) {
         if (success) {
             if (error) {
-                LOG_N("Restore completed with warning" << " Error# " << error);
+                YDB_LOG_NOTICE("Restore completed with warning",
+                    {"error", error});
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
             } else {
-                LOG_N("Restore completed");
+                YDB_LOG_NOTICE("Restore completed");
                 RestoreState = ERestoreState::Done;
             }
         } else {
-            LOG_E("Restore failed" << " Error# " << error);
+            YDB_LOG_ERROR("Restore failed",
+                {"error", error});
             RestoreState = ERestoreState::Error;
             Error = error;
         }
@@ -599,7 +615,7 @@ public:
                     "\r\n"
                     "restoreBackup requires POST"));
                 return true;
-            } 
+            }
         }
 
         TStringStream str;
@@ -769,7 +785,7 @@ private:
 
 class TTxUploadSchema : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadSchema(TRecoveryShard* self, TEvSchemaData::TPtr& schema)
         : TBase(self)
@@ -795,7 +811,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            LOG_E("Schema upload failed" << " Error# " << Error);
+            YDB_LOG_ERROR("Schema upload failed",
+                {"error", Error});
             Self->CompleteRestore(false, Error);
             ctx.Send(Schema->Sender, new TEvDataAck(false, Error));
         } else {
@@ -810,7 +827,7 @@ private:
 
 class TTxUploadSnapshot : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadSnapshot(TRecoveryShard* self, TEvSnapshotData::TPtr& snapshot, size_t startLine)
         : TBase(self)
@@ -857,7 +874,8 @@ public:
 
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_D("Snapshot upload partial, continuing from" << " Line# " << i);
+            YDB_LOG_DEBUG("Snapshot upload partial, continuing",
+                {"line", i});
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -868,13 +886,15 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_D("Snapshot chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
+            YDB_LOG_DEBUG("Snapshot chunk uploaded",
+                {"bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_E("Snapshot upload failed" << " Error# " << Result.GetErrorMessage());
+            YDB_LOG_ERROR("Snapshot upload failed",
+                {"error", Result.GetErrorMessage()});
             Self->CompleteRestore(false, Result.GetErrorMessage());
             ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -889,7 +909,7 @@ private:
 
 class TTxUploadChangelog : public TTransactionBase<TRecoveryShard> {
 public:
-    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const { return Self->LogPrefix(); }
 
     TTxUploadChangelog(TRecoveryShard* self, TEvChangelogData::TPtr& changelog, size_t startLine)
         : TBase(self)
@@ -984,7 +1004,8 @@ public:
 
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_D("Changelog upload partial, continuing from" << " Line# " << i);
+            YDB_LOG_DEBUG("Changelog upload partial, continuing",
+                {"line", i});
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -995,13 +1016,15 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_D("Changelog chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
+            YDB_LOG_DEBUG("Changelog chunk uploaded",
+                {"bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_E("Changelog upload failed" << " Error# " << Result.GetErrorMessage());
+            YDB_LOG_ERROR("Changelog upload failed",
+                {"error", Result.GetErrorMessage()});
             Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
             ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -1041,12 +1064,17 @@ public:
         , SkipChecksumValidation(skipChecksumValidation)
     {}
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << ExpectedTabletId << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TBackupReader"},
+            {"selfId", SelfId()},
+            {"expectedTabletId", ExpectedTabletId});
     }
 
     void Bootstrap() {
-        LOG_N("Validating backup" << " Path# " << BackupPath);
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_NOTICE("Validating backup",
+            {"path", BackupPath});
 
         if (!BackupPath.Exists()) {
             return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
@@ -1067,12 +1095,15 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        LOG_N("Backup validated" << " TotalBytes# " << totalBytes);
+        YDB_LOG_NOTICE("Backup validated",
+            {"totalBytes", totalBytes});
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvReadBackup, Handle);
             hFunc(TEvDataAck, Handle);
@@ -1081,7 +1112,7 @@ public:
     }
 
     void Handle(TEvReadBackup::TPtr&) {
-        LOG_D("Sending schema data");
+        YDB_LOG_DEBUG("Sending schema data");
         try {
             TString schemaData = TFileInput(SchemaFilePath).ReadAll();
             Send(Owner, new TEvSchemaData(std::move(schemaData)));
@@ -1114,7 +1145,8 @@ public:
                         CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
                     }
 
-                    LOG_D("Processing snapshot file" << " Path# " << CurrentFilePath);
+                    YDB_LOG_DEBUG("Processing snapshot file",
+                        {"path", CurrentFilePath});
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1125,7 +1157,7 @@ public:
                     CurrentTableName.clear();
                     ChangelogProcessed = true;
 
-                    LOG_D("Processing changelog");
+                    YDB_LOG_DEBUG("Processing changelog");
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1133,7 +1165,7 @@ public:
                     }
                 } else {
                     // All files processed
-                    LOG_D("All files processed");
+                    YDB_LOG_DEBUG("All files processed");
                     return SendResultAndDie(true);
                 }
             }
@@ -1167,17 +1199,17 @@ public:
     }
 
     bool ValidateSnapshot() {
-        LOG_D("Validating snapshot");
+        YDB_LOG_DEBUG("Validating snapshot");
         if (!SnapshotDirPath.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
             return false;
         }
- 
+
         if (!SchemaFilePath.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
             return false;
         }
-    
+
         auto manifestFile = SnapshotDirPath.Child("manifest.json");
         if (!manifestFile.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
@@ -1315,7 +1347,8 @@ public:
                                              << ", got " << actualFileSha256);
                     return false;
                 }
-                LOG_D("Checksum validated" << " File# " << name);
+                YDB_LOG_DEBUG("Checksum validated",
+                    {"file", name});
             }
         }
 
@@ -1323,7 +1356,7 @@ public:
     }
 
     bool ValidateChangelog() {
-        LOG_D("Validating changelog");
+        YDB_LOG_DEBUG("Validating changelog");
         if (!ChangelogFilePath.Exists()) {
             SendResultAndDie(false, TStringBuilder()
                 << "Changelog file doesn't exist: " << ChangelogFilePath);
@@ -1388,7 +1421,7 @@ public:
             return false;
         }
 
-        LOG_D("Changelog validated");
+        YDB_LOG_DEBUG("Changelog validated");
         return true;
     }
 
@@ -1404,7 +1437,7 @@ public:
                 << "Failed to parse changelog line " << line << ": " << e.what()
                 << ", last valid line: " << lastValidLine;
             return false;
-        }   
+        }
 
         if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
             error = TStringBuilder()
@@ -1444,7 +1477,8 @@ public:
 
     void SendResultAndDie(bool success, const TString& error = "") {
         if (!success) {
-            LOG_E("Failed" << " Error# " << error);
+            YDB_LOG_ERROR("Failed",
+                {"error", error});
         }
         Send(Owner, new TEvBackupReaderResult(success, error));
         PassAway();

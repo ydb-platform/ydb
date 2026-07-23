@@ -5,6 +5,8 @@
 #include "leader_tablet_info.h"
 #include "follower_tablet_info.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -114,15 +116,31 @@ TString TTabletInfo::FamilyString() const {
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     if (VolatileState == state) {
         if (Node != nullptr) {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " (Node " << Node->Id << ")");
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", ToString()},
+                {"volatileState", EVolatileStateName(VolatileState)},
+                {"nodeId", Node->Id});
         } else {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState));
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", ToString()},
+                {"volatileState", EVolatileStateName(VolatileState)});
         }
     } else {
         if (Node != nullptr) {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state) << " (Node " << Node->Id << ")");
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState changing volatile state",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", ToString()},
+                {"volatileState", EVolatileStateName(VolatileState)},
+                {"newVolatileState", EVolatileStateName(state)},
+                {"nodeId", Node->Id});
         } else {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState changing volatile state",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", ToString()},
+                {"volatileState", EVolatileStateName(VolatileState)},
+                {"newVolatileState", EVolatileStateName(state)});
         }
     }
     if (Node != nullptr) {
@@ -132,17 +150,28 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     VolatileStateChangeTime = TActivationContext::Now();
 }
 
+bool TTabletInfo::IsReadyToWork() const {
+    if (IsLeader()) {
+        return AsLeader().IsReadyToWork();
+    }
+    return true;
+}
+
+bool TTabletInfo::IsReadyToBoot() const {
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
+}
+
 bool TTabletInfo::IsReadyToStart(TInstant now) const {
     if (IsFollower()) {
         if (!GetLeader().IsRunning()) {
             return false;
         }
     }
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
 }
 
 bool TTabletInfo::IsStarting() const {
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
 }
 
 bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
@@ -150,28 +179,31 @@ bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
 }
 
 bool TTabletInfo::IsRunning() const {
-    return Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
+    return IsReadyToWork() && Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
 }
 
 bool TTabletInfo::IsBooting() const {
-    return VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
+    return IsReadyToWork() && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
 }
 
 bool TTabletInfo::IsAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
 }
 
 bool TTabletInfo::CanBeAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
 bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
-    return Node != nullptr
+    return IsReadyToWork()
+            && Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
                 || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING
@@ -350,7 +382,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
-                BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
+                YDB_LOG_WARN("Ignoring too high CPU metric for tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"cpu", metrics.GetCPU()},
+                    {"maxCpu", std::get<NMetrics::EResource::CPU>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
             }
@@ -362,7 +398,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)) {
         if (metrics.HasMemory()) {
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
-                BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
+                YDB_LOG_WARN("Ignoring too high Memory metric for tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"memory", metrics.GetMemory()},
+                    {"maxMemory", std::get<NMetrics::EResource::Memory>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
             }
@@ -374,7 +414,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)) {
         if (metrics.HasNetwork()) {
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
-                BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
+                YDB_LOG_WARN("Ignoring too high Network metric for tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"network", metrics.GetNetwork()},
+                    {"maxNetwork", std::get<NMetrics::EResource::Network>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
             }
@@ -515,7 +559,11 @@ void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffect
         if (IsLeader()) {
             gen = AsLeader().KnownGeneration;
         }
-        BLOG_D("Sending TEvStopTablet(" << ToString() << " gen " << gen << ") to node " << local.NodeId());
+        YDB_LOG_DEBUG("Sending TEvLocal::TEvStopTablet to node",
+            {"logPrefix", GetLogPrefix()},
+            {"tablet", ToString()},
+            {"gen", gen},
+            {"localNodeId", local.NodeId()});
         sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));
     }
 }

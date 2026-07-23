@@ -1,6 +1,8 @@
 items:
   - name: Обзор
     href: index.md
+  - name: Процесс выполнения запросов
+    href: execution_process.md
   - name: Оптимизатор запросов
     href: optimizer.md
   - name: Многоверсионное управление конкурентным доступом (MVCC)
@@ -25,3 +27,5 @@ items:
     href: spilling.md
   - name: Скан запросы
     href: scan_query.md
+  - name: YQL запросы к топикам
+    href: topics.md

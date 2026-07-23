@@ -1,6 +1,7 @@
 #include "kqp_run_script_actor_impl.h"
 
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -54,6 +55,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
         bool WaitSave = false;
         bool QueryStatsChanged = true; // We should update status once execution was started
         bool AstSaved = false;
+        TInstant SuspendUntil;
 
         void UpdateChanged(const std::optional<TString>& from, const TString& to) {
             if (QueryStatsChanged) {
@@ -233,6 +235,7 @@ private:
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvKqp::TEvCancelQueryResponse, Handle);
         sFunc(TEvents::TEvPoison, Finish);
+        sFunc(TEvents::TEvWakeup, ContinueExecute);
     )
 
     void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
@@ -352,8 +355,10 @@ private:
 
         const auto astSaved = ev->Get()->AstSaved;
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_N("Script progress updated " << ev->Sender << ", fail: " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             SaveProgressState.QueryStatsChanged = true;
+            SaveProgressState.SuspendUntil = TInstant::Now() + TDuration::Seconds(1);
+            Schedule(SaveProgressState.SuspendUntil, new TEvents::TEvWakeup());
+            LOG_N("Script progress updated " << ev->Sender << ", fail: " << status << ", suspend until: " << SaveProgressState.SuspendUntil << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
             LOG_T("Script progress updated " << ev->Sender << ", ast saved: " << astSaved);
             SaveProgressState.AstSaved = SaveProgressState.AstSaved || astSaved;
@@ -417,7 +422,7 @@ private:
                     meta.set_enabled_runtime_results(true);
                     *meta.mutable_columns() = resultSet.columns();
 
-                    if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
+                    if (const auto& issues = NFq::ValidateResultSetColumns(meta.columns())) {
                         meta.clear_columns();
                         Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
                         return;
@@ -501,7 +506,7 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-        issues = TruncateIssues(issues);
+        issues = NFq::TruncateIssues(issues);
 
         const auto status = record.GetYdbStatus();
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -593,7 +598,7 @@ private:
             return SaveResultsMeta();
         }
 
-        if (SaveProgressState.QueryStatsChanged) {
+        if (SaveProgressState.QueryStatsChanged && SaveProgressState.SuspendUntil <= TInstant::Now()) {
             return UpdateScriptProgress();
         }
 

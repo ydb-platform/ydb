@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/deferred_publish/constants.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -897,13 +898,19 @@ void TWriteSessionActor<UseMigrationProtocol>::CloseSpans(const TString& errorRe
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
+void TWriteSessionActor<UseMigrationProtocol>::CloseSession(
+    const TString& errorReason,
+    const PersQueue::ErrorCode::ErrorCode errorCode,
+    const NActors::TActorContext& ctx,
+    std::optional<Ydb::StatusIds::StatusCode> statusOverride)
+{
     if (SessionClosed) {
         return;
     }
     SessionClosed = true;
 
-    const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(errorCode);
+    const Ydb::StatusIds::StatusCode statusCode = statusOverride.value_or(
+        ConvertPersQueueInternalCodeToStatus(errorCode));
     if (errorCode != PersQueue::ErrorCode::OK) {
 
         if (InternalErrorCode(errorCode)) {
@@ -1309,6 +1316,13 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             }
         } else if (last.has_tx()) {
             PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+        } else if (writeRequest.has_deferred_publish() != last.has_deferred_publish()) {
+            PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+        } else if (writeRequest.has_deferred_publish()) {
+            if (writeRequest.deferred_publish().int_publication_id() !=
+                last.deferred_publish().int_publication_id()) {
+                PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
+            }
         }
     }
 
@@ -1431,8 +1445,11 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
 
     auto [sessionId, txId] = request->GetTransactionId();
     auto event =
-        std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(sessionId, txId,
-                                                                     std::move(request->PartitionWriteRequest));
+        std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(
+            sessionId,
+            txId,
+            std::move(request->PartitionWriteRequest),
+            request->GetDeferredPublishOpts());
 
     ctx.Send(PartitionWriterCache, std::move(event), 0, 0, request->Span.GetTraceId());
 
@@ -1530,11 +1547,54 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
 
     if constexpr (!UseMigrationProtocol) {
         if (writeRequest.has_deferred_publish()) {
-            CloseSession(
-                "WriteRequest.deferred_publish (deferred topic publish) is not supported yet",
-                PersQueue::ErrorCode::BAD_REQUEST,
-                ctx);
-            return;
+            if (!AppData(ctx)->FeatureFlags.GetEnableTopicDeferredPublish()) {
+                CloseSession(
+                    TString(NPQ::NDeferredPublish::DisabledMessage),
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx,
+                    Ydb::StatusIds::UNSUPPORTED);
+                return;
+            }
+            if (writeRequest.has_tx()) {
+                CloseSession(
+                    "WriteRequest must not contain both tx and deferred_publish",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+
+            const auto& deferredPublish = writeRequest.deferred_publish();
+            if (deferredPublish.int_publication_id() == 0) {
+                CloseSession(
+                    "WriteRequest.deferred_publish.int_publication_id must be greater than 0",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+            if (deferredPublish.has_ext_publication_id()
+                && deferredPublish.ext_publication_id().size() > NPQ::NDeferredPublish::MaxDeferredPublishStringLength) {
+                CloseSession(
+                    "WriteRequest.deferred_publish.ext_publication_id is too long",
+                    PersQueue::ErrorCode::BAD_REQUEST,
+                    ctx);
+                return;
+            }
+
+            const ui64 intPublicationId = deferredPublish.int_publication_id();
+            if (deferredPublish.has_ext_publication_id()) {
+                const auto& extPublicationId = deferredPublish.ext_publication_id();
+                const auto knownExt = DeferredPublicationExtByInt.FindPtr(intPublicationId);
+                if (knownExt && *knownExt != extPublicationId) {
+                    YDB_LOG_WARN_CTX(ctx, "Deferred publish ext_publication_id mismatch",
+                        {"cookie", Cookie},
+                        {"sessionId", OwnerCookie},
+                        {"intPublicationId", intPublicationId},
+                        {"expectedExtPublicationId", *knownExt},
+                        {"actualExtPublicationId", extPublicationId});
+                } else if (!knownExt) {
+                    DeferredPublicationExtByInt[intPublicationId] = extPublicationId;
+                }
+            }
         }
     }
 

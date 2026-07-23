@@ -14,7 +14,7 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -26,7 +26,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
+#include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -46,6 +46,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/services/workload_manager/service/service.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -347,7 +348,7 @@ public:
         Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
             "Cannot send to workload manager: PoolConfig is already resolved");
 
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
+        Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
@@ -356,7 +357,7 @@ public:
             QueryState->RequestEv->GetWmSessionUpdater()
         ), IEventHandle::FlagTrackDelivery);
 
-        QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());
+        QueryState->PoolHandlerActor = NWorkloadManager::MakeServiceId(SelfId().NodeId());
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -598,7 +599,7 @@ public:
 
         using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
         auto error = std::visit(TOverloaded {
-            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& s) -> TError {
+            [this, &sent](const NWorkloadManager::IQueryClassifier::TResolvedPoolId& s) -> TError {
                 STLOG_D("PreCompile Classify resolved",
                     (pool_id, s.PoolId),
                     (skip_admission, s.SkipAdmission),
@@ -612,18 +613,18 @@ public:
                 PassRequestToResourcePool();
                 return std::nullopt;
             },
-            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+            [this](const NWorkloadManager::IQueryClassifier::TReject& r) -> TError {
                 STLOG_N("PreCompile Classify rejected",
                     (trace_id, TraceId()));
                 return std::make_pair(r.Code, r.Message);
             },
-            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+            [this](const NWorkloadManager::IQueryClassifier::TBypass&) -> TError {
                 STLOG_D("PreCompile Classify bypass, compiling",
                     (trace_id, TraceId()));
                 QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
                 return std::nullopt;
             },
-            [this](const NWorkload::IQueryClassifier::TPendingCompilation&) -> TError {
+            [this](const NWorkloadManager::IQueryClassifier::TPendingCompilation&) -> TError {
                 STLOG_D("PreCompile Classify pending, compiling",
                     (trace_id, TraceId()));
                 return std::nullopt;
@@ -639,7 +640,7 @@ public:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
+        if (ev->Get()->SourceType == NWorkloadManager::TWorkloadManagerEvents::EvPlaceRequestIntoPool) {
             STLOG_W("Failed to deliver request to workload service, bypassing WLM",
                 (trace_id, TraceId()));
             ContinueAfterWmAdmission();
@@ -659,7 +660,7 @@ public:
         }
     }
 
-    void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
         QueryState->ContinueTime = TInstant::Now();
 
@@ -705,10 +706,10 @@ public:
         auto classifier = QueryState->QueryClassifier;
         auto state = classifier->GetState();
 
-        if (state == NWorkload::IQueryClassifier::EState::PreCompileDone) {
+        if (state == NWorkloadManager::IQueryClassifier::EState::PreCompileDone) {
             STLOG_D("Pre-compile admission completed, compiling", (trace_id, TraceId()));
             CompileQuery();
-        } else if (state == NWorkload::IQueryClassifier::EState::PostCompileDone) {
+        } else if (state == NWorkloadManager::IQueryClassifier::EState::PostCompileDone) {
             STLOG_D("Post-compile admission completed, executing", (trace_id, TraceId()));
             OnSuccessCompileRequest();
         } else {
@@ -771,7 +772,11 @@ public:
             return;
         }
 
-        QueryState->FillTopicOperations();
+        if (QueryState->HasDeferredPublication()) {
+            QueryState->FillDeferredPublicationOperations();
+        } else {
+            QueryState->FillTopicOperations();
+        }
 
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
@@ -785,7 +790,8 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
@@ -997,16 +1003,16 @@ public:
     bool WmPostCompileClassify() {
         auto classifier = QueryState->QueryClassifier;
 
-        if (!classifier || classifier->GetState() != NWorkload::IQueryClassifier::EState::WaitCompile) {
+        if (!classifier || classifier->GetState() != NWorkloadManager::IQueryClassifier::EState::WaitCompile) {
             return false;
         }
 
         bool sent = false;
-        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery);
+        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery, *QueryState->UserRequestContext);
 
         using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
         auto error = std::visit(TOverloaded {
-            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& r) -> TError {
+            [this, &sent](const NWorkloadManager::IQueryClassifier::TResolvedPoolId& r) -> TError {
                 STLOG_D("PostCompile Classify resolved",
                     (pool_id, r.PoolId),
                     (skip_admission, r.SkipAdmission),
@@ -1020,12 +1026,12 @@ public:
                 PassRequestToResourcePool();
                 return std::nullopt;
             },
-            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+            [this](const NWorkloadManager::IQueryClassifier::TBypass&) -> TError {
                 STLOG_D("PostCompile Classify bypass",
                     (trace_id, TraceId()));
                 return std::nullopt;
             },
-            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+            [this](const NWorkloadManager::IQueryClassifier::TReject& r) -> TError {
                 STLOG_N("PostCompile Classify rejected",
                     (trace_id, TraceId()));
                 return std::make_pair(r.Code, r.Message);
@@ -1710,6 +1716,16 @@ public:
             return false;
         }
 
+        if (txCtx.TxManager->BrokenLocks()) {
+            EmitVictimTliLog(
+                txCtx.TxManager->GetVictimQuerySpanId(),
+                std::nullopt,
+                txCtx.TxManager->GetBrokenLocksCount());
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            return false;
+        }
+
         return true;
     }
 
@@ -2251,8 +2267,7 @@ public:
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
-            (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
             (QueryState && QueryState->PreparedQuery)
                 ? QueryState->PreparedQuery->GetUseKqpTasksGraphV2()
@@ -2716,6 +2731,10 @@ public:
 
         QueryState->TxCtx->AcceptIncomingSnapshot(ev->Snapshot);
 
+        if (ev->CommitTimestamp) {
+            QueryState->CommitTimestamp = std::move(ev->CommitTimestamp);
+        }
+
         if (ev->LockHandle) {
             QueryState->TxCtx->LockHandle = std::move(ev->LockHandle);
         }
@@ -3025,6 +3044,12 @@ public:
 
         FillTxInfo(response);
         FillPoolId(response);
+
+        if (QueryState->CommitTimestamp) {
+            auto* ts = response->MutableCommitTimestamp();
+            ts->set_plan_step(QueryState->CommitTimestamp->PlanStep);
+            ts->set_tx_id(QueryState->CommitTimestamp->TxId);
+        }
 
         UpdateQueryExecutionCounters();
 
@@ -3496,12 +3521,12 @@ public:
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
 
             const auto& stats = QueryState->QueryStats;
-            auto event = std::make_unique<NWorkload::TEvCleanupRequest>(
+            auto event = std::make_unique<NWorkloadManager::TEvCleanupRequest>(
                 QueryState->UserRequestContext->DatabaseId, SessionId, QueryState->UserRequestContext->PoolId,
                 TDuration::MicroSeconds(stats.DurationUs), TDuration::MicroSeconds(stats.WorkerCpuTimeUs)
             );
 
-            auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
+            auto forwardId = NWorkloadManager::MakeServiceId(SelfId().NodeId());
             Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), event.release(), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
             QueryState->PoolHandlerActor = Nothing();
         }
@@ -3577,7 +3602,7 @@ public:
         }
     }
 
-    void HandleCleanup(NWorkload::TEvCleanupResponse::TPtr& ev) {
+    void HandleCleanup(NWorkloadManager::TEvCleanupResponse::TPtr& ev) {
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
 
@@ -3734,7 +3759,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
-                hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 // A finished request's client may be lost after we already replied and
@@ -3769,7 +3794,7 @@ public:
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
 
                 hFunc(TEvents::TEvUndelivered, Handle);
-                hFunc(NWorkload::TEvContinueRequest, Handle);
+                hFunc(NWorkloadManager::TEvContinueRequest, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
 
@@ -3815,7 +3840,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, Handle);
 
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
-                hFunc(NWorkload::TEvCleanupResponse, HandleCleanup);
+                hFunc(NWorkloadManager::TEvCleanupResponse, HandleCleanup);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(NGRpcService::TEvClientLost, HandleNoop);
@@ -3830,7 +3855,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleNoop);
-                hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
@@ -3853,7 +3878,7 @@ public:
                 hFunc(TEvents::TEvGone, HandleFinalCleanup);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
                 hFunc(TEvKqp::TEvQueryRequest, HandleFinalCleanup);
             }
         } catch (const yexception& ex) {
@@ -3932,7 +3957,8 @@ private:
 
         QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
         }
@@ -3963,6 +3989,10 @@ private:
 
     bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
+    }
+
+    bool HasDeferredPublicationOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasDeferredPublicationOperations();
     }
 
     ui64 GetTopicWriteId() const {

@@ -12,6 +12,12 @@ namespace NKikimr::NKqp::NPhysicalConvertionUtils {
 TString GetFullName(const TString& name);
 TString GetFullName(const TInfoUnit& name);
 
+// Returns LiveOut in logical schema order.
+TVector<TInfoUnit> GetLiveOutputIUs(IOperator& op);
+
+// Returns child-edge LiveIn in the child's logical schema order.
+TVector<TInfoUnit> GetLiveInputIUs(IOperator& op, ui32 childIndex);
+
 TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos);
 bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op);
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx);

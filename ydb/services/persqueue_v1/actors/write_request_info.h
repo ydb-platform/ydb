@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/persqueue/deferred_publish/constants.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -29,6 +30,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
     }
 
     std::pair<TString, TString> GetTransactionId() const;
+    TMaybe<NPQ::TDeferredPublishWriterOpts> GetDeferredPublishOpts() const;
 
     // Source requests from user (grpc session object)
     std::deque<TUserWriteRequest> UserWriteRequests;
@@ -60,7 +62,39 @@ std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() 
         return {"", ""};
     } else {
         auto& request = UserWriteRequests.front().Write->Request.write_request();
-        return {request.tx().session(), request.tx().id()};
+        if (request.has_deferred_publish()) {
+            const auto& deferredPublish = request.deferred_publish();
+            return {"", NPQ::NDeferredPublish::MakeDeferredPublishWriterKey(deferredPublish.int_publication_id())};
+        }
+        if (request.has_tx()) {
+            return {request.tx().session(), request.tx().id()};
+        }
+        return {"", ""};
+    }
+}
+
+template<class TEvWrite>
+TMaybe<NPQ::TDeferredPublishWriterOpts> TWriteRequestInfoImpl<TEvWrite>::GetDeferredPublishOpts() const
+{
+    AFL_ENSURE(!UserWriteRequests.empty());
+
+    static constexpr bool UseMigrationProtocol = !std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite>;
+
+    if constexpr (UseMigrationProtocol) {
+        return Nothing();
+    } else {
+        auto& request = UserWriteRequests.front().Write->Request.write_request();
+        if (!request.has_deferred_publish()) {
+            return Nothing();
+        }
+
+        const auto& deferredPublish = request.deferred_publish();
+        return NPQ::TDeferredPublishWriterOpts{
+            deferredPublish.int_publication_id(),
+            deferredPublish.has_ext_publication_id()
+                ? TMaybe<TString>(deferredPublish.ext_publication_id())
+                : Nothing(),
+        };
     }
 }
 

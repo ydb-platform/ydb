@@ -38,7 +38,7 @@ void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
     Y_UNUSED(hostIndex, now);
 }
 
-TDuration TOracleMock::GetDDiskReconnectDelay(THostIndex hostIndex)
+TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
 {
     Y_UNUSED(hostIndex);
     return TDuration::MilliSeconds(1);
@@ -226,8 +226,10 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
 }
 
 NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    ITraceService* traceService,
     IPartitionDirectService* service)
 {
+    Y_UNUSED(traceService);
     Y_UNUSED(service);
     // The mock is considered ready immediately - tests that do not exercise
     // session locking should not block on the initial-ready gate.
@@ -388,6 +390,12 @@ void TDirectBlockGroupMock::OnAddHostResult(
         newHostIndex,
         std::move(ddiskId),
         std::move(pbufferId));
+}
+
+NThreading::TFuture<TDbgSnapshot>
+TDirectBlockGroupMock::BuildMonSnapshot() const
+{
+    return NThreading::MakeFuture(TDbgSnapshot{});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

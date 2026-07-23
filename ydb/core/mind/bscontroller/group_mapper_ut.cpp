@@ -17,6 +17,7 @@ class TTestContext {
         ui32 BodyId;
         ui32 NumSlots;
         ui32 SlotSizeInUnits;
+        std::optional<TString> DiskScope;
 
         TPDiskRecord(ui32 dataCenterId, ui32 roomId, ui32 rackId, ui32 bodyId, ui32 slotSizeInUnits = 0u)
             : DataCenterId(dataCenterId)
@@ -498,10 +499,12 @@ public:
                 .NumSlots = pair.second.NumSlots,
                 .MaxSlots = equalSlots || location.Rack < 8 ? maxSlots : 2 * maxSlots,
                 .SlotSizeInUnits = pair.second.SlotSizeInUnits,
+                .SlotSizeInBytes = 0,
                 .Groups{g.begin(), g.end()},
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
                 .Decommitted = decommittedDataCenter == pair.second.DataCenterId,
+                .DiskScope = pair.second.DiskScope,
             });
         }
     }
@@ -584,8 +587,10 @@ public:
             for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
                 for (ui32 vdisk = 0; vdisk < geom.GetNumVDisksPerFailDomain(); ++vdisk) {
                     const auto pdiskId = group[failRealm][failDomain][vdisk];
+                    const TPDiskRecord& record = PDisks.at(pdiskId);
                     pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
-                            PDisks.at(pdiskId).GetLocation(),
+                            record.GetLocation(),
+                            record.DiskScope,
                             pdiskId,
                             geom
                     );
@@ -626,6 +631,33 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         Ctest << "group after allocation:" << Endl;
         context.DumpGroup(g1);
         context.DumpGroup(g2);
+    }
+
+    Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
+        NActorsInterconnect::TNodeLocation locationProto;
+        locationProto.SetDataCenter("1");
+        locationProto.SetModule("1");
+        locationProto.SetRack("1");
+        locationProto.SetUnit("1");
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        UNIT_ASSERT(mapper.RegisterPDisk({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = TNodeLocation(locationProto),
+            .Usable = true,
+            .NumSlots = 0,
+            .MaxSlots = 2,
+            .SlotSizeInUnits = 1,
+            .SlotSizeInBytes = 100,
+            .Groups{},
+            .SpaceAvailable = 1000,
+            .Operational = true,
+            .Decommitted = false,
+        }));
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
     }
 
     Y_UNIT_TEST(SimplestMirror3dc) {

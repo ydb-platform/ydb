@@ -1,8 +1,8 @@
 #include "resource_pool_classifiers.h"
 
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.h>
-#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -46,7 +46,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
-                hFunc(NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
+                hFunc(NWorkloadManager::TEvFetchDatabaseResponse, Handle);
                 hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
                 cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -66,44 +66,63 @@ private:
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ReplyEmptyAndDie();
         }
-        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericUse));
+        Register(NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericUse));
     }
 
-    void Handle(NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvFetchDatabaseResponse::TPtr& ev) {
         auto& event = *ev->Get();
         if (event.Status != Ydb::StatusIds::SUCCESS) {
             ReplyErrorAndDie(event.Status, event.Issues.ToOneLineString());
             return;
         }
         DatabaseId = event.DatabaseId;
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NKqp::TResourcePoolClassifierSnapshotsFetcher>()));
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NWorkloadManager::TResourcePoolClassifierSnapshotsFetcher>()));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        using TExtractor = std::function<TCell(const NKqp::TResourcePoolClassifierConfig&)>;
+        using TExtractor = std::function<TCell(const NWorkloadManager::TResourcePoolClassifierConfig&)>;
         using TSchema = Schema::ResourcePoolClassifiers;
 
         struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
             TExtractorsMap() {
-                insert({TSchema::Name::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::Name::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     return TCell(config.GetName().data(), config.GetName().size());
                 }});
-                insert({TSchema::Rank::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::Rank::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     return TCell::Make<i64>(config.GetRank());
                 }});
-                insert({TSchema::MemberName::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::MemberName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     const auto& memberName = config.GetConfigJson()["member_name"].GetString();
                     return TCell(memberName.data(), memberName.size());
                 }});
-                insert({TSchema::ResourcePool::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                insert({TSchema::ResourcePool::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
                     return TCell(resourcePool.data(), resourcePool.size());
+                }});
+                insert({TSchema::HasAppName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& hasAppName = config.GetConfigJson()["has_app_name"].GetString();
+                    return TCell(hasAppName.data(), hasAppName.size());
+                }});
+                insert({TSchema::Action::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& action = config.GetConfigJson()["action"].GetString();
+                    return TCell(action.data(), action.size());
+                }});
+                insert({TSchema::HasFullScan::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
+                    return TCell(hasFullScan.data(), hasFullScan.size());
+                }});
+                insert({TSchema::HasPath::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    const auto& hasPath = config.GetConfigJson()["has_path"].GetString();
+                    return TCell(hasPath.data(), hasPath.size());
+                }});
+                insert({TSchema::HasStream::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
+                    return TCell::Make<bool>(config.GetConfigJson()["has_stream"].GetBoolean());
                 }});
             }
         };
         static TExtractorsMap extractors;
 
-        const auto& snapshot = ev->Get()->GetSnapshotAs<NKqp::TResourcePoolClassifierSnapshot>();
+        const auto& snapshot = ev->Get()->GetSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>();
         const auto& config = snapshot->GetResourcePoolClassifierConfigs();
         auto resourcePoolsIt = config.find(DatabaseId);
         if (resourcePoolsIt == config.end()) {

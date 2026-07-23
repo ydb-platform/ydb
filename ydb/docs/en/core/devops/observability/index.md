@@ -1,6 +1,6 @@
-# Observability Overview
+# Observability overview
 
-This section contains descriptions for working with {{ ydb-short-name }} cluster observability tools.
+This section contains descriptions of tools for monitoring the {{ ydb-short-name }} cluster.
 
 Main subsections:
 
@@ -10,3 +10,4 @@ Main subsections:
 * [{#T}](../../reference/observability/tracing/setup.md)
 * [{#T}](system-views.md)
 * [{#T}](alerting.md)
+* [{#T}](diagnostics.md)

@@ -89,6 +89,39 @@ namespace NKikimr::NDDisk {
             }
         }
 
+        // Unlike TEvWritePersistentBuffer, TEvWrite's checksums (if any) are validated here but never
+        // persisted: TEvWrite goes straight to the final DDisk chunk, which has no per-record metadata
+        // slot to carry them (see RFC 006). Note this validation intentionally runs again for events
+        // that get parked in PendingEventsForChunk below and re-dispatched to this same handler once
+        // their chunk allocation completes -- harmless (checksums don't change), just redundant.
+        if (record.ChecksumsSize() > 0) {
+            Y_ABORT_UNLESS(instr.PayloadId, "TEvWrite without a payload, but with checksums");
+
+            const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
+            if (const auto result = ValidatePayloadChecksums(record, payload)) {
+                const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+                Counters.Interface.Write.Request(0);
+                Counters.Interface.Write.Reply(false);
+                if (isCorrupted) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
+                    (isCorrupted
+                        ? "TDDiskActor::Handle(TEvWrite) checksum mismatch"
+                        : "TDDiskActor::Handle(TEvWrite) checksum count mismatch"),
+                    {"marker", "BSDD52"},
+                    {"DDiskId", DDiskId},
+                    {"tabletId", creds.TabletId},
+                    {"vChunkIndex", selector.VChunkIndex},
+                    {"offsetInBytes", selector.OffsetInBytes},
+                    {"checksumCount", result->ChecksumCount},
+                    {"selectorSize", selector.Size},
+                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                SendReply(*ev, std::make_unique<TEvWriteResult>(result->Status, result->ErrorReason));
+                return;
+            }
+        }
+
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {

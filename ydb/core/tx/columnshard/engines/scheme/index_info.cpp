@@ -496,6 +496,17 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+            if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
+                // An inplace index must stay a single chunk and cannot be split into several blobs: drop it.
+                // The portion stays correct without it, like a portion older than the index itself, only the
+                // skip optimization is lost.
+                YDB_LOG_WARN("",
+                    {"event", "index_skipped"},
+                    {"index_id", indexId},
+                    {"packed_size", chunk->GetPackedSize()},
+                    {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
+                return TConclusionStatus::Success();
+            }
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
                                            ":" + ::ToString(recordsCount) + ") bigger than limit (" +
                                            ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
@@ -518,7 +529,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
     // An inplace (_LOCAL) index must stay a single chunk, so no size budget is passed and an oversize one is
-    // dropped below. For blob storages the builder splits the index into several chunks fitting MaxBlobSize.
+    // dropped by ReuseIndexChunks. For blob storages the builder splits the index into several chunks fitting
+    // MaxBlobSize, so an oversize chunk there is a real failure and propagates to the caller.
     std::optional<ui64> chunkSizeLimit;
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     if (indexStorageId != IStoragesManager::LocalMetadataStorageId) {
@@ -534,17 +546,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    auto conclusion = ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
-    if (conclusion.IsFail()) {
-        // The index does not fit the target storage even after chunk splitting (or is inplace and cannot be
-        // split). Store the portion without it, like a portion older than the index itself: the data stays
-        // correct, only the skip optimization is lost.
-        YDB_LOG_WARN("",
-            {"event", "index_skipped"},
-            {"index_name", index->GetIndexName()},
-            {"reason", conclusion.GetErrorMessage()});
-    }
-    return TConclusionStatus::Success();
+    return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
 }
 
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {

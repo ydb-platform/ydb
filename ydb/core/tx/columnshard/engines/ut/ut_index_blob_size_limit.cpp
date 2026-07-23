@@ -149,8 +149,9 @@ bool HasIndex(const TWritePortionInfoWithBlobsResult& portion, const ui32 indexI
 
 Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // Issue #26733: actualization rebuilds the index for the target tier, and a filter above the storage
-    // MaxBlobSize used to abort the tablet with "blob size for secondary data ... bigger than limit".
-    Y_UNIT_TEST(OversizedIndexOnActualizationIsSkipped) {
+    // MaxBlobSize used to abort the tablet with "blob size for secondary data ... bigger than limit". A
+    // filter that cannot even be split (its base size is above the limit) is folded down to the limit.
+    Y_UNIT_TEST(OversizedIndexOnActualizationIsClampedToLimit) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(MaxBlobSize).SetMinBlobSize(MaxBlobSize / 4));
 
@@ -168,7 +169,12 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         UNIT_ASSERT(syncResult);
         syncResult->RegisterFakeBlobIds();
         syncResult->FinalizePortionConstructor(TSnapshot(1, 1));
-        UNIT_ASSERT(!HasIndex(*syncResult, NGrammIndexId));
+        UNIT_ASSERT(HasIndex(*syncResult, NGrammIndexId));
+        for (const auto& index : syncResult->GetPortionResult().GetIndexesVerified()) {
+            if (index.GetIndexId() == NGrammIndexId) {
+                UNIT_ASSERT_LE(index.GetDataSize(), MaxBlobSize);
+            }
+        }
     }
 
     // The same index fits when the storage limit is the production one, so the portion keeps its index.

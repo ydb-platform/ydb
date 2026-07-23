@@ -73,32 +73,30 @@ int GetBackoffWaitMs(int retryCount, int millis, int ceiling) {
 
 //-----------------------------------------------------------------------------
 
-// Generates a random string of length (strLen-1) to match Benchbase's TPCCUtil.randomStr behavior
-TString RandomStringBenchbase(TReallyFastRng32& fastRng, int strLen, char baseChar = 'a') {
-    if (strLen > 1) {
-        int actualLength = strLen - 1;
-        TString result;
-        result.reserve(actualLength);
-
-        for (int i = 0; i < actualLength; ++i) {
-            result += static_cast<char>(baseChar + RandomNumber(fastRng, 0, 25));
-        }
-        return result;
-    } else {
+// TPC-C §4.3.2.2: random a-string of the requested length (letters only here).
+TString RandomString(TReallyFastRng32& fastRng, int strLen, char baseChar = 'a') {
+    if (strLen <= 0) {
         return "";
     }
+    TString result;
+    result.reserve(strLen);
+
+    for (int i = 0; i < strLen; ++i) {
+        result += static_cast<char>(baseChar + RandomNumber(fastRng, 0, 25));
+    }
+    return result;
 }
 
 // Generates a random string with [a-z] characters
 TString RandomAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
     int length = RandomNumber(fastRng, minLength, maxLength);
-    return RandomStringBenchbase(fastRng, length, 'a');
+    return RandomString(fastRng, length, 'a');
 }
 
 // Generates a random string with [A-Z] characters
 TString RandomUpperAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
     int length = RandomNumber(fastRng, minLength, maxLength);
-    return RandomStringBenchbase(fastRng, length, 'A');
+    return RandomString(fastRng, length, 'A');
 }
 
 // Generates a random string with [09] characters
@@ -146,12 +144,12 @@ NTable::TBulkUpsertResult LoadItems(
         int len = RandomNumber(fastRng, 26, 50);
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 .. 50]
-            data = RandomStringBenchbase(fastRng, len);
+            data = RandomString(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere in
             // middle
             int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
-            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
+            data = RandomString(fastRng, startORIGINAL) + "ORIGINAL" + RandomString(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
@@ -199,8 +197,8 @@ NTable::TBulkUpsertResult LoadWarehouses(
             .AddMember("W_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("W_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("W_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
-            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
-            .AddMember("W_ZIP").Utf8("123456789")
+            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(fastRng, 2, 2))
+            .AddMember("W_ZIP").Utf8(RandomNumericString(fastRng, 4) + "11111")
             .EndStruct();
     }
 
@@ -240,12 +238,12 @@ NTable::TBulkUpsertResult LoadStock(
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 ..
             // 50]
-            data = RandomStringBenchbase(fastRng, len);
+            data = RandomString(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere
             // in middle
             int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
-            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
+            data = RandomString(fastRng, startORIGINAL) + "ORIGINAL" + RandomString(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
@@ -256,16 +254,16 @@ NTable::TBulkUpsertResult LoadStock(
             .AddMember("S_ORDER_CNT").Int32(0)
             .AddMember("S_REMOTE_CNT").Int32(0)
             .AddMember("S_DATA").Utf8(data)
-            .AddMember("S_DIST_01").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_02").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_03").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_04").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_05").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_06").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_07").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_08").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_09").Utf8(RandomStringBenchbase(fastRng, 24))
-            .AddMember("S_DIST_10").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_01").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_02").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_03").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_04").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_05").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_06").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_07").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_08").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_09").Utf8(RandomString(fastRng, 24))
+            .AddMember("S_DIST_10").Utf8(RandomString(fastRng, 24))
             .EndStruct();
     }
 
@@ -307,8 +305,8 @@ NTable::TBulkUpsertResult LoadDistricts(
             .AddMember("D_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("D_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("D_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
-            .AddMember("D_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
-            .AddMember("D_ZIP").Utf8("123456789")
+            .AddMember("D_STATE").Utf8(RandomUpperAlphaString(fastRng, 2, 2))
+            .AddMember("D_ZIP").Utf8(RandomNumericString(fastRng, 4) + "11111")
             .EndStruct();
         }
     }
@@ -353,7 +351,7 @@ NTable::TBulkUpsertResult LoadCustomers(
             .AddMember("C_W_ID").Int32(wh)
             .AddMember("C_D_ID").Int32(district)
             .AddMember("C_ID").Int32(customerId)
-            .AddMember("C_DISCOUNT").Double(RandomNumber(fastRng, 1, 5000) / 10000.0)
+            .AddMember("C_DISCOUNT").Double(RandomNumber(fastRng, 0, 5000) / 10000.0)
             .AddMember("C_CREDIT").Utf8(credit)
             .AddMember("C_LAST").Utf8(last)
             .AddMember("C_FIRST").Utf8(RandomAlphaString(fastRng, 8, 16))
@@ -365,7 +363,7 @@ NTable::TBulkUpsertResult LoadCustomers(
             .AddMember("C_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("C_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
             .AddMember("C_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
-            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
+            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(fastRng, 2, 2))
             .AddMember("C_ZIP").Utf8(RandomNumericString(fastRng, 4) + "11111")
             .AddMember("C_PHONE").Utf8(RandomNumericString(fastRng, 16))
             .AddMember("C_SINCE").Timestamp(TInstant::Now())
@@ -412,7 +410,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
             .AddMember("H_W_ID").Int32(wh)
             .AddMember("H_DATE").Timestamp(date)
             .AddMember("H_AMOUNT").Double(10.00)
-            .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 10, 24))
+            .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 12, 24))
             .AddMember("H_C_NANO_TS").Int64(baseTs++)
             .EndStruct();
     }
@@ -562,7 +560,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
                 .AddMember("OL_AMOUNT").Double(amount)
                 .AddMember("OL_SUPPLY_W_ID").Int32(wh)
                 .AddMember("OL_QUANTITY").Double(5.0)
-                .AddMember("OL_DIST_INFO").Utf8(RandomStringBenchbase(fastRng, 24))
+                .AddMember("OL_DIST_INFO").Utf8(RandomString(fastRng, 24))
                 .EndStruct();
         }
     }

@@ -67,8 +67,8 @@ this map, recorded:
 | Area | Physical lines |
 |---|---:|
 | Nine trusted Python semantic modules | 9,375 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,397 |
-| **Proof-producing code total** | **16,772** |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,492 |
+| **Proof-producing code total** | **16,867** |
 | Tests, outside the TCB | 39,573 |
 | Diagnostic/orchestration tools, outside the TCB | 5,082 |
 | Documentation, outside the TCB | 4,400 |

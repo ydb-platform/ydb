@@ -43,7 +43,7 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
         json["has_path"] = *hasPath;
     }
     if (hasStream) {
-        json["has_stream"] = *hasStream ? "true" : "false";
+        json["has_stream"] = *hasStream;
     }
     if (action) {
         json["action"] = *action;

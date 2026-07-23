@@ -608,6 +608,78 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
 
+    Y_UNIT_TEST(DatashardRebootLostMessage) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 datashardTabletId = 0;
+        bool firstRequestDropped = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!firstRequestDropped &&
+                ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType)
+            {
+                datashardTabletId = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record.GetTabletId();
+                firstRequestDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+
+        runtime.WaitFor("first validate request", [&] {
+            return firstRequestDropped;
+        });
+
+        UNIT_ASSERT_C(datashardTabletId != 0, "Failed to capture DataShard tabletId");
+
+        RebootTablet(runtime, datashardTabletId, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell()
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), false);
+        }
+    }
+
     Y_UNIT_TEST(AlreadyNotNull) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1087,9 +1159,9 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_VALIDATING,
-            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
-            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
-            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_DONE)
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_REJECTED : Ydb::Table::SetNotNullState::STATE_APPLYING),
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_REJECTED : Ydb::Table::SetNotNullState::STATE_APPLYING),
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_REJECTED : Ydb::Table::SetNotNullState::STATE_DONE)
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1123,7 +1195,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        // STATE_DONE/STATE_CANCELLED
+        // STATE_DONE/STATE_REJECTED
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(
@@ -1385,7 +1457,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             }
             if (entry.GetId() == setConstraintTxId2) {
                 foundOp2 = true;
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_CANCELLED));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(entry.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_REJECTED));
                 UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(columns.Get(0), "value2");
             }

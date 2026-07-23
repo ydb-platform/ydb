@@ -54,7 +54,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
-    std::shared_ptr<TFastPathService> FastPathService;
+    TFastPathServicePtr FastPathService;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 

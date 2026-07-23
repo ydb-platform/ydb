@@ -126,6 +126,8 @@ namespace NActors {
         std::shared_ptr<IRcBufAllocator> RcBufAllocator;
         TSubSystems SubSystems;
 
+        std::vector<std::function<void(TActorSystem*)>> OnActorSystemCreated;
+
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
         }
@@ -193,6 +195,7 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
         TSubSystems SubSystems;
+        std::vector<size_t> SubSystemOrder;
 
         std::atomic_bool StartExecuted = false;
         std::atomic_bool StopExecuted = false;

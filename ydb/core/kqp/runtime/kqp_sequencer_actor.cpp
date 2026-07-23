@@ -22,6 +22,8 @@
 
 #include <list>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -143,7 +145,8 @@ public:
     void Bootstrap() {
         Counters->SequencerActorsCount->Inc();
 
-        CA_LOG_D("Start stream lookup actor");
+        YDB_LOG_DEBUG("Start stream lookup actor",
+            {"logPrefix", this->LogPrefix});
         Become(&TKqpSequencerActor::StateFunc);
     }
 
@@ -189,9 +192,12 @@ private:
 
         if (PendingRows.size() > 0 && WaitingReplies == 0) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-        } 
+        }
 
-        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
+        YDB_LOG_DEBUG("Returned bytes",
+            {"logPrefix", this->LogPrefix},
+            {"totalDataSize", totalDataSize},
+            {"finished", finished});
         return totalDataSize;
     }
 
@@ -291,7 +297,7 @@ private:
             Counters->SequencerErrors->Inc();
             TStringBuilder result;
             result << "Failed to get next val for sequence: " << ColumnSequenceInfo[ev->Cookie].DefaultFromSequence
-                << ", status: " << ev->Get()->Status; 
+                << ", status: " << ev->Get()->Status;
             RuntimeError(result, NYql::NDq::YdbStatusToDqStatus(ev->Get()->Status), ev->Get()->Issues);
             return;
         }

@@ -88,6 +88,8 @@ message TReadSessionsInfoResponse {
 
 message TGetPartitionsLocation {
     repeated uint64 Partitions = 1;
+    // How long PQRB may keep the request queued waiting for pipes.
+    optional uint64 TimeoutMs = 2 [default = 5000];
 }
 
 message TPartitionsLocationResponse {
@@ -173,6 +175,7 @@ message THasDataInfo {
 
     optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
     optional uint64 ReadTimestampMs = 8; //optional, default = 0
+    optional string SessionId = 9;
 }
 
 message THasDataInfoResponse { //signal
@@ -183,6 +186,7 @@ message THasDataInfoResponse { //signal
     optional bool ReadingFinished = 5;
     repeated uint32 AdjacentPartitionIds = 6;
     repeated uint32 ChildPartitionIds = 7;
+    optional bool SessionInvalidated = 8;
 }
 
 message TPartitionClientInfo {

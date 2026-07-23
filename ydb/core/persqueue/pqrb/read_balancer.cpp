@@ -97,6 +97,12 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
     }
     TabletPipes.clear();
+    PipesRequested.clear();
+    ReadyPartitionTablets = 0;
+    while (!PartitionsLocationQueue.empty()) {
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        PartitionsLocationQueue.pop_front();
+    }
     if (PartitionsScaleManager) {
         PartitionsScaleManager->Die(ctx);
     }
@@ -162,6 +168,8 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -175,7 +183,13 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             }
             break;
         }
+        case PARTITIONS_LOCATION_WAKEUP_TAG: {
+            PartitionsLocationWakeupScheduled = false;
+            ProcessPartitionsLocationQueue(ctx);
+            break;
+        }
         default: {
+            ProcessPartitionsLocationQueue(ctx);
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
             CleanupReceiveAttemptPartitions(ctx);
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
@@ -416,22 +430,34 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
+        if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+            it->second.Ready = true;
+            ++ReadyPartitionTablets;
+        }
+
         YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId},
             {"nodeId", ev->Get()->ServerId.NodeId()},
             {"generation", ev->Get()->Generation});
-    }
-    else
+    } else {
         YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId});
+    }
+
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
 {
     auto it = TabletPipes.find(tabletId);
     if (it != TabletPipes.end()) {
+        if (it->second.Ready) {
+            PQ_ENSURE(ReadyPartitionTablets > 0);
+            --ReadyPartitionTablets;
+            it->second.Ready = false;
+        }
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
         PipesRequested.erase(tabletId);
@@ -621,74 +647,6 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
         Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));
     }
 }
-
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
-    evResponse->Record.SetStatus(false);
-    ctx.Send(ev->Sender, evResponse);
-}
-
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    const auto& request = ev->Get()->Record;
-    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-
-    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
-        if (PipesRequested.contains(tabletId)) {
-            return false;
-        }
-        auto iter = TabletPipes.find(tabletId);
-        if (iter == TabletPipes.end()) {
-            GetPipeClient(tabletId, ctx);
-            return false;
-        }
-
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
-
-        YDB_LOG_DEBUG("The partition location was added to response: TabletId PartitionId NodeId Generation",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"partitionId", partitionId},
-            {"pResponseNodeId", pResponse->GetNodeId()},
-            {"pResponseGeneration", pResponse->GetGeneration()});
-
-        return true;
-    };
-
-    auto sendError = [&]() {
-        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-        response->Record.SetStatus(false);
-        ctx.Send(ev->Sender, response.release());
-    };
-
-    if (request.PartitionsSize() == 0) {
-        if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
-            // Do not have all pipes connected.
-            return sendError();
-        }
-        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
-                return sendError();
-            }
-        }
-    } else {
-        for (const auto& partitionInRequest : request.GetPartitions()) {
-            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
-            if (partitionInfoIter == PartitionsInfo.end()) {
-                return sendError();
-            }
-            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
-                return sendError();
-            }
-        }
-    }
-
-    evResponse->Record.SetStatus(true);
-    ctx.Send(ev->Sender, evResponse.release());
-}
-
 
 
 
@@ -962,7 +920,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, 
 }
 
 void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
-    const TInstant now = TInstant::Now();
+    const TInstant now = TAppData::TimeProvider->Now();
     for (const auto& [_, pipeLocation] : TabletPipes) {
         THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
         NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
@@ -1025,7 +983,7 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
     }
 
     TReceiveAttemptPartitionsWriteBatch batch;
-    const auto now = TInstant::Now();
+    const auto now = TAppData::TimeProvider->Now();
 
     while (!PendingMLPGetPartitionRequests.empty()) {
         auto ev = std::move(PendingMLPGetPartitionRequests.front());
@@ -1095,7 +1053,7 @@ void TPersQueueReadBalancer::CleanupReceiveAttemptPartitions(const TActorContext
         return;
     }
 
-    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TInstant::Now());
+    auto deletes = MLPBalancer->CollectExpiredReceiveAttemptPartitions(TAppData::TimeProvider->Now());
     if (deletes.empty()) {
         return;
     }
@@ -1142,6 +1100,7 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         HFunc(TEvPQ::TEvMLPConsumerStatus, Handle);

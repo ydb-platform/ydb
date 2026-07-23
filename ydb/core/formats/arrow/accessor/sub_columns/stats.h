@@ -152,7 +152,7 @@ public:
         }
     };
 
-    static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
+    static TDictStats Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount);
 
     // Selects which keys become separated columns;
     // the rest fall into the Others store, whose stats are built by the caller.

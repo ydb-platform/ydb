@@ -134,6 +134,7 @@ def union_node(node_id, left, right):
             {"node": right, "columns": list(COLUMNS)},
         ],
         "output": list(COLUMNS),
+        "ordered": False,
     }
 
 

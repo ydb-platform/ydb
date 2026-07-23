@@ -1,6 +1,6 @@
 import copy
 import unittest
-from itertools import combinations, product
+from itertools import combinations, permutations, product
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -65,6 +65,47 @@ def pass_project(node_id, output):
                 "expression": {"kind": "column", "column": "a.value"},
             }
         ],
+    }
+
+
+def constant_project(node_id, input_id, output, value):
+    return {
+        "id": node_id,
+        "op": "project",
+        "input": input_id,
+        "ordered": False,
+        "columns": [
+            {
+                "output": output,
+                "expression": {
+                    "kind": "literal",
+                    "type": "Int64",
+                    "value": value,
+                },
+            }
+        ],
+    }
+
+
+def false_filter(node_id, input_id):
+    return {
+        "id": node_id,
+        "op": "filter",
+        "input": input_id,
+        "predicate": {"kind": "literal", "type": "Bool", "value": False},
+    }
+
+
+def union_all(node_id, left, left_column, right, right_column, *, ordered):
+    return {
+        "id": node_id,
+        "op": "union_all",
+        "inputs": [
+            {"node": left, "columns": [left_column]},
+            {"node": right, "columns": [right_column]},
+        ],
+        "output": ["a.value"],
+        "ordered": ordered,
     }
 
 
@@ -348,6 +389,135 @@ class LimitIrTest(unittest.TestCase):
 
 
 class LimitOutcomeTest(unittest.TestCase):
+    def test_ordered_union_limit_prefers_left_branch_and_uses_right_fallback(self):
+        for omit_left, expected in ((False, 10), (True, 20)):
+            nodes = [
+                {"id": "left_unit", "op": "empty_source"},
+                constant_project("left", "left_unit", "left.value", 10),
+            ]
+            left = "left"
+            if omit_left:
+                nodes.append(false_filter("no_left", left))
+                left = "no_left"
+            nodes.extend(
+                [
+                    {"id": "right_unit", "op": "empty_source"},
+                    constant_project("right", "right_unit", "right.value", 20),
+                    union_all(
+                        "union",
+                        left,
+                        "left.value",
+                        "right",
+                        "right.value",
+                        ordered=True,
+                    ),
+                    limit("first", "union", 1),
+                ]
+            )
+            parsed = parse_snapshot(snapshot(nodes, "first"))
+            script = smt.Script()
+            family = RelationEvaluator(
+                parsed,
+                Database(parsed, 1, script),
+                ScalarEncoder(script),
+            ).root()
+            with self.subTest(omit_left=omit_left):
+                self.assertTrue(family.sequence)
+                self.assertEqual(_bags(family, {}), {(expected,)})
+
+    def test_ordered_union_branch_precedence_with_symbolic_input_ordinals(self):
+        nodes = [
+            scan(),
+            {"id": "fallback_unit", "op": "empty_source"},
+            constant_project(
+                "fallback",
+                "fallback_unit",
+                "fallback.value",
+                99,
+            ),
+            union_all(
+                "union",
+                "scan",
+                "a.value",
+                "fallback",
+                "fallback.value",
+                ordered=True,
+            ),
+            limit("first", "union", 1),
+        ]
+        parsed = parse_snapshot(snapshot(nodes, "first"))
+        script = smt.Script()
+        database = Database(parsed, 4, script)
+        family = RelationEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        self.assertEqual(len(family.outcomes), 1)
+        outcome = family.outcomes[0]
+        self.assertEqual(len(outcome.choices), 4)
+        self.assertIsNotNone(outcome.relation.ordinals)
+
+        for present in product((False, True), repeat=4):
+            present_indexes = tuple(
+                index for index, is_present in enumerate(present) if is_present
+            )
+            for order in permutations(range(len(present_indexes))):
+                input_ordinals = [0] * 4
+                for index, ordinal in zip(present_indexes, order):
+                    input_ordinals[index] = ordinal
+                constants = _constants(database, present)
+                constants.update(
+                    {
+                        choice.term.atom: ordinal
+                        for choice, ordinal in zip(
+                            outcome.choices,
+                            input_ordinals,
+                        )
+                    }
+                )
+                self.assertTrue(_ground(outcome.enabled, constants))
+                expected = (
+                    99
+                    if not present_indexes
+                    else 10
+                    + min(
+                        present_indexes,
+                        key=input_ordinals.__getitem__,
+                    )
+                )
+                self.assertEqual(_bags(family, constants), {(expected,)})
+
+    def test_ordered_union_gives_symbolic_branches_independent_ordinals(self):
+        parsed = parse_snapshot(
+            snapshot(
+                [
+                    scan(),
+                    union_all(
+                        "union",
+                        "scan",
+                        "a.value",
+                        "scan",
+                        "a.value",
+                        ordered=True,
+                    ),
+                ],
+                "union",
+            )
+        )
+        script = smt.Script()
+        family = RelationEvaluator(
+            parsed,
+            Database(parsed, 4, script),
+            ScalarEncoder(script),
+        ).root()
+        choices = family.outcomes[0].choices
+        self.assertEqual(len(choices), 8)
+        self.assertEqual(
+            len({choice.term.atom for choice in choices}),
+            len(choices),
+        )
+
     def test_unordered_limit_matches_an_independent_exhaustive_reference(self):
         for count, offset in product(range(5), range(5)):
             with self.subTest(count=count, offset=offset):
@@ -401,6 +571,7 @@ class LimitOutcomeTest(unittest.TestCase):
                             {"node": "limit", "columns": ["a.value"]},
                         ],
                         "output": ["a.value"],
+                        "ordered": False,
                     },
                 ],
                 "union",
@@ -429,6 +600,7 @@ class LimitOutcomeTest(unittest.TestCase):
                             {"node": "right", "columns": ["a.value"]},
                         ],
                         "output": ["a.value"],
+                        "ordered": False,
                     },
                 ],
                 "union",
@@ -451,6 +623,7 @@ class LimitOutcomeTest(unittest.TestCase):
                             {"node": "right", "columns": ["right.value"]},
                         ],
                         "output": ["a.value"],
+                        "ordered": False,
                     },
                 ],
                 "union",
@@ -476,6 +649,7 @@ class LimitOutcomeTest(unittest.TestCase):
                             {"node": "right_project", "columns": ["right.value"]},
                         ],
                         "output": ["a.value"],
+                        "ordered": False,
                     },
                     limit("first", "union", 2),
                     limit("second", "first", 1),

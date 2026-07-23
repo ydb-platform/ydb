@@ -275,6 +275,7 @@ def duplicate_edge_stage_value():
             {"node": "a", "columns": ["a.k"]},
         ],
         "output": ["result"],
+        "ordered": False,
     }
     return _snapshot_with_stage_graph(
         _stage_schema("A"),
@@ -508,6 +509,7 @@ def duplicated_grouped_aggregate_snapshot(function, nullable_key=False):
             {"node": "right", "columns": ["right.k", "right.x"]},
         ],
         "output": ["u.k", "u.x"],
+        "ordered": False,
     }
     aggregate = {
         "id": "aggregate",
@@ -875,6 +877,7 @@ def union_snapshot(duplicate):
                     {"node": "a", "columns": ["a.k"]},
                 ],
                 "output": ["u.k"],
+                "ordered": False,
             },
         ]
     else:

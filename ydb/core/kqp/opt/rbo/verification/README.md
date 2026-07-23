@@ -585,10 +585,33 @@ ms, not a proof or counterexample. Focused q65 emits a formula after
 thirteen-query proof floor remains unchanged. q7 and q8 remain visible at the
 deeper generic `Map` exporter blocker.
 
-The next implementation milestone is exact support for the captured
-uncorrelated scalar/`IN`/`EXISTS` subplans that currently block seven TPCH and
-thirteen TPC-DS queries. Solver/formula-size work then targets promotion of
-supported `UNKNOWN` obligations into the proof floor.
+The subplan audit found 32 source subqueries across the seven blocked TPCH and
+thirteen blocked TPC-DS queries: fifteen scalar, seventeen `EXISTS`,
+twenty-five correlated, and only seven uncorrelated. There are no dynamic `IN`
+subplans in this workload slice. Only TPCH q11/q15 and TPC-DS q24/q54 are fully
+uncorrelated.
+
+Initial catalog capture now validates the subplan registry and follows every
+subplan root, so a failed initial semantic export no longer hides the final
+boundary. Focused captures show fully exportable optimized StageGraphs for q11,
+q15, and q54; q24 exposes a separate final callable `Map` blocker. Exact ordered
+logical UnionAll is also modeled, including independent input orderings and
+left-before-right branch precedence.
+
+The next implementation slice is exact uncorrelated scalar subplans that are
+statically at most one row, starting with TPCH q11 and q15. General scalar
+subplans require explicit query-error outcomes for the more-than-one-row case;
+restricted `IN`/`EXISTS` and correlated subplans follow separately.
+Solver/formula-size work then targets promotion of supported `UNKNOWN`
+obligations into the proof floor.
+
+The audit produced two confirmed new-RBO runtime defects. A stale negation flag
+could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
+and fix are committed in `95a2afad1d3`. Separately, a two-row uncorrelated
+scalar subquery raises the required error under the legacy optimizer but new RBO
+currently succeeds and selects the first row because `EnsureAtMostOne` is not
+consumed by physical lowering. The verifier will keep the query-error behavior
+explicit rather than accepting that truncation.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -798,8 +821,15 @@ non-null `Uint64` literals in v1; parameterized or otherwise computed limits
 fail closed. Phase is preserved as `undefined`, `intermediate`, or `final`, but
 does not itself change runtime semantics. Distinct Limit observers downstream
 of one shared unordered plan stream fail closed until their latent-order
-correlation is modeled. Ordered Limit is deterministic; Aggregate, Join, and
-UnionAll start new unordered streams.
+correlation is modeled. Ordered Limit is deterministic. Aggregate and Join
+start new unordered streams. Unordered UnionAll does too, while ordered
+UnionAll gives each input every legal local sequence and concatenates the
+complete left sequence before the right.
+
+Every logical `union_all` node has a required Boolean `ordered` field. The
+strict decoder rejects absence or non-Boolean values, keeping logical stream
+ordering separate from the StageGraph connection’s independent `parallel`
+routing field.
 
 ```json
 {

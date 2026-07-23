@@ -478,6 +478,17 @@ class Evaluator:
                 self._input(node.id, index, item.node)
                 for index, item in enumerate(node.inputs)
             )
+            if node.ordered:
+                sources = tuple(
+                    source
+                    if source.sequence
+                    else _as_sequence_family(
+                        source,
+                        self.scalar.script,
+                        f"{self.choice_scope}:union:{node.id}:input:{index}",
+                    )
+                    for index, source in enumerate(sources)
+                )
 
             def union(relations: tuple[Relation, ...]) -> Relation:
                 _require_relation_rows(
@@ -507,7 +518,31 @@ class Evaluator:
                                 row.partition_facts,
                             )
                         )
-                return Relation(self._columns(node.id), tuple(rows))
+                ordinals: tuple[smt.Term, ...] | None = None
+                if node.ordered and any(
+                    source.ordinals is not None for source in relations
+                ):
+                    ordinal_items: list[smt.Term] = []
+                    prior_rows: list[Row] = []
+                    for source in relations:
+                        offset = smt.add(
+                            *(
+                                smt.ite(row.present, smt.ONE, smt.ZERO)
+                                for row in prior_rows
+                            )
+                        )
+                        ordinal_items.extend(
+                            smt.add(offset, _compressed_rank(source, index))
+                            for index in range(len(source.rows))
+                        )
+                        prior_rows.extend(source.rows)
+                    ordinals = tuple(ordinal_items)
+                return Relation(
+                    self._columns(node.id),
+                    tuple(rows),
+                    sequence=node.ordered,
+                    ordinals=ordinals,
+                )
 
             return combine_families(sources, union)
 
@@ -2030,6 +2065,7 @@ def _compressed_rank(relation: Relation, index: int) -> smt.Term:
 def _as_sequence_family(
     family: RelationFamily,
     script: smt.Script,
+    scope: str,
 ) -> RelationFamily:
     """Give an unordered bag every possible compressed sequence order."""
 
@@ -2047,7 +2083,7 @@ def _as_sequence_family(
         relation = source_outcome.relation
         ordinals, choices = _fresh_ordinals(
             script,
-            f"latent_sequence:{index}:ordinal",
+            f"{scope}:latent_sequence:{index}:ordinal",
             len(relation.rows),
         )
         outcomes.append(
@@ -2097,10 +2133,11 @@ def _comparison_inputs(
     left: RelationFamily,
     right: RelationFamily,
     script: smt.Script,
+    scope: str,
 ) -> tuple[RelationFamily, RelationFamily, bool]:
     ordered = left.sequence
     if ordered and not right.sequence:
-        right = _as_sequence_family(right, script)
+        right = _as_sequence_family(right, script, f"{scope}:right")
     comparisons = len(left.outcomes) * len(right.outcomes)
     if comparisons > MAX_OUTCOME_COMPARISONS:
         raise RelationError(
@@ -2198,7 +2235,12 @@ def compare_families(
 ) -> FamilyComparison:
     """Expose the exact normalized outcome pairs used by family equivalence."""
 
-    left, right, ordered = _comparison_inputs(left, right, scalar.script)
+    left, right, ordered = _comparison_inputs(
+        left,
+        right,
+        scalar.script,
+        "compare_families",
+    )
     pair_equal = tuple(
         tuple(
             _relations_equal(
@@ -2222,5 +2264,10 @@ def family_equal(
 ) -> smt.Term:
     """Mutual inclusion of enabled bags or initial-query result sequences."""
 
-    left, right, ordered = _comparison_inputs(left, right, scalar.script)
+    left, right, ordered = _comparison_inputs(
+        left,
+        right,
+        scalar.script,
+        "family_equal",
+    )
     return _families_equivalent(left, right, scalar, ordered)

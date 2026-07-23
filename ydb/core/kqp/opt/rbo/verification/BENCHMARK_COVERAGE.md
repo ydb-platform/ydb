@@ -148,9 +148,9 @@ StageGraph remains a separate diagnostic step.
 
 ## Latest measured formula coverage
 
-Both complete formula-only dashboards were rerun on current code on 2026-07-23.
-Together they emitted the 39-query floor below and recorded an outcome for
-every workload entry. The TPC-DS rerun includes exact Decimal wrapper
+The last complete pre-subplan-catalog formula-only dashboards were rerun on
+2026-07-23. Together they emitted the 39-query floor below and recorded an
+outcome for every workload entry. The TPC-DS rerun includes exact Decimal wrapper
 hardening, nonrecursive structural IDs, grouped-key classes, the small-sequence
 representation selector, exact direct Date-cast normalization, and exact
 phase-aware Decimal AVG. The complete thirteen-query proof floor was not
@@ -786,10 +786,47 @@ Date-cast model, but its regenerated and corrected fixed-witness results are
 both `UNKNOWN`; it is neither a current candidate nor a confirmed false
 positive. No corrected-model witness currently requires replay.
 
-The next coverage milestone is exact support for captured uncorrelated
-scalar/`IN`/`EXISTS` subplans, which currently block seven TPCH and thirteen
-TPC-DS queries. After that, solver/formula-size work targets reproducible
-promotion of supported `UNKNOWN` obligations into the proof floor.
+The next coverage milestone began with a corrected source inventory and a
+final-boundary visibility prerequisite. The seven TPCH and thirteen TPC-DS
+catalog-blocked queries contain 32 subqueries: fifteen scalar, seventeen
+`EXISTS`, twenty-five correlated, and seven uncorrelated. No dynamic `IN`
+subplan occurs in this slice. Only TPCH q11/q15 and TPC-DS q24/q54 are fully
+uncorrelated.
+
+Catalog capture now validates the ordered subplan registry and includes tables
+reachable only from subplan roots. Focused formula-only captures therefore
+retain the catalog after initial export fails closed on unmodeled subplans:
+q11 and q15 have an empty final unsupported reason, as does TPC-DS q54. TPC-DS
+q24 reaches the deeper final `Unsupported scalar callable Map` reason. Exact
+ordered logical UnionAll removes q11’s former final boundary blocker and
+preserves the real-value-before-NULL-fallback branch precedence used by scalar
+lowering.
+
+The first exact initial-boundary slice is uncorrelated scalar subplans that are
+statically at most one row, starting with q11/q15. General scalar subplans need
+an explicit query-error outcome for more than one row. Restricted `IN`/`EXISTS`
+and correlated forms remain separate milestones. Solver/formula-size work then
+targets reproducible promotion of supported `UNKNOWN` obligations into the
+proof floor.
+
+### Confirmed subplan optimizer defects
+
+The subplan audit also produced two real optimizer correctness findings,
+independently of the solver dashboard:
+
+- With a nonempty inner table, `WHERE NOT flag AND EXISTS (subquery)` returned
+  no rows under new RBO but returned the expected row under the legacy
+  optimizer. The simple-subplan rule retained `negated=true` from the unrelated
+  first conjunct and lowered the later positive `EXISTS` as `NOT EXISTS`.
+  Commit `95a2afad1d3` resets the flag for each candidate conjunct and retains
+  the focused real-YDB regression.
+- A two-row uncorrelated scalar subquery returns
+  `PRECONDITION_FAILED` with “More than one row returned by a subquery used as
+  an expression” under the legacy optimizer. New RBO instead succeeds and
+  returns the row matching the first subquery value. The logical rule marks the
+  value Map `EnsureAtMostOne`, but physical lowering does not consume that
+  property before ordered UnionAll plus `Limit 1` hides the second row. This is
+  a confirmed open optimizer defect, not a verifier candidate.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

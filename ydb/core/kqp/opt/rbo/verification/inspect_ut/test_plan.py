@@ -283,6 +283,7 @@ class OperatorRendererTest(unittest.TestCase):
                         ir.UnionInput("right", ("r.k",)),
                     ),
                     ("k",),
+                    False,
                 ),
                 'node "union" union_all '
                 'inputs=[{node="left", columns=["l.k"]}, '

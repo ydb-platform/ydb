@@ -517,8 +517,15 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
+    // An inplace (_LOCAL) index must stay a single chunk, so no size budget is passed and an oversize one is
+    // dropped below. For blob storages the builder splits the index into several chunks fitting MaxBlobSize.
+    std::optional<ui64> chunkSizeLimit;
+    const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
+    if (indexStorageId != IStoragesManager::LocalMetadataStorageId) {
+        chunkSizeLimit = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
+    }
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
-        index->BuildIndexOptional(originalData, recordsCount, *this);
+        index->BuildIndexOptional(originalData, recordsCount, *this, chunkSizeLimit);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
@@ -529,8 +536,9 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
     auto conclusion = ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
     if (conclusion.IsFail()) {
-        // The index does not fit the target storage. Store the portion without it, like a portion older than
-        // the index itself: the data stays correct, only the skip optimization is lost.
+        // The index does not fit the target storage even after chunk splitting (or is inplace and cannot be
+        // split). Store the portion without it, like a portion older than the index itself: the data stays
+        // correct, only the skip optimization is lost.
         YDB_LOG_WARN("",
             {"event", "index_skipped"},
             {"index_name", index->GetIndexName()},

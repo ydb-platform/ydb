@@ -656,6 +656,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
+        // The oversized filter must be split into several chunks fitting the blob limit, not dropped.
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_ngramm_uid"
+            )";
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_GT(rows.size(), 0);
+        }
+
         ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
     }
 

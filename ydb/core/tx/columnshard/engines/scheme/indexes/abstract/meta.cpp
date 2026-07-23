@@ -56,8 +56,9 @@ std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const
 }
 
 TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> IIndexMeta::BuildIndexOptional(
-    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
-    auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo);
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo,
+    const std::optional<ui64> chunkSizeLimit) const {
+    auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo, chunkSizeLimit);
     if (conclusion.IsFail()) {
         return conclusion;
     }

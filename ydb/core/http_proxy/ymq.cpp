@@ -314,8 +314,8 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.FolderId = FolderId = ev->Get()->FolderId;
                     HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
-                    SendGrpcRequestNoDriver(ctx);
                     IamAuthenticated = true;
+                    SendGrpcRequestNoDriver(ctx);
                 } else {
                     YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
                         {"logPrefix", LogPrefix()},
@@ -323,7 +323,6 @@ namespace NKikimr::NHttpProxy {
                         {"errorCode", ev->Get()->Error->ErrorCode},
                         {"message", ev->Get()->Error->Message});
 
-                    IamAuthenticated = false;
                     ReplyWithError(
                         ctx,
                         ev->Get()->Error->HttpStatusCode,

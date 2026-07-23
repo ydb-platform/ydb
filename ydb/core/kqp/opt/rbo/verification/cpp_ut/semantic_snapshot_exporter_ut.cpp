@@ -2707,6 +2707,28 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(MapSubplanDiscoveryDeduplicatesSharedExpressionDag) {
+        TExportTestContext ctx;
+        const auto pos = TPositionHandle();
+        auto argument = ctx.ExprCtx.NewArgument(pos, "row");
+        auto expression = ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {argument}),
+            ExponentialSharedAnd(ctx, 32));
+        auto map = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(TPositionHandle()),
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TExpression(
+                    std::move(expression),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        TOpRoot root(map, pos, {"result"});
+
+        UNIT_ASSERT(map->GetSubplanIUs(root.PlanProps).empty());
+    }
+
     Y_UNIT_TEST(ExactScalarAuditEnforcesDepthBoundary) {
         {
             TExportTestContext ctx;
@@ -2888,6 +2910,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(snapshot["format"].GetStringSafe(), "ydb-rbo-semantic-snapshot");
         UNIT_ASSERT_VALUES_EQUAL(snapshot["version"].GetIntegerSafe(), 1);
         UNIT_ASSERT(snapshot["stage_graph"].IsNull());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot["plan"].GetMapSafe().size(), 4);
+        UNIT_ASSERT(snapshot["plan"]["subplans"].GetArraySafe().empty());
 
         const auto& tables = snapshot["schema"]["tables"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
@@ -10939,7 +10963,718 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!snapshot.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             snapshot.UnsupportedReason,
-            "cannot represent subplans");
+            "not statically at most one row");
+    }
+
+    Y_UNIT_TEST(ExportsExactUncorrelatedScalarSubplanDescriptors) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {{"value", "Int64", false}});
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"value"});
+        const auto pos = TPositionHandle();
+        auto scalarAggregate = MakeIntrusive<TOpAggregate>(
+            innerRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("inner.value"),
+                "sum",
+                TInfoUnit("scalar.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+
+        TOpRoot root(outerRead, pos, {"outer.k"});
+        const TInfoUnit binding("_rbo_arg_0", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                scalarAggregate,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+
+        auto predicate = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                binding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps),
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx));
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* int64 = ScalarType(ctx, NUdf::EDataSlot::Int64);
+        const auto* optionalBool =
+            ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+        auto predicateBody = predicate.GetExpressionBody();
+        predicateBody->Child(0)->SetTypeAnn(optionalInt64);
+        predicateBody->Child(1)->SetTypeAnn(int64);
+        predicateBody->SetTypeAnn(optionalBool);
+        predicate.Node->SetTypeAnn(optionalBool);
+        auto* predicateArguments = predicate.Node->Child(0);
+        predicateArguments->Child(0)->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TStructExprType>(
+                TVector<const TItemExprType*>{
+                    ctx.ExprCtx.MakeType<TItemExprType>(
+                        "outer.k",
+                        ScalarType(ctx, NUdf::EDataSlot::Int32)),
+                    ctx.ExprCtx.MakeType<TItemExprType>(
+                        "_rbo_arg_0",
+                        optionalInt64),
+                }));
+        predicateArguments->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TUnitExprType>());
+        auto filter = MakeIntrusive<TOpFilter>(
+            outerRead,
+            pos,
+            predicate);
+        root.SetInput(filter);
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        const auto snapshot = ParseSupported(sink.Results[0]);
+
+        const auto& plan = snapshot["plan"];
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().size(), 4);
+        const auto& descriptors = plan["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(descriptors.size(), 1);
+        const auto& descriptor = descriptors[0];
+        UNIT_ASSERT_VALUES_EQUAL(descriptor.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["binding"].GetStringSafe(),
+            "_rbo_arg_0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["kind"].GetStringSafe(),
+            "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["root"].GetStringSafe(),
+            FindNode(snapshot, "aggregate")["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(descriptor["type"].GetStringSafe(), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(descriptor["nullable"].GetBooleanSafe(), true);
+        UNIT_ASSERT(descriptor["dependencies"].GetArraySafe().empty());
+
+        const auto& output = descriptor["output"];
+        UNIT_ASSERT_VALUES_EQUAL(output.GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            output["column"].GetStringSafe(),
+            "scalar.value");
+        UNIT_ASSERT_VALUES_EQUAL(output["type"].GetStringSafe(), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(output["nullable"].GetBooleanSafe(), true);
+
+        const auto& consumers = descriptor["consumers"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            consumers[0].GetStringSafe(),
+            FindNode(snapshot, "filter")["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(plan["output"]),
+            TVector<TString>{"outer.k"});
+
+        auto sharedPredicate = predicate.GetExpressionBody();
+        for (size_t level = 0; level < 32; ++level) {
+            sharedPredicate = TypedCallable(
+                ctx,
+                "And",
+                {sharedPredicate, sharedPredicate},
+                optionalBool);
+        }
+        auto sharedLambda = ctx.ExprCtx.NewLambda(
+            pos,
+            predicate.Node->ChildPtr(0),
+            std::move(sharedPredicate));
+        sharedLambda->SetTypeAnn(optionalBool);
+        filter->FilterExpr = TExpression(
+            std::move(sharedLambda),
+            &ctx.ExprCtx,
+            &root.PlanProps);
+
+        const auto sharedResult =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!sharedResult.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            sharedResult.UnsupportedReason,
+            "Exact scalar expression exceeds the node audit limit");
+    }
+
+    Y_UNIT_TEST(ExportsScalarSubplanMapRenameConsumer) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {{"value", "Int64", false}});
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"value"});
+        SetOutputType(ctx, *outerRead, {
+            {"outer.k", NUdf::EDataSlot::Int32},
+        });
+        SetOutputType(ctx, *innerRead, {
+            {"inner.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto scalarAggregate = MakeIntrusive<TOpAggregate>(
+            innerRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("inner.value"),
+                "sum",
+                TInfoUnit("scalar.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *scalarAggregate, {
+            {"scalar.value", NUdf::EDataSlot::Int64, true},
+        });
+
+        TOpRoot root(outerRead, pos, {"result"});
+        const TInfoUnit binding("_rbo_arg_0", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                scalarAggregate,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+        auto renameProject = MakeIntrusive<TOpMap>(
+            outerRead,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                binding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps)});
+        auto computedProject = MakeIntrusive<TOpMap>(
+            renameProject,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("computed"),
+                MakeColumnAccess(
+                    binding,
+                    pos,
+                    &ctx.ExprCtx,
+                    &root.PlanProps))});
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto annotate = [&](TMapElement& element) {
+            auto& expression = element.GetExpressionRef();
+            expression.GetExpressionBody()->SetTypeAnn(optionalInt64);
+        };
+        annotate(renameProject->MapElements.front());
+        annotate(computedProject->MapElements.front());
+        SetOutputType(ctx, *renameProject, {
+            {"outer.k", NUdf::EDataSlot::Int32},
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        SetOutputType(ctx, *computedProject, {
+            {"outer.k", NUdf::EDataSlot::Int32},
+            {"result", NUdf::EDataSlot::Int64, true},
+            {"computed", NUdf::EDataSlot::Int64, true},
+        });
+        root.SetInput(computedProject);
+        UNIT_ASSERT_VALUES_EQUAL(
+            renameProject->GetSubplanIUs(root.PlanProps).size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            computedProject->GetSubplanIUs(root.PlanProps).size(),
+            1);
+
+        const auto snapshot =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto* projectType = computedProject->GetTypeAnn()
+            ->Cast<TListExprType>()
+            ->GetItemType()
+            ->Cast<TStructExprType>();
+        UNIT_ASSERT_VALUES_EQUAL(projectType->GetItems().size(), 3);
+        UNIT_ASSERT(projectType->FindItemType("outer.k"));
+        UNIT_ASSERT(projectType->FindItemType("result"));
+        UNIT_ASSERT(projectType->FindItemType("computed"));
+        UNIT_ASSERT(!projectType->FindItemType("_rbo_arg_0"));
+        const auto& descriptor =
+            snapshot["plan"]["subplans"].GetArraySafe()[0];
+        const auto& consumers = descriptor["consumers"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 2);
+        TVector<const NJson::TJsonValue*> projects;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "project") {
+                projects.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(projects.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            consumers[0].GetStringSafe(),
+            (*projects[0])["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            consumers[1].GetStringSafe(),
+            (*projects[1])["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*projects[0])["columns"][1]["expression"]["column"].GetStringSafe(),
+            "_rbo_arg_0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*projects[1])["columns"][2]["expression"]["column"].GetStringSafe(),
+            "_rbo_arg_0");
+    }
+
+    Y_UNIT_TEST(ScalarSubplanRegistryAndConsumerContractsFailClosed) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {{"value", "Int64", false}});
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"value"});
+        SetOutputType(ctx, *outerRead, {
+            {"outer.k", NUdf::EDataSlot::Int32},
+        });
+        SetOutputType(ctx, *innerRead, {
+            {"inner.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto scalarAggregate = MakeIntrusive<TOpAggregate>(
+            innerRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("inner.value"),
+                "sum",
+                TInfoUnit("scalar.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *scalarAggregate, {
+            {"scalar.value", NUdf::EDataSlot::Int64, true},
+        });
+
+        TOpRoot root(outerRead, pos, {"outer.k"});
+        const TInfoUnit binding("_rbo_arg_0", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                scalarAggregate,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+        const auto catalog =
+            CaptureSemanticSnapshotCatalogV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        auto result =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "has no consumer");
+
+        auto& entry = root.PlanProps.Subplans.PlanMap.at(binding);
+        entry.DependentIUs.push_back(TInfoUnit("outer.k"));
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "is correlated");
+        entry.DependentIUs.clear();
+
+        entry.Tuple.push_back(TInfoUnit("outer.k"));
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "tuple inputs");
+        entry.Tuple.clear();
+
+        entry.Type = ESubplanType::EXISTS;
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "not a scalar expression subplan");
+        entry.Type = ESubplanType::EXPR;
+
+        entry.Plan = innerRead;
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "not statically at most one row");
+        entry.Plan = scalarAggregate;
+
+        auto collidingProject = MakeIntrusive<TOpMap>(
+            outerRead,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                binding,
+                binding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps)});
+        collidingProject->MapElements.front()
+            .GetExpressionRef()
+            .GetExpressionBody()
+            ->SetTypeAnn(ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int64,
+                true));
+        root.SetInput(collidingProject);
+        root.ColumnOrder = {binding.GetFullName()};
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "output collides with scalar subplan binding");
+        root.SetInput(outerRead);
+        root.ColumnOrder = {"outer.k"};
+
+        root.PlanProps.StageGraph.AddStage();
+        result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "cannot contain residual subplans");
+    }
+
+    Y_UNIT_TEST(NestedScalarSubplanReferenceFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetOutputType(ctx, *read, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto leaf = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("leaf.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *leaf, {
+            {"leaf.value", NUdf::EDataSlot::Int64, true},
+        });
+
+        auto empty = MakeIntrusive<TOpEmptySource>(pos);
+        SetExactOutputType(ctx, *empty, {});
+        TOpRoot root(empty, pos, {"main.value"});
+        const TInfoUnit nestedBinding("_rbo_arg_nested", true);
+        const TInfoUnit leafBinding("_rbo_arg_leaf", true);
+        auto nested = MakeIntrusive<TOpMap>(
+            empty,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("nested.value"),
+                leafBinding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps)});
+        SetOutputType(ctx, *nested, {
+            {"nested.value", NUdf::EDataSlot::Int64, true},
+        });
+        root.PlanProps.Subplans.Add(
+            nestedBinding,
+            TSubplanEntry{
+                nested,
+                {},
+                ESubplanType::EXPR,
+                nestedBinding,
+                {}});
+        root.PlanProps.Subplans.Add(
+            leafBinding,
+            TSubplanEntry{
+                leaf,
+                {},
+                ESubplanType::EXPR,
+                leafBinding,
+                {}});
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "contains a nested subplan reference");
+    }
+
+    Y_UNIT_TEST(ScalarSubplanRootTopologyFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetOutputType(ctx, *read, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto leaf = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("leaf.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *leaf, {
+            {"leaf.value", NUdf::EDataSlot::Int64, true},
+        });
+
+        const TInfoUnit leafBinding("_rbo_arg_leaf", true);
+        TOpRoot mainReachableRoot(leaf, pos, {"leaf.value"});
+        mainReachableRoot.PlanProps.Subplans.Add(
+            leafBinding,
+            TSubplanEntry{
+                leaf,
+                {},
+                ESubplanType::EXPR,
+                leafBinding,
+                {}});
+        auto result =
+            ExportSemanticSnapshotV1(mainReachableRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "is reachable from the main plan");
+
+        auto empty = MakeIntrusive<TOpEmptySource>(pos);
+        auto malformedLimit = MakeIntrusive<TOpLimit>(
+            leaf,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        malformedLimit->Children.clear();
+        TOpRoot malformedSubplanRoot(empty, pos, {"unused"});
+        const TInfoUnit malformedBinding("_rbo_arg_malformed", true);
+        malformedSubplanRoot.PlanProps.Subplans.Add(
+            malformedBinding,
+            TSubplanEntry{
+                malformedLimit,
+                {},
+                ESubplanType::EXPR,
+                malformedBinding,
+                {}});
+        result = ExportSemanticSnapshotV1(
+            malformedSubplanRoot,
+            ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "Limit must have one input");
+
+        auto wrapper = MakeIntrusive<TOpMap>(
+            leaf,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("wrapper.value"),
+                MakeColumnAccess(
+                    TInfoUnit("leaf.value"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        wrapper->MapElements.front()
+            .GetExpressionRef()
+            .GetExpressionBody()
+            ->SetTypeAnn(ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int64,
+                true));
+        SetOutputType(ctx, *wrapper, {
+            {"leaf.value", NUdf::EDataSlot::Int64, true},
+            {"wrapper.value", NUdf::EDataSlot::Int64, true},
+        });
+        TOpRoot nestedRoot(empty, pos, {"unused"});
+        const TInfoUnit wrapperBinding("_rbo_arg_wrapper", true);
+        nestedRoot.PlanProps.Subplans.Add(
+            wrapperBinding,
+            TSubplanEntry{
+                wrapper,
+                {},
+                ESubplanType::EXPR,
+                wrapperBinding,
+                {}});
+        nestedRoot.PlanProps.Subplans.Add(
+            leafBinding,
+            TSubplanEntry{
+                leaf,
+                {},
+                ESubplanType::EXPR,
+                leafBinding,
+                {}});
+        result = ExportSemanticSnapshotV1(nestedRoot, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "is reachable below distinct subplan binding");
+    }
+
+    Y_UNIT_TEST(ProvenAtMostOneMarkerIsAdmittedOnlyAsANoop) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetOutputType(ctx, *read, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("result"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        auto checkedLimit = MakeIntrusive<TOpLimit>(
+            aggregate,
+            pos,
+            MakeConstant("Uint64", "2", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        SetOutputType(ctx, *checkedLimit, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        checkedLimit->Props.EnsureAtMostOne = true;
+        auto propagatedLimit = MakeIntrusive<TOpLimit>(
+            checkedLimit,
+            pos,
+            MakeConstant("Uint64", "2", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        SetOutputType(ctx, *propagatedLimit, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        propagatedLimit->Props.EnsureAtMostOne = true;
+        TOpRoot root(propagatedLimit, pos, {"result"});
+
+        const auto supported =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(supported.IsSupported(), supported.UnsupportedReason);
+
+        checkedLimit->SetInput(read);
+        SetOutputType(ctx, *checkedLimit, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        SetOutputType(ctx, *propagatedLimit, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        root.ColumnOrder = {"a.value"};
+        auto rejected =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            rejected.UnsupportedReason,
+            "physical properties");
+
+        checkedLimit->SetInput(aggregate);
+        checkedLimit->Props.EnsureAtMostOne = false;
+        auto map = MakeIntrusive<TOpMap>(
+            aggregate,
+            pos,
+            TVector<TMapElement>{});
+        map->Props.EnsureAtMostOne = true;
+        TOpRoot mapRoot(map, pos, {"result"});
+        rejected = ExportSemanticSnapshotV1(mapRoot, ctx.RboCtx);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            rejected.UnsupportedReason,
+            "physical properties");
+    }
+
+    Y_UNIT_TEST(ProvenAtMostOneMarkerDoesNotCrossAStageBoundary) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetOutputType(ctx, *read, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("result"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        auto checkedLimit = MakeIntrusive<TOpLimit>(
+            aggregate,
+            pos,
+            MakeConstant("Uint64", "2", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        SetOutputType(ctx, *checkedLimit, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        checkedLimit->Props.EnsureAtMostOne = true;
+        TOpRoot root(checkedLimit, pos, {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 producer =
+            graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = producer;
+        aggregate->Props.StageId = producer;
+        checkedLimit->Props.StageId = consumer;
+        graph.Connect(
+            producer,
+            consumer,
+            MakeIntrusive<TUnionAllConnection>(
+                graph.GetOutputIndex(producer),
+                false));
+
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "physical properties");
     }
 
     Y_UNIT_TEST(MalformedSubplanRegistryFailsCatalogCaptureClosed) {
@@ -12018,6 +12753,89 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(trait["nullable"].GetBooleanSafe(), false);
     }
 
+    Y_UNIT_TEST(InitialPairCaptureMaterializesNonAggregateScalarSubplanTypes) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"k", "Int32", true}});
+        const auto& scalarTable = AddTable(
+            ctx,
+            "/Root/Scalar",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        auto scalarRead = MakeRead(
+            ctx,
+            scalarTable,
+            "scalar",
+            {"value"});
+        const auto pos = TPositionHandle();
+        auto scalarLimit = MakeIntrusive<TOpLimit>(
+            scalarRead,
+            pos,
+            MakeConstant("Uint64", "0", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+
+        TOpRoot root(read, pos, {"result"});
+        const TInfoUnit binding("_rbo_arg_0", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                scalarLimit,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+        auto consumer = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                binding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps)});
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        auto& consumerExpression =
+            consumer->MapElements.front().GetExpressionRef();
+        consumerExpression.GetExpressionBody()->SetTypeAnn(optionalInt64);
+        consumerExpression.Node->SetTypeAnn(optionalInt64);
+        auto* consumerArguments = consumerExpression.Node->Child(0);
+        consumerArguments->Child(0)->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TStructExprType>(
+                TVector<const TItemExprType*>{
+                    ctx.ExprCtx.MakeType<TItemExprType>(
+                        "a.k",
+                        ScalarType(ctx, NUdf::EDataSlot::Int32)),
+                    ctx.ExprCtx.MakeType<TItemExprType>(
+                        "_rbo_arg_0",
+                        optionalInt64),
+                }));
+        consumerArguments->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TUnitExprType>());
+        root.SetInput(consumer);
+        UNIT_ASSERT(!scalarLimit->GetTypeAnn());
+        UNIT_ASSERT(!consumer->GetTypeAnn());
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        const auto snapshot = ParseSupported(sink.Results[0]);
+        UNIT_ASSERT(scalarLimit->GetTypeAnn());
+        UNIT_ASSERT(consumer->GetTypeAnn());
+        const auto& descriptor =
+            snapshot["plan"]["subplans"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["column"].GetStringSafe(),
+            "scalar.value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["type"].GetStringSafe(),
+            "Int64");
+    }
+
     Y_UNIT_TEST(InitialPairCaptureMaterializesMapAndSortTypesInsideFailClosedPath) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
@@ -12044,6 +12862,53 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(order["column"].GetStringSafe(), "a.k");
         UNIT_ASSERT_VALUES_EQUAL(order["ascending"].GetBooleanSafe(), true);
         UNIT_ASSERT_VALUES_EQUAL(order["nulls_first"].GetBooleanSafe(), false);
+    }
+
+    Y_UNIT_TEST(InitialPairCaptureValidatesTopologyBeforeMaterialization) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int32", true},
+            {"x", "Int64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        const auto pos = TPositionHandle();
+        auto scalarAggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "sum",
+                TInfoUnit("scalar.value"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        auto malformedSort = MakeIntrusive<TOpSort>(
+            read,
+            pos,
+            TVector<TSortElement>{
+                TSortElement(TInfoUnit("a.k"), true, true)});
+        malformedSort->Children.clear();
+        TOpRoot root(malformedSort, pos, {"a.k"});
+        const TInfoUnit binding("_rbo_arg_0", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                scalarAggregate,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT(!sink.Results[0].IsSupported());
+        UNIT_ASSERT(sink.Results[0].Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(
+            sink.Results[0].UnsupportedReason,
+            "Sort must have one input");
     }
 
     Y_UNIT_TEST(PairCaptureRejectsAStagedInitialBoundary) {

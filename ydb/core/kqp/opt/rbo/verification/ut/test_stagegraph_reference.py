@@ -140,6 +140,7 @@ def _snapshot(tables, nodes, root, output, stages=None, edges=None):
                 "nodes": copy.deepcopy(nodes),
                 "root": root,
                 "output": list(output),
+                "subplans": [],
             },
             "stage_graph": (
                 None

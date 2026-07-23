@@ -923,19 +923,40 @@ TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left
     return TExpression(lambda, ctx, props);
 }
 
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
+namespace {
+
+void GetAllMembersImpl(
+    TExprNode::TPtr node,
+    TVector<TInfoUnit>& ius,
+    THashSet<const TExprNode*>& visited)
+{
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
-        IUs.push_back(TInfoUnit(member.Name().StringValue()));
+        ius.push_back(TInfoUnit(member.Name().StringValue()));
         return;
     }
 
     for (auto c : node->Children()) {
-        GetAllMembers(c, IUs);
+        GetAllMembersImpl(c, ius, visited);
     }
 }
 
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies) {
+void GetAllMembersImpl(
+    TExprNode::TPtr node,
+    TVector<TInfoUnit>& ius,
+    const TPlanProps& props,
+    bool withSubplanContext,
+    bool withDependencies,
+    THashSet<const TExprNode*>& visited)
+{
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
@@ -945,26 +966,56 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
                 iu.SetSubplanContext(true);
                 iu.AddDependencies(subplan.Tuple);
                 iu.AddDependencies(subplan.DependentIUs);
-                IUs.push_back(iu);
+                ius.push_back(iu);
             }
             if (withDependencies) {
                 for (const auto& dep : subplan.Tuple) {
-                    AddUniqueInfoUnit(IUs, dep);
+                    AddUniqueInfoUnit(ius, dep);
                 }
                 for (const auto& dep : subplan.DependentIUs) {
-                    AddUniqueInfoUnit(IUs, dep);
+                    AddUniqueInfoUnit(ius, dep);
                 }
             }
         }
         else {
-            IUs.push_back(iu);
+            ius.push_back(iu);
         }
         return;
     }
 
     for (auto c : node->Children()) {
-        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
+        GetAllMembersImpl(
+            c,
+            ius,
+            props,
+            withSubplanContext,
+            withDependencies,
+            visited);
     }
+}
+
+} // anonymous namespace
+
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& ius) {
+    THashSet<const TExprNode*> visited;
+    GetAllMembersImpl(node, ius, visited);
+}
+
+void GetAllMembers(
+    TExprNode::TPtr node,
+    TVector<TInfoUnit>& ius,
+    const TPlanProps& props,
+    bool withSubplanContext,
+    bool withDependencies)
+{
+    THashSet<const TExprNode*> visited;
+    GetAllMembersImpl(
+        node,
+        ius,
+        props,
+        withSubplanContext,
+        withDependencies,
+        visited);
 }
 
 } // namespace NKikimr::NKqp

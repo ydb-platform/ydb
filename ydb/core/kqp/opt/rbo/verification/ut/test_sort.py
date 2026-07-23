@@ -163,6 +163,7 @@ def snapshot(nodes, root, stage_graph=None, key1_type="Int64"):
             "nodes": nodes,
             "root": root,
             "output": list(COLUMNS),
+            "subplans": [],
         },
         "stage_graph": stage_graph,
     }

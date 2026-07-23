@@ -287,7 +287,7 @@ class OperatorRendererTest(unittest.TestCase):
                 ),
                 'node "union" union_all '
                 'inputs=[{node="left", columns=["l.k"]}, '
-                '{node="right", columns=["r.k"]}] output=["k"]',
+                '{node="right", columns=["r.k"]}] output=["k"] ordered=false',
             ),
         )
         for node, expected in nodes:
@@ -400,7 +400,7 @@ def _stage_snapshot():
     )
     return ir.Snapshot(
         tables,
-        ir.Plan(nodes, "join", ("b.k", "a.k")),
+        ir.Plan(nodes, "join", ("b.k", "a.k"), ()),
         ir.StageGraph("root", stages, edges),
     )
 
@@ -412,7 +412,7 @@ class SnapshotRendererTest(unittest.TestCase):
 schema tables=2
   table "A" columns=[{name="k", type="Int64", not_null}] unique_keys=[{columns=["k"], nulls_distinct=false}]
   table "B" columns=[{name="k", type="Int64", nullable}] unique_keys=[]
-plan root="join" output=["b.k", "a.k"]
+plan root="join" output=["b.k", "a.k"] subplans=0
   output_schema=[{name="b.k", type="Int64", nullable}, {name="a.k", type="Int64", not_null}]
   node "a" scan table="A" columns=[{source="k", output="a.k"}] predicate=none pushed_limit=none
   node "b" scan table="B" columns=[{source="k", output="b.k"}] predicate=none pushed_limit=none
@@ -430,6 +430,77 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
     def test_absent_stage_graph_is_explicit(self):
         rendered = render_snapshot(replace(_stage_snapshot(), stage_graph=None))
         self.assertTrue(rendered.endswith("stage_graph none\n"))
+
+    def test_scalar_subplan_descriptor_is_explicit_and_digest_sensitive(self):
+        nodes = (
+            ir.EmptySource("main_source"),
+            ir.Project(
+                "main_project",
+                "main_source",
+                (ir.Projection("result", _column("$scalar")),),
+                False,
+            ),
+            ir.EmptySource("sub_source"),
+            ir.Project(
+                "sub_value",
+                "sub_source",
+                (ir.Projection("sub.value", _literal(7)),),
+                False,
+            ),
+        )
+        descriptor = ir.ScalarSubplan(
+            binding="$scalar",
+            kind="scalar",
+            root="sub_value",
+            output=ir.SubplanOutput("sub.value", "Int64", False),
+            type="Int64",
+            nullable=True,
+            dependencies=(),
+            consumers=("main_project",),
+        )
+        snapshot = ir.Snapshot(
+            (),
+            ir.Plan(nodes, "main_project", ("result",), (descriptor,)),
+            None,
+        )
+        rendered = render_snapshot(snapshot)
+        self.assertIn(
+            'plan root="main_project" output=["result"] subplans=1',
+            rendered,
+        )
+        self.assertIn(
+            'subplan binding="$scalar" kind=scalar root="sub_value" '
+            'output={column="sub.value", type="Int64", nullable=false} '
+            'type="Int64" nullable=true dependencies=[] '
+            'consumers=["main_project"]',
+            rendered,
+        )
+        without_subplan = ir.Snapshot(
+            (),
+            ir.Plan(nodes[:2], "main_project", ("result",), ()),
+            None,
+        )
+        with self.assertRaisesRegex(ir.SnapshotError, "not available"):
+            snapshot_digest(without_subplan)
+        renamed_nodes = (
+            nodes[0],
+            replace(
+                nodes[1],
+                columns=(ir.Projection("result", _column("$renamed")),),
+            ),
+            *nodes[2:],
+        )
+        renamed = ir.Snapshot(
+            (),
+            ir.Plan(
+                renamed_nodes,
+                "main_project",
+                ("result",),
+                (replace(descriptor, binding="$renamed"),),
+            ),
+            None,
+        )
+        self.assertNotEqual(snapshot_digest(snapshot), snapshot_digest(renamed))
 
     def test_semantic_digest_is_stable_and_field_sensitive(self):
         snapshot = _stage_snapshot()

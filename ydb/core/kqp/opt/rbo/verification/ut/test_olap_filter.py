@@ -50,7 +50,12 @@ def snapshot(nodes, root, stage_graph):
                 }
             ]
         },
-        "plan": {"nodes": nodes, "root": root, "output": ["a.value"]},
+        "plan": {
+            "nodes": nodes,
+            "root": root,
+            "output": ["a.value"],
+            "subplans": [],
+        },
         "stage_graph": stage_graph,
     }
 

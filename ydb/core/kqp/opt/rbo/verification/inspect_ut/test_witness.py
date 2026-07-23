@@ -57,6 +57,7 @@ def _snapshot():
             }],
             "root": "scan",
             "output": [column["name"] for column in columns],
+            "subplans": [],
         },
         "stage_graph": None,
     })

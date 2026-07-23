@@ -89,6 +89,7 @@ def _text_order_snapshot(value_type, literal_type, filter_before_sort, ascending
                 "nodes": [scan, filter_node, sort],
                 "root": "sort" if filter_before_sort else "filter",
                 "output": ["t.key"],
+                "subplans": [],
             },
             "stage_graph": None,
         }

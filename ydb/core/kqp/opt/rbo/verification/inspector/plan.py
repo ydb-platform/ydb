@@ -237,7 +237,10 @@ def render_node(node: ir.PlanNode) -> str:
             node.inputs,
             lambda item: f"{{node={_quote(item.node)}, columns={_list(item.columns, _quote)}}}",
         )
-        return prefix + f"union_all inputs={inputs} output={_list(node.output, _quote)}"
+        return (
+            prefix + f"union_all inputs={inputs} output={_list(node.output, _quote)} "
+            f"ordered={_boolean(node.ordered)}"
+        )
     raise InspectionError(f"unknown plan node class {type(node).__name__!r}")
 
 
@@ -275,6 +278,21 @@ def _column(column: ir.Column) -> str:
     return f"{{name={_quote(column.name)}, type={_quote(column.type)}, {nullability}}}"
 
 
+def _subplan(subplan: ir.ScalarSubplan) -> str:
+    output = (
+        f"{{column={_quote(subplan.output.column)}, "
+        f"type={_quote(subplan.output.type)}, "
+        f"nullable={_boolean(subplan.output.nullable)}}}"
+    )
+    return (
+        f"subplan binding={_quote(subplan.binding)} kind={subplan.kind} "
+        f"root={_quote(subplan.root)} output={output} "
+        f"type={_quote(subplan.type)} nullable={_boolean(subplan.nullable)} "
+        f"dependencies={_list(subplan.dependencies, _quote)} "
+        f"consumers={_list(subplan.consumers, _quote)}"
+    )
+
+
 def render_snapshot(snapshot: ir.Snapshot) -> str:
     """Render one validated semantic snapshot, ending with exactly one newline."""
 
@@ -298,9 +316,11 @@ def render_snapshot(snapshot: ir.Snapshot) -> str:
         )
 
     lines.extend((
-        f"plan root={_quote(snapshot.plan.root)} output={_list(snapshot.plan.output, _quote)}",
+        f"plan root={_quote(snapshot.plan.root)} output={_list(snapshot.plan.output, _quote)} "
+        f"subplans={len(snapshot.plan.subplans)}",
         f"  output_schema={_list(output, _column)}",
     ))
+    lines.extend(f"  {_subplan(subplan)}" for subplan in snapshot.plan.subplans)
     lines.extend(f"  {render_node(node)}" for node in snapshot.plan.nodes)
 
     graph = snapshot.stage_graph

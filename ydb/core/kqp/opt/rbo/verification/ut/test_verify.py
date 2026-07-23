@@ -168,7 +168,12 @@ def _snapshot_with_stage_graph(schema_value, nodes, root, output, stages=None, e
         "format": "ydb-rbo-semantic-snapshot",
         "version": 1,
         "schema": schema_value,
-        "plan": {"nodes": nodes, "root": root, "output": output},
+        "plan": {
+            "nodes": nodes,
+            "root": root,
+            "output": output,
+            "subplans": [],
+        },
         "stage_graph": None if stages is None else {
             "root_stage": stages[-1]["id"],
             "stages": stages,
@@ -859,6 +864,7 @@ def right_join(predicate):
                 ],
                 "root": "join",
                 "output": ["a.x", "b.x"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -899,6 +905,7 @@ def union_snapshot(duplicate):
                 "nodes": nodes,
                 "root": "union" if duplicate else "a",
                 "output": ["u.k"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -937,6 +944,7 @@ def filtered_snapshot(predicate):
                 ],
                 "root": "filter",
                 "output": ["t.flag"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -1009,6 +1017,7 @@ def mixed_width_membership_snapshot(lowered):
                 ],
                 "root": "filter",
                 "output": ["t.year"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -1053,6 +1062,7 @@ def date_filtered_snapshot(kind, day):
                 ],
                 "root": "filter",
                 "output": ["d.day"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -1088,6 +1098,7 @@ def left_join_elimination_snapshot(with_join, right_key_is_unique):
                 "nodes": nodes,
                 "root": "join" if with_join else "a",
                 "output": ["a.x"],
+                "subplans": [],
             },
             "stage_graph": None,
         }
@@ -1119,10 +1130,142 @@ def constant_snapshot(value, output="result", scalar_type=None):
                 ],
                 "root": "project",
                 "output": [output],
+                "subplans": [],
             },
             "stage_graph": None,
         }
     )
+
+
+def scalar_subplan_inline_snapshot(staged, aggregate_input="a.x"):
+    aggregate = {
+        "id": "scalar_aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": aggregate_input,
+                "function": "sum",
+                "output": "sub.value",
+                "type": "Int64",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    result_project = {
+        "id": "result_project",
+        "op": "project",
+        "input": "cross" if staged else "b",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "key",
+                "expression": {"kind": "column", "column": "b.k"},
+            },
+            {
+                "output": "result",
+                "expression": {
+                    "kind": "column",
+                    "column": "sub.value" if staged else "$scalar",
+                },
+            },
+        ],
+    }
+    nodes = [
+        copy.deepcopy(SCAN_A),
+        copy.deepcopy(SCAN_B),
+        aggregate,
+    ]
+    stages = None
+    edges = None
+    if staged:
+        nodes.extend(
+            [
+                {
+                    "id": "cross",
+                    "op": "join",
+                    "left": "b",
+                    "right": "scalar_aggregate",
+                    "kind": "cross",
+                    "predicate": {
+                        "kind": "literal",
+                        "type": "Bool",
+                        "value": True,
+                    },
+                },
+                result_project,
+            ]
+        )
+        stages = [
+            _stage("a_source", ["a"], [], ["a"], "column"),
+            _stage(
+                "scalar",
+                ["scalar_aggregate"],
+                ["a"],
+                ["scalar_aggregate"],
+            ),
+            _stage("b_source", ["b"], [], ["b"], "row"),
+            _stage(
+                "root",
+                ["cross", "result_project"],
+                ["b", "scalar_aggregate"],
+                ["result_project"],
+            ),
+        ]
+        edges = [
+            _edge(
+                "gather_scalar_input",
+                "a_source",
+                "scalar",
+                0,
+                0,
+                "union_all",
+                parallel=False,
+            ),
+            _edge("map_main_input", "b_source", "root", 0, 0, "map"),
+            _edge(
+                "broadcast_scalar",
+                "scalar",
+                "root",
+                0,
+                1,
+                "broadcast",
+            ),
+        ]
+    else:
+        nodes.append(result_project)
+
+    raw = _snapshot_with_stage_graph(
+        _stage_schema("A", "B"),
+        nodes,
+        "result_project",
+        ["key", "result"],
+        stages,
+        edges,
+    )
+    if not staged:
+        raw["plan"]["subplans"] = [
+            {
+                "binding": "$scalar",
+                "kind": "scalar",
+                "root": "scalar_aggregate",
+                "output": {
+                    "column": "sub.value",
+                    "type": "Int64",
+                    "nullable": True,
+                },
+                "type": "Int64",
+                "nullable": True,
+                "dependencies": [],
+                "consumers": ["result_project"],
+            }
+        ]
+    return parse_snapshot(raw)
 
 
 class SolverProtocolTest(unittest.TestCase):
@@ -1241,6 +1384,7 @@ class SolverProtocolTest(unittest.TestCase):
                     ],
                     "root": "project",
                     "output": ["result"],
+                    "subplans": [],
                 },
                 "stage_graph": None,
             }
@@ -3337,6 +3481,34 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_scalar_subplan_and_staged_cross_join_inline_are_bounded_equivalent(self):
+        initial = scalar_subplan_inline_snapshot(False)
+        final = scalar_subplan_inline_snapshot(True)
+        result = solve(
+            build_problem(initial, final, 1, 10_000),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_mutated_inlined_scalar_input_has_a_solver_counterexample(self):
+        initial = scalar_subplan_inline_snapshot(False)
+        mutated = scalar_subplan_inline_snapshot(True, aggregate_input="a.k")
+        result = solve(
+            build_problem(initial, mutated, 1, 10_000),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertEqual(len(result.witness["A"]), 1)
+        self.assertEqual(len(result.witness["B"]), 1)
+        self.assertNotEqual(
+            result.witness["A"][0]["k"],
+            result.witness["A"][0]["x"],
+        )
+
     def test_split_aggregates_are_bounded_equivalent(self):
         cases = (
             ("count", "Int64"),

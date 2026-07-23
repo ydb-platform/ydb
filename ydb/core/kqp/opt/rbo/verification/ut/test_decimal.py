@@ -197,6 +197,7 @@ def _snapshot(predicate):
             ],
             "root": "filter",
             "output": ["a.d"],
+            "subplans": [],
         },
         "stage_graph": None,
     }
@@ -256,6 +257,7 @@ def _arithmetic_snapshot(kind, staged, right=None):
             ],
             "root": "project",
             "output": ["result"],
+            "subplans": [],
         },
         "stage_graph": None,
     }
@@ -340,6 +342,7 @@ def _cast_snapshot(staged, argument=None):
             ],
             "root": "project",
             "output": ["result"],
+            "subplans": [],
         },
         "stage_graph": None,
     }

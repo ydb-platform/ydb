@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
 
@@ -169,6 +170,111 @@ void VisitOperators(
     visitor(*op);
 }
 
+void ValidateOperatorArity(IOperator& op, bool allowRoot) {
+    const size_t children = op.GetChildren().size();
+    switch (op.GetKind()) {
+        case EOperator::EmptySource:
+            if (children != 0) {
+                Unsupported("EmptySource unexpectedly has children");
+            }
+            return;
+
+        case EOperator::Source:
+            if (children != 0) {
+                Unsupported("Read unexpectedly has children");
+            }
+            return;
+
+        case EOperator::Map:
+            if (children != 1) {
+                Unsupported("Map must have one input");
+            }
+            return;
+
+        case EOperator::Filter:
+            if (children != 1) {
+                Unsupported("Filter must have one input");
+            }
+            return;
+
+        case EOperator::Limit:
+            if (children != 1) {
+                Unsupported("Limit must have one input");
+            }
+            return;
+
+        case EOperator::Sort:
+            if (children != 1) {
+                Unsupported("Sort must have one input");
+            }
+            return;
+
+        case EOperator::Aggregate:
+            if (children != 1) {
+                Unsupported("Aggregate must have one input");
+            }
+            return;
+
+        case EOperator::Join:
+            if (children != 2) {
+                Unsupported("Join must have two inputs");
+            }
+            return;
+
+        case EOperator::UnionAll:
+            if (children != 2) {
+                Unsupported("UnionAll must have two inputs");
+            }
+            return;
+
+        case EOperator::Root:
+            if (!allowRoot) {
+                Unsupported("Unsupported operator Root");
+            }
+            if (children != 1) {
+                Unsupported("Root must have one input");
+            }
+            return;
+
+        case EOperator::AddDependencies:
+        case EOperator::CBOTree:
+            Unsupported(TStringBuilder()
+                << "Unsupported operator " << op.GetExplainName());
+    }
+    Unsupported("Unsupported operator kind");
+}
+
+void ValidateOperatorTopologyImpl(
+    IOperator& op,
+    THashSet<const IOperator*>& visiting,
+    THashSet<const IOperator*>& visited,
+    bool allowRoot)
+{
+    if (visited.contains(&op)) {
+        return;
+    }
+    if (!visiting.insert(&op).second) {
+        Unsupported("Plan contains an operator cycle");
+    }
+
+    ValidateOperatorArity(op, allowRoot);
+    for (const auto& child : op.GetChildren()) {
+        if (!child) {
+            Unsupported("Plan contains a null operator");
+        }
+        ValidateOperatorTopologyImpl(*child, visiting, visited, false);
+    }
+
+    visiting.erase(&op);
+    visited.insert(&op);
+}
+
+void ValidateOperatorTopology(IOperator& root, bool allowRoot = false) {
+    THashSet<const IOperator*> visiting;
+    THashSet<const IOperator*> visited;
+    ValidateOperatorTopologyImpl(root, visiting, visited, allowRoot);
+}
+
 TVector<TIntrusivePtr<IOperator>> OrderedSubplanRoots(const TSubplans& subplans) {
     if (subplans.OrderedList.size() != subplans.PlanMap.size()) {
         Unsupported("Subplan registry order and map have different sizes");
@@ -203,12 +309,151 @@ TVector<TIntrusivePtr<IOperator>> OrderedSubplanRoots(const TSubplans& subplans)
     return result;
 }
 
-void CheckSnapshotProperties(const IOperator& op, bool stageGraphPresent) {
+void ValidateSnapshotTopology(TOpRoot& root) {
+    ValidateOperatorTopology(root, true);
+    for (const auto& subplanRoot :
+        OrderedSubplanRoots(root.PlanProps.Subplans))
+    {
+        ValidateOperatorTopology(*subplanRoot);
+    }
+}
+
+std::optional<ui64> ExactUint64LiteralValue(const TExpression& expression) {
+    if (!expression.Node || !expression.Node->IsLambda() ||
+        expression.Node->ChildrenSize() != 2)
+    {
+        return std::nullopt;
+    }
+    const auto* arguments = expression.Node->Child(0);
+    if (!arguments->IsArguments() || arguments->ChildrenSize() != 1 ||
+        !arguments->Child(0)->IsArgument())
+    {
+        return std::nullopt;
+    }
+    const auto* body = expression.GetExpressionBody().Get();
+    if (!body || !body->IsCallable("Uint64") || body->ChildrenSize() != 1 ||
+        !body->Child(0)->IsAtom())
+    {
+        return std::nullopt;
+    }
+    ui64 value = 0;
+    if (!TryFromString<ui64>(body->Child(0)->Content(), value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+enum class EAtMostOneProofMode {
+    ScalarSubplan,
+    HarmlessCheckInput,
+};
+
+bool ProvesAtMostOne(
+    IOperator& op,
+    EAtMostOneProofMode mode,
+    THashSet<const IOperator*>& visiting,
+    const std::optional<int>* requiredStage)
+{
+    if (requiredStage && op.Props.StageId != *requiredStage) {
+        return false;
+    }
+    if (!visiting.insert(&op).second) {
+        return false;
+    }
+    const auto finish = [&](bool result) {
+        visiting.erase(&op);
+        return result;
+    };
+
+    switch (op.GetKind()) {
+        case EOperator::EmptySource:
+            return finish(true);
+
+        case EOperator::Aggregate: {
+            auto& aggregate = static_cast<TOpAggregate&>(op);
+            return finish(
+                !aggregate.IsDistinctAll() &&
+                aggregate.GetKeyColumns().empty() &&
+                aggregate.GetAggregationPhase() != EOpPhase::Intermediate);
+        }
+
+        case EOperator::Limit: {
+            auto& limit = static_cast<TOpLimit&>(op);
+            const auto count = ExactUint64LiteralValue(limit.GetLimitCond());
+            if (!count) {
+                return finish(false);
+            }
+            if (*count <= 1) {
+                return finish(true);
+            }
+            const auto& children = op.GetChildren();
+            return finish(
+                mode == EAtMostOneProofMode::HarmlessCheckInput &&
+                children.size() == 1 &&
+                ProvesAtMostOne(
+                    *children.front(),
+                    mode,
+                    visiting,
+                    requiredStage));
+        }
+
+        case EOperator::Map:
+        case EOperator::Filter:
+        case EOperator::Sort: {
+            const auto& children = op.GetChildren();
+            return finish(
+                children.size() == 1 &&
+                ProvesAtMostOne(
+                    *children.front(),
+                    mode,
+                    visiting,
+                    requiredStage));
+        }
+
+        default:
+            return finish(false);
+    }
+}
+
+bool IsStaticallyAtMostOne(IOperator& op) {
+    THashSet<const IOperator*> visiting;
+    return ProvesAtMostOne(
+        op,
+        EAtMostOneProofMode::ScalarSubplan,
+        visiting,
+        nullptr);
+}
+
+bool IsHarmlessAtMostOneCheckInput(
+    IOperator& op,
+    const std::optional<int>* requiredStage)
+{
+    THashSet<const IOperator*> visiting;
+    return ProvesAtMostOne(
+        op,
+        EAtMostOneProofMode::HarmlessCheckInput,
+        visiting,
+        requiredStage);
+}
+
+void CheckSnapshotProperties(IOperator& op, bool stageGraphPresent) {
     const auto& props = op.Props;
     const bool joinPhysicalProps = props.JoinAlgo || props.UseBlockHashJoin ||
         props.LeftShuffleBy || props.RightShuffleBy;
+    bool harmlessAtMostOneCheck = false;
+    if (props.EnsureAtMostOne && op.GetKind() == EOperator::Limit) {
+        const auto& children = op.GetChildren();
+        const auto* requiredStage =
+            stageGraphPresent ? &props.StageId : nullptr;
+        harmlessAtMostOneCheck =
+            children.size() == 1 &&
+            (!stageGraphPresent || props.StageId.has_value()) &&
+            IsHarmlessAtMostOneCheckInput(
+                *children.front(),
+                requiredStage);
+    }
     if ((!stageGraphPresent && props.StageId) || props.Algorithm || props.OrderEnforcer ||
-        props.EnsureAtMostOne ||
+        (props.EnsureAtMostOne && !harmlessAtMostOneCheck) ||
         (joinPhysicalProps && (!stageGraphPresent || op.GetKind() != EOperator::Join)))
     {
         Unsupported(TStringBuilder()
@@ -236,12 +481,19 @@ bool HasStageGraphState(TOpRoot& root) {
 }
 
 bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
-    bool result = false;
+    // Scalar descriptors require an exact type on their selected root output,
+    // including Project/Filter/Limit wrappers that otherwise do not trigger
+    // the legacy Aggregate/Sort materialization path.
+    bool result = !root.PlanProps.Subplans.PlanMap.empty();
     THashSet<const IOperator*> visited;
-    VisitOperators(root.GetInput(), visited, [&](IOperator& op) {
+    const auto inspect = [&](IOperator& op) {
         result = result || op.GetKind() == EOperator::Aggregate ||
             op.GetKind() == EOperator::Sort;
-    });
+    };
+    VisitOperators(root.GetInput(), visited, inspect);
+    for (const auto& subplanRoot : OrderedSubplanRoots(root.PlanProps.Subplans)) {
+        VisitOperators(subplanRoot, visited, inspect);
+    }
     return result;
 }
 
@@ -4445,6 +4697,16 @@ TString Phase(EOpPhase phase) {
 }
 
 class TPlanExporter {
+private:
+    struct TScalarSubplanDescriptor {
+        TString Binding;
+        TIntrusivePtr<IOperator> Plan;
+        TString OutputColumn;
+        TString Type;
+        bool OutputNullable = false;
+        TVector<IOperator*> Consumers;
+    };
+
 public:
     TPlanExporter(
         TOpRoot& root,
@@ -4463,16 +4725,18 @@ public:
     }
 
     NJson::TJsonValue Export() {
-        if (!Root.PlanProps.Subplans.PlanMap.empty() ||
-            !Root.PlanProps.Subplans.OrderedList.empty())
-        {
-            Unsupported("Logical snapshot v1 cannot represent subplans");
-        }
+        ValidateSnapshotTopology(Root);
+        PrepareSubplans();
         CheckSnapshotProperties(Root, false);
         if (Root.ColumnOrder.empty()) {
             Unsupported("Root output order must not be empty");
         }
 
+        // Subplan roots precede the main root so descriptors and consumer IDs
+        // share one deterministic post-order node namespace.
+        for (const auto& subplan : ScalarSubplans) {
+            ExportNode(subplan.Plan);
+        }
         RootId = ExportNode(Root.GetInput());
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
@@ -4488,6 +4752,7 @@ public:
         result["nodes"] = std::move(Nodes);
         result["root"] = RootId;
         result["output"] = std::move(output);
+        result["subplans"] = ExportSubplans();
         return result;
     }
 
@@ -4504,6 +4769,331 @@ public:
     }
 
 private:
+    TVector<TString> ReferencedSubplanBindings(IOperator& op) {
+        THashSet<TString> referenced;
+        for (const auto& iu : op.GetSubplanIUs(Root.PlanProps)) {
+            const TString name = iu.GetFullName();
+            if (!ScalarSubplanIndices.contains(name)) {
+                Unsupported(TStringBuilder()
+                    << op.GetExplainName()
+                    << " references an undeclared scalar subplan binding "
+                    << name);
+            }
+            referenced.insert(name);
+        }
+
+        TVector<TString> result;
+        result.reserve(referenced.size());
+        for (const auto& subplan : ScalarSubplans) {
+            if (referenced.contains(subplan.Binding)) {
+                result.push_back(subplan.Binding);
+            }
+        }
+        return result;
+    }
+
+    void PrepareSubplans() {
+        const auto roots = OrderedSubplanRoots(Root.PlanProps.Subplans);
+        if (!roots.empty() && StageGraphPresent) {
+            Unsupported(
+                "A staged logical snapshot cannot contain residual subplans");
+        }
+        for (const auto& root : roots) {
+            ValidateOperatorTopology(*root);
+        }
+        if (roots.empty()) {
+            return;
+        }
+
+        ScalarSubplans.reserve(roots.size());
+        for (size_t index = 0; index < roots.size(); ++index) {
+            const auto& bindingIU = Root.PlanProps.Subplans.OrderedList[index];
+            const TString binding = bindingIU.GetFullName();
+            const auto entryIt = Root.PlanProps.Subplans.PlanMap.find(bindingIU);
+            if (entryIt == Root.PlanProps.Subplans.PlanMap.end()) {
+                Unsupported(TStringBuilder()
+                    << "Subplan registry order references missing binding "
+                    << binding);
+            }
+            const auto& entry = entryIt->second;
+            if (entry.Type != ESubplanType::EXPR) {
+                Unsupported(TStringBuilder()
+                    << "Subplan binding " << binding
+                    << " is not a scalar expression subplan");
+            }
+            if (!entry.Tuple.empty()) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " has tuple inputs");
+            }
+            if (!entry.DependentIUs.empty()) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " is correlated");
+            }
+            if (!IsStaticallyAtMostOne(*roots[index])) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " is not statically at most one row");
+            }
+
+            const auto resultIUs = GetSubplanResultIUs(roots[index]);
+            if (resultIUs.size() != 1) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " must have exactly one result column");
+            }
+            const TString output = resultIUs.front().GetFullName();
+            const auto outputNames = OutputNames(*roots[index]);
+            if (output.empty() || !outputNames.contains(output)) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " has an invalid result column " << output);
+            }
+
+            bool outputNullable = false;
+            const TString type = TypeName(
+                OutputType(*roots[index], output),
+                &outputNullable);
+            if (!ScalarSubplanIndices.emplace(
+                    binding,
+                    ScalarSubplans.size()).second)
+            {
+                Unsupported(TStringBuilder()
+                    << "Duplicate scalar subplan binding " << binding);
+            }
+            ScalarSubplans.push_back({
+                binding,
+                roots[index],
+                output,
+                type,
+                outputNullable,
+                {},
+            });
+        }
+
+        THashSet<const IOperator*> mainReachable;
+        VisitOperators(
+            Root.GetInput(),
+            mainReachable,
+            [](IOperator&) {});
+        for (const auto& subplan : ScalarSubplans) {
+            if (mainReachable.contains(subplan.Plan.Get())) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan root for binding "
+                    << subplan.Binding
+                    << " is reachable from the main plan");
+            }
+        }
+
+        TVector<THashSet<const IOperator*>> subplanReachable(
+            ScalarSubplans.size());
+        for (size_t index = 0; index < ScalarSubplans.size(); ++index) {
+            VisitOperators(
+                ScalarSubplans[index].Plan,
+                subplanReachable[index],
+                [](IOperator&) {});
+        }
+        for (size_t outer = 0; outer < ScalarSubplans.size(); ++outer) {
+            for (size_t inner = 0; inner < ScalarSubplans.size(); ++inner) {
+                if (outer == inner ||
+                    ScalarSubplans[outer].Plan.Get() ==
+                        ScalarSubplans[inner].Plan.Get())
+                {
+                    continue;
+                }
+                if (subplanReachable[outer].contains(
+                        ScalarSubplans[inner].Plan.Get()))
+                {
+                    Unsupported(TStringBuilder()
+                        << "Scalar subplan root for binding "
+                        << ScalarSubplans[inner].Binding
+                        << " is reachable below distinct subplan binding "
+                        << ScalarSubplans[outer].Binding);
+                }
+            }
+        }
+
+        // A subplan is a closed relation in this first slice. References from
+        // one captured subplan into any registry binding would be nesting or
+        // correlation and must not be silently evaluated as a free column.
+        for (const auto& subplan : ScalarSubplans) {
+            THashSet<const IOperator*> subplanNodes;
+            VisitOperators(
+                subplan.Plan,
+                subplanNodes,
+                [&](IOperator& op) {
+                    if (!ReferencedSubplanBindings(op).empty()) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << subplan.Binding
+                            << " contains a nested subplan reference");
+                    }
+                });
+        }
+
+        THashSet<const IOperator*> mainNodes;
+        VisitOperators(
+            Root.GetInput(),
+            mainNodes,
+            [&](IOperator& op) {
+                const auto outputNames = OutputNames(op);
+                for (const auto& subplan : ScalarSubplans) {
+                    if (outputNames.contains(subplan.Binding)) {
+                        Unsupported(TStringBuilder()
+                            << op.GetExplainName()
+                            << " output collides with scalar subplan binding "
+                            << subplan.Binding);
+                    }
+                }
+                auto bindings = ReferencedSubplanBindings(op);
+                if (bindings.empty()) {
+                    return;
+                }
+                if (op.GetKind() != EOperator::Map &&
+                    op.GetKind() != EOperator::Filter)
+                {
+                    Unsupported(TStringBuilder()
+                        << op.GetExplainName()
+                        << " cannot consume a scalar subplan binding");
+                }
+                if (op.GetChildren().size() != 1) {
+                    Unsupported(TStringBuilder()
+                        << op.GetExplainName()
+                        << " scalar subplan consumer is not unary");
+                }
+                const auto inputNames = OutputNames(*op.GetChildren().front());
+                for (const auto& binding : bindings) {
+                    if (inputNames.contains(binding)) {
+                        Unsupported(TStringBuilder()
+                            << op.GetExplainName()
+                            << " scalar subplan binding collides with input column "
+                            << binding);
+                    }
+                    ScalarSubplans[ScalarSubplanIndices.at(binding)]
+                        .Consumers.push_back(&op);
+                }
+                if (!ConsumerBindings.emplace(&op, std::move(bindings)).second) {
+                    Unsupported("Scalar subplan consumer was indexed twice");
+                }
+            });
+
+        for (const auto& subplan : ScalarSubplans) {
+            if (subplan.Consumers.empty()) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << subplan.Binding
+                    << " has no consumer");
+            }
+        }
+    }
+
+    const TVector<TString>& VirtualBindings(const IOperator& op) const {
+        static const TVector<TString> Empty;
+        const auto* result = ConsumerBindings.FindPtr(&op);
+        return result ? *result : Empty;
+    }
+
+    THashSet<TString> VisibleInputNames(
+        IOperator& consumer,
+        IOperator& input) const
+    {
+        auto result = OutputNames(input);
+        for (const auto& binding : VirtualBindings(consumer)) {
+            if (!result.insert(binding).second) {
+                Unsupported(TStringBuilder()
+                    << consumer.GetExplainName()
+                    << " scalar subplan binding collides with input column "
+                    << binding);
+            }
+        }
+        return result;
+    }
+
+    void AuditVirtualBindingMemberTypes(
+        const TExpression& expression,
+        const IOperator& consumer) const
+    {
+        const auto& bindings = VirtualBindings(consumer);
+        if (bindings.empty()) {
+            return;
+        }
+        THashSet<TString> expected(bindings.begin(), bindings.end());
+        THashSet<const TExprNode*> visited;
+        std::function<void(const TExprNode&)> visit =
+            [&](const TExprNode& node) {
+                if (!visited.insert(&node).second) {
+                    return;
+                }
+                if (node.IsCallable("Member") &&
+                    node.ChildrenSize() == 2 &&
+                    node.Child(1)->IsAtom())
+                {
+                    const TString name(node.Child(1)->Content());
+                    if (expected.contains(name)) {
+                        bool nullable = false;
+                        const TString type = ScalarTypeName(node, &nullable);
+                        const auto& subplan =
+                            ScalarSubplans[ScalarSubplanIndices.at(name)];
+                        if (type != subplan.Type || !nullable) {
+                            Unsupported(TStringBuilder()
+                                << consumer.GetExplainName()
+                                << " scalar subplan Member " << name
+                                << " must be Optional<" << subplan.Type << ">");
+                        }
+                    }
+                }
+                for (const auto& child : node.Children()) {
+                    visit(*child);
+                }
+            };
+        if (!expression.Node) {
+            Unsupported(TStringBuilder()
+                << consumer.GetExplainName()
+                << " has an empty scalar subplan expression");
+        }
+        visit(*expression.Node);
+    }
+
+    NJson::TJsonValue ExportSubplans() const {
+        auto result = JsonArray();
+        for (const auto& subplan : ScalarSubplans) {
+            const auto* rootId = Ids.FindPtr(subplan.Plan.Get());
+            if (!rootId) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan root was not exported for binding "
+                    << subplan.Binding);
+            }
+
+            auto output = JsonMap();
+            output["column"] = subplan.OutputColumn;
+            output["type"] = subplan.Type;
+            output["nullable"] = subplan.OutputNullable;
+
+            auto dependencies = JsonArray();
+            auto consumers = JsonArray();
+            for (const auto* consumer : subplan.Consumers) {
+                const auto* consumerId = Ids.FindPtr(consumer);
+                if (!consumerId) {
+                    Unsupported(TStringBuilder()
+                        << "Scalar subplan consumer was not exported for binding "
+                        << subplan.Binding);
+                }
+                consumers.AppendValue(*consumerId);
+            }
+
+            auto descriptor = JsonMap();
+            descriptor["binding"] = subplan.Binding;
+            descriptor["kind"] = "scalar";
+            descriptor["root"] = *rootId;
+            descriptor["output"] = std::move(output);
+            descriptor["type"] = subplan.Type;
+            descriptor["nullable"] = true;
+            descriptor["dependencies"] = std::move(dependencies);
+            descriptor["consumers"] = std::move(consumers);
+            result.AppendValue(std::move(descriptor));
+        }
+        return result;
+    }
+
     TString ExportNode(const TIntrusivePtr<IOperator>& op) {
         if (!op) {
             Unsupported("Plan contains a null operator");
@@ -4787,9 +5377,13 @@ private:
                     Unsupported("Map must have one input");
                 }
                 auto& map = static_cast<TOpMap&>(base);
-                const auto inputNames = OutputNames(*map.GetInput());
+                const auto inputNames =
+                    VisibleInputNames(map, *map.GetInput());
                 THashSet<TString> renameSources;
                 for (const auto& element : map.MapElements) {
+                    AuditVirtualBindingMemberTypes(
+                        element.GetExpression(),
+                        map);
                     if (element.IsRename()) {
                         const TString source = element.GetRename().GetFullName();
                         if (!inputNames.contains(source) || !renameSources.insert(source).second) {
@@ -4843,7 +5437,9 @@ private:
                     Unsupported("Filter must have one input");
                 }
                 auto& filter = static_cast<TOpFilter&>(base);
-                const auto inputNames = OutputNames(*filter.GetInput());
+                const auto inputNames =
+                    VisibleInputNames(filter, *filter.GetInput());
+                AuditVirtualBindingMemberTypes(filter.FilterExpr, filter);
                 node["op"] = "filter";
                 node["input"] = children[0];
                 node["predicate"] = ExportExpr(filter.FilterExpr, inputNames);
@@ -5191,6 +5787,9 @@ private:
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     TVector<IOperator*> NodeOrder;
+    TVector<TScalarSubplanDescriptor> ScalarSubplans;
+    THashMap<TString, size_t> ScalarSubplanIndices;
+    THashMap<const IOperator*, TVector<TString>> ConsumerBindings;
     TString RootId;
     NJson::TJsonValue Nodes = JsonArray();
 };
@@ -5959,6 +6558,7 @@ TString SerializeSnapshot(
     const TSemanticSnapshotCatalogV1& catalog,
     TStringBuf cluster)
 {
+    ValidateSnapshotTopology(root);
     const bool stageGraphPresent = HasStageGraphState(root);
     TPlanExporter planExporter(root, catalog, cluster, stageGraphPresent);
 
@@ -6000,6 +6600,7 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
     const TRBOContext& ctx)
 {
     return CatchUnsupported<TSemanticSnapshotCatalogCaptureResult>([&](auto& result) {
+        ValidateSnapshotTopology(initialRoot);
         const auto subplanRoots =
             OrderedSubplanRoots(initialRoot.PlanProps.Subplans);
 
@@ -6127,6 +6728,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureInitial(
     };
 
     try {
+        ValidateSnapshotTopology(root);
         if (HasStageGraphState(root)) {
             CatalogFailure =
                 "Initial semantic snapshot boundary requires stage_graph:null";
@@ -6179,6 +6781,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
     };
 
     try {
+        ValidateSnapshotTopology(root);
         if (!InitialAttempted) {
             result.UnsupportedReason = "Initial semantic snapshot capture was not attempted";
         } else if (!Catalog) {
@@ -6220,6 +6823,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureTransformationPrefix(
     };
 
     try {
+        ValidateSnapshotTopology(root);
         bool validEvents = !result.TransformationEvents.empty();
         for (ui64 index = 0; index < result.TransformationEvents.size(); ++index) {
             const auto& event = result.TransformationEvents[index];

@@ -171,6 +171,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             scalarRenames,
             ctx.ExprCtx,
             props);
+        demandedScalar->PreserveInputOrder = true;
         auto cardinalityCheck = MakeIntrusive<TOpLimit>(
             demandedScalar,
             subplan->Pos,
@@ -204,6 +205,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
     
         auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
+        cross->PreserveInputOrder = true;
         unaryOp->SetInput(cross);
     }
 

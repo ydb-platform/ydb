@@ -50,12 +50,13 @@ struct TRuleTestContext {
 TIntrusivePtr<TOpRead> MakeRead(
     NYql::EStorageType storage,
     TPositionHandle pos,
-    const TPhysicalOpProps& props = {})
+    const TPhysicalOpProps& props = {},
+    const TString& column = "a")
 {
     return MakeIntrusive<TOpRead>(
         "",
-        TVector<TString>{"a"},
-        TVector<TInfoUnit>{TInfoUnit("a")},
+        TVector<TString>{column},
+        TVector<TInfoUnit>{TInfoUnit(column)},
         storage,
         nullptr,
         nullptr,
@@ -145,6 +146,100 @@ Y_UNIT_TEST_SUITE(KqpRboLimitPushdownRules) {
         UNIT_ASSERT_VALUES_EQUAL(result.Get(), limit.Get());
         UNIT_ASSERT(!sort->LimitCond);
         UNIT_ASSERT_VALUES_EQUAL(sort->Parents.size(), 2);
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpRboOrderSensitiveJoinRules) {
+    Y_UNIT_TEST(KeepsMarkedJoinOutsideCboWhileOptimizingBothSides) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        TBuildInitialCBOTreeRule buildCboTree;
+
+        auto markedJoin = MakeIntrusive<TOpJoin>(
+            MakeRead(NYql::EStorageType::RowStorage, pos),
+            MakeRead(NYql::EStorageType::RowStorage, pos),
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        markedJoin->PreserveInputOrder = true;
+
+        const auto markedResult =
+            buildCboTree.SimpleMatchAndApply(markedJoin, ctx.RboCtx, ctx.PlanProps);
+        UNIT_ASSERT_VALUES_EQUAL(markedResult.Get(), markedJoin.Get());
+
+        auto makeCboSide = [&]() {
+            auto join = MakeIntrusive<TOpJoin>(
+                MakeRead(NYql::EStorageType::RowStorage, pos),
+                MakeRead(NYql::EStorageType::RowStorage, pos),
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            auto result =
+                buildCboTree.SimpleMatchAndApply(join, ctx.RboCtx, ctx.PlanProps);
+            UNIT_ASSERT_VALUES_UNEQUAL(result.Get(), join.Get());
+            UNIT_ASSERT(result->Kind == EOperator::CBOTree);
+            return result;
+        };
+
+        auto leftCboTree = makeCboSide();
+        auto rightCboTree = makeCboSide();
+        auto markedJoinWithCboSides = MakeIntrusive<TOpJoin>(
+            leftCboTree,
+            rightCboTree,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        markedJoinWithCboSides->PreserveInputOrder = true;
+
+        TExpandCBOTreeRule expandCboTree;
+        const auto expandedResult = expandCboTree.SimpleMatchAndApply(
+            markedJoinWithCboSides,
+            ctx.RboCtx,
+            ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            expandedResult.Get(),
+            markedJoinWithCboSides.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            markedJoinWithCboSides->GetLeftInput().Get(),
+            leftCboTree.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            markedJoinWithCboSides->GetRightInput().Get(),
+            rightCboTree.Get());
+    }
+
+    Y_UNIT_TEST(DoesNotConvertMarkedCrossJoinThroughFilterPushdown) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit leftColumn("left");
+        const TInfoUnit rightColumn("right");
+
+        auto markedJoin = MakeIntrusive<TOpJoin>(
+            MakeRead(NYql::EStorageType::RowStorage, pos, {}, leftColumn.GetFullName()),
+            MakeRead(NYql::EStorageType::RowStorage, pos, {}, rightColumn.GetFullName()),
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        markedJoin->PreserveInputOrder = true;
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(leftColumn, pos, &ctx.ExprCtx, &ctx.PlanProps),
+            MakeColumnAccess(rightColumn, pos, &ctx.ExprCtx, &ctx.PlanProps));
+        auto filter = MakeIntrusive<TOpFilter>(
+            markedJoin,
+            pos,
+            equality);
+        TOpRoot root(filter, pos, {"left", "right"});
+        root.ComputeParents();
+        UNIT_ASSERT(markedJoin->IsSingleConsumer());
+
+        TPushFilterIntoJoinRule pushFilter;
+        const auto result =
+            pushFilter.SimpleMatchAndApply(filter, ctx.RboCtx, ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), filter.Get());
+        UNIT_ASSERT_VALUES_EQUAL(markedJoin->JoinKind, "Cross");
+        UNIT_ASSERT(markedJoin->JoinKeys.empty());
     }
 }
 

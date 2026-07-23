@@ -80,6 +80,9 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
 
     // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
+    if (join->PreserveInputOrder) {
+        return input;
+    }
 
     // Make sure the join and its inputs are single consumer
     if (!join->IsSingleConsumer()) {

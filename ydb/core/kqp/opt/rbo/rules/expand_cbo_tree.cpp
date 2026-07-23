@@ -66,7 +66,7 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
-        if (!join->JoinFilters.empty()) {
+        if (join->PreserveInputOrder || !join->JoinFilters.empty()) {
             return input;
         }
 

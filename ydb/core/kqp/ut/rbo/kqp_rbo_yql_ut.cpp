@@ -6508,6 +6508,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_STRING_CONTAINS(
             projectedMultirowScalar.GetIssues().ToString(),
             "More than one row returned by a subquery used as an expression");
+
+        auto nestedMultirowScalarWithEmptyConsumer = session2.ExecuteDataQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.CostBasedOptimizationLevel = '2';
+            SELECT (
+                SELECT (
+                    SELECT inner_foo.id
+                    FROM `/Root/foo` AS inner_foo
+                    WHERE inner_foo.id < 2
+                ) AS nested_scalar
+                FROM `/Root/foo` AS outer_foo
+                WHERE outer_foo.id = 0
+            ) AS value
+            FROM `/Root/bar` AS bar
+            WHERE bar.id < 0;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            nestedMultirowScalarWithEmptyConsumer.GetStatus(),
+            EStatus::PRECONDITION_FAILED,
+            nestedMultirowScalarWithEmptyConsumer.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            nestedMultirowScalarWithEmptyConsumer.GetIssues().ToString(),
+            "More than one row returned by a subquery used as an expression");
     }
 
     Y_UNIT_TEST(CorrelatedSubquery) {

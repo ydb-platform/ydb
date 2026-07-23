@@ -628,6 +628,10 @@ public:
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;
+    // Some synthetic Cross joins encode a right-before-left evaluation
+    // dependency. Relational rewrites may optimize either side independently,
+    // but must not commute or otherwise absorb this join.
+    bool PreserveInputOrder = false;
 
 protected:
     void ComputeOutputIUs() override;

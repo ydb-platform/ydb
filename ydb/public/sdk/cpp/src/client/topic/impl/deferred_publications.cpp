@@ -27,7 +27,7 @@ NThreading::TFuture<TResult> MakeBadRequestFuture(const std::string& message) {
 }
 
 NThreading::TFuture<TStatus> WaitAcksIfNeeded(const TDeferredPublication& publication) {
-    return NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(publication)->WaitAllAcks();
+    return TDeferredPublication::TAccess::AckState(publication)->WaitAllAcks();
 }
 
 TPublicationSummary FromProto(const PublicationSummary& summary) {

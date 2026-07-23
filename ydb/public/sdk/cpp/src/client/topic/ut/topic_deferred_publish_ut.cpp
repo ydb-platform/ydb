@@ -94,6 +94,11 @@ private:
     std::optional<NTopic::TContinuationToken> Token_;
 };
 
+struct TReadHelperState {
+    std::vector<std::string> Messages;
+    NThreading::TPromise<void> Done = NThreading::NewPromise<void>();
+};
+
 std::vector<std::string> ReadMessages(
     NTopic::TTopicClient& client,
     const std::string& topicPath,
@@ -101,26 +106,27 @@ std::vector<std::string> ReadMessages(
     size_t expectedCount,
     TDuration timeout = TDuration::Seconds(30))
 {
-    std::vector<std::string> messages;
-    auto done = NThreading::NewPromise<void>();
+    // Shared so the handler outlives Wait/Close: TrySetValue wakes the waiter while the
+    // callback may still be running on the handlers executor.
+    auto state = std::make_shared<TReadHelperState>();
 
     NTopic::TReadSessionSettings settings;
     settings.ConsumerName(consumerName);
     settings.AppendTopics({NTopic::TTopicReadSettings(topicPath).ReadFromTimestamp(TInstant::Zero())});
     settings.EventHandlers_.SimpleDataHandlers(
-        [&](NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+        [state, expectedCount](NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
         for (const auto& message : event.GetMessages()) {
-            messages.emplace_back(TString(message.GetData()));
+            state->Messages.emplace_back(TString(message.GetData()));
         }
-        if (messages.size() >= expectedCount) {
-            done.TrySetValue();
+        if (state->Messages.size() >= expectedCount) {
+            state->Done.TrySetValue();
         }
     }, true);
 
     auto session = client.CreateReadSession(settings);
-    UNIT_ASSERT(done.GetFuture().Wait(timeout));
+    UNIT_ASSERT(state->Done.GetFuture().Wait(timeout));
     session->Close(TDuration::Seconds(5));
-    return messages;
+    return state->Messages;
 }
 
 std::vector<std::string> ReadNoMessages(
@@ -129,24 +135,23 @@ std::vector<std::string> ReadNoMessages(
     const std::string& consumerName,
     TDuration timeout = TDuration::Seconds(5))
 {
-    std::vector<std::string> messages;
-    auto done = NThreading::NewPromise<void>();
+    auto state = std::make_shared<TReadHelperState>();
 
     NTopic::TReadSessionSettings settings;
     settings.ConsumerName(consumerName);
     settings.AppendTopics({NTopic::TTopicReadSettings(topicPath).ReadFromTimestamp(TInstant::Zero())});
     settings.EventHandlers_.SimpleDataHandlers(
-        [&](NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+        [state](NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
         for (const auto& message : event.GetMessages()) {
-            messages.emplace_back(TString(message.GetData()));
+            state->Messages.emplace_back(TString(message.GetData()));
         }
-        done.TrySetValue();
+        state->Done.TrySetValue();
     }, true);
 
     auto session = client.CreateReadSession(settings);
-    done.GetFuture().Wait(timeout);
+    state->Done.GetFuture().Wait(timeout);
     session->Close(TDuration::Seconds(5));
-    return messages;
+    return state->Messages;
 }
 
 } // namespace

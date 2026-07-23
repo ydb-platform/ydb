@@ -205,10 +205,6 @@ concept Serializable =
 
 class TDeferredPublicationAckState;
 
-namespace NDeferredPublicationDetail {
-struct TDeferredPublicationAccess;
-} // namespace NDeferredPublicationDetail
-
 //! Deferred publication for StreamWrite and deferred-publish control RPCs.
 //! Each handle owns ack-tracking state (shared on copy, transferred on move).
 //! Publish/Cancel wait for acks only when this handle's state recorded writes.
@@ -216,6 +212,11 @@ struct TDeferredPublicationAccess;
 //! On Write, ExtPublicationId is optional and informational (omit / "" / any string); only the
 //! MaxExtPublicationIdLength cap applies. BeginPublication still requires a non-empty ext id.
 struct TDeferredPublication {
+    //! SDK-internal hatch to private AckState_. Not part of the public contract:
+    //! keeps AckState_ hidden from users while write-session / Publish / Cancel can reach it
+    //! without a public getter (and without friending every call site).
+    struct TAccess;
+
     static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
     uint64_t IntPublicationId = 0;
@@ -245,8 +246,6 @@ struct TDeferredPublication {
     }
 
 private:
-    friend struct NDeferredPublicationDetail::TDeferredPublicationAccess;
-
     std::shared_ptr<TDeferredPublicationAckState> AckState_;
 };
 

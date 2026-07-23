@@ -791,7 +791,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
             }
             WrittenInTx[seqNo] = *tx;
         } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
-            auto& ackState = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(*deferred);
+            auto& ackState = TDeferredPublication::TAccess::AckState(*deferred);
             if (!ackState->TryOnWrite()) {
                 CloseImpl(
                     EStatus::BAD_REQUEST,

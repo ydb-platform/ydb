@@ -103,55 +103,55 @@ Y_UNIT_TEST(AbortWithoutWaitOnlyDropsUnackedCount) {
 Y_UNIT_TEST(IndependentHandleDoesNotWaitForOtherWrites) {
     TDeferredPublication writeHandle(42);
     TDeferredPublication publishHandle(42);
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(writeHandle).get()
-        != NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(publishHandle).get());
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(writeHandle).get()
+        != TDeferredPublication::TAccess::AckState(publishHandle).get());
 
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(writeHandle)->TryOnWrite());
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(writeHandle)->TryOnWrite());
 
-    auto wait = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(publishHandle)->WaitAllAcks();
+    auto wait = TDeferredPublication::TAccess::AckState(publishHandle)->WaitAllAcks();
     UNIT_ASSERT(wait.HasValue());
     UNIT_ASSERT(wait.GetValue().IsSuccess());
-    UNIT_ASSERT(!NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(publishHandle)->IsSealed());
-    UNIT_ASSERT(!NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(writeHandle)->IsSealed());
+    UNIT_ASSERT(!TDeferredPublication::TAccess::AckState(publishHandle)->IsSealed());
+    UNIT_ASSERT(!TDeferredPublication::TAccess::AckState(writeHandle)->IsSealed());
 }
 
 Y_UNIT_TEST(CopySharesAckState) {
     TDeferredPublication a(42);
     TDeferredPublication b = a;
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)
-        == NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b));
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(a)
+        == TDeferredPublication::TAccess::AckState(b));
 
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->TryOnWrite());
-    auto wait = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b)->WaitAllAcks();
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(a)->TryOnWrite());
+    auto wait = TDeferredPublication::TAccess::AckState(b)->WaitAllAcks();
     UNIT_ASSERT(!wait.HasValue());
-    NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->OnAck();
+    TDeferredPublication::TAccess::AckState(a)->OnAck();
     UNIT_ASSERT(wait.Wait(TDuration::Seconds(1)));
     UNIT_ASSERT(wait.GetValue().IsSuccess());
 }
 
 Y_UNIT_TEST(MoveTransfersAckState) {
     TDeferredPublication a(42, "ext-42");
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->TryOnWrite());
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(a)->TryOnWrite());
 
     TDeferredPublication b = std::move(a);
     UNIT_ASSERT_VALUES_EQUAL(b.IntPublicationId, 42u);
     UNIT_ASSERT(b.ExtPublicationId.has_value());
     UNIT_ASSERT_VALUES_EQUAL(*b.ExtPublicationId, "ext-42");
-    UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a).get()
-        != NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b).get());
+    UNIT_ASSERT(TDeferredPublication::TAccess::AckState(a).get()
+        != TDeferredPublication::TAccess::AckState(b).get());
 
-    auto waitB = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b)->WaitAllAcks();
+    auto waitB = TDeferredPublication::TAccess::AckState(b)->WaitAllAcks();
     UNIT_ASSERT(!waitB.HasValue());
-    NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b)->OnAck();
+    TDeferredPublication::TAccess::AckState(b)->OnAck();
     UNIT_ASSERT(waitB.Wait(TDuration::Seconds(1)));
 
     // Moved-from handle is unusable for finalize: ids cleared, fresh empty state.
     UNIT_ASSERT_VALUES_EQUAL(a.IntPublicationId, 0u);
     UNIT_ASSERT(!a.ExtPublicationId.has_value());
-    auto waitA = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->WaitAllAcks();
+    auto waitA = TDeferredPublication::TAccess::AckState(a)->WaitAllAcks();
     UNIT_ASSERT(waitA.HasValue());
     UNIT_ASSERT(waitA.GetValue().IsSuccess());
-    UNIT_ASSERT(!NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->IsSealed());
+    UNIT_ASSERT(!TDeferredPublication::TAccess::AckState(a)->IsSealed());
 }
 
 } // Y_UNIT_TEST_SUITE

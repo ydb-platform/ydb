@@ -103,7 +103,7 @@ void TResourcePoolClassifierConfig::EnsureSettings() {
             continue;
         }
         try {
-            std::visit(TClassifierSettings::TParser{value.GetString()}, it->second);
+            std::visit(TClassifierSettings::TParser{value.GetStringRobust()}, it->second);
         } catch (...) {
             continue;
         }

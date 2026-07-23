@@ -80,6 +80,7 @@ namespace NActors {
             RefcountItems.push_back({
                 .EndOffset = bufferProduced,
                 .Scratch = buffer,
+                .EventReceivedTimestamp = 0,
             });
         }
 
@@ -91,8 +92,9 @@ namespace NActors {
         Y_ABORT_UNLESS(CumulativeCommitted <= CumulativeProduced);
         const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty() && RefcountItems.front().EndOffset <= CumulativeCommitted) {
-            if (Y_LIKELY(eventToWireTime)) {
-                eventToWireTime->push_back(timestamp - RefcountItems.front().EventReceivedTimestamp);
+            auto& front = RefcountItems.front();
+            if (Y_LIKELY(eventToWireTime) && front.EventReceivedTimestamp) {
+                eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
             RefcountItems.pop_front();
         }

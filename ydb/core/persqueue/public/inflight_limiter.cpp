@@ -1,6 +1,9 @@
 #include "inflight_limiter.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NPQ {
 
@@ -60,7 +63,7 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
     if (!wasMemoryLimitReached && isMemoryLimitReached && InFlightFullSince == TInstant::Zero()) {
-        InFlightFullSince = TInstant::Now();
+        InFlightFullSince = TAppData::TimeProvider->Now();
     }
 
     return !isMemoryLimitReached;
@@ -88,7 +91,7 @@ bool TInFlightController::Remove(ui64 Offset) {
 
     auto isMemoryLimitReached = IsMemoryLimitReached();
     if (wasMemoryLimitReached && !isMemoryLimitReached && InFlightFullSince != TInstant::Zero()) {
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
         SlidingWindow.Update(now - InFlightFullSince, now);
         InFlightFullSince = TInstant::Zero();
     }
@@ -108,7 +111,7 @@ bool TInFlightController::IsMemoryLimitReached() const {
 TDuration TInFlightController::GetLimitReachedDuration() {
     TDuration carry = TDuration::Zero();
     if (InFlightFullSince != TInstant::Zero()) {
-        carry = TInstant::Now() - InFlightFullSince;
+        carry = TAppData::TimeProvider->Now() - InFlightFullSince;
     }
 
     return Min(SLIDING_WINDOW_SIZE, SlidingWindow.GetValue() + carry);

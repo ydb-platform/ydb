@@ -28,7 +28,7 @@ def create_test_methods(chunk_size):
         for k in range(count):
             def make_test_method(index):
                 def test_method(self):
-                    self._run_chunk(k, chunk_size)
+                    self._run_chunk(index, chunk_size)
                 test_method.__name__ = f"test_{index}"
                 return test_method
             setattr(cls, f"test_{k}", make_test_method(k))

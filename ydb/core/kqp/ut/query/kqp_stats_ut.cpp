@@ -434,6 +434,35 @@ Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
     UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, limitedPlan);
 }
 
+Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
+        *result.GetStats()->GetPlan());
+    const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
+    const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), simplifiedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), simplifiedPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, simplifiedPlan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();

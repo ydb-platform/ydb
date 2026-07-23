@@ -12,7 +12,7 @@
 #include <arrow/scalar.h>
 
 #include "dq_join_common.h"
-#include "dq_join_filters.h"
+#include "dq_block_hash_join_filter.h"
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
@@ -53,61 +53,6 @@ struct TDqBlockJoinContext {
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
     TSides<TVector<int>> ColumnPermutation;
-};
-
-// Evaluates the combined non-equi join filter on a matched (Build, Probe) pair. Packed tuples are
-// decoded into scalar rows (in original user column order) via scalar converters that share the
-// block converters' packed layout. Standard orientation only (probe = left, build = right).
-class TBlockJoinPairFilter {
-  public:
-    TBlockJoinPairFilter(TComputationContext& ctx, const TDqBlockJoinContext* meta,
-                         TSides<std::unique_ptr<IScalarLayoutConverter>> converters, TJoinCommonFilter filter)
-        : Ctx_(&ctx)
-        , Meta_(meta)
-        , Converters_(std::move(converters))
-        , Filter_(std::move(filter))
-    {
-        for (ESide side : EachSide) {
-            const size_t width = Meta_->UserTypes.SelectSide(side).size();
-            ValsPermuted_.SelectSide(side).resize(width);
-            ValsOrig_.SelectSide(side).resize(width);
-        }
-    }
-
-    bool operator()(TSides<TSingleTuple> pair) {
-        const NUdf::TUnboxedValue* leftRow = Filter_.LeftArgs.empty() ? nullptr : Decode(ESide::Probe, pair.Probe);
-        const NUdf::TUnboxedValue* rightRow = Filter_.RightArgs.empty() ? nullptr : Decode(ESide::Build, pair.Build);
-        return Filter_.Pass(*Ctx_, leftRow, rightRow);
-    }
-
-  private:
-    const NUdf::TUnboxedValue* Decode(ESide side, TSingleTuple tuple) {
-        auto& converter = *Converters_.SelectSide(side);
-        auto& one = OneTuple_.SelectSide(side);
-        one.Clear();
-        one.AppendTuple(tuple, converter.GetTupleLayout());
-        auto& permuted = ValsPermuted_.SelectSide(side);
-        converter.Unpack(one, 0, permuted.data());
-
-        const auto& perm = Meta_->ColumnPermutation.SelectSide(side);
-        if (perm.empty()) {
-            return permuted.data();
-        }
-        // Packed position i holds original column perm[i]; restore original user order.
-        auto& orig = ValsOrig_.SelectSide(side);
-        for (size_t i = 0; i < permuted.size(); ++i) {
-            orig[perm[i]] = permuted[i];
-        }
-        return orig.data();
-    }
-
-    TComputationContext* Ctx_;
-    const TDqBlockJoinContext* Meta_;
-    TSides<std::unique_ptr<IScalarLayoutConverter>> Converters_;
-    TJoinCommonFilter Filter_;
-    TSides<TPackResult> OneTuple_;
-    TSides<TVector<NUdf::TUnboxedValue>> ValsPermuted_;
-    TSides<TVector<NUdf::TUnboxedValue>> ValsOrig_;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -363,7 +308,9 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
                 scalarConverters.SelectSide(side) =
                     MakeScalarLayoutConverter(helper, userTypes.SelectSide(side), roles, ctx.HolderFactory);
             }
-            pairFilter.emplace(ctx, Meta_.get(), std::move(scalarConverters), Filter_);
+            const TSides<int> widths{.Build = static_cast<int>(userTypes.Build.size()),
+                                     .Probe = static_cast<int>(userTypes.Probe.size())};
+            pairFilter.emplace(ctx, std::move(scalarConverters), Meta_->ColumnPermutation, widths, Filter_);
         }
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,

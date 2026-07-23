@@ -3,6 +3,8 @@
 #include "yaml_config_helpers.h"
 #include "core_constants.h"
 
+#include <ydb/library/yaml_config/public/storage_defaults.h>
+
 #include <ydb/library/pdisk_io/device_type.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/viewer/json/json.h>
@@ -37,20 +39,18 @@ NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<
 
 namespace NKikimr::NYaml {
 
-    struct TFailDomainGeometryRange {
-        ui32 RealmLevelBegin;
-        ui32 RealmLevelEnd;
-        ui32 DomainLevelBegin;
-        ui32 DomainLevelEnd;
-    };
+    static NYamlConfig::EFailDomainType ConvertFailDomainType(NKikimrConfig::TEphemeralInputFields::FailDomainKind type) {
+        switch (type) {
+            case NKikimrConfig::TEphemeralInputFields::Rack:
+                return NYamlConfig::EFailDomainType::Rack;
+            case NKikimrConfig::TEphemeralInputFields::Body:
+                return NYamlConfig::EFailDomainType::Body;
+            case NKikimrConfig::TEphemeralInputFields::Disk:
+                return NYamlConfig::EFailDomainType::Disk;
+        }
 
-    const static std::unordered_map<
-        NKikimrConfig::TEphemeralInputFields::FailDomainKind, TFailDomainGeometryRange
-    > FailDomainGeometryRanges = {
-        {NKikimrConfig::TEphemeralInputFields::Rack, {10, 20, 10, 40}},
-        {NKikimrConfig::TEphemeralInputFields::Body, {10, 20, 10, 50}},
-        {NKikimrConfig::TEphemeralInputFields::Disk, {10, 20, 10, 256}},
-    };
+        Y_ENSURE_BT(false, "unknown fail domain type " << static_cast<int>(type));
+    }
 
     const NJson::TJsonValue::TMapType& GetMapSafe(const NJson::TJsonValue& json) {
         try {
@@ -933,7 +933,7 @@ endDiskTypeCheck:   ;
             if (ephemeralConfig.HasFailDomainType() &&
                 ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
                 auto* geometry = poolConfig.MutableGeometry();
-                const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                const auto range = NYamlConfig::GetFailDomainGeometryRange(ConvertFailDomainType(ephemeralConfig.GetFailDomainType()));
                 geometry->SetRealmLevelBegin(range.RealmLevelBegin);
                 geometry->SetRealmLevelEnd(range.RealmLevelEnd);
                 geometry->SetDomainLevelBegin(range.DomainLevelBegin);
@@ -1009,7 +1009,11 @@ endDiskTypeCheck:   ;
             for (size_t i = 0; i < 3; ++i) {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName.GetRef());
-                channel.SetPDiskCategory(TPDiskCategory(PDiskTypeToPDiskType(*dtEnum), 0));
+                if (const auto diskType = NYamlConfig::TryParseDefaultDiskType(defaultDiskType.GetRef())) {
+                    channel.SetPDiskCategory(NYamlConfig::DefaultPDiskCategory(*diskType));
+                } else {
+                    channel.SetPDiskCategory(TPDiskCategory(PDiskTypeToPDiskType(*dtEnum), 0));
+                }
                 channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
             };
         }
@@ -1291,7 +1295,7 @@ endDiskTypeCheck:   ;
                 if (!smConfig->HasGeometry() && ephemeralConfig.HasFailDomainType() &&
                         ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
                     auto* geometry = smConfig->MutableGeometry();
-                    const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                    const auto range = NYamlConfig::GetFailDomainGeometryRange(ConvertFailDomainType(ephemeralConfig.GetFailDomainType()));
                     geometry->SetRealmLevelBegin(range.RealmLevelBegin);
                     geometry->SetRealmLevelEnd(range.RealmLevelEnd);
                     geometry->SetDomainLevelBegin(range.DomainLevelBegin);

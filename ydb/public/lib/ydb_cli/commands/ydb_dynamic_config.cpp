@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
-#include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/library/yaml_config/public/migration/config_migration.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -49,6 +49,9 @@ TCommandConfig::TCommandConfig(
     , CommandFlagsOverrides(commandFlagsOverrides)
 {
     AddCommand(std::make_unique<TCommandConfigFetch>(useLegacyApi, allowEmptyDatabase));
+    if (allowEmptyDatabase) {
+        AddCommand(std::make_unique<TCommandConfigMigration>());
+    }
     AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
@@ -75,6 +78,103 @@ void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
     for (auto& [_, cmd] : SubCommands) {
         cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
     }
+}
+
+TCommandConfigMigration::TCommandConfigMigration()
+    : TClientCommandTree("migration", {}, "Offline configuration migration converters")
+{
+    AddCommand(std::make_unique<TCommandConfigMerge>());
+    AddCommand(std::make_unique<TCommandConfigCleanupV2>());
+}
+
+static TString ReadMigrationConfig(const TString& path) {
+    return path == "-" ? Cin.ReadAll() : TFileInput(path).ReadAll();
+}
+
+static void WriteMigrationConfig(NFyaml::TDocument& config, const TString& path) {
+    if (path.empty() || path == "-") {
+        Cout << config << Endl;
+    } else {
+        TFileOutput output(path);
+        output << config << Endl;
+    }
+}
+
+TCommandConfigMerge::TCommandConfigMerge()
+    : TYdbReadOnlyCommand(
+        "merge",
+        {},
+        "Merge static and dynamic V1 configs for migration")
+{
+}
+
+void TCommandConfigMerge::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("static-config", "Path to the static V1 config in simple format")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&StaticConfigPath);
+    config.Opts->AddLongOption("dynamic-config", "Path to the dynamic config in MainConfig format")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&DynamicConfigPath);
+    config.Opts->AddLongOption('o', "output", "Path for the merged config; stdout if omitted")
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&OutputPath);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = true;
+    config.NeedToConnect = false;
+}
+
+int TCommandConfigMerge::Run(TConfig&) {
+    if (StaticConfigPath == "-" && DynamicConfigPath == "-") {
+        ythrow yexception() << "Only one input config may be read from stdin";
+    }
+
+    const auto staticConfig = ReadMigrationConfig(StaticConfigPath);
+    const auto dynamicConfig = ReadMigrationConfig(DynamicConfigPath);
+
+    auto result = NYamlConfig::MergeConfigsForMigration(staticConfig, dynamicConfig);
+
+    if (!result.StaticConfigPrecedencePaths.empty()) {
+        Cerr << "Static config takes precedence at the following paths:" << Endl;
+        for (const auto& path : result.StaticConfigPrecedencePaths) {
+            Cerr << "  " << path << Endl;
+        }
+        Cerr << "Review the merged config before passing it to 'config replace'." << Endl;
+    }
+
+    WriteMigrationConfig(result.Config, OutputPath);
+
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigCleanupV2::TCommandConfigCleanupV2()
+    : TYdbReadOnlyCommand(
+        "cleanup-v2",
+        {},
+        "Remove legacy storage sections after switching to V2 config")
+{
+}
+
+void TCommandConfigCleanupV2::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption('f', "input", "Path to a freshly fetched MainConfig; '-' for stdin")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&InputPath);
+    config.Opts->AddLongOption('o', "output", "Path for the cleaned config; stdout if omitted")
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&OutputPath);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = true;
+    config.NeedToConnect = false;
+}
+
+int TCommandConfigCleanupV2::Run(TConfig&) {
+    auto result = NYamlConfig::CleanupConfigV2Migration(ReadMigrationConfig(InputPath));
+    WriteMigrationConfig(result, OutputPath);
+    return EXIT_SUCCESS;
 }
 
 TCommandConfigFetch::TCommandConfigFetch(

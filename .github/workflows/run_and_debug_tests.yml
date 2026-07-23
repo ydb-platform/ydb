@@ -123,15 +123,24 @@ jobs:
             merge_sha=$(echo "$pr_json" | jq -r '.merge_commit_sha // empty')
             head_sha=$(echo "$pr_json" | jq -r '.head.sha')
             base_ref=$(echo "$pr_json" | jq -r '.base.ref')
-            if [ -z "$merge_sha" ]; then
-              echo "PR #$ref has no merge commit (conflicts or closed?)" >&2
-              exit 1
-            fi
-            checkout_ref="$merge_sha"
+            mergeable=$(echo "$pr_json" | jq -r '.mergeable // empty')
             pr_number="$ref"
             pr_head_sha="$head_sha"
             history_branch="$base_ref"
-            echo "PR #$ref: merge=$merge_sha head=$head_sha base=$base_ref"
+            # Prefer the test-merge commit (PR tip + base). When the PR conflicts
+            # with base, GitHub leaves merge_commit_sha empty — fall back to head
+            # so debug runs still work (unlike production PR-check).
+            if [ -n "$merge_sha" ]; then
+              checkout_ref="$merge_sha"
+              echo "PR #$ref: merge=$merge_sha head=$head_sha base=$base_ref mergeable=$mergeable"
+            else
+              if [ -z "$head_sha" ] || [ "$head_sha" = "null" ]; then
+                echo "PR #$ref has neither merge_commit_sha nor head.sha" >&2
+                exit 1
+              fi
+              checkout_ref="$head_sha"
+              echo "WARNING: PR #$ref has no merge commit (mergeable=$mergeable); using head=$head_sha base=$base_ref" >&2
+            fi
           else
             case "$ref" in
               main|stable-*|stream-*|prestable-*|release-*) history_branch="$ref" ;;

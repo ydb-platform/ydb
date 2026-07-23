@@ -1077,14 +1077,18 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         timeoutResolved = true;
         selected = config.Selected;
         solver = config.Solver;
-        auto kikimr = MakeRunner();
-        CreateTables(kikimr, suite);
 
-        NYql::TExprContext moduleContext;
         NYql::IModuleResolver::TPtr moduleResolver;
-        if (!NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver)) {
+        // RunCall work may retain the host, and therefore the resolver, until
+        // the runner's thread pool is torn down. Give the resolver ownership
+        // of its expression context and construct it before the runner, so
+        // both outlive that teardown.
+        if (!NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver)) {
             ythrow yexception() << "Cannot construct the default YQL module resolver";
         }
+
+        auto kikimr = MakeRunner();
+        CreateTables(kikimr, suite);
 
         for (const ui32 queryId : selected) {
             Cerr << "Checking " << suite.Name << " q" << queryId << Endl;

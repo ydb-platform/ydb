@@ -73,9 +73,6 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
-        // YDB_LOG_TRACE("Feed",
-        //     {"debug", Debug()});
-
         if (row.Size() != ScanTags.size()) {
             return FinishValidation(NKikimrIndexBuilder::EBuildStatus::ABORTED, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
         }

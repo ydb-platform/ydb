@@ -274,9 +274,6 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // YDB_LOG_TRACE("Feed",
-        //     {"debug", Debug()});
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 

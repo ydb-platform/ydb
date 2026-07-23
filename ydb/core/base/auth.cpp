@@ -125,20 +125,4 @@ void SetSystemOwnerIfNeeded(NKikimrScheme::TEvModifySchemeTransaction& record, c
     }
 }
 
-TString AccessLevelToString(EAccessLevel level) {
-    switch (level) {
-        case EAccessLevel::Administration:
-            return "administration";
-        case EAccessLevel::Monitoring:
-            return "monitoring";
-        case EAccessLevel::Viewer:
-            return "viewer";
-        case EAccessLevel::Database:
-            return "database";
-        case EAccessLevel::None:
-            return "none";
-    }
-    return "none";
-}
-
 } // namespace NKikimr

@@ -86,7 +86,7 @@ void LogAuthorizedHttpRequest(
     const TString address = request.Address ? request.Address->ToString() : "";
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
-    const TString accessLevel = AccessLevelToString(GetHighestAccessLevel(appData, userToken));
+    const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
     const TString database = result ? result->Database : GetDatabase(&request);
     YDB_LOG_NOTICE(
         "Send request"

@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({5, 65, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 15, 19, 37, 40, 42, 43, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
+            std::set<ui32>({3, 5, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 68, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 42, 48, 52, 55, 90, 93, 96}));
@@ -1363,13 +1363,16 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TMap<ui32, TString> statuses = {
             {1, "FORMULA_EMITTED"},
             {3, "FORMULA_EMITTED"},
-            {5, "UNSUPPORTED"},
+            {5, "FORMULA_EMITTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
+            {25, "FORMULA_EMITTED"},
+            {29, "FORMULA_EMITTED"},
             {37, "FORMULA_EMITTED"},
             {40, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {43, "FORMULA_EMITTED"},
+            {46, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
@@ -1377,13 +1380,16 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {61, "FORMULA_EMITTED"},
             {62, "FORMULA_EMITTED"},
             {65, "UNSUPPORTED"},
+            {68, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
+            {77, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
-            {80, "UNSUPPORTED"},
+            {80, "FORMULA_EMITTED"},
             {82, "FORMULA_EMITTED"},
             {88, "FORMULA_EMITTED"},
             {90, "FORMULA_EMITTED"},
+            {91, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
             {96, "FORMULA_EMITTED"},
             {99, "FORMULA_EMITTED"},
@@ -1401,11 +1407,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.Violations.empty());
         for (const ui32 queryId : {5, 65, 80}) {
             UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
-            UNIT_ASSERT(!evaluation.FormulaEmittedQueries.contains(queryId));
         }
+        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(5));
+        UNIT_ASSERT(!evaluation.FormulaEmittedQueries.contains(65));
+        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(80));
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 15, 19, 37, 40, 42, 43, 48, 50, 52, 55, 61, 62, 71, 76, 79, 82, 88, 90, 93, 96, 99}));
+            std::set<ui32>({1, 3, 5, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 68, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
 
         const auto report = PolicyEvaluationJson(evaluation);
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
@@ -1532,11 +1540,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
 
         for (const TString status : {"FORMULA_EMITTED", "VERIFIED_BOUNDED"}) {
-            for (const ui32 queryId :
-                 policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
-            {
-                statuses[queryId] = status;
-            }
+            statuses[65] = status;
             const auto evaluation = EvaluateCoveragePolicy(
                 policy,
                 Tpcds,
@@ -1550,11 +1554,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                  policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
             {
                 UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
-                if (status == "FORMULA_EMITTED") {
-                    UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(queryId));
-                } else {
-                    UNIT_ASSERT(evaluation.VerifiedBoundedQueries.contains(queryId));
-                }
+            }
+            UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(5));
+            UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(80));
+            if (status == "FORMULA_EMITTED") {
+                UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(65));
+            } else {
+                UNIT_ASSERT(evaluation.VerifiedBoundedQueries.contains(65));
             }
         }
     }
@@ -1572,11 +1578,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         {
             statuses[queryId] = "FORMULA_EMITTED";
         }
-        for (const ui32 queryId :
-             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
-        {
-            statuses[queryId] = "UNSUPPORTED";
-        }
+        statuses[65] = "UNSUPPORTED";
         auto verifierEntries = OutcomeIds(statuses);
         verifierEntries.erase(65);
 
@@ -1625,13 +1627,16 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         const TMap<ui32, TString> statuses = {
             {3, "FORMULA_EMITTED"},
-            {5, "UNSUPPORTED"},
+            {5, "FORMULA_EMITTED"},
             {15, "FORMULA_EMITTED"},
             {19, "FORMULA_EMITTED"},
+            {25, "FORMULA_EMITTED"},
+            {29, "FORMULA_EMITTED"},
             {37, "FORMULA_EMITTED"},
             {40, "FORMULA_EMITTED"},
             {42, "FORMULA_EMITTED"},
             {43, "FORMULA_EMITTED"},
+            {46, "FORMULA_EMITTED"},
             {48, "FORMULA_EMITTED"},
             {50, "FORMULA_EMITTED"},
             {52, "FORMULA_EMITTED"},
@@ -1639,13 +1644,16 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {61, "FORMULA_EMITTED"},
             {62, "FORMULA_EMITTED"},
             {65, "UNSUPPORTED"},
+            {68, "FORMULA_EMITTED"},
             {71, "FORMULA_EMITTED"},
             {76, "FORMULA_EMITTED"},
+            {77, "FORMULA_EMITTED"},
             {79, "FORMULA_EMITTED"},
-            {80, "UNSUPPORTED"},
+            {80, "FORMULA_EMITTED"},
             {82, "FORMULA_EMITTED"},
             {88, "UNSUPPORTED"},
             {90, "FORMULA_EMITTED"},
+            {91, "FORMULA_EMITTED"},
             {93, "FORMULA_EMITTED"},
             {99, "FORMULA_EMITTED"},
         };

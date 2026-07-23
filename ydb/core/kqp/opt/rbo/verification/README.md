@@ -12,15 +12,14 @@ ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
-optional Decimal, exact reviewed `Coalesce(..., false)` forms over either a
-direct comparison or a binary same-member String membership/complement
-predicate, exact direct Decimal `Coalesce(member, zero)`, exact reviewed
-Decimal `Just` forms, exact Decimal semantics for
-comparison, integral casts,
-arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
-parts of M4. The reviewed exact wrapper forms retain their Optional schema through
-existing `IfPresent`/`If` IR instead of being erased. The exporter also exactly
-folds the reviewed constant
+optional Decimal or Date, exact reviewed `Coalesce(..., false)` forms over
+either a direct comparison or a binary same-member String
+membership/complement predicate, exact direct Decimal
+`Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
+semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
+Decimal `MAX`, plus the benchmark-dashboard parts of M4. The reviewed exact
+wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
+instead of being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
 the corresponding direct Date-literal OLAP `just` wrapper, exactly folds direct
 numeric Date/Interval literal arithmetic, exactly folds the reviewed constant
@@ -37,22 +36,25 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on current code
-on 2026-07-23. They establish
-formula construction for TPCH q3, q5, q6,
-q10, q12, q14, and q19 plus TPC-DS q3,
-q15, q19, q37, q40,
-q42, q43, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93,
-q96, and q99: 29/121 workload queries (24.0%). Formula emission means that both
-snapshots were modeled and SMT was constructed; it is not a solver proof. The
-checked-in solver proof floor returns
+on 2026-07-23. They establish formula construction for TPCH q3, q5, q6, q10,
+q12, q14, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37, q40, q42, q43,
+q46, q48, q50, q52, q55, q61, q62, q68, q71, q76, q77, q79, q80, q82, q88,
+q90, q91, q93, q96, and q99: 37/121 workload queries (30.6%). TPCH has seven
+formulas, twelve unsupported queries, and three optimizer failures; TPC-DS has
+thirty formulas, forty unsupported queries, and twenty-nine optimizer failures.
+Across both suites that is 52 unsupported queries and 32 optimizer failures.
+The complete TPCH dashboard spent 2,314/3,522 ms and TPC-DS spent
+41,207/151,635 ms in preparation/verification.
+Formula emission means that both snapshots were modeled and SMT was
+constructed; it is not a solver proof. The checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42,
 q48, q52, q55, q90, q93, and q96: thirteen obligations (10.7% of the
 workload). The latest TPCH proof-floor run prepared/verified q3 in
-107/11,691 ms, q6 in 57/709 ms, q12 in 78/34,956 ms, q14 in 95/30,288 ms,
-and q19 in 100/830 ms. Focused q12 took 108/38,880 ms. The latest TPC-DS
+105/2,642 ms, q6 in 56/684 ms, q12 in 77/1,704 ms, q14 in 80/30,141 ms,
+and q19 in 102/817 ms. Focused q12 took 108/38,880 ms. The latest TPC-DS
 proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90, q93,
-and q96 prepared/verified in 103/14,687, 114/15,310, 199/3,911, 121/15,208,
-94/10,689, 231/8,209, 104/14,782, and 128/445 ms, respectively.
+and q96 prepared/verified in 103/4,833, 90/4,527, 174/3,846, 107/4,189,
+96/3,747, 234/7,916, 110/2,215, and 150/426 ms, respectively.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
@@ -62,19 +64,42 @@ but returned `UNKNOWN` after 147/69,391 ms at that same budget. A separate non-g
 q40 experiment with a 10-second solver budget reported `SOLVER_ERROR` after the
 external solver exceeded its 15.0-second process deadline; the focused `ya`
 experiment failed on that status as designed. These obligations are
-formula-covered, not proved, and not part of the proof floor. None is evidence of an optimizer
-correctness bug.
+formula-covered, not proved, and not part of the proof floor. None is evidence
+of an optimizer correctness bug.
+After exact direct literal-to-Date normalization, regenerated full TPC-DS
+solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
+2,035/66,344 ms of preparation/verification. Those results likewise extend
+neither the proof floor nor the formula count.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
-and reach the verifier. Their current verifier-side results stop at aggregate
-`avg`, the 32,896-pair Merge construction cap, aggregate `avg`, and the
-41,616-pair grouped-aggregate comparison cap, respectively; none is counted
-as a formula. Later formula or proof results satisfy the same depth floor
-automatically.
-TPC-DS q77 also passes both snapshot exporters, finite Decimal `SUM` headroom,
-and both 160-row grouped aggregates, then fails closed on a 51,360-pair Sort
-above the 16,384-pair construction bound. It is not counted as a formula or
-proof.
+and reach the verifier. q5 and q80 now satisfy the stronger formula-construction
+floor, while TPCH q1 and TPC-DS q65 still stop at unmodeled aggregate `avg`.
+Later formula or proof results satisfy every weaker floor automatically.
+
+Before that exact Date-cast gate was implemented, a focused 60-second solver
+experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
+preparation/verification and for q77 after 2,062/36,163 ms. The SHA-bound
+historical artifacts are preserved. A fixed-witness q5 inspection independently
+reproduced the symbolic mismatch, with six present logical root rows and one
+staged root row. Follow-up audit identifies q5 as a verifier false positive:
+the witness chose `date_dim` days 10,441 and 10,457 outside the query's true
+10,442..10,456 range because three initial String-literal-to-optional-Date
+casts remained shared zero-argument opaque functions while the pushed final
+scans used Date literal 10,442. Replacing those three opaque lower-bound results
+with 10,442 made the pinned obligation `UNSAT` in about two seconds.
+
+At that historical point q77's saved candidate remained unresolved: a
+180-second inspector run reached the 185-second process deadline, its witness
+day 10,472 was in range, and narrowed diagnostics returned `UNKNOWN`. The
+generic and OLAP exporter paths now fold the exact direct String/Utf8-literal
+`SafeCast` to `Optional<Date>`, and the regenerated q5/q77 obligations return
+the `UNKNOWN` results above instead of rediscovering either candidate. q5's
+old witness is conclusively invalid under the exact cast. q77's old witness
+was not refuted—the corrected fixed-witness diagnostic was also `UNKNOWN`—so
+it remains a historical, unconfirmed diagnostic rather than a current
+counterexample. Neither run is evidence of an optimizer bug; real-YDB replay
+remains the confirmation boundary if q77 is reproduced by the corrected model.
+
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -346,10 +371,29 @@ literals, numeric overflow saturates to signed infinity, and underflow can round
 to zero. Successful casts become existing Decimal literal nodes, so this
 milestone changes neither the snapshot IR nor the Python decoder/evaluator.
 
-A third constant normalization covers only Optional-Date arithmetic of the
-form `SafeCast(text, Optional<Date>) +/- Apply(udf, days)`. The text must be a
-direct non-null `String` or `Utf8` literal. The cast result and descriptor must
-be exactly `Optional<Date>`, and YQL cast analysis must classify it as the
+A separate normalization evaluates a direct non-null `String` or `Utf8`
+literal under `SafeCast` to exactly `Optional<Date>`, independently of any
+surrounding arithmetic. The result and target descriptor, outer and nested
+annotations, and reviewed `MayFail` cast classification must agree exactly.
+MiniKQL `ValueFromString` supplies the runtime value: a valid input becomes an
+existing Date literal and an invalid or out-of-domain input becomes existing
+typed Date NULL. The generic expression path retains the closed-world safety
+and totality audit used for opaque expressions; the executed OLAP-filter path
+uses the same exact fold. Dynamic, nullable, malformed, differently annotated,
+or non-`SafeCast` forms fail closed. The fold introduces no new snapshot IR or
+Python evaluator semantics.
+
+Focused exporter tests pass 4/4, the complete `cpp_ut` run passes 144/144,
+and a q5-shaped actual-host pushed-filter integration passes 1/1 with
+`VERIFIED_BOUNDED`. Regenerated q5 and q77 obligations contain the exact Date
+constants and return `UNKNOWN` rather than reproducing the old symbolic
+candidates. This refutes q5's saved witness; it does not turn q77's historical
+candidate into either a proof or a confirmed false positive.
+
+The Date/Interval normalization additionally covers Optional-Date arithmetic
+of the form `SafeCast(text, Optional<Date>) +/- Apply(udf, days)`. The text must
+be a direct non-null `String` or `Utf8` literal. The cast result and descriptor
+must be exactly `Optional<Date>`, and YQL cast analysis must classify it as the
 reviewed `MayFail` conversion. The right side must be the strict normalized
 eight-child `DateTime2.IntervalFromDays` UDF applied to a direct non-null
 `Int32` literal in `[-49672, 49672]`, with its callable annotations, cached
@@ -385,9 +429,11 @@ experiment retained a
 97,319,076-byte formula but reported `SOLVER_ERROR` after the external solver
 exceeded its 15.0-second process deadline; it is neither a proof nor a
 counterexample. Before restricted stored-String `Concat` was added, TPC-DS q5, q80,
-and q84 stopped at the generic callable. q5 and q80 now have the deeper outcomes
-described above; subsequent finite Decimal-bound propagation moves q5 again to
-the 32,896-pair Merge construction cap. q84 remains unsupported on its
+and q84 stopped at the generic callable. At that milestone q5 and q80 moved to
+the deeper outcomes described above; subsequent finite Decimal-bound
+propagation moved q5 again to the 32,896-pair Merge construction cap. The later
+exact representation selector moves both through formula construction. q84
+remains unsupported on its
 two-cell allocation bound. Before constant DateTime2 calendar-shift folding,
 the dashboard covered 23/121 queries and the proof floor remained ten. TPCH q1
 passes both snapshot
@@ -454,13 +500,14 @@ proofs to five, and the total proof floor to 13/121 (10.7%). No proof produced
 a candidate, so replay was not invoked and no optimizer correctness bug was
 found.
 
-The next exact gate normalizes only a direct `Optional<Decimal>` member under
+The following historical exact gate normalized only a direct
+`Optional<Decimal>` member under
 `Coalesce(member, zero)`, including its matching `Just` wrapper, to the
 schema-preserving forms described above. At that milestone the complete TPC-DS
 dashboard moves q43 through formula construction after 145/4,760 ms and moves
 q77 past Decimal `SUM` headroom to the 25,600-pair grouped-aggregate cap after
-2,063/442 ms. TPC-DS now emits 22/99 formulas and the combined workload emits
-29/121 (24.0%); q77 remains unsupported. A focused q43 solver run returned
+2,063/442 ms. At that milestone TPC-DS emitted 22/99 formulas and the combined
+workload emitted 29/121 (24.0%); q77 remained unsupported. A focused q43 solver run returned
 `UNKNOWN` after 147/69,391 ms at the 60-second budget, so the proof floor stays
 at thirteen. The first complete run also caught incomplete Decimal-zero casts
 in q40 and q80 being rejected while classifying a near-match. Classification
@@ -468,17 +515,43 @@ now leaves those forms opaque before invoking the strict exact-cast exporter;
 targeted regressions and the repeated complete dashboard restore q40's formula
 and q80's verifier entry. No candidate or optimizer bug arose.
 
-Exact scalable grouped-aggregate sharing preserves the established directional
-formula while its square fits the ordinary pair cap. Above that threshold it
-caches only the symmetric composite null-safe group-key comparisons as an upper
-triangle; row membership and first-representative suppression remain directional. The
-complete current-code TPC-DS dashboard remains policy-valid at 22/99 formulas,
-48 unsupported queries, and 29 optimizer failures. q25 and q29 now reject
-32,896 unique composite group-key row comparisons instead of 65,536, q80
-rejects 41,616 instead of 82,944, and q77 clears both 160-row aggregates before
-its 321-row Sort rejects 51,360 unordered pairs after 2,161/19,363 ms of
-preparation/verifier work. Formula and proof coverage remain 29/121 and 13/121,
-respectively.
+The current exact-representation milestone assigns nonrecursive bottom-up
+structural IDs to SMT terms, then partitions grouped-aggregate candidates by
+the complete `(type, is-null term, value term)` structure of their ordered
+group keys. Aggregate membership still ranges over every original row, so bag
+multiplicity is unchanged. When there are fewer exact key classes than input
+candidates, the class costs fit the ordinary construction bounds, and the form
+is either required to avoid the directional cap or strictly cheaper than the
+directional square, one result candidate is retained per class and null-safe
+comparison is shared over the class upper triangle. Singleton provenance and
+common partition facts are retained; no SQL rows are deduplicated. Sort and
+latent sequence families enumerate permutations only when every outcome has at
+most three candidate rows and the outcome cap also fits; four or more rows use
+the same exact bounded symbolic-ordinal language. The structural-ID walk is
+iterative, so deep exact terms do not depend on recursive Python hashing.
+
+The complete current-code TPC-DS dashboard is policy-valid at 30/99 formulas,
+40 unsupported queries, and 29 optimizer failures. The eight newly
+constructed formulas are q5, q25, q29, q46, q68, q77, q80, and q91. Their
+measured preparation/verifier times were 1,588/2,653, 249/11,564, 263/4,142,
+284/2,574, 276/2,301, 2,122/3,323, 1,810/42,847, and 227/3,754 ms,
+respectively. Together with TPCH's unchanged seven formulas this is 37/121
+(30.6%); the thirteen-query proof floor remains unchanged. Formula construction
+is not a proof, and the regenerated q5/q77 results do not extend that proof
+floor. Full TPC-DS solver runs returned `UNKNOWN` for q5 and q77 after
+1,552/64,916 and 2,035/66,344 ms of preparation/verification. Focused 60-second
+runs returned `UNKNOWN` for q25, q29, q46, q68, q80, and q91 after 302/86,108,
+272/68,174, 313/64,717, 293/64,427, 1,784/121,558, and 221/67,811 ms,
+respectively. All eight are formula-covered but neither proved nor current
+candidate divergences.
+
+The next implementation milestone is exact phase-aware Decimal `AVG`: carry
+an explicit `(sum, count)` through intermediate aggregation and HashShuffle,
+combine both components at the final aggregate, and only then perform Decimal
+division/casting. The first workload exit criterion is formula construction
+for TPCH q1 and TPC-DS q65 without regressing the current floors. Exact
+uncorrelated scalar/`IN`/`EXISTS` subplans are the subsequent coverage
+milestone; they currently block seven TPCH and thirteen TPC-DS queries.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -726,23 +799,26 @@ scan rows before symbolic source partitioning and any per-task pushed limit.
 
 Every relation is capped at 4096 candidate rows. Join matrices and outputs,
 UnionAll, and grouped aggregation are checked before construction; Sort, Merge,
-and latent sequences may construct at most 16384 candidate-row pairs before
-factorials or symbolic ordinals are allocated. Every explicit outcome family is
-separately capped at 256 alternatives, including unordered-Limit choices, small
-enumerated sequence choices, Cartesian products, and gathers. Large ordered
-families switch to bounded symbolic ordinals, and cross-plan bag or sequence
-equality is capped at 4096 explicit outcome pairs. Exceeding any audit bound
-returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
+and latent sequences may construct at most 16384 audited candidate-row pairs
+before permutations or symbolic ordinals are allocated. Every explicit outcome
+family is separately capped at 256 alternatives, including unordered-Limit
+choices, at-most-three-row sequence choices, Cartesian products, and gathers.
+Other ordered families use bounded symbolic ordinals, and cross-plan bag or
+sequence equality is capped at 4096 explicit outcome pairs. Exceeding any audit
+bound returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
 approximating semantics.
-The pair ceiling admits q71's 9072-term Merge ordinal construction while q31
-deterministically fails before allocating its 32768-pair join matrix.
-When a grouped aggregate's directional square fits the pair ceiling, it retains
-the established directional formula. Otherwise, null-safe group-key equality
-is shared as one symmetric upper-triangular term per unordered row pair and the
-same ceiling is applied to that triangle. Row-presence membership and
-first-representative guards remain directional; the accepted triangular bound
-keeps their `N^2` count strictly below twice the ordinary pair ceiling. No
-directional predicate is treated as symmetric.
+
+Grouped aggregation first gives every complete ordered group-key value an exact
+nonrecursive structural signature. For `N` input rows and `K` distinct
+signatures, the repeated-class representation is eligible only when `K < N`
+and both its `K*N` memberships and `K*(K+1)/2` symmetric comparisons fit the
+pair ceiling. It is selected above the directional cap, or below it only when
+their combined count is strictly less than `N^2`. Membership still ranges over
+all original rows; presence and first-representative suppression remain
+directional. If classes are ineligible, the established `N^2` formula is
+retained while it fits, and the exact singleton-class upper-triangle fallback
+is used above that point. No directional predicate is treated as symmetric and
+no bag occurrence is discarded.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:

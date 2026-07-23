@@ -12,7 +12,7 @@ namespace NPageCollection {
     public:
         TPageCollection() = delete;
 
-        /* `skippedInMeta` is the number of data/btree pages absorbed into EPage::Skip */
+        /* `skippedInMeta` is the extra page count beyond MetaPages() contributed by EPage::Skip entries (see TRecord::PushSkip) */
         TPageCollection(TLargeGlobId largeGlobId, TSharedData raw, ui32 skippedInMeta = Max<ui32>())
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)

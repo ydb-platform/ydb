@@ -1627,7 +1627,7 @@ static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const TPartStore& part, c
 
     // Root level [0] — use meta.RootV2.Size (logical page size from index meta)
     auto rootLoc = meta.RootV2;
-    EPage rootType = meta.LevelCount > 0 ? EPage::BTreeIndex : EPage::DataPage;
+    EPage rootType = meta.LevelCount > 0 ? EPage::BTreeIndexV2 : EPage::DataPage;
     auto* rootData = part.Store->GetPage(0, rootLoc.Offset);
     UNIT_ASSERT(rootData);
     layout[0].push_back({rootLoc.Offset, rootType, rootLoc.Size, rootData->size()});
@@ -1641,10 +1641,10 @@ static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const TPartStore& part, c
 
             bool isLeafLevel = (level + 1 >= meta.LevelCount);
             for (auto pos : xrange(node.GetChildrenCount())) {
-                auto ref = BuildPageRef(node, pos, isLeafLevel);
+                auto ref = node.GetChild(pos, isLeafLevel);
                 auto childLoc = ResolvePageLocation(&part, ref, NPage::TGroupId{0});
 
-                EPage childType = isLeafLevel ? EPage::DataPage : EPage::BTreeIndex;
+                EPage childType = isLeafLevel ? EPage::DataPage : EPage::BTreeIndexV2;
                 auto* childData = part.Store->GetPage(0, childLoc.Offset);
                 UNIT_ASSERT(childData);
                 // Use childLoc.Size (logical page size from TChildV2) rather than
@@ -1876,9 +1876,9 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
 
         // Level 0 (root): request and fill
         const auto& root = layout[0][0];
-        wrap.To(step++).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(step++).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(step++).Fill({root.Offset});
-        wrap.To(step++).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(step++).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
 
         // Btree index levels: only Get the first page; Fill handles the rest via Forward
         for (ui32 lev = 1; lev < layout.size() - 1; lev++) {
@@ -1886,11 +1886,11 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             for (auto& c : layout[lev]) offsets.push_back(c.Offset);
 
             // Request first page at this level → queue has entries → grow=true
-            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndexV2, false, true, true);
             // Fill all pages at this level (Forward adds remaining from queue)
             wrap.To(step++).Fill(offsets);
             // Verify first is now cached
-            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndex, true, false, true);
+            wrap.To(step++).Get(layout[lev][0].Offset, EPage::BTreeIndexV2, true, false, true);
         }
 
         // Last level (data pages)
@@ -1917,14 +1917,14 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
 
         // After Fill(root): locator tracks root + L1 children (added via AdvancePending)
-        wrap.To(0).Get(layout[0][0].Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(layout[0][0].Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({layout[0][0].Offset});
 
         // Build expected: only root + L1 (AdvancePending from root only adds L1)
         TVector<TPageOffset> expected = { layout[0][0].Offset };
         if (layout.size() > 1) {
             for (auto& c : layout[1]) {
-                if (c.Type == EPage::BTreeIndex) {
+                if (c.Type == EPage::BTreeIndexV2) {
                     expected.push_back(c.Offset);
                 }
             }
@@ -1944,11 +1944,11 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
-        wrap.To(1).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
+        wrap.To(1).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(2).Fill({root.Offset});
-        wrap.To(3).Get(root.Offset, EPage::BTreeIndex, true, false, true);
-        wrap.To(4).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(3).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
+        wrap.To(4).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
     }
 
     // Forward_OnlyUsed: only the used page gets loaded (no Forward for L1)
@@ -1964,18 +1964,18 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         const auto& root = layout[0][0];
 
         // Level 0: load root
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         // Level 1: request first child only
         if (layout.size() > 1 && !layout[1].empty()) {
             const auto& first = layout[1][0];
             // After Fill(root), L1 queue has children → grow=true
-            wrap.To(2).Get(first.Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(2).Get(first.Offset, EPage::BTreeIndexV2, false, true, true);
             // Fill only first child (Forward won't add more with AheadHi=0)
             wrap.To(3).Fill({first.Offset});
             // Verify first is cached; queue still has remaining entries → grow=true
-            wrap.To(4).Get(first.Offset, EPage::BTreeIndex, true, true, true);
+            wrap.To(4).Get(first.Offset, EPage::BTreeIndexV2, true, true, true);
         }
     }
 
@@ -1990,7 +1990,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         if (layout.size() > 1 && layout[1].size() > 1) {
@@ -1998,14 +1998,14 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             const auto& second = layout[1][1];
 
             // Request first L1 → Forward will add rest on Fill
-            wrap.To(2).Get(first.Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(2).Get(first.Offset, EPage::BTreeIndexV2, false, true, true);
             // Fill all L1 pages (Forward adds second, queue has both)
             TVector<TPageOffset> allL1;
             for (auto& c : layout[1]) allL1.push_back(c.Offset);
             wrap.To(3).Fill(allL1);
 
             // Now both are cached; skip to second
-            wrap.To(4).Get(second.Offset, EPage::BTreeIndex, true, false, true);
+            wrap.To(4).Get(second.Offset, EPage::BTreeIndexV2, true, false, true);
         }
     }
 
@@ -2020,18 +2020,18 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
-        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
 
         if (layout.size() > 1 && !layout[1].empty()) {
             // Request first L1 page → grow=true (queue has entries)
             TVector<TPageOffset> l1Offsets;
             for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
-            wrap.To(3).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(3).Get(layout[1][0].Offset, EPage::BTreeIndexV2, false, true, true);
             // Fill all L1 pages (Forward adds remaining from queue)
             wrap.To(4).Fill(l1Offsets);
-            wrap.To(5).Get(layout[1][0].Offset, EPage::BTreeIndex, true, false, true);
+            wrap.To(5).Get(layout[1][0].Offset, EPage::BTreeIndexV2, true, false, true);
         }
     }
 
@@ -2046,9 +2046,9 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
-        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
     }
 
     // Slices
@@ -2068,9 +2068,9 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, slices, 1000, 1000);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
-        wrap.To(2).Get(root.Offset, EPage::BTreeIndex, true, false, true);
+        wrap.To(2).Get(root.Offset, EPage::BTreeIndexV2, true, false, true);
     }
 
     // ManyApplies: apply pages one by one
@@ -2084,7 +2084,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 1000, 1000);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         if (layout.size() > 1 && !layout[1].empty()) {
@@ -2092,7 +2092,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
 
             // Get first child to populate queue; grow=true (queue has entries)
-            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndexV2, false, true, true);
             wrap.To(3).Apply({layout[1][0].Offset});
         }
     }
@@ -2109,7 +2109,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         const auto& root = layout[0][0];
 
         // level 0: Fill root, then Fill again (Grow=true → Forward → no-op)
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
         wrap.Grow = true;
         wrap.To(1).Fill({});
@@ -2119,7 +2119,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             TVector<TPageOffset> l1Offsets;
             for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
 
-            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndexV2, false, true, true);
             wrap.To(3).Fill(l1Offsets);
             wrap.Grow = true;
             wrap.To(3).Fill({});
@@ -2139,19 +2139,19 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         if (layout.size() > 1 && layout[1].size() >= 2) {
             // Request first L1 page, Fill all L1 (Forward adds remaining siblings)
-            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndexV2, false, true, true);
             TVector<TPageOffset> l1Offsets;
             for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
             wrap.To(3).Fill(l1Offsets);
 
             // All L1 pages are now cached (both the requested one and forwarded siblings)
             for (auto& entry : layout[1]) {
-                wrap.To(4).Get(entry.Offset, EPage::BTreeIndex, true, false, true);
+                wrap.To(4).Get(entry.Offset, EPage::BTreeIndexV2, true, false, true);
             }
         }
     }
@@ -2168,11 +2168,11 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         if (layout.size() < 2 || layout[1].empty()) return;
-        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndex;
+        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndexV2;
 
         // Get first L1 with grow=true → sets Grow flag
         wrap.To(2).Get(layout[1][0].Offset, l1Type, false, true, true);
@@ -2204,11 +2204,11 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TCacheWrapV2 wrap(part, nullptr, 200, 350);
         const auto& root = layout[0][0];
 
-        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndexV2, false, false, true);
         wrap.To(1).Fill({root.Offset});
 
         if (layout.size() < 2 || layout[1].size() < 2) return;
-        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndex;
+        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndexV2;
 
         // Get first L1 with grow=true → Fill adds all via Forward
         wrap.To(2).Get(layout[1][0].Offset, l1Type, false, true, true);

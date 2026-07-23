@@ -33,29 +33,7 @@ namespace NTable {
         return (meta.LevelCount == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
     }
 
-    /// Universal page reference — either a V1 page ID or a V2 byte-offset location.
-    struct TPageRef : std::variant<NPage::TPageId, NPage::TPageLocation> {
-        using TBase = std::variant<NPage::TPageId, NPage::TPageLocation>;
-        using TBase::variant;
-
-        bool IsValid() const noexcept {
-            return !(std::holds_alternative<NPage::TPageLocation>(*this) && !std::get<NPage::TPageLocation>(*this));
-        }
-
-        bool operator==(const TPageRef& other) const {
-            return IsValid() && static_cast<const TBase&>(*this) == static_cast<const TBase&>(other);
-        }
-        bool operator!=(const TPageRef& other) const { return !(*this == other); }
-    };
-
-    /// Version-agnostic child reference builder — works for V1 and V2 nodes.
-    inline TPageRef BuildPageRef(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isDataPage) {
-        if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
-            auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildV2Location(pos, type);
-        }
-        return node.GetChildV1PageId(pos);
-    }
+    using TPageRef = NPage::TPageRef;
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,

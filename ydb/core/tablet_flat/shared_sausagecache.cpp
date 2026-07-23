@@ -467,9 +467,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     page->IncrementFrequency();
                 }
                 if (doTraceLog) {
-                    pagesFromCacheTraceLog.push_back(location.Offset);
+                    pagesFromCacheTraceLog.push_back(page->Offset);
                 }
-                readyPages.emplace_back(location.Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, location.Type));
+                readyPages.emplace_back(page->Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -483,8 +483,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Counters.CacheMissInMemoryPages->Inc();
                     Counters.CacheMissInMemoryBytes->Add(page->Size);
                 }
-                readyPages.emplace_back(location.Offset, TSharedPageRef());
-                pendingPages.emplace_back(location.Offset, reqIdx);
+                readyPages.emplace_back(page->Offset, TSharedPageRef());
+                pendingPages.emplace_back(page->Offset, reqIdx);
                 break;
             case PageStateEvicted:
                 Y_TABLET_ERROR("must not happens");

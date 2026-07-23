@@ -110,7 +110,7 @@ namespace NWriter {
         {
             /* LastPageId captures the most recent AddPage() return value.
                In v2 mode, for structural pages, it returns the correct compacted index (1-based after skip entry).
-               For DataPage/BTreeIndex ir returns Max<ui32>() (no TEntry entry).
+               For DataPage/BTreeIndex it returns Max<ui32>() (no TEntry entry).
                */
             return LastPageId;
         }

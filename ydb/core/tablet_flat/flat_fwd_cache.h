@@ -427,7 +427,7 @@ namespace NFwd {
         }
 
         NPage::TPageLocation GetChildLocation(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) const {
-            auto ref = BuildPageRef(node, pos, isLeafLevel);
+            auto ref = node.GetChild(pos, isLeafLevel);
             return ResolvePageLocation(Part, ref, isLeafLevel ?  GroupId : TGroupId{0});
         }
 

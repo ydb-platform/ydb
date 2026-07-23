@@ -29,11 +29,11 @@ NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta
 // For V2 nodes, the location is inline in the child struct.
 // For V1 nodes, the location is resolved through Part->GetPageLocation().
 NPage::TPageLocation ChildLocation(const TPart* part, const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel, TGroupId groupId) {
-    if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-        auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-        return node.GetChildV2Location(pos, type);
+    auto ref = node.GetChild(pos, isLeafLevel);
+    if (auto* loc = std::get_if<NPage::TPageLocation>(&ref)) {
+        return *loc;
     }
-    return part->GetPageLocation(node.GetChildV1PageId(pos), isLeafLevel ? groupId : TGroupId{});
+    return part->GetPageLocation(std::get<NPage::TPageId>(ref), isLeafLevel ? groupId : TGroupId{});
 }
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {

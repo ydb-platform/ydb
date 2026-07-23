@@ -340,14 +340,9 @@ private:
     }
 
     /// Resolve a child's TPageLocation from the parent node at pos.
-    /// For v2 nodes, the location is inline in the child struct.
-    /// For v1 nodes, the location is resolved through Part->GetPageLocation().
+    /// V2 nodes carry inline locations; V1 nodes resolve through Part->GetPageLocation().
     TPageLocation ChildLocation(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) const {
-        if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildV2Location(pos, type);
-        }
-        return Part->GetPageLocation(node.GetChildV1PageId(pos), isLeafLevel ? GroupId : TGroupId{});
+        return ResolvePageLocation(Part, node.GetChild(pos, isLeafLevel), isLeafLevel ? GroupId : TGroupId{});
     }
 
     void PushNextState(TRecIdx pos) {

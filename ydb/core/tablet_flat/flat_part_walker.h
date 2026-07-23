@@ -49,9 +49,8 @@ public:
                         auto node = NPage::TBtreeIndexNode(*data);
                         bool childrenAreData = (LevelCount_ > 0 && level + 1 >= LevelCount_);
                         if (!(skipDataPages && childrenAreData)) {
-                            auto childType = childrenAreData ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
                             for (NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {
-                                Levels[level + 1].push_back(node.GetChildV2Location(pos, childType));
+                                Levels[level + 1].push_back(std::get<NPage::TPageLocation>(node.GetChild(pos, childrenAreData)));
                             }
                         }
                     }

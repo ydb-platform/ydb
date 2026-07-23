@@ -121,7 +121,7 @@ void TPrivatePageCache::DropPage(TPageOffset offset, TPageCollection* pageCollec
 void TPrivatePageCache::AddPage(TPageOffset offset, TSharedPageRef sharedBody, TPageCollection *pageCollection)
 {
     auto size = sharedBody.GetBodySize();
-    if (pageCollection->AddPage(offset, sharedBody)) {
+    if (pageCollection->AddPage(offset, std::move(sharedBody))) {
         Stats.SharedBodyBytes += size;
     }
 }

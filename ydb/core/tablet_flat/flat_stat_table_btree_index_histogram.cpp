@@ -256,7 +256,7 @@ public:
             auto rootLoc = GetBTreeRootLocation(meta, pageColl, pageColl);
             LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount, 0, meta.GetRowCount(), 0,
                                           meta.GetTotalDataSize(), beginKey, endKey);
-            ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
+            if (part.Slices) ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
         if (!ready) {
@@ -551,7 +551,7 @@ private:
     }
 
     static TNodeState BuildChildState(const TNodeState& parent, const TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel, TColumns colsKeyData) {
-        return TNodeState(parent.Part, BuildPageRef(node, pos, isLeafLevel), parent.Level - 1,
+        return TNodeState(parent.Part, node.GetChild(pos, isLeafLevel), parent.Level - 1,
             pos ? node.GetChildRowCount(pos - 1) : parent.BeginRowId,
             node.GetChildRowCount(pos),
             pos ? node.GetChildTotalDataSize(pos - 1) : parent.BeginDataSize,

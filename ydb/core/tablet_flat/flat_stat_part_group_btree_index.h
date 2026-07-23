@@ -90,7 +90,7 @@ public:
                 bool isLeafLevel = (height + 1 == Meta.LevelCount);
 
                 for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
-                    TPageRef ref = BuildPageRef(node, pos, isLeafLevel);
+                    TPageRef ref = node.GetChild(pos, isLeafLevel);
 
                     TRowId beginRowId = pos ? node.GetChildRowCount(pos - 1) : nodeState.BeginRowId;
                     TRowId endRowId = node.GetChildRowCount(pos);

@@ -1,6 +1,6 @@
 # node_broker_config
 
-Секция `node_broker_config` настраивает работу [Node Broker](../../concepts/glossary.md#node-broker) в кластере {{ ydb-short-name }}. В этой секции настраиваются длительность эпох и аренды [динамических узлов](../../concepts/glossary.md#dynamic), а также стабильные имена динамических узлов.
+Секция `node_broker_config` настраивает работу [Node Broker](../../concepts/glossary.md#node-broker) в кластере {{ ydb-short-name }}. В этой секции настраиваются длительность [эпох Node Broker](../../concepts/glossary.md#node-broker-epoch) и [аренды](../../concepts/glossary.md#node-lease) [динамических узлов](../../concepts/glossary.md#dynamic), а также стабильные имена динамических узлов.
 
 ## Параметры
 
@@ -11,6 +11,8 @@
 | `stable_node_name_prefix` | `slot-` | Префикс [стабильных имён динамических узлов](#stable-node-names). |
 
 ## Пример
+
+Пример секции `node_broker_config`, в котором заданы все параметры с их значениями по умолчанию:
 
 ```yaml
 node_broker_config:

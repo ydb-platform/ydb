@@ -177,6 +177,7 @@ public:
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;
+        context.SS->RegisterBackupCollectionTables(backupCollection);
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
         context.SS->CreateTx(
             OperationId,

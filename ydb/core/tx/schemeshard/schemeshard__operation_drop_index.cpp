@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
@@ -173,6 +174,10 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
+        // Sync remaining child index versions with main table
+        // (excluding the one being dropped - skipPlannedToDrop=true)
+        NTableIndexVersion::SyncChildIndexVersions(path, table, table->AlterVersion, OperationId, context, db, true);
+
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 
@@ -326,7 +331,6 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(indexPath.Base()->PathId));
         TTableIndexInfo::TPtr index = context.SS->Indexes.at(indexPath.Base()->PathId);

@@ -1004,6 +1004,7 @@ struct TAnalyzeSettings {
 
 struct TBackupCollectionSettings {
     bool IncrementalBackupEnabled = false;
+    bool OmitIndexes = false;
 };
 
 struct TCreateBackupCollectionSettings {

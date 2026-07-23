@@ -1,0 +1,204 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771554883805,
+  "projectRoot": "/home/innokentii/ydbwork2/issue-31382-schema-sync-25",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "scripts"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "build": {
+      "path": "build",
+      "purpose": "Build output",
+      "fileCount": 8,
+      "lastAccessed": 1771554883794,
+      "keyFiles": [
+        "ext_mapping.conf.json",
+        "long-path.manifest",
+        "mapping.conf.json",
+        "sanitize-blacklist.txt",
+        "sysincl.lst"
+      ]
+    },
+    "certs": {
+      "path": "certs",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1771554883799,
+      "keyFiles": [
+        "cacert.pem",
+        "ya.make"
+      ]
+    },
+    "contrib": {
+      "path": "contrib",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771554883799,
+      "keyFiles": []
+    },
+    "devtools": {
+      "path": "devtools",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771554883800,
+      "keyFiles": []
+    },
+    "library": {
+      "path": "library",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771554883800,
+      "keyFiles": [
+        "rightlib_sha.txt"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1771554883801,
+      "keyFiles": [
+        "generate_dump.sh"
+      ]
+    },
+    "tools": {
+      "path": "tools",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771554883801,
+      "keyFiles": []
+    },
+    "util": {
+      "path": "util",
+      "purpose": null,
+      "fileCount": 10,
+      "lastAccessed": 1771554883801,
+      "keyFiles": [
+        "README.md",
+        "linters.make.inc",
+        "str_stl.cpp",
+        "str_stl.h",
+        "ya.make"
+      ]
+    },
+    "vendor": {
+      "path": "vendor",
+      "purpose": "Third-party code",
+      "fileCount": 0,
+      "lastAccessed": 1771554883801,
+      "keyFiles": []
+    },
+    "ydb": {
+      "path": "ydb",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771554883802,
+      "keyFiles": [
+        "ya.make"
+      ]
+    },
+    "yql": {
+      "path": "yql",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771554883802,
+      "keyFiles": []
+    },
+    "yt": {
+      "path": "yt",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1771554883803,
+      "keyFiles": [
+        "gradle.inc",
+        "opensource.inc",
+        "ya_cpp.make.inc"
+      ]
+    },
+    "build/config": {
+      "path": "build/config",
+      "purpose": "Configuration files",
+      "fileCount": 0,
+      "lastAccessed": 1771554883803,
+      "keyFiles": []
+    },
+    "ydb/docs": {
+      "path": "ydb/docs",
+      "purpose": "Documentation",
+      "fileCount": 11,
+      "lastAccessed": 1771554883804,
+      "keyFiles": [
+        "README.md",
+        "a.yaml",
+        "build.sh"
+      ]
+    },
+    "ydb/public": {
+      "path": "ydb/public",
+      "purpose": "Public files",
+      "fileCount": 1,
+      "lastAccessed": 1771554883804,
+      "keyFiles": [
+        "ya.make"
+      ]
+    },
+    "ydb/services": {
+      "path": "ydb/services",
+      "purpose": "Business logic services",
+      "fileCount": 1,
+      "lastAccessed": 1771554883805,
+      "keyFiles": [
+        "ya.make"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "ydb/core/tx/datashard/datashard_ut_incremental_backup.cpp",
+      "accessCount": 16,
+      "lastAccessed": 1771558122593,
+      "type": "file"
+    },
+    {
+      "path": "ydb/core/tx/schemeshard/ut_backup_collection/ut_backup_collection.cpp",
+      "accessCount": 3,
+      "lastAccessed": 1771556492946,
+      "type": "file"
+    },
+    {
+      "path": "ydb/core/kqp/provider/yql_kikimr_gateway.h",
+      "accessCount": 2,
+      "lastAccessed": 1771557976726,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

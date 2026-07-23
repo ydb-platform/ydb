@@ -447,7 +447,14 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         TVector<int> perm(numDataCols);
         std::iota(perm.begin(), perm.end(), 0);
         for (int i = 0; i < numKeys; ++i) {
-            auto it = std::find(perm.begin(), perm.end(), static_cast<int>(keyColumns[i]));
+            const int keyColumn = static_cast<int>(keyColumns[i]);
+            MKQL_ENSURE(keyColumn >= 0 && keyColumn < numDataCols,
+                        Sprintf("key column index %i on %s side is out of range [0, %i)", keyColumn,
+                                AsString(side), numDataCols));
+            auto it = std::find(perm.begin() + i, perm.end(), keyColumn);
+            MKQL_ENSURE(it != perm.end(),
+                        Sprintf("key column index %i on %s side is duplicated or could not be placed",
+                                keyColumn, AsString(side)));
             std::swap(perm[i], *it);
         }
 

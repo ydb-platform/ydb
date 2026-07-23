@@ -1345,7 +1345,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         return;
     }
 
-    auto startTime = TInstant::Now();
+    auto startTime = TAppData::TimeProvider->Now();
 
     // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
     for (auto& [_, family] : Families) {
@@ -1502,7 +1502,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         }
     }
 
-    auto duration = TInstant::Now() - startTime;
+    auto duration = TAppData::TimeProvider->Now() - startTime;
     YDB_LOG_DEBUG("Balancing",
         {"logPrefix", LogPrefix()},
         {"duration", duration});

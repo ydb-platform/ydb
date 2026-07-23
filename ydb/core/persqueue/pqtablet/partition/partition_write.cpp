@@ -627,7 +627,7 @@ void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
 }
 
 void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
-    auto now = TInstant::Now();
+    auto now = TAppData::TimeProvider->Now();
     if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
         return;
     }

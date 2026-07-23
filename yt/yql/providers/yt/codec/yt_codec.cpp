@@ -1058,11 +1058,12 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFla
             }
 
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                if (items[i]) {
+                auto memberType = structType->GetMemberType(i);
+                if (items[i] || memberType->IsVoid() || memberType->IsNull()) {
                     continue;
                 }
 
-                YQL_ENSURE(structType->GetMemberType(i)->IsOptional(), "Missing required field: " << structType->GetMemberName(i));
+                YQL_ENSURE(memberType->IsOptional(), "Missing required field: " << structType->GetMemberName(i));
             }
 
             return ret;

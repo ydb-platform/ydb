@@ -554,9 +554,10 @@ Implementation sequence:
 26. M4: explicit query-error outcomes, exact `EnsureAtMostOne`, and general
     uncorrelated scalar subplans with consumer-demanded local cardinality
     errors and eager inherited errors;
-27. next: exact restricted relational `IN`/`EXISTS`;
-28. later: equality-correlated scalar and `EXISTS` subplans;
-29. later: proof scaling, distinct expansion, range reads, and other OLAP
+27. M4: exact uncorrelated and one-equality-correlated relational `EXISTS`;
+28. next: auditability consolidation and independent C++/Python contract review;
+29. later: equality-correlated scalar, dynamic `IN`, and broader `EXISTS`;
+30. later: proof scaling, distinct expansion, range reads, and other OLAP
     pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -1252,7 +1253,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 41-query formula floor must keep constructing SMT, and the
+  the verifier, the 45-query formula floor must keep constructing SMT, and the
   fifteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
@@ -1260,28 +1261,29 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements reran on 2026-07-23 after the general scalar-error and
-  bounded-choice hardening. They emit TPCH q1, q3, q5,
-  q6, q10, q11, q12, q14, q15, and q19 (10/22) and TPC-DS q3, q5, q15, q19,
-  q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68,
-  q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99 (31/99),
-  for 41/121 workload queries (33.9%). TPCH has nine unsupported and three
-  optimizer-failure results; TPC-DS has 40 unsupported and 28
-  optimizer-failure results, for 49 unsupported and 31 optimizer failures
-  across both suites. Complete preparation/verification totals are
-  2,928/6,655 ms for TPCH and 66,719/192,475 ms for TPC-DS, or
-  69,647/199,130 ms together. Status membership is unchanged from the
-  preceding complete dashboard. The refreshed reasons include TPC-DS q54's
-  initial `Invalid Map rename source _yql_source_5.segment`; q54 remains
-  unsupported and emits no formula. Formula emission confirms end-to-end model
-  coverage at two rows per referenced table and two tasks; it is not a proof
-  by itself. TPCH q7 and q8 reach the generic `Map` exporter blocker and remain
-  unsupported.
+  measurements reran on 2026-07-23 after relational `EXISTS` support. They emit
+  TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, and q22 (12/22) and
+  TPC-DS q3, q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50,
+  q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90,
+  q91, q93, q96, and q99 (33/99), for 45/121 workload queries (37.2%). TPCH
+  has seven unsupported and three optimizer-failure results; TPC-DS has 38
+  unsupported and 28 optimizer-failure results, for 45 unsupported and 31
+  optimizer failures across both suites. Complete preparation/verification
+  totals are 2,567/7,851 ms for TPCH and 55,244/175,820 ms for TPC-DS, or
+  57,811/183,671 ms together. The only status changes are the four new formulas
+  TPCH q4/q22 and TPC-DS q10/q69. TPC-DS q35 reaches the deeper `Double`
+  blocker. Fifty queries (41.3%) reach the verifier: the 45 formulas plus five
+  verifier-side resource preflight failures. Generic
+  `Unsupported operator AddDependencies` is absent from the current inventory;
+  remaining former cases are classified as correlated scalar,
+  multi-dependency `EXISTS`, or q35 `Double`. Formula emission confirms
+  end-to-end model coverage at two rows per referenced table and two tasks; it
+  is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
-  construction blockers are q4's 20,736-pair join match, q64's 8,192-row join
-  output, q11/q74's 8,126,496-pair Sort constructions, and q31's
+  construction blockers are TPC-DS q4's 20,736-pair join match, q64's
+  8,192-row join output, q11/q74's 8,126,496-pair Sort constructions, and q31's
   8,386,560-pair Sort construction. q1, q5, q25, q29, q46, q65, q68, q77,
   q80, and q91 now construct complete formulas instead of stopping at their
   historical aggregate, Sort, or Merge gates.
@@ -1294,26 +1296,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
   q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
-  q93, and q96 with a fixed 60-second per-query budget. The latest TPCH run
-  recorded
-  99/2,823 ms of preparation/verification for q3, 61/710 ms for q6,
-  175/7,265 ms for q11, 103/1,739 ms for q12, 86/31,035 ms for q14,
-  177/7,058 ms for q15, and 117/913 ms for q19. The latest TPC-DS run recorded
-  126/4,589 ms for q3, 101/5,068 ms for q42, 194/4,051 ms for q48,
-  100/4,289 ms for q52, 97/3,987 ms for q55, 280/8,201 ms for q90,
-  109/2,252 ms for q93, and 115/496 ms for q96. These are fifteen curated proofs
-  (12.4% of the workload). q50 emits a formula but its
+  q93, and q96 with a fixed 60-second per-query budget. The fresh TPCH run spent
+  854/49,986 ms and the TPC-DS run spent 1,124/31,796 ms in
+  preparation/verification. These are fifteen curated proofs (12.4% of the
+  workload); the four new `EXISTS` formulas do not extend this floor. q50 emits
+  a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. TPC-DS q15, q61, q62,
   q76, q79, and q88 return `UNKNOWN` at the 60-second solver budget. q43 likewise
   returns `UNKNOWN` after 147/69,391 ms. q61's
   1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
-  verification. The fresh q76 dashboard row records 437/3,846 ms; its preserved
+  verification. The fresh q76 dashboard row records 395/3,400 ms; its preserved
   focused formula run recorded 391/14,169 ms, and its solver experiment recorded
   419/88,305 ms before `UNKNOWN`. At the earlier scaling milestone, q71's
   118,276,852-byte formula recorded 83,339 ms in the verifier/formula-emission
   phase before a focused solver attempt reached the external process deadline.
-  The fresh q71 dashboard row records 412/1,678 ms; no new solver result is
+  The fresh q71 dashboard row records 329/1,437 ms; no new solver result is
   inferred. q76 is formula-covered but is not one of the fifteen proofs. The
   Date additions q37 and q82 return `UNKNOWN`
   at the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
@@ -1338,12 +1336,12 @@ correlated forms.
 The catalog prerequisite follows every ordered subplan root with one
 deduplicating traversal, validates the `OrderedList`/`PlanMap` registry, and
 captures tables referenced only by a subplan. The semantic snapshot now adds an
-ordered scalar-subplan descriptor for each used binding: stable binding name,
-kind, root node, selected output, exact type/nullability, dependency list, and
-explicit consumer-node list. Export fails closed on an unregistered binding,
-duplicate or colliding binding, bad topology, consumer mismatch, nested or
-staged subplan, correlation, unsupported kind, or a binding whose physical
-placement cannot be represented.
+ordered discriminated descriptor for each used binding: stable binding name,
+kind, root node, exact type/nullability, dependency list, explicit consumer
+nodes, and either the selected scalar output or complete `EXISTS` predicate.
+Export fails closed on an unregistered, duplicate, or colliding binding, bad
+topology, consumer mismatch, nesting, staging, unsupported kind, or a physical
+placement the snapshot cannot represent.
 
 Exact ordered logical UnionAll is also implemented as a prerequisite for scalar
 lowering. Each unordered input denotes every legal local sequence; the operator
@@ -1409,18 +1407,49 @@ barrier.
 Every Limit now serializes its marker, including across one- and multi-task
 producer stages, and the evaluator checks it exactly after Skip/Take in each
 task. The focused `*AtMostOneMarker*` exporter matrix passes 3/3 for direct,
-multi-task-producer, and single-task-producer serialization. After the model
-and optimizer corrections, the full `cpp_ut` passes 165/165 and the affected
-Python verifier/inspector/bisect/replay/confirmation gates pass 507/507.
+multi-task-producer, and single-task-producer serialization.
 TPC-DS q24 still reaches the independent blocker, `Unsupported scalar callable
 Map`. In the fresh complete dashboard, q54 fails initial export with
 `Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
 
-Exact relational `EXISTS`, restricted dynamic `IN`, and correlated forms remain
-separate later slices. Every slice must preserve output type/nullability, empty
-behavior, correlation metadata, and every final StageGraph consumer.
-Solver/formula-size work follows coverage and promotes a query only after a
-reproducible `VERIFIED_BOUNDED` run.
+Relational `EXISTS` is exact for uncorrelated bindings and one deliberately
+narrow correlated form. An uncorrelated descriptor has no dependency or
+predicate and returns non-null Boolean root presence. A correlated source may
+have only plain column-projection Maps above one Filter directly over
+`AddDependencies`. It has exactly one outer dependency and exactly one
+dependency-bearing conjunct: strict, non-null-safe equality between that
+dependency and one direct inner column. The descriptor retains the complete
+predicate, including supported inner-only residual conjuncts, and exports the
+underlying inner root without synthetic residual plan nodes.
+
+For each outer row the evaluator ORs
+`inner.present AND is_true(predicate(outer, inner))` across inner rows. This
+preserves SQL NULL behavior and collapses duplicate matches; `NOT EXISTS` is
+ordinary consumer negation. Every `EXISTS` binding is non-null `Bool`, has one
+Filter consumer, remains virtual, and cannot be nested or staged. C++ and
+Python independently validate registry, topology, consumer, type, nullability,
+dependency, and predicate shape.
+
+Observable `EnsureAtMostOne` errors fail closed. Correlated Limit and TopSort
+also fail closed because their row choices would need a fresh decision per
+outer invocation; plain Sort and exact uncorrelated row selection remain
+admissible. The evaluator preflights at most 16,384 outer/inner pairs. The final
+side remains the normal StageGraph, with no `EXISTS`-specific equivalence
+shortcut.
+
+Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
+through the real host. Current full suites pass 430/430 verifier, 167/167 C++,
+43/43 inspector, and 26/26 real-host integration tests. The complete dashboards
+move TPCH q4/q22 and TPC-DS q10/q69 to formula construction; q35 instead exposes
+`Unsupported scalar type Double`. None of these rows extends the fifteen-query
+proof floor.
+
+The next slice is an auditability consolidation: independently review
+C++/Python agreement, keep the descriptor and evaluator minimal, remove stale
+current-versus-historical prose, and rerun every regression floor before adding
+semantics. Correlated scalar subplans, dynamic `IN`, multiple dependencies, and
+broader correlations remain later work. Solver/formula-size work promotes a
+query only after a reproducible `VERIFIED_BOUNDED` run.
 
 The milestone audit has independently found seven production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
@@ -1473,9 +1502,10 @@ Cross. Because physical Cross drains the right input first, the commuted empty
 outer input could finish the join before the inherited scalar error was
 evaluated. Commit `cab0dd1e89c` fixes the defect with the
 `PreserveInputOrder` barriers described above. Its two direct order-sensitive
-join rule tests pass 2/2, `KqpRboYql::ExpressionSubquery` passes 1/1 including
-the CBO2 nested regression, the full `cpp_ut` passes 165/165, and the affected
-Python gates pass 507/507. Defect seven is fixed.
+join rule tests passed 2/2 at that checkpoint,
+`KqpRboYql::ExpressionSubquery` passed 1/1 including the CBO2 nested regression,
+the full `cpp_ut` passed 165/165, and the affected Python gates passed 507/507.
+Defect seven is fixed.
 
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises

@@ -218,6 +218,7 @@ class UnionAll:
     id: str
     inputs: tuple[UnionInput, ...]
     output: tuple[str, ...]
+    ordered: bool
 
 
 PlanNode: TypeAlias = (
@@ -878,7 +879,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         )
 
     if operation == "union_all":
-        _keys(obj, {"id", "op", "inputs", "output"}, path)
+        _keys(obj, {"id", "op", "inputs", "output", "ordered"}, path)
         inputs: list[UnionInput] = []
         for index, raw_input in enumerate(_array(obj["inputs"], f"{path}.inputs")):
             input_path = f"{path}.inputs[{index}]"
@@ -903,7 +904,12 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         )
         if not output:
             _fail(f"{path}.output", "must not be empty")
-        return UnionAll(node_id, tuple(inputs), output)
+        return UnionAll(
+            node_id,
+            tuple(inputs),
+            output,
+            _bool(obj["ordered"], f"{path}.ordered"),
+        )
 
     _fail(f"{path}.op", f"unsupported operator {operation!r}")
 

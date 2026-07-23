@@ -169,6 +169,40 @@ void VisitOperators(
     visitor(*op);
 }
 
+TVector<TIntrusivePtr<IOperator>> OrderedSubplanRoots(const TSubplans& subplans) {
+    if (subplans.OrderedList.size() != subplans.PlanMap.size()) {
+        Unsupported("Subplan registry order and map have different sizes");
+    }
+
+    TInfoUnitSet seen;
+    TVector<TIntrusivePtr<IOperator>> result;
+    result.reserve(subplans.OrderedList.size());
+    for (const auto& binding : subplans.OrderedList) {
+        const TString name = binding.GetFullName();
+        if (name.empty() || !seen.insert(binding).second) {
+            Unsupported(TStringBuilder()
+                << "Subplan registry has an empty or duplicate binding " << name);
+        }
+        const auto it = subplans.PlanMap.find(binding);
+        if (it == subplans.PlanMap.end()) {
+            Unsupported(TStringBuilder()
+                << "Subplan registry order references missing binding " << name);
+        }
+        const auto& entry = it->second;
+        if (!(entry.IU == binding)) {
+            Unsupported(TStringBuilder()
+                << "Subplan registry entry disagrees with binding " << name);
+        }
+        auto* plan = dynamic_cast<IOperator*>(entry.Plan.Get());
+        if (!plan) {
+            Unsupported(TStringBuilder()
+                << "Subplan registry has no operator plan for binding " << name);
+        }
+        result.emplace_back(plan);
+    }
+    return result;
+}
+
 void CheckSnapshotProperties(const IOperator& op, bool stageGraphPresent) {
     const auto& props = op.Props;
     const bool joinPhysicalProps = props.JoinAlgo || props.UseBlockHashJoin ||
@@ -5111,9 +5145,6 @@ private:
                     Unsupported("UnionAll must have two inputs");
                 }
                 auto& unionAll = static_cast<TOpUnionAll&>(base);
-                if (unionAll.Ordered) {
-                    Unsupported("Ordered UnionAll is absent from logical snapshot v1");
-                }
                 if (unionAll.Columns.empty()) {
                     Unsupported("UnionAll has no output columns");
                 }
@@ -5142,6 +5173,7 @@ private:
                 node["op"] = "union_all";
                 node["inputs"] = std::move(inputs);
                 node["output"] = std::move(output);
+                node["ordered"] = unionAll.Ordered;
                 return node;
             }
 
@@ -5968,11 +6000,8 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
     const TRBOContext& ctx)
 {
     return CatchUnsupported<TSemanticSnapshotCatalogCaptureResult>([&](auto& result) {
-        if (!initialRoot.PlanProps.Subplans.PlanMap.empty() ||
-            !initialRoot.PlanProps.Subplans.OrderedList.empty())
-        {
-            Unsupported("Logical snapshot v1 cannot capture a catalog for subplans");
-        }
+        const auto subplanRoots =
+            OrderedSubplanRoots(initialRoot.PlanProps.Subplans);
 
         struct TScannedTable {
             TString Path;
@@ -5980,7 +6009,7 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
         };
         TMap<TString, TScannedTable> scanned;
         THashSet<const IOperator*> visited;
-        VisitOperators(initialRoot.GetInput(), visited, [&](IOperator& op) {
+        const auto recordRead = [&](IOperator& op) {
             if (op.GetKind() != EOperator::Source) {
                 return;
             }
@@ -5995,7 +6024,11 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
             }
             scannedTable.Path = table.Path;
             scannedTable.Columns.insert(read.Columns.begin(), read.Columns.end());
-        });
+        };
+        VisitOperators(initialRoot.GetInput(), visited, recordRead);
+        for (const auto& subplanRoot : subplanRoots) {
+            VisitOperators(subplanRoot, visited, recordRead);
+        }
 
         for (auto& [identity, scannedTable] : scanned) {
             const auto& path = scannedTable.Path;

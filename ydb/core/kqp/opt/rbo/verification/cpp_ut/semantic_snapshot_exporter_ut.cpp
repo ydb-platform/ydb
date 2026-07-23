@@ -2961,6 +2961,32 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(ProjectionOutputs(project), TVector<TString>{"result"});
     }
 
+    Y_UNIT_TEST(ExportsUnionAllOrdering) {
+        for (const bool ordered : {false, true}) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/A",
+                {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                read,
+                read,
+                TPositionHandle(),
+                TVector<TInfoUnit>{TInfoUnit("a.k")},
+                ordered);
+            TOpRoot root(unionAll, TPositionHandle(), {"a.k"});
+
+            const auto snapshot =
+                ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& node = FindNode(snapshot, "union_all");
+            UNIT_ASSERT_VALUES_EQUAL(node.GetMapSafe().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(
+                node["ordered"].GetBooleanSafe(),
+                ordered);
+        }
+    }
+
     Y_UNIT_TEST(ExportsPassiveDateAndExactDecimalCatalogTypes) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/Passive", {
@@ -10872,6 +10898,74 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
         UNIT_ASSERT_STRING_CONTAINS(tables[0]["name"].GetStringSafe(), "/Root/A");
         UNIT_ASSERT_VALUES_EQUAL(tables[0]["columns"].GetArraySafe().size(), 2);
+    }
+
+    Y_UNIT_TEST(InitialCatalogIncludesSubplanTables) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {{"value", "Int64", false}});
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"value"});
+        TOpRoot root(outerRead, TPositionHandle(), {"outer.k"});
+
+        const TInfoUnit binding("scalar");
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                innerRead,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        UNIT_ASSERT_VALUES_EQUAL(catalog.Catalog.Tables.size(), 2);
+        UNIT_ASSERT_STRING_CONTAINS(
+            catalog.Catalog.Tables[0].Name,
+            "/Root/Inner");
+        UNIT_ASSERT_STRING_CONTAINS(
+            catalog.Catalog.Tables[1].Name,
+            "/Root/Outer");
+
+        const auto snapshot =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog);
+        UNIT_ASSERT(!snapshot.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            snapshot.UnsupportedReason,
+            "cannot represent subplans");
+    }
+
+    Y_UNIT_TEST(MalformedSubplanRegistryFailsCatalogCaptureClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"k", "Int32", true}});
+        auto read = MakeRead(ctx, table, "a", {"k"});
+        TOpRoot root(read, TPositionHandle(), {"a.k"});
+
+        const TInfoUnit binding("scalar");
+        root.PlanProps.Subplans.PlanMap.emplace(
+            binding,
+            TSubplanEntry{
+                read,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!catalog.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            catalog.UnsupportedReason,
+            "order and map have different sizes");
     }
 
     Y_UNIT_TEST(IncompleteStageGraphStateFailsClosed) {

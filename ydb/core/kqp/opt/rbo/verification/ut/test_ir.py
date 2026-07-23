@@ -1598,6 +1598,7 @@ class SnapshotTest(unittest.TestCase):
                         {"node": "scan", "columns": ["a.k"]},
                     ],
                     "output": ["u.k"],
+                    "ordered": False,
                 },
             ],
             "root": "union",
@@ -1664,6 +1665,7 @@ class SnapshotTest(unittest.TestCase):
                         {"node": "scan", "columns": ["a.k"]},
                     ],
                     "output": ["u.k"],
+                    "ordered": False,
                 },
             ],
             "root": "union",
@@ -1700,6 +1702,7 @@ class SnapshotTest(unittest.TestCase):
                         {"node": "scan", "columns": ["a.k"]},
                     ],
                     "output": ["u.k"],
+                    "ordered": False,
                 },
             ],
             "root": "union",
@@ -1707,6 +1710,44 @@ class SnapshotTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(SnapshotError, "requires exactly two inputs"):
             parse_snapshot(value)
+
+    def test_union_all_ordered_flag_is_required_and_strict(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["plan"] = {
+            "nodes": [
+                value["plan"]["nodes"][0],
+                {
+                    "id": "union",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "scan", "columns": ["a.k"]},
+                        {"node": "scan", "columns": ["a.k"]},
+                    ],
+                    "output": ["u.k"],
+                    "ordered": True,
+                },
+            ],
+            "root": "union",
+            "output": ["u.k"],
+        }
+        value["stage_graph"] = None
+        parsed = parse_snapshot(value)
+        self.assertTrue(parsed.plan.nodes[-1].ordered)
+
+        missing = copy.deepcopy(value)
+        del missing["plan"]["nodes"][1]["ordered"]
+        with self.assertRaisesRegex(SnapshotError, "missing fields: ordered"):
+            parse_snapshot(missing)
+
+        wrong_type = copy.deepcopy(value)
+        wrong_type["plan"]["nodes"][1]["ordered"] = 1
+        with self.assertRaisesRegex(SnapshotError, "ordered: expected a Boolean"):
+            parse_snapshot(wrong_type)
+
+        unknown = copy.deepcopy(value)
+        unknown["plan"]["nodes"][1]["parallel"] = False
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: parallel"):
+            parse_snapshot(unknown)
 
     def test_boolean_is_not_accepted_as_version_one(self):
         value = minimal_snapshot()

@@ -521,8 +521,13 @@ Implementation sequence:
     root;
 23. M4: exact phase-aware Decimal `avg` with explicit hidden state and direct
     intermediate-to-final lineage;
-24. next: exact captured uncorrelated scalar/`IN`/`EXISTS` subplans;
-25. later: proof scaling, distinct expansion, range reads, and other OLAP
+24. M4: subplan-aware initial catalog capture and exact ordered logical
+    `UnionAll`;
+25. next: exact captured uncorrelated, statically single-row scalar subplans;
+26. later: explicit query-error outcomes for general scalar subplans plus exact
+    restricted `IN`/`EXISTS`;
+27. later: equality-correlated scalar and `EXISTS` subplans;
+28. later: proof scaling, distinct expansion, range reads, and other OLAP
     pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -546,7 +551,9 @@ column-scan limit runs after source partitioning and therefore applies once per
 task. Exact reuse of one unordered Limit node remains correlated. Distinct
 Limit observers of one shared unordered stream remain unsupported until a
 common latent-order model is added. Ordered Limit is deterministic, while
-Aggregate, Join, and UnionAll establish new unordered streams.
+Aggregate and Join establish new unordered streams. Unordered UnionAll does the
+same; ordered UnionAll independently orders each input and concatenates the
+complete left sequence before the right.
 
 Sort enumerates every permutation only when every family outcome has at most
 three candidate rows and their combined permutations fit the ordinary outcome
@@ -1210,14 +1217,50 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   commands, complete formula-only baseline, proof-floor evidence, q6/q14 and
   q79/q88 investigations, and explicit unsupported/optimizer-failure inventory.
 
-The next bounded M4 deliverable is exact support for the captured uncorrelated
-scalar/`IN`/`EXISTS` subplans that currently block seven TPCH and thirteen
-TPC-DS queries. The implementation must preserve subplan output
-type/nullability, empty/multirow behavior, correlation status, and every
-StageGraph consumer, while keeping the normal verifier small and fail-closed.
-Solver/formula-size work follows that coverage milestone and targets promotion
-of supported `UNKNOWN` obligations into the proof floor; a query is promoted
-only after a reproducible `VERIFIED_BOUNDED` run.
+The subplan inventory contains 32 source subqueries across the seven blocked
+TPCH and thirteen blocked TPC-DS queries: fifteen scalar expressions and
+seventeen `EXISTS` predicates. Twenty-five are correlated, only seven are
+uncorrelated, and none is a dynamic `IN` subplan. Only TPCH q11/q15 and TPC-DS
+q24/q54 are fully uncorrelated; q6 and q22 mix uncorrelated and correlated
+forms.
+
+The catalog prerequisite now follows every ordered subplan root with one
+deduplicating traversal, validates the `OrderedList`/`PlanMap` registry, and
+captures tables referenced only by a subplan. This keeps the query-level
+initial catalog available even while initial semantic export deliberately
+fails closed on the unmodeled subplan. Focused q11 and q15 captures now show an
+empty final unsupported reason, proving that their optimized StageGraphs export
+completely. TPC-DS q54 does too; q24 exposes the independent final callable
+`Map` blocker.
+
+Exact ordered logical UnionAll is also implemented as a prerequisite for scalar
+lowering. Each unordered input denotes every legal local sequence; the operator
+then concatenates the complete left sequence before the right. Symbolic
+ordinals use input-specific choice scopes and compressed branch offsets, so an
+ordered UnionAll followed by `Limit 1` selects a real scalar row before the NULL
+fallback without correlating independent input orderings.
+
+The next bounded deliverable is the smallest auditable initial-boundary
+contract: uncorrelated scalar subplans whose plan is statically at most one row,
+starting with TPCH q11 and q15. General scalar subplans require an explicit
+query-error outcome for more than one row; that error must be compared with
+successful bags rather than encoded as a solver assumption or silently
+truncated. Restricted `IN`/`EXISTS` and correlated forms remain separate later
+slices. Every slice must preserve output type/nullability, empty behavior,
+correlation metadata, and every final StageGraph consumer. Solver/formula-size
+work follows coverage and promotes a query only after a reproducible
+`VERIFIED_BOUNDED` run.
+
+The milestone audit has independently confirmed two real new-RBO correctness
+defects with legacy-vs-new runtime tests. First, an unrelated earlier `NOT`
+left stale state while the simple-subplan rule searched later conjuncts, so a
+positive `EXISTS` could be lowered as `NOT EXISTS`; the focused regression and
+per-conjunct reset are committed in `95a2afad1d3`. Second, an uncorrelated
+two-row scalar subquery raises the required “more than one row” error under the
+legacy optimizer but succeeds under new RBO and selects its first row:
+`EnsureAtMostOne` is recorded on the logical Map but is not consumed by
+physical lowering. The verifier must model the error contract even while that
+optimizer defect is fixed.
 
 ### M5: confirmation and localization — implemented for replayable single-result witnesses
 

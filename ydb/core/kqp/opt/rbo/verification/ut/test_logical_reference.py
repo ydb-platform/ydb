@@ -198,6 +198,7 @@ def _union_plan():
             {"node": "b", "columns": ["right_value"]},
         ],
         "output": ["value"],
+        "ordered": False,
     }
     return {"nodes": [left, right, union], "root": "union", "output": ["value"]}
 

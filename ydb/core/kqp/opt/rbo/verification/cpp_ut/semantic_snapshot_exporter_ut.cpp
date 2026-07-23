@@ -782,6 +782,36 @@ TExprNode::TPtr TypedTextLiteralDecimalCast(
         optionalDecimalType);
 }
 
+TExprNode::TPtr TypedTextLiteralDateCast(
+    TExportTestContext& ctx,
+    TStringBuf castCallable,
+    TStringBuf sourceCallable,
+    TStringBuf text)
+{
+    UNIT_ASSERT(sourceCallable == "String" || sourceCallable == "Utf8");
+    const auto sourceSlot = sourceCallable == "String"
+        ? NUdf::EDataSlot::String
+        : NUdf::EDataSlot::Utf8;
+    const auto* sourceType = ScalarType(ctx, sourceSlot);
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(
+        ctx,
+        NUdf::EDataSlot::Date,
+        true);
+    return TypedCallable(
+        ctx,
+        castCallable,
+        {
+            TypedLiteral(ctx, sourceCallable, text, sourceType),
+            OptionalDataTypeDescriptor(
+                ctx,
+                "Date",
+                dateType,
+                optionalDateType),
+        },
+        optionalDateType);
+}
+
 enum class EDateIntervalShape {
     Exact,
     NonOptionalDateTarget,
@@ -3026,6 +3056,251 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 result.UnsupportedReason,
                 "Date literal type annotation does not match");
         }
+    }
+
+    Y_UNIT_TEST(FoldsDirectTextLiteralDateSafeCastsExactly) {
+        struct TCase {
+            TString Source;
+            TString Date;
+        };
+        const TVector<TCase> cases = {
+            {"String", "1970-01-01"},
+            // TPC-DS q5/q77 lower-bound spelling.
+            {"String", "1998-08-04"},
+            {"Utf8", "1998-08-04"},
+            {"Utf8", "2105-12-31"},
+        };
+
+        for (const auto& test : cases) {
+            const auto parsed = NKikimr::NMiniKQL::ValueFromString(
+                NUdf::EDataSlot::Date,
+                NUdf::TStringRef(test.Date.data(), test.Date.size()));
+            UNIT_ASSERT_C(parsed.HasValue(), test.Date);
+            const ui16 expected = parsed.Get<ui16>();
+
+            TExportTestContext ctx;
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedTextLiteralDateCast(
+                    ctx,
+                    "SafeCast",
+                    test.Source,
+                    test.Date));
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["value"].GetUIntegerSafe(),
+                expected);
+
+            TExportTestContext directCtx;
+            const auto direct = ExportMapExpression(
+                directCtx,
+                "a",
+                TypedLiteral(
+                    directCtx,
+                    "Date",
+                    ToString(expected),
+                    ScalarType(directCtx, NUdf::EDataSlot::Date)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NJson::WriteJson(expression, false, true),
+                NJson::WriteJson(direct, false, true));
+        }
+
+        const TString q5LowerBound = "1998-08-04";
+        const auto parsed = NKikimr::NMiniKQL::ValueFromString(
+            NUdf::EDataSlot::Date,
+            NUdf::TStringRef(q5LowerBound.data(), q5LowerBound.size()));
+        UNIT_ASSERT(parsed.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Get<ui16>(), 10'442);
+    }
+
+    Y_UNIT_TEST(InvalidDirectTextLiteralDateSafeCastsBecomeTypedNull) {
+        const TVector<TString> invalid = {
+            "",
+            "1969-12-31",
+            "1998-02-30",
+            "1998-13-04",
+            "1998-08-04 ",
+            "2106-01-01",
+            "not-a-date",
+        };
+        for (const TString source : {"String", "Utf8"}) {
+            for (const auto& date : invalid) {
+                const auto parsed = NKikimr::NMiniKQL::ValueFromString(
+                    NUdf::EDataSlot::Date,
+                    NUdf::TStringRef(date.data(), date.size()));
+                UNIT_ASSERT_C(!parsed.HasValue(), date);
+
+                TExportTestContext ctx;
+                const auto expression = ExportMapExpression(
+                    ctx,
+                    "a",
+                    TypedTextLiteralDateCast(
+                        ctx,
+                        "SafeCast",
+                        source,
+                        date));
+                UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["kind"].GetStringSafe(),
+                    "null");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["type"].GetStringSafe(),
+                    "Date");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DirectTextLiteralDateSafeCastGateFailsClosed) {
+        auto checkUnsupported = [](
+            TStringBuf label,
+            auto&& makeExpression)
+        {
+            TExportTestContext ctx;
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                makeExpression(ctx));
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder() << label << " unexpectedly exported " << result.Json);
+        };
+
+        checkUnsupported("dynamic source", [](TExportTestContext& ctx) {
+            const auto* sourceType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String);
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* optionalDateType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Date,
+                true);
+            return TypedCallable(
+                ctx,
+                "SafeCast",
+                {
+                    TypedMember(ctx, "a.x", sourceType),
+                    OptionalDataTypeDescriptor(
+                        ctx,
+                        "Date",
+                        dateType,
+                        optionalDateType),
+                },
+                optionalDateType);
+        });
+        checkUnsupported("nullable source", [](TExportTestContext& ctx) {
+            auto expression = TypedTextLiteralDateCast(
+                ctx,
+                "SafeCast",
+                "Utf8",
+                "1998-08-04");
+            expression->Child(0)->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Utf8, true));
+            return expression;
+        });
+        checkUnsupported("source annotation mismatch", [](TExportTestContext& ctx) {
+            auto expression = TypedTextLiteralDateCast(
+                ctx,
+                "SafeCast",
+                "String",
+                "1998-08-04");
+            expression->Child(0)->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Utf8));
+            return expression;
+        });
+        checkUnsupported("StrictCast", [](TExportTestContext& ctx) {
+            return TypedTextLiteralDateCast(
+                ctx,
+                "StrictCast",
+                "Utf8",
+                "1998-08-04");
+        });
+        checkUnsupported("non-optional result", [](TExportTestContext& ctx) {
+            auto expression = TypedTextLiteralDateCast(
+                ctx,
+                "SafeCast",
+                "String",
+                "1998-08-04");
+            expression->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Date));
+            return expression;
+        });
+        checkUnsupported("non-optional target", [](TExportTestContext& ctx) {
+            const auto* sourceType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String);
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* optionalDateType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Date,
+                true);
+            return TypedCallable(
+                ctx,
+                "SafeCast",
+                {
+                    TypedLiteral(
+                        ctx,
+                        "String",
+                        "1998-08-04",
+                        sourceType),
+                    DataTypeDescriptor(ctx, "Date", dateType),
+                },
+                optionalDateType);
+        });
+        checkUnsupported("outer target annotation mismatch", [](
+            TExportTestContext& ctx)
+        {
+            auto expression = TypedTextLiteralDateCast(
+                ctx,
+                "SafeCast",
+                "String",
+                "1998-08-04");
+            expression->Child(1)->SetTypeAnn(
+                ctx.ExprCtx.MakeType<TTypeExprType>(
+                    ScalarType(ctx, NUdf::EDataSlot::Utf8, true)));
+            return expression;
+        });
+        checkUnsupported("nested target annotation mismatch", [](
+            TExportTestContext& ctx)
+        {
+            auto expression = TypedTextLiteralDateCast(
+                ctx,
+                "SafeCast",
+                "Utf8",
+                "1998-08-04");
+            expression->Child(1)->Child(0)->SetTypeAnn(
+                ctx.ExprCtx.MakeType<TTypeExprType>(
+                    ScalarType(ctx, NUdf::EDataSlot::Utf8)));
+            return expression;
+        });
+        checkUnsupported("malformed source literal", [](TExportTestContext& ctx) {
+            const auto* sourceType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String);
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* optionalDateType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Date,
+                true);
+            return TypedCallable(
+                ctx,
+                "SafeCast",
+                {
+                    TypedCallable(ctx, "String", {}, sourceType),
+                    OptionalDataTypeDescriptor(
+                        ctx,
+                        "Date",
+                        dateType,
+                        optionalDateType),
+                },
+                optionalDateType);
+        });
     }
 
     Y_UNIT_TEST(FoldsDirectNumericDateAndIntervalLiteralsExactly) {
@@ -9866,6 +10141,103 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ctx,
                 ctx.ExprCtx.NewAtom(TPositionHandle(), "d"));
             UNIT_ASSERT(!result.IsSupported());
+        }
+    }
+
+    Y_UNIT_TEST(FoldsTextLiteralDateSafeCastInActualOlapFilterDialect) {
+        const auto exportRight = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr right)
+        {
+            const auto& table = AddTable(ctx, "/Root/OlapDateCast", {
+                {"d", "Date", false},
+                {"s", "String", true},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"d", "s"},
+                NYql::EStorageType::ColumnStorage);
+            SetExactOutputType(ctx, *read, {
+                {"a.d", ScalarType(ctx, NUdf::EDataSlot::Date, true)},
+                {"a.s", ScalarType(ctx, NUdf::EDataSlot::String)},
+            });
+            auto comparison = Build<TKqpOlapFilterBinaryOp>(
+                ctx.ExprCtx,
+                TPositionHandle())
+                .Operator().Value("gte").Build()
+                .Left<TCoAtom>().Value("d").Build()
+                .Right(std::move(right))
+                .Done();
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx,
+                comparison.Ptr());
+            TOpRoot root(read, TPositionHandle(), {"a.d"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        for (const TString source : {"String", "Utf8"}) {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportRight(
+                ctx,
+                TypedTextLiteralDateCast(
+                    ctx,
+                    "SafeCast",
+                    source,
+                    "1998-08-04")));
+            const auto& right = FindNode(snapshot, "scan")["predicate"]["right"];
+            UNIT_ASSERT_VALUES_EQUAL(right["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(right["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                right["value"].GetUIntegerSafe(),
+                10'442);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportRight(
+                ctx,
+                TypedTextLiteralDateCast(
+                    ctx,
+                    "SafeCast",
+                    "String",
+                    "1998-02-30")));
+            const auto& right = FindNode(snapshot, "scan")["predicate"]["right"];
+            UNIT_ASSERT_VALUES_EQUAL(right["kind"].GetStringSafe(), "null");
+            UNIT_ASSERT_VALUES_EQUAL(right["type"].GetStringSafe(), "Date");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto* optionalDateType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Date,
+                true);
+            const auto result = exportRight(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(
+                            ctx,
+                            "a.s",
+                            ScalarType(ctx, NUdf::EDataSlot::String)),
+                        OptionalDataTypeDescriptor(
+                            ctx,
+                            "Date",
+                            dateType,
+                            optionalDateType),
+                    },
+                    optionalDateType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "not a direct String or Utf8 literal");
         }
     }
 

@@ -32,10 +32,14 @@ namespace NBlockHashJoinParams {
         LeftRenames = 5,
         RightRenames = 6,
         Settings = 7,
-        FilterLeftArgs = 8,
-        FilterRightArgs = 9,
-        FilterBody = 10,
-        Count = 11,
+        LeftFilterArgs = 8,
+        LeftFilterBody = 9,
+        RightFilterArgs = 10,
+        RightFilterBody = 11,
+        CommonFilterLeftArgs = 12,
+        CommonFilterRightArgs = 13,
+        CommonFilterBody = 14,
+        Count = 15,
     };
 }
 
@@ -273,11 +277,13 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
 
   public:
     TBlockHashJoinWrapper(TComputationMutables& mutables, TDqBlockJoinContext meta, TSides<IComputationNode*> streams,
-                          TJoinCommonFilter filter)
+                          TJoinFilter leftFilter, TJoinFilter rightFilter, TJoinCommonFilter commonFilter)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Meta_(std::make_unique<TDqBlockJoinContext>(meta))
         , Streams_(streams)
-        , Filter_(std::move(filter))
+        , LeftFilter_(std::move(leftFilter))
+        , RightFilter_(std::move(rightFilter))
+        , CommonFilter_(std::move(commonFilter))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -296,10 +302,13 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
         // The filter path is only instantiated when a filter is present (HasFilter).
         std::optional<TBlockJoinPairFilter> pairFilter;
         if constexpr (HasFilter) {
+            // Probe == left input, Build == right input. Decode a side only if some filter needs it.
+            const bool needLeft = LeftFilter_ || CommonFilter_;
+            const bool needRight = RightFilter_ || CommonFilter_;
             // Scalar converters share the block converters' packed layout, so a matched packed tuple
             // can be decoded into scalar values for filter evaluation.
             TSides<std::unique_ptr<IScalarLayoutConverter>> scalarConverters;
-            for (ESide side : EachSide) {
+            const auto makeConverter = [&](ESide side) {
                 TVector<NPackedTuple::EColumnRole> roles(userTypes.SelectSide(side).size(),
                                                          NPackedTuple::EColumnRole::Payload);
                 for (int column : Meta_->KeyColumns.SelectSide(side)) {
@@ -307,10 +316,17 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
                 }
                 scalarConverters.SelectSide(side) =
                     MakeScalarLayoutConverter(helper, userTypes.SelectSide(side), roles, ctx.HolderFactory);
+            };
+            if (needLeft) {
+                makeConverter(ESide::Probe);
+            }
+            if (needRight) {
+                makeConverter(ESide::Build);
             }
             const TSides<int> widths{.Build = static_cast<int>(userTypes.Build.size()),
                                      .Probe = static_cast<int>(userTypes.Probe.size())};
-            pairFilter.emplace(ctx, std::move(scalarConverters), Meta_->ColumnPermutation, widths, Filter_);
+            pairFilter.emplace(ctx, std::move(scalarConverters), Meta_->ColumnPermutation, widths, LeftFilter_,
+                               RightFilter_, CommonFilter_);
         }
 
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,
@@ -405,27 +421,37 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
         this->DependsOn(Streams_.Probe);
 
         if constexpr (HasFilter) {
-            for (auto* arg : Filter_.LeftArgs) {
-                this->Own(arg);
-            }
-            for (auto* arg : Filter_.RightArgs) {
-                this->Own(arg);
-            }
-            if (Filter_.Body) {
-                this->DependsOn(Filter_.Body);
-            }
+            const auto ownArgs = [&](const TComputationExternalNodePtrVector& args) {
+                for (auto* arg : args) {
+                    this->Own(arg);
+                }
+            };
+            const auto dependOnBody = [&](IComputationNode* body) {
+                if (body) {
+                    this->DependsOn(body);
+                }
+            };
+            ownArgs(LeftFilter_.Args);
+            dependOnBody(LeftFilter_.Body);
+            ownArgs(RightFilter_.Args);
+            dependOnBody(RightFilter_.Body);
+            ownArgs(CommonFilter_.LeftArgs);
+            ownArgs(CommonFilter_.RightArgs);
+            dependOnBody(CommonFilter_.Body);
         }
     }
 
     std::unique_ptr<TDqBlockJoinContext> Meta_;
     TSides<IComputationNode*> Streams_;
-    TJoinCommonFilter Filter_;
+    TJoinFilter LeftFilter_;
+    TJoinFilter RightFilter_;
+    TJoinCommonFilter CommonFilter_;
 };
 
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == NBlockHashJoinParams::Count, "Expected 11 args");
+    MKQL_ENSURE(callable.GetInputsCount() == NBlockHashJoinParams::Count, "Expected 15 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -590,21 +616,26 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
         : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
 
-    // The three ON-clause predicates are pre-combined into a single (leftRow, rightRow) -> Bool
-    // filter by the program builder; empty argument tuples encode an absent filter.
-    TJoinCommonFilter filter = ParseJoinCommonFilter(
-        ctx, callable, NBlockHashJoinParams::FilterLeftArgs, NBlockHashJoinParams::FilterRightArgs,
-        NBlockHashJoinParams::FilterBody);
-    MKQL_ENSURE(!filter || !meta.Settings.LeftIsBuild(),
+    // The three ON-clause predicates stay separate; empty argument tuples encode an absent filter.
+    TJoinFilter leftFilter =
+        ParseJoinFilter(ctx, callable, NBlockHashJoinParams::LeftFilterArgs, NBlockHashJoinParams::LeftFilterBody);
+    TJoinFilter rightFilter =
+        ParseJoinFilter(ctx, callable, NBlockHashJoinParams::RightFilterArgs, NBlockHashJoinParams::RightFilterBody);
+    TJoinCommonFilter commonFilter = ParseJoinCommonFilter(
+        ctx, callable, NBlockHashJoinParams::CommonFilterLeftArgs, NBlockHashJoinParams::CommonFilterRightArgs,
+        NBlockHashJoinParams::CommonFilterBody);
+    const bool hasFilter = leftFilter || rightFilter || commonFilter;
+    MKQL_ENSURE(!hasFilter || !meta.Settings.LeftIsBuild(),
                 "Join filters are not supported with LeftIsBuild block join");
 
     // Filter presence is known here, so we pick the HasFilter template instantiation and never
     // compile the filter (decode/eval) path into the no-filter join, nor a runtime branch for it.
     const auto makeWrapper = [&]<EJoinKind K>() -> IComputationNode* {
-        if (filter) {
-            return new TBlockHashJoinWrapper<K, true>(ctx.Mutables, meta, streams, std::move(filter));
+        if (hasFilter) {
+            return new TBlockHashJoinWrapper<K, true>(ctx.Mutables, meta, streams, std::move(leftFilter),
+                                                      std::move(rightFilter), std::move(commonFilter));
         }
-        return new TBlockHashJoinWrapper<K, false>(ctx.Mutables, meta, streams, {});
+        return new TBlockHashJoinWrapper<K, false>(ctx.Mutables, meta, streams, {}, {}, {});
     };
 
     using enum EJoinKind;

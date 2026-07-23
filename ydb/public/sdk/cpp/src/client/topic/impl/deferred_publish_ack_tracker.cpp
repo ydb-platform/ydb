@@ -160,7 +160,7 @@ NThreading::TFuture<TStatus> TDeferredPublicationAckState::WaitAllAcks() {
     }
 
     if (promiseToComplete) {
-        promiseToComplete->SetValue(statusToSet);
+        promiseToComplete->TrySetValue(statusToSet);
     }
     return future;
 }

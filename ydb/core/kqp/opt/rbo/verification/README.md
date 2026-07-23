@@ -14,10 +14,11 @@ ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
 optional Decimal, exact reviewed `Coalesce(..., false)` forms over either a
 direct comparison or a binary same-member String membership/complement
-predicate, exact constant Decimal `Just`, exact Decimal semantics for
+predicate, exact direct Decimal `Coalesce(member, zero)`, exact reviewed
+Decimal `Just` forms, exact Decimal semantics for
 comparison, integral casts,
 arithmetic, ordering, `SUM`, and Decimal `MAX`, plus the benchmark-dashboard
-parts of M4. The two exact wrapper forms retain their Optional schema through
+parts of M4. The reviewed exact wrapper forms retain their Optional schema through
 existing `IfPresent`/`If` IR instead of being erased. The exporter also exactly
 folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -35,13 +36,13 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The latest complete formula-only measurements combine a TPCH run from
-2026-07-23 with the earlier TPC-DS baseline from 2026-07-22. They establish
+The latest complete formula-only measurements reran both suites on current code
+on 2026-07-23. They establish
 formula construction for TPCH q3, q5, q6,
 q10, q12, q14, and q19 plus TPC-DS q3,
 q15, q19, q37, q40,
-q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96,
-and q99: 28/121 workload queries (23.1%). Formula emission means that both
+q42, q43, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93,
+q96, and q99: 29/121 workload queries (24.0%). Formula emission means that both
 snapshots were modeled and SMT was constructed; it is not a solver proof. The
 checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42,
@@ -54,11 +55,12 @@ Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
 q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. The new q37 and
-q82 obligations are likewise `UNKNOWN` at 60 seconds. A separate non-gating
+q82 obligations are likewise `UNKNOWN` at 60 seconds. q43 is formula-covered
+but returned `UNKNOWN` after 147/69,391 ms at that same budget. A separate non-gating
 q40 experiment with a 10-second solver budget reported `SOLVER_ERROR` after the
 external solver exceeded its 15.0-second process deadline; the focused `ya`
-experiment failed on that status as designed. All three are formula-covered,
-not proved, and not part of the proof floor. None is evidence of an optimizer
+experiment failed on that status as designed. These obligations are
+formula-covered, not proved, and not part of the proof floor. None is evidence of an optimizer
 correctness bug.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
@@ -67,6 +69,9 @@ and reach the verifier. Their current verifier-side results stop at aggregate
 82,944-pair grouped-aggregate construction cap, respectively; none is counted
 as a formula. Later formula or proof results satisfy the same depth floor
 automatically.
+TPC-DS q77 also passes both snapshot exporters and finite Decimal `SUM`
+headroom, then fails closed on a 25,600-pair grouped aggregate above the
+16,384-pair construction bound. It is not counted as a formula or proof.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -203,6 +208,19 @@ node only for `Contains(ToDict(List(...), identity, Void, (One, Auto)), bound)`
 inside that handler. Every item must be non-null, have the bound value's exact
 type, and pass the ordinary recursive scalar audit. Other lambdas, dictionary
 settings, payloads, lookups, and generic `Contains` remain unsupported.
+
+The exact Decimal zero wrapper admits only
+`Coalesce(direct_optional_member, zero) -> Decimal(p,s)`. The member must be a
+visible `Optional<Decimal(p,s)>` input and the fallback must be either a
+canonical non-null Decimal zero of that exact type or a complete
+`SafeCast(Int32("0"), Decimal(p,s))`. It lowers to
+`if_present(member, bound(0), zero)`, preserving NULL-to-zero behavior and the
+non-null result schema. A matching `Just` may wrap that exact result and reuses
+the existing `if(true, value, typed-null)` Optional-preserving form. Nonzero or
+special fallbacks, dynamic or incomplete casts, `Convert`, computed first
+children, mismatched types, and broader `Coalesce` shapes remain opaque when
+the closed-world safety audit admits them; malformed or unsafe trees fail
+closed.
 
 Scalar syntax outside the explicit Boolean, equality, ordering, integer
 arithmetic, and restricted static-membership core is represented by a shared
@@ -372,8 +390,8 @@ the dashboard covered 23/121 queries and the proof floor remained ten. TPCH q1
 passes both snapshot
 exporters and reaches unmodeled aggregate
 `avg`; q21 exposes `Double`; q72 still has a dynamic Date-fold
-`SafeCast(Optional<Date>)` mismatch; and q77 passes export but fails the
-verifier's Decimal-SUM headroom gate.
+`SafeCast(Optional<Date>)` mismatch; and, at that earlier milestone, q77 passed
+export but failed the verifier's Decimal-SUM headroom gate.
 
 A further constant normalization accepts only the exact optimizer-generated
 `Map(Shift(Split(Date), Int32), MakeDate)` tree for `DateTime2.ShiftYears` or
@@ -432,6 +450,20 @@ TPCH formula coverage to 7/22, total formula coverage to 28/121 (23.1%), TPCH
 proofs to five, and the total proof floor to 13/121 (10.7%). No proof produced
 a candidate, so replay was not invoked and no optimizer correctness bug was
 found.
+
+The next exact gate normalizes only a direct `Optional<Decimal>` member under
+`Coalesce(member, zero)`, including its matching `Just` wrapper, to the
+schema-preserving forms described above. The complete current-code TPC-DS
+dashboard moves q43 through formula construction after 145/4,760 ms and moves
+q77 past Decimal `SUM` headroom to the 25,600-pair grouped-aggregate cap after
+2,063/442 ms. TPC-DS now emits 22/99 formulas and the combined workload emits
+29/121 (24.0%); q77 remains unsupported. A focused q43 solver run returned
+`UNKNOWN` after 147/69,391 ms at the 60-second budget, so the proof floor stays
+at thirteen. The first complete run also caught incomplete Decimal-zero casts
+in q40 and q80 being rejected while classifying a near-match. Classification
+now leaves those forms opaque before invoking the strict exact-cast exporter;
+targeted regressions and the repeated complete dashboard restore q40's formula
+and q80's verifier entry. No candidate or optimizer bug arose.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,

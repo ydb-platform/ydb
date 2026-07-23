@@ -376,7 +376,21 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx, &PlanProps, project);
             } else {
-                TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
+                auto exprLambdaNode = GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx);
+                const auto unsupportedProjectionSublink = FindNode(
+                    exprLambdaNode,
+                    [](const TExprNode::TPtr& candidate) {
+                        return TKqpSublinkBase::Match(candidate.Get()) &&
+                            !TKqpExprSublink::Match(candidate.Get());
+                    });
+                if (!unsupportedProjectionSublink) {
+                    // Map consumers are currently inlined only by the scalar
+                    // EXPR rule.  Leaving a mixed EXISTS/IN expression intact
+                    // is preferable to creating a residual registry entry that
+                    // no Map rule can consume.
+                    exprLambdaNode = RemoveSubplans(exprLambdaNode);
+                }
+                TExpression exprLambda(exprLambdaNode, &Ctx);
                 mapElements.emplace_back(iu, exprLambda);
             }
         }

@@ -6347,6 +6347,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 PRAGMA YqlSelect = 'force';
+                SELECT (SELECT max(foo.id) FROM `/Root/foo` as foo) AS scalar
+                FROM `/Root/bar` as bar
+                WHERE bar.id == 0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT (
+                    SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 2
+                ) AS scalar
+                FROM `/Root/bar` as bar
+                WHERE bar.id == 0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id + (
+                    SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 2
+                ) AS scalar
+                FROM `/Root/bar` as bar
+                WHERE bar.id == 0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT (
+                    SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id < 0
+                ) AS scalar
+                FROM `/Root/bar` as bar
+                WHERE bar.id == 0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.id = (SELECT max(foo.id) FROM `/Root/foo` as foo);
             )",
             R"(
@@ -6392,6 +6422,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
+            R"([[[3]]])",
+            R"([[[2]]])",
+            R"([[[2]]])",
+            R"([[#]])",
             R"([[3]])",
             R"([[0]])",
             R"([[0]])",
@@ -6439,6 +6473,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             orderedMultirowScalar.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(
             orderedMultirowScalar.GetIssues().ToString(),
+            "More than one row returned by a subquery used as an expression");
+
+        auto projectedMultirowScalar = session2.ExecuteDataQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT (
+                SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id < 2
+            ) AS scalar
+            FROM `/Root/bar` as bar
+            WHERE bar.id == 0;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            projectedMultirowScalar.GetStatus(),
+            EStatus::PRECONDITION_FAILED,
+            projectedMultirowScalar.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            projectedMultirowScalar.GetIssues().ToString(),
             "More than one row returned by a subquery used as an expression");
     }
 

@@ -430,7 +430,7 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
         }
     }
 
-    AddUnique<TInfoUnit>(res, subplanIUs);
+    AddUnique<TInfoUnit>(subplanIUs, res);
     return res;
 }
 

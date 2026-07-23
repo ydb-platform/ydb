@@ -29,6 +29,10 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     auto subplanResIU = GetSubplanResultIUs(subplan)[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
+    const bool makeResultOptional = !subplanResType->IsOptionalOrNull();
+    const auto* scalarResultType = makeResultOptional
+        ? ctx.ExprCtx.MakeType<TOptionalExprType>(subplanResType)
+        : subplanResType;
 
     Y_ENSURE(MatchOperator<IUnaryOperator>(input));
     auto unaryOp = CastOperator<IUnaryOperator>(input);
@@ -121,10 +125,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto emptySource = MakeIntrusive<TOpEmptySource>(subplan->Pos);
 
         TVector<TMapElement> mapElements;
-
-        // FIXME: This works only for postgres types, because they are null-compatible
-        // For YQL types we will need to handle optionality
-        mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
+        mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, scalarResultType, &ctx.ExprCtx));
         auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements);
 
         auto cardinalityCheck = MakeIntrusive<TOpLimit>(
@@ -135,7 +136,18 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         cardinalityCheck->Props.EnsureAtMostOne = true;
 
         TVector<TMapElement> renameElements;
-        renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+        if (makeResultOptional) {
+            auto value = MakeColumnAccess(subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            auto optionalValue = ctx.ExprCtx.NewCallable(
+                subplan->Pos,
+                "Just",
+                {value.GetExpressionBody()});
+            renameElements.emplace_back(
+                scalarIU,
+                TExpression(optionalValue, &ctx.ExprCtx, &props));
+        } else {
+            renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+        }
         auto rename = MakeIntrusive<TOpMap>(cardinalityCheck, subplan->Pos, renameElements);
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(

@@ -153,6 +153,12 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
             Y_ENSURE(!resultIUs.empty(), "Scalar subplan has no result columns");
             subplanType = subplan->GetIUType(resultIUs.front());
             Y_ENSURE(subplanType, "Cannot infer scalar subplan result type for " << resultIUs.front().GetFullName());
+            // KqpExprSublink exposes a nullable value: an empty scalar
+            // subquery produces NULL even when its selected column is
+            // non-nullable.
+            if (!subplanType->IsOptionalOrNull()) {
+                subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
+            }
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
@@ -231,10 +237,24 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(
+    TIntrusivePtr<TOpMap> map,
+    TRBOContext& ctx,
+    TPlanProps& props)
+{
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
-    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto* inputStructType =
+        inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto subplanContextIUs = map->GetSubplanIUs(props);
+    const auto* expressionStructType = inputStructType;
+    if (!subplanContextIUs.empty()) {
+        expressionStructType = AddSubplanTypes(
+            expressionStructType,
+            subplanContextIUs,
+            ctx,
+            props);
+    }
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
     for (const auto& mapElement : map->MapElements) {
@@ -244,7 +264,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
     }
 
-    for (const auto* item : structType->GetItems()) {
+    for (const auto* item : inputStructType->GetItems()) {
         if (!renameSources.contains(TInfoUnit(TString(item->GetName())))) {
             resStructItemTypes.push_back(item);
         }
@@ -253,7 +273,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     for (auto& mapElement : map->MapElements) {
         // This is type annotation update inplace, which is different comparing to yql type annotation.
         auto& lambda = mapElement.GetExpressionRef().Node;
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+        if (!UpdateLambdaAllArgumentsTypes(
+                lambda,
+                {expressionStructType},
+                ctx.ExprCtx))
+        {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -269,7 +293,10 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
 
         const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
-        Y_ENSURE(lambdaType);
+        Y_ENSURE(
+            lambdaType,
+            "Cannot infer Map expression type for "
+                << mapElement.GetElementName().GetFullName());
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
     }
@@ -524,7 +551,7 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
         return ComputeTypes(CastOperator<TOpFilter>(op), ctx, props);
     }
     else if(MatchOperator<TOpMap>(op)) {
-        return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+        return ComputeTypes(CastOperator<TOpMap>(op), ctx, props);
     }
     else if(MatchOperator<TOpAddDependencies>(op)) {
         return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);

@@ -1,7 +1,7 @@
 name: PR-check sharding core
 # Reusable sharding engine: main test_ya + plan/filter/merge.
 # Production: called from pr_check.yml (publish=true).
-# Also used by run_and_debug_tests / pr_check_sharding (manual).
+# Also used by run_and_debug_tests (manual).
 
 on:
   workflow_call:

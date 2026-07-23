@@ -1,7 +1,7 @@
 name: Run and debug tests
-# Manual debug driver for pr_check_sharding_core.yml (not production).
-# Production PR-check is pr_check.yml. Use this to compare timing vs PR-check
-# without publishing statuses (publish=false by default).
+# Universal manual driver for pr_check_sharding_core.yml (not production).
+# Production path is pr_check.yml. Use this to exercise sharding over a PR or
+# branch (single preset or both, publish opt-in, timing summary).
 
 on:
   workflow_dispatch:
@@ -22,12 +22,13 @@ on:
         type: string
         default: small,medium
       build_preset:
-        description: 'Build preset'
+        description: 'Build preset (both = rwdi + asan, like production PR-check)'
         required: false
         type: choice
         options:
           - relwithdebinfo
           - release-asan
+          - both
         default: 'relwithdebinfo'
       mode:
         description: 'Pipeline mode'
@@ -52,12 +53,16 @@ on:
           - soft
         default: 'pr'
       increment:
-        description: 'Run only suites affected by the change (graph_compare, like PR-check). Use for PR refs.'
+        description: 'auto = true for PR refs / false for branches; or force true/false'
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options:
+          - auto
+          - 'true'
+          - 'false'
+        default: auto
       checkout_sha:
-        description: 'Optional pinned commit SHA (overrides PR merge commit or branch tip for parity runs)'
+        description: 'Optional pinned commit SHA (overrides PR merge commit or branch tip)'
         required: false
         type: string
         default: ''
@@ -67,10 +72,19 @@ on:
         type: boolean
         default: false
       publish:
-        description: 'Post test summary comment and commit statuses on the PR (sharded: from merge job)'
+        description: 'Post build_*/test_* commit statuses and PR test summary comment'
         required: false
         type: boolean
         default: false
+      publish_integrated_status:
+        description: 'Also update checks_integrated (only when publish=true and both presets ran)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: run-and-debug-${{ inputs.ref }}-${{ inputs.build_preset }}
+  cancel-in-progress: true
 
 jobs:
   resolve:
@@ -82,6 +96,8 @@ jobs:
       pr_number: ${{ steps.resolve.outputs.pr_number }}
       pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
       history_branch: ${{ steps.resolve.outputs.history_branch }}
+      presets: ${{ steps.resolve.outputs.presets }}
+      increment: ${{ steps.resolve.outputs.increment }}
     steps:
       - name: Resolve PR or branch
         id: resolve
@@ -89,6 +105,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF_INPUT: ${{ inputs.ref }}
           CHECKOUT_SHA_INPUT: ${{ inputs.checkout_sha }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          INCREMENT_INPUT: ${{ inputs.increment }}
         run: |
           set -euo pipefail
           ref="${REF_INPUT#pull/}"
@@ -102,6 +120,11 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${ref}")
+            state=$(echo "$pr_json" | jq -r '.state')
+            if [ "$state" != "open" ]; then
+              echo "PR #$ref is not open (state=$state)" >&2
+              exit 1
+            fi
             merge_sha=$(echo "$pr_json" | jq -r '.merge_commit_sha // empty')
             head_sha=$(echo "$pr_json" | jq -r '.head.sha')
             base_ref=$(echo "$pr_json" | jq -r '.base.ref')
@@ -126,30 +149,97 @@ jobs:
             echo "Pinning checkout SHA: $CHECKOUT_SHA_INPUT (was: $checkout_ref)"
             checkout_ref="$CHECKOUT_SHA_INPUT"
           fi
+
+          case "$BUILD_PRESET" in
+            both) presets='["relwithdebinfo","release-asan"]' ;;
+            relwithdebinfo|release-asan) presets=$(jq -nc --arg p "$BUILD_PRESET" '[$p]') ;;
+            *) echo "Unsupported build_preset: $BUILD_PRESET" >&2; exit 1 ;;
+          esac
+
+          case "$INCREMENT_INPUT" in
+            auto)
+              if [ -n "$pr_number" ]; then increment=true; else increment=false; fi
+              ;;
+            true|false) increment="$INCREMENT_INPUT" ;;
+            *) echo "Unsupported increment: $INCREMENT_INPUT" >&2; exit 1 ;;
+          esac
+
+          echo "presets=$presets"
+          echo "increment=$increment"
           echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
           echo "pr_head_sha=$pr_head_sha" >> "$GITHUB_OUTPUT"
           echo "history_branch=$history_branch" >> "$GITHUB_OUTPUT"
+          echo "presets=$presets" >> "$GITHUB_OUTPUT"
+          echo "increment=$increment" >> "$GITHUB_OUTPUT"
 
   run_check:
     needs: resolve
-    name: Sharded check
+    if: needs.resolve.outputs.checkout_ref != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ${{ fromJSON(needs.resolve.outputs.presets) }}
     uses: ./.github/workflows/pr_check_sharding_core.yml
+    name: Build and test ${{ matrix.build_preset }}
     secrets: inherit
     with:
       checkout_ref: ${{ needs.resolve.outputs.checkout_ref }}
       test_targets: ${{ inputs.test_targets }}
-      build_preset: ${{ inputs.build_preset }}
+      build_preset: ${{ matrix.build_preset }}
       mode: ${{ inputs.mode }}
       shard_count: ${{ inputs.shard_count }}
       shard_profile: ${{ inputs.shard_profile }}
       test_size: ${{ inputs.test_size }}
-      increment: ${{ inputs.increment }}
+      increment: ${{ needs.resolve.outputs.increment == 'true' }}
       pr_number: ${{ needs.resolve.outputs.pr_number }}
       history_branch: ${{ needs.resolve.outputs.history_branch }}
       status_sha: ${{ needs.resolve.outputs.pr_head_sha }}
       publish: ${{ inputs.publish }}
       disable_peak_cap: ${{ inputs.disable_peak_cap }}
+
+  update_integrated_status:
+    runs-on: [self-hosted, tiny-worker]
+    needs:
+      - resolve
+      - run_check
+    if: >
+      always()
+      && needs.resolve.result == 'success'
+      && inputs.publish
+      && inputs.publish_integrated_status
+      && needs.resolve.outputs.pr_head_sha != ''
+      && inputs.build_preset == 'both'
+    steps:
+      - name: Gather required checks results
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ needs.resolve.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          integrated_status=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X GET \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${PR_HEAD_SHA}/status" | \
+            jq -cr '
+              .statuses
+              | group_by(.context)
+              | map(.[0])
+              | map(select(.context | (
+                  startswith("build_relwithdebinfo")
+                  or startswith("build_release-asan")
+                  or startswith("test_relwithdebinfo")
+                  or startswith("test_release-asan")
+                )))
+              | if length == 4 and all(.state == "success") then "success" else "failure" end
+            ')
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${PR_HEAD_SHA}" \
+            -d '{"state":"'"$integrated_status"'","description":"All checks completed","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
 
   timing_summary:
     needs:
@@ -199,7 +289,6 @@ jobs:
             echo "Wall clock so far: $(( (now - start) / 60 )) min (run started $(echo "$run_json" | jq -r '.run_started_at'))"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # Best-effort comparison with the production PR-check run of the same PR.
           if [ -n "$PR_HEAD_SHA" ]; then
             {
               echo ""

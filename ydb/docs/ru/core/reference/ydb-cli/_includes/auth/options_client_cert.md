@@ -2,7 +2,7 @@
 
 - `--ca-file <filename>` : файл корневого PEM-сертификата (CA)
 
-Если в конфигурации кластера в секции [client_certificate_authorization](../../../configuration/client_certificate_authorization.md) включен параметр `request_client_certificate`, сервер запрашивает клиентский сертификат при [аутентификации устройств](../../../../security/authentication.md#device-auth-interfaces). Если нужна [аутентификация устройств](../../../../security/authentication.md#device-auth) или [аутентификация по клиентскому сертификату](../../../../security/authentication.md#client-certificate), на клиенте указываются:
+Если в конфигурации кластера в секции [client_certificate_authorization](../../../configuration/client_certificate_authorization.md) включен параметр `request_client_certificate: true`, сервер запрашивает клиентский сертификат при [аутентификации устройств](../../../../security/authentication.md#device-auth-interfaces). Если нужна [аутентификация устройств](../../../../security/authentication.md#device-auth) или [аутентификация по клиентскому сертификату](../../../../security/authentication.md#client-certificate), на клиенте указываются:
 
 - `--client-cert-file <filename>` : файл клиентского сертификата (PEM или PKCS#12)
 - `--client-cert-key-file <filename>` : файл закрытого ключа клиентского сертификата (указывается, если сертификат и ключ содержатся в отдельных файлах)

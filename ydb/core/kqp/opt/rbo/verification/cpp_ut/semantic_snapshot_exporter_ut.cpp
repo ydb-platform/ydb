@@ -11621,7 +11621,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "physical properties");
     }
 
-    Y_UNIT_TEST(ProvenAtMostOneMarkerDoesNotCrossAStageBoundary) {
+    Y_UNIT_TEST(ProvenAtMostOneMarkerRejectsMultiTaskProducerStage) {
         TExportTestContext ctx;
         const auto& table = AddTable(
             ctx,
@@ -11653,27 +11653,142 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         SetOutputType(ctx, *checkedLimit, {
             {"result", NUdf::EDataSlot::Int64, true},
         });
-        checkedLimit->Props.EnsureAtMostOne = true;
         TOpRoot root(checkedLimit, pos, {"result"});
 
         auto& graph = root.PlanProps.StageGraph;
-        const ui32 producer =
+        const ui32 source =
             graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 aggregateStage = graph.AddStage();
         const ui32 consumer = graph.AddStage();
-        read->Props.StageId = producer;
-        aggregate->Props.StageId = producer;
+        read->Props.StageId = source;
+        aggregate->Props.StageId = aggregateStage;
         checkedLimit->Props.StageId = consumer;
         graph.Connect(
-            producer,
+            source,
+            aggregateStage,
+            MakeIntrusive<TMapConnection>(
+                graph.GetOutputIndex(source)));
+        graph.Connect(
+            aggregateStage,
             consumer,
             MakeIntrusive<TUnionAllConnection>(
-                graph.GetOutputIndex(producer),
+                graph.GetOutputIndex(aggregateStage),
                 false));
 
-        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        const auto baseline = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(baseline.IsSupported(), baseline.UnsupportedReason);
+
+        checkedLimit->Props.EnsureAtMostOne = true;
+        const auto result =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT(result.Json.empty());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
+            "physical properties");
+    }
+
+    Y_UNIT_TEST(ProvenAtMostOneMarkerCrossesSingleTaskProducerStage) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/A",
+            {{"value", "Int64", false}});
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        SetOutputType(ctx, *read, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("result"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        auto checkedLimit = MakeIntrusive<TOpLimit>(
+            aggregate,
+            pos,
+            MakeConstant("Uint64", "2", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        SetOutputType(ctx, *checkedLimit, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        TOpRoot root(checkedLimit, pos, {"result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 source =
+            graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const ui32 aggregateStage = graph.AddStage();
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = source;
+        aggregate->Props.StageId = aggregateStage;
+        checkedLimit->Props.StageId = consumer;
+        graph.Connect(
+            source,
+            aggregateStage,
+            MakeIntrusive<TUnionAllConnection>(
+                graph.GetOutputIndex(source),
+                false));
+        graph.Connect(
+            aggregateStage,
+            consumer,
+            MakeIntrusive<TUnionAllConnection>(
+                graph.GetOutputIndex(aggregateStage),
+                false));
+
+        const auto baseline =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(baseline.IsSupported(), baseline.UnsupportedReason);
+
+        checkedLimit->Props.EnsureAtMostOne = true;
+        const auto result =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+        UNIT_ASSERT_VALUES_EQUAL(result.Json, baseline.Json);
+
+        auto groupedAggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.value"),
+                "sum",
+                TInfoUnit("result"))},
+            TVector<TInfoUnit>{TInfoUnit("a.value")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *groupedAggregate, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        groupedAggregate->Props.StageId = aggregateStage;
+        checkedLimit->SetInput(groupedAggregate);
+        root.RecomputeOutputIUsSubtree();
+        SetOutputType(ctx, *checkedLimit, {
+            {"a.value", NUdf::EDataSlot::Int64, true},
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+
+        checkedLimit->Props.EnsureAtMostOne = false;
+        const auto groupedBaseline =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(
+            groupedBaseline.IsSupported(),
+            groupedBaseline.UnsupportedReason);
+
+        checkedLimit->Props.EnsureAtMostOne = true;
+        const auto groupedResult =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!groupedResult.IsSupported());
+        UNIT_ASSERT(groupedResult.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(
+            groupedResult.UnsupportedReason,
             "physical properties");
     }
 

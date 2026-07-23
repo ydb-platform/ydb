@@ -3,7 +3,7 @@
 Документ описывает реализацию операции `TRUNCATE` колоночной таблицы. Основной
 фокус — уровень ColumnShard (`ydb/core/tx/columnshard`), но отдельно разобран
 протокол обмена сообщениями со SchemeShard (раздел 2). В конце — сравнение с
-операцией `MoveTable`.
+операциями `DropTable`, `MoveTable`, `CopyTable` (раздел 7).
 
 ## 1. Общая идея
 
@@ -24,11 +24,18 @@
 - `TInternalPathId` — внутренний id, под которым в движке хранятся данные/порции.
 
 Связь хранится в `TTablesManager::SchemeShardLocalToInternal`
-(`SchemeShardLocalPathId → InternalPathId`). Барьер для чтений после TRUNCATE
-**не** лежит в маппинге: при скане он вычисляется как min schema-version
-текущего `InternalPathId` (или `CopyVersion` для copy-пути). После TRUNCATE
-первая `AddTableVersion` нового id = версия усечения — чтения со старым
-снапшотом **отклоняются** (hard cut), а не получают пустую таблицу (см. 5.4, 6.1).
+(`SchemeShardLocalPathId → InternalPathId`). После TRUNCATE маппинг **сразу**
+указывает на новый пустой `InternalPathId`; отдельного барьера снапшота в
+маппинге нет. Любой новый скан (независимо от снапшота) видит новый пустой id —
+**silent empty**, как DropTable до завершения GC. Жёсткий барьер снапшота
+(`IsPathMappingValidAt`) признан излишним и **не реализован**: сама подмена
+`InternalPathId` обеспечивает нужную изоляцию (см. §5.4, §6.1).
+
+Гонка «запись vs TRUNCATE» устранена: на propose TRUNCATE ожидает завершения
+всех in-flight транзакций шарда (`TWaitTxs`), аналогично MoveTable. Тем самым
+гарантируется, что ни одна запись, стартовавшая до propose, не завершится после
+подмены `InternalPathId` — это исключает потерю данных и срабатывание
+`AFL_VERIFY(IsReadyForFinishWrite)` (см. §4, §6.2, §8).
 
 ## 2. Обмен сообщениями со SchemeShard
 
@@ -119,10 +126,16 @@ sequenceDiagram
     («Cannot truncate read-only table ...»). Read-only —
     `TablesManager.GetTable(internalPathId).IsReadOnly(schemeShardLocalPathId)`.
     Если путь на шарде неизвестен, проверка пропускается (propose успешен).
-  - Никаких изменений состояния маппинга на propose не делается, ожидания
-    in-flight транзакций нет.
-- **`DoOnTabletInit`**, ветка `kTruncateTable`: пустая (`break`). При рестарте
-  ничего доустанавливать не нужно, т.к. вся работа делается идемпотентно на плане.
+  - **Ожидание in-flight транзакций** — аналогично MoveTable:
+    `GetProgressTxController().GetTxs()` собирает все текущие tx шарда;
+    если список непуст — создаётся `TWaitTxs(txId, txIdsToWait)`, propose
+    становится асинхронным, `TTxFinishAsyncTransaction` будет запущен, когда
+    последний ожидаемый tx завершится. Маппинг при этом не меняется.
+    (`//TODO` в коде: в будущем можно сузить до tx на конкретном pathId.)
+- **`DoOnTabletInit`**, ветка `kTruncateTable`: при рестарте повторно собирает
+  список in-flight tx шарда (за вычетом собственного txId) и повторно ставит
+  ожидание `TWaitTxs` — так же как MoveTable. Это нужно, чтобы propose не
+  завис навсегда в случае рестарта во время ожидания.
 - **`DoGetOpType`**: тип операции «Scheme:TruncateTable».
 
 ## 5. Применение на плане
@@ -152,10 +165,10 @@ sequenceDiagram
    На уровне ColumnShard это защищено `AFL_VERIFY(GenerateInternalPathId)`;
    отказ пользователю — на propose в SchemeShard
    (`StatusPreconditionFailed`, см. раздел 2).
-  4. Регистрирует свежую пустую `TTableInfo` под новым `InternalPathId`
+4. Регистрирует свежую пустую `TTableInfo` под новым `InternalPathId`
    (`RegisterTable`): пишет `TableInfo`/`TableInfoV1`, персистит
    `MaxInternalPathId`, обновляет маппинг `ss → newInternal`, и при наличии
-   индекса вызывает `PrimaryIndex->RegisterTable`. Барьер снапшота появится
+   индекса вызывает `PrimaryIndex->RegisterTable`. Версионный барьер появится
    следом через `AddTableVersion` в `RunTruncateTable` (та же plan-версия).
 
 ### 5.1. Восстановление маппинга после рестарта
@@ -166,12 +179,6 @@ sequenceDiagram
 `AddTableInfo` детерминированно предпочитает «живую» (не-dropped) таблицу при
 построении `SchemeShardLocalToInternal` — иначе маппинг мог бы указать на dropped
 путь, и таблица стала бы нерезолвимой/незаписываемой после рестарта.
-
-Барьер чтений после рестарта: `GetPathMappingValidFromOptional` берёт live id из
-маппинга и считает `*Versions.begin()` (из загруженного `TableVersionInfo`) либо
-`CopyVersion`. Отдельного поля/`ValidFrom` в маппинге нет.
-
-Инвариант: первая `AddTableVersion` нового id после truncate — на версии truncate.
 
 ### 5.2. Фоновая очистка
 
@@ -207,26 +214,35 @@ sequenceDiagram
 
 Замечания:
 - **Накопление, а не порча.** Корректность не страдает, но до завершения GC все
-  старые версии занимают место (портации + записи `TableInfo`/версий схемы в БД).
+  старые версии занимают место (порции + записи `TableInfo`/версий схемы в БД).
   Частые усечения подряд → данные копятся, пока фон не догонит.
 - **Долгий read-снапшот тормозит конкретную версию**, не блокируя очистку прочих.
 - **Инвариант уникальности.** `AFL_VERIFY(PathsToDrop[version].emplace(pathId).second)`
   рассчитывает на уникальность пары (версия, `InternalPathId`); при штатном потоке
   версии разные, коллизий нет.
 
-### 5.4. Барьер снапшота vs CopyVersion
+### 5.4. Поведение снапшотов после truncate
 
-Барьер truncate при запросе: `CopyVersion`, если путь — copy-алиас; иначе
-`*TTableInfo::Versions.begin()` текущего `InternalPathId` из маппинга.
+После TRUNCATE маппинг `SchemeShardLocalPathId → InternalPathId` **сразу**
+указывает на новый пустой `InternalPathId`. Жёсткий барьер снапшота
+(`IsPathMappingValidAt`) признан излишним и **не реализован**: сама подмена id
+обеспечивает нужную изоляцию.
 
-| | `CopyVersion` | Барьер truncate (derive) |
+При старте любого нового скана (с любым снапшотом, в т.ч. до truncate):
+
+1. `BuildTableMetadataAccessor` резолвирует `SchemeShardLocalPathId` → новый
+   `InternalPathId` по текущему маппингу;
+2. `HasTable(newId, false)` = `true` → возвращает `TUserTableAccessor` с пустым
+   engine-гранулом;
+3. скан читает пустой результат — **silent empty**, как DropTable до завершения GC.
+
+| | `CopyVersion` (CopyTable) | Поведение Truncate |
 |---|---|---|
-| Где | `TPathInfo` на dst после CopyTable | min `Versions` / CopyVersion живого id |
-| Семантика | **пин**: отдать данные «как на момент копии» | **барьер**: `S < barrier` → reject |
-| При `S < version` | `ResolveReadSnapshot` подменяет на CopyVersion | ошибка скана (`BAD_REQUEST`) |
-| При `S >= version` | обычно читают ровно CopyVersion | новый (пустой/живой) `InternalPathId` |
+| Источник | `TPathInfo.CopyVersion` | нет отдельного барьера |
+| Снапшот до операции (новый скан) | `ResolveReadSnapshot` подменяет на CopyVersion | маппинг → новый пустой id → пустой результат |
+| Явная ошибка клиенту | нет | нет |
 | GC | пинит через `RegisterReadOnlyTableSnapshot` | не пинит для чтения старых данных |
-| Персист | `TableInfoV1.CopyStep/TxId` | `TableVersionInfo` (первая версия нового id) |
+| Персист | `TableVersionInfo` (CopyStep/TxId) | `TableVersionInfo` (первая версия нового id) |
 
 ## 6. Обработка записей и чтений, начатых до TRUNCATE
 
@@ -244,28 +260,26 @@ TRUNCATE, в отличие от MoveTable, **не ждёт** завершени
   `TablesManager.ResolveReadSnapshot(ssPathId, snapshot)` — для read-only/copy
   таблиц возвращается зафиксированная copy-version, для обычных — сам запрошенный
   снапшот;
-- затем `IsPathMappingValidAt(ssPathId, snapshot)`: барьер = CopyVersion или
-  min Versions текущего id; если `snapshot < barrier` → **`TEvScanError` /
-  `BAD_REQUEST`** («snapshot too old for path mapping»);
-- иначе `ssPathId` → `InternalPathId` по **текущему** маппингу
-  (`BuildTableMetadataAccessor`).
+- затем `ssPathId` → `InternalPathId` по **текущему** маппингу
+  (`BuildTableMetadataAccessor`). Жёсткий барьер `IsPathMappingValidAt` **не
+  применяется**.
 
-Отсюда:
+Поведение:
 
-- **Скан, уже стартовавший до TRUNCATE** (успел зарезолвить старый
-  `InternalPathId`): продолжает читать гранулу старого id, пока данные не
-  вычищены фоном. Консистентен в рамках своего снапшота.
-- **Скан после TRUNCATE на снапшоте `>= barrier`**: видит новый (пустой/живой)
-  `InternalPathId`.
-- **Скан после TRUNCATE на снапшоте `< barrier`**: **reject**, а не пустой
-  результат. Это hard cut: TRUNCATE не даёт MVCC-дочитывания старых данных (в
-  отличие от CopyTable + `CopyVersion`), но и не врёт пустой таблицей.
+| Сценарий | Поведение |
+|---|---|
+| Скан, уже стартовавший **до** TRUNCATE (успел зарезолвить старый `InternalPathId`) | Продолжает читать гранулу старого id до фоновой очистки. Консистентен в рамках своего снапшота. |
+| Новый скан **после** TRUNCATE с любым снапшотом (в т.ч. старше truncate) | **Silent empty** — маппинг указывает на новый пустой id. Ошибки нет. |
+
+TRUNCATE не даёт MVCC-дочитывания данных через старый снапшот для новых сканов —
+это осознанный компромисс (нет snapshot-isolation, как у CopyTable). Вместо этого
+поведение совпадает с `DropTable` до завершения GC.
 
 ### 6.2. Записи (insert/upsert/delete)
 
 Путь записи (`columnshard__write.cpp`):
 
-- на `EvWrite` `schemeShardLocalPathId` → `InternalPathId` резолвится по текущему
+- на `EvWrite` `schemeShardLocalPathId` → `InternalPathId` резолвируется по текущему
   маппингу и **сохраняется** в метаданных операции (`writeMeta`/`Pack`), туда же
   попадает проверка `IsReadyForStartWrite` и проверка read-only;
 - финализация записи (`TTxBlobsWritingFinished`,
@@ -294,90 +308,57 @@ TRUNCATE, в отличие от MoveTable, **не ждёт** завершени
 срабатывания проверок-инвариантов. (Для сравнения, `MoveTable` явно дожидается всех
 in-flight транзакций шарда перед завершением propose.)
 
-## 7. Сравнение: CopyTable, MoveTable, TRUNCATE (на уровне ColumnShard)
+## 7. Сравнение: DropTable, CopyTable, MoveTable, TRUNCATE (на уровне ColumnShard)
 
-Все три — схемные операции, по-разному манипулирующие связкой
-`SchemeShardLocalPathId` ↔ `InternalPathId` ↔ данные:
+Все четыре — схемные операции, по-разному манипулирующие связкой
+`SchemeShardLocalPathId` ↔ `InternalPathId` ↔ данные.
 
-- **CopyTable** — создаёт **новый внешний путь-алиас** на **те же** данные:
-  `InternalPathId` переиспользуется, dst помечается **read-only** и привязывается к
-  зафиксированной copy-version.
-- **MoveTable** — **переименовывает** путь: меняет `SchemeShardLocalPathId`,
-  **сохраняя** тот же `InternalPathId` и все данные.
-- **TRUNCATE** — **подменяет** `InternalPathId` на новый пустой, старый (с данными)
-  отправляет в drop + фоновую очистку.
+### Потоки по фазам
 
-### Поток CopyTable
-- **Propose** (`schema.cpp`, `kCopyTable`): резолвит src (должен существовать),
-  проверяет, что dst ещё не существует, вызывает `CopyTablePropose` — кладёт
-  `src → internalPathId` в отдельный маппинг `CopyingLocalToInternal`, **не** трогая
-  `SchemeShardLocalToInternal`. **Не ждёт** in-flight транзакций (умышленно: иначе
-  были зависания при долгоживущих backup/export-транзакциях на тех же шардах).
-- **OnTabletInit**: повторяет `CopyTablePropose`.
-- **План** (`CopyTableProgress`/`CopyTablePlanStep`): добавляет dst как **алиас** на
-  тот же `internalPathId` (`SchemeShardLocalToInternal[dst] = internalPathId`),
-  фиксирует copy-version (`SetCopyVersion`), помечает dst как `ReadOnly`,
-  регистрирует read-only-снапшот (`RegisterReadOnlyTableSnapshot`), чтобы данные
-  оставались читаемыми на copy-version. Данные физически не копируются.
-
-### Поток MoveTable
-- **Propose** (`schema.cpp`, `kMoveTable`): резолвит src, проверяет, что dst ещё
-  не существует, вызывает `MoveTablePropose` — переносит маппинг из
-  `SchemeShardLocalToInternal` в промежуточный `RenamingLocalToInternal` (т.е.
-  снимает src-маппинг «в полёт»). Затем **дожидается всех in-flight транзакций
-  шарда** (`GetProgressTxController().GetTxs()` + `TWaitTxs`) прежде чем завершить
-  propose.
-- **OnTabletInit**: повторяет `MoveTablePropose` и заново ставит ожидание
-  транзакций — состояние «в процессе переименования» восстанавливается при
-  рестарте.
-- **План** (`RunMoveTable` → `MoveTableProgress`): переименовывает
-  `SchemeShardLocalPathId` в `TTableInfo` и БД, убирает из
-  `RenamingLocalToInternal`, добавляет новый маппинг
-  `SchemeShardLocalToInternal[new] = internalPathId`, при необходимости обновляет
-  `TabletPathId`/`OwnerPath`. Данные не трогаются.
-
-### Поток TRUNCATE
-- **Propose** (`schema.cpp`, `kTruncateTable`): только проверка read-only
-  (раздел 4). Маппинг не меняется, in-flight транзакции не ожидаются.
-- **OnTabletInit**: no-op.
-- **План** (`RunTruncateTable` → `TablesManager::TruncateTable`, раздел 5):
-  `DropTable(old)` + аллокация нового `InternalPathId` + регистрация пустой
-  `TTableInfo` + `AddTableVersion` (барьер = эта версия). Старые данные уходят в
-  `PathsToDrop`/GC.
+| Фаза | DropTable | CopyTable | MoveTable | TRUNCATE |
+|---|---|---|---|---|
+| **Propose** | SeqNo per-path; содержательной логики нет (`break`); **не ждёт** in-flight tx | Резолвит src, проверяет отсутствие dst; `CopyTablePropose` → dst в `CopyingLocalToInternal`; **не ждёт** in-flight tx (умышленно — иначе зависания при долгоживущих backup-tx) | Резолвит src, проверяет отсутствие dst; `MoveTablePropose` → src-маппинг в `RenamingLocalToInternal`; **ждёт все in-flight tx шарда** (`TWaitTxs`) | Проверка read-only; **ждёт все in-flight tx шарда** (`TWaitTxs`); маппинг не меняется |
+| **OnTabletInit** | пустой (`break`) — нет промежуточного состояния | повтор `CopyTablePropose` | повтор `MoveTablePropose` + повторное ожидание tx | повторное ожидание in-flight tx (за вычетом собственного txId) |
+| **План** | `SetDropVersion` → `PathsToDrop[ver]`; при partial drop сразу стирает маппинг; при full drop — маппинг до GC; новый `InternalPathId` **не** аллоцируется | dst-алиас на тот же `InternalPathId` (`SchemeShardLocalToInternal[dst]`); `SetCopyVersion`; dst → `ReadOnly`; `RegisterReadOnlyTableSnapshot`; данные не копируются | Переименование `SchemeShardLocalPathId` в `TTableInfo` и БД; убирает из `RenamingLocalToInternal`; добавляет новый маппинг; данные не трогаются | `DropTable(old)` → `PathsToDrop`; аллоцирует новый `InternalPathId`; регистрирует пустую `TTableInfo`; `AddTableVersion`; старые данные уходят в GC |
 
 ### Ключевые отличия
 
-| Аспект | CopyTable | MoveTable | TRUNCATE |
-|---|---|---|---|
-| InternalPathId | **тот же** (dst — алиас src) | **тот же** | аллоцируется **новый** (`MaxInternalPathId+1`) |
-| Данные | общие, не копируются; dst read-only | сохраняются полностью | старые → drop + фоновая очистка; новая таблица пустая |
-| Маппинг на propose | src сохраняется; dst → `CopyingLocalToInternal` | src снимается в `RenamingLocalToInternal` | не меняется |
-| Ожидание in-flight tx | **нет** (умышленно) | **есть** (`TWaitTxs` по всем tx шарда) | **нет** |
-| OnTabletInit | повтор `CopyTablePropose` | повтор propose + повторное ожидание | no-op |
-| Маппинги SSLocalPathId → InternalPathId | **два** (src и dst) на один internal | один (переименован на месте) | **две** записи таблиц на один SSLocalPathId → нужен детерминированный выбор живой |
-| `MaxInternalPathId` | не трогает | не трогает | потребляет (требует `GenerateInternalPathId`) |
-| read-only / copy-version | dst read-only, copy-version зафиксирована | n/a | n/a |
-| SeqNo | per-path | глобальный шардовый | глобальный шардовый |
-| Снимок старых данных для старых снапшотов | сохраняется (`RegisterReadOnlyTableSnapshot`) | n/a (данные не удаляются) | **не** сохраняется; `S < barrier` → reject |
-| Конкурентная запись на старый id | n/a (данные не меняются) | исключена ожиданием tx | возможна (нет барьера) → потеря/`AFL_VERIFY` |
-| Барьер чтений | CopyVersion (пин) | n/a | derive: min Versions нового id |
+| Аспект | DropTable | CopyTable | MoveTable | TRUNCATE |
+|---|---|---|---|---|
+| InternalPathId | **тот же** (помечается dropped) | **тот же** (dst — алиас src) | **тот же** | аллоцируется **новый** (`MaxInternalPathId+1`) |
+| Данные | все → drop + фоновая очистка GC | общие, не копируются; dst read-only | сохраняются полностью | старые → drop + фоновая очистка; новая таблица пустая |
+| Маппинг на propose | не меняется | src сохраняется; dst → `CopyingLocalToInternal` | src снимается в `RenamingLocalToInternal` | не меняется |
+| Маппинг после плана | остаётся до GC (full drop); сразу стирается (partial drop) | добавляется dst-маппинг | переименовывается | старый маппинг заменяется на новый |
+| Ожидание in-flight tx | **нет** | **нет** (умышленно) | **есть** (`TWaitTxs` по всем tx шарда) | **есть** (`TWaitTxs` по всем tx шарда) |
+| OnTabletInit | пустой | повтор `CopyTablePropose` | повтор propose + повторное ожидание | повторное ожидание in-flight tx |
+| Маппинги SSLocalPathId → InternalPathId | один (до GC) | **два** (src и dst) на один internal | один (переименован на месте) | **две** записи таблиц на один SSLocalPathId → нужен детерминированный выбор живой |
+| `MaxInternalPathId` | не трогает | не трогает | не трогает | потребляет (требует `GenerateInternalPathId`) |
+| read-only / copy-version | n/a | dst read-only, copy-version зафиксирована | n/a | n/a |
+| SeqNo | **per-path** | per-path | глобальный шардовый | глобальный шардовый |
+| Снимок старых данных для новых сканов после операции | не сохраняется; до GC — mapped id dropped → **silent empty** для новых сканов | сохраняется (`RegisterReadOnlyTableSnapshot`) | n/a (данные не удаляются) | **не** сохраняется; новый скан видит новый пустой id → **silent empty** |
+| Конкурентная запись на старый id | **не исключена** (нет ожидания tx) | n/a (данные не меняются) | исключена ожиданием tx | **исключена** ожиданием tx на propose |
+| Барьер чтений | нет — dropped id | CopyVersion (пин) | n/a | нет — маппинг → новый пустой id |
 
 ## 8. Потенциальные проблемы
 
 ### TRUNCATE
-- **Hard cut вместо MVCC для старых чтений.** Маппинг подменяется на новый id;
-  барьер = первая schema-version этого id (версия truncate). Новый скан со
-  снапшотом `< barrier` получает ошибку («snapshot too old for path mapping»), а
-  не пустую таблицу. Скан, уже зарезолвивший старый id до truncate, может
-  дочитать старые данные до GC. Полноценного snapshot-isolation **нет** — в
-  отличие от CopyTable; это осознанный компромисс.
-- **Отсутствие ожидания in-flight транзакций.** В отличие от MoveTable, TRUNCATE
-  не дожидается конкурентных операций над тем же путём. Запись, заплани­рованная до
-  TRUNCATE, но завершающаяся после, может попасть в старый (dropped)
-  `InternalPathId` и быть вычищенной фоном → риск «молчаливой» потери данных, либо
-  привести к срабатыванию `AFL_VERIFY(IsReadyForFinishWrite(...))` в
-  `TTxBlobsWritingFinished` (abort таблетки).
-- **Зависимость от фоновой очистки.** Физическое удаление старых портаций
+- **Silent empty вместо MVCC для старых чтений.** После TRUNCATE любой новый скан
+  (с любым снапшотом, в т.ч. старше truncate) видит новый пустой `InternalPathId` —
+  **silent empty**. Жёсткий барьер (`IsPathMappingValidAt`) не реализован. Это
+  осознанный компромисс: поведение совпадает с `DropTable` до завершения GC (тихий
+  пустой результат вместо явной ошибки). Полноценного snapshot-isolation нет — в
+  отличие от CopyTable. Скан, уже зарезолвивший старый id до truncate, может
+  дочитать старые данные до GC.
+- ~~**Отсутствие ожидания in-flight транзакций.**~~ **Устранено:** TRUNCATE теперь
+  ожидает завершения всех in-flight tx шарда через `TWaitTxs` на propose (аналогично
+  MoveTable). Запись, стартовавшая до propose, гарантированно завершится до
+  применения TRUNCATE на плане, исключая потерю данных и
+  `AFL_VERIFY(IsReadyForFinishWrite)`.
+- **Ожидание всех tx шарда (не только данного пути).** Как и у MoveTable,
+  `GetProgressTxController().GetTxs()` возвращает *все* tx шарда. При наличии
+  долгоиграющих несвязанных транзакций propose TRUNCATE может затянуться.
+  Уточнение до per-path — TODO в коде.
+- **Зависимость от фоновой очистки.** Физическое удаление старых порций
   асинхронно (`PathsToDrop`/GC); до завершения данные занимают место. Для больших
   таблиц очистка может быть длительной.
 - **Требование `GenerateInternalPathId` и feature flag.** На SchemeShard propose
@@ -390,9 +371,8 @@ in-flight транзакций шарда перед завершением prop
   внутренние id.
 - **Неоднозначность маппинга после рестарта** (исторически): из-за двух записей с
   одним `SchemeShardLocalPathId`. Закрыто детерминированным выбором живой таблицы в
-  `AddTableInfo`; барьер чтений восстанавливается из `TableVersionInfo`. Регрессия
-  в порядке загрузки/учёте dropped-флага или первой schema-version способна снова
-  сломать резолвинг/hard cut.
+  `AddTableInfo`. Регрессия в порядке загрузки/учёте dropped-флага способна снова
+  сломать резолвинг.
 - **Грубость SeqNo.** TRUNCATE использует глобальный SeqNo шарда (а не per-path,
   как Drop/Copy), поэтому он сериализуется относительно любых схемных операций
   шарда; TRUNCATE с меньшим раундом, чем любая прошедшая на шарде схемная
@@ -413,7 +393,7 @@ in-flight транзакций шарда перед завершением prop
 ### CopyTable
 - **Накопление read-only-снапшотов.** Каждая копия фиксирует copy-version и
   регистрирует read-only-снапшот; пока копии живы, соответствующие снапшоты данных
-  нельзя вычистить, что удерживает старые портации от GC.
+  нельзя вычистить, что удерживает старые порции от GC.
 - **Общий `InternalPathId`/данные.** src и dst делят один `InternalPathId`,
   поэтому запись/усечение по одному пути затрагивает данные, видимые другому;
   именно поэтому dst делается read-only, а TRUNCATE для read-only-копии запрещён

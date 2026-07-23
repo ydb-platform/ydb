@@ -369,5 +369,102 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 6), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
     }
+
+    // Verifies that TRUNCATE waits for all in-flight write transactions to complete before
+    // becoming PREPARED (analogous to MoveTable::WithCommitInProgress). Without the TWaitTxs
+    // mechanism a write tx committed concurrently with TRUNCATE could end up writing into the
+    // old (already-dropped) InternalPathId and the data would be silently lost in GC.
+    Y_UNIT_TEST_DUO(TruncateWithCommitInProgress, Reboot) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write 100 rows and propose a commit but do NOT plan it yet — this creates an in-flight tx.
+        std::vector<ui64> writeIds;
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+        }
+        const auto commitTxId = ++txId;
+        planStep = ProposeCommit(runtime, sender, commitTxId, writeIds);
+        const auto commitPlanStep = planStep;
+
+        // Send TRUNCATE propose asynchronously (without waiting for PREPARED).
+        // Because an in-flight write tx exists, TWaitTxs must defer the PREPARED reply until
+        // that write tx completes.
+        const auto truncateTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, truncateTxId, TTestSchema::TruncateTableTxBody(pathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        // Complete the write commit — this should unblock the TRUNCATE propose.
+        PlanCommit(runtime, sender, commitPlanStep, commitTxId);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        // Now the TRUNCATE propose should have completed with PREPARED.
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), truncateTxId);
+        UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        planStep = TPlanStep{ res.GetMinStep() };
+        const auto truncatePlanStep = planStep;
+        // TRUNCATE must be planned after the commit that preceded it.
+        UNIT_ASSERT(commitPlanStep.Val() < truncatePlanStep.Val());
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        // Apply TRUNCATE on plan.
+        PlanSchemaTx(runtime, sender, { truncatePlanStep, truncateTxId });
+
+        // After TRUNCATE the table must be empty — the 100 committed rows are gone.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot{ truncatePlanStep, truncateTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Write and commit new data after TRUNCATE; only these rows must be visible.
+        {
+            std::vector<ui64> newWriteIds;
+            const bool ok = WriteData(
+                runtime, sender, writeId++, pathId, MakeTestBlob({ 200, 250 }, testTable.Schema), testTable.Schema, true, &newWriteIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, newWriteIds);
+            PlanCommit(runtime, sender, planStep, txId);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot{ planStep, txId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
+        }
+    }
 }
 }   // namespace NKikimr

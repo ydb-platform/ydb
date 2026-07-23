@@ -22,11 +22,13 @@ public:
     const std::shared_ptr<TLevelNodeCounts> LevelNodeCounts = std::make_shared<TLevelNodeCounts>();
     const NColumnShard::TIncrementalHistogram OverloadHistogram;
     const NColumnShard::TIncrementalHistogram WidthHistogram;
+    const NColumnShard::TIncrementalHistogram HeightHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
         , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
+        , HeightHistogram(base.GetModuleId(), "ByLevel/Height", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
     {
     }
 };
@@ -38,7 +40,9 @@ private:
     std::shared_ptr<TLevelNodeCounts> LevelNodeCounts;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> HeightHistogram;
     std::optional<ui64> LastOverload;
+    std::optional<ui64> LastHeight;
 
     static ui32 LevelBucket(const ui64 overload) {
         return std::min<ui64>(overload, TILING_PRIORITY_LEVEL_COUNT - 1);
@@ -50,6 +54,7 @@ public:
         , LevelNodeCounts(agents.LevelNodeCounts)
         , OverloadHistogram(agents.OverloadHistogram.BuildGuard())
         , WidthHistogram(agents.WidthHistogram.BuildGuard())
+        , HeightHistogram(agents.HeightHistogram.BuildGuard())
     {
     }
 
@@ -67,6 +72,14 @@ public:
         OverloadHistogram->Add(overload, 1);
         (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
         LastOverload = overload;
+    }
+
+    void SetHeight(const ui64 height) {
+        if (LastHeight) {
+            HeightHistogram->Sub(*LastHeight, 1);
+        }
+        HeightHistogram->Add(height, 1);
+        LastHeight = height;
     }
 
     i64 GetMaxOverloadLevel() const {

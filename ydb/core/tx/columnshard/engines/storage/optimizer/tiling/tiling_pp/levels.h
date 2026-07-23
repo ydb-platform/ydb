@@ -46,6 +46,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
             Candidates.insert(p);
         }
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
@@ -63,6 +64,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
             AFL_VERIFY(false)("portion_id", portionId);
         }
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
@@ -143,11 +145,13 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Portions.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Portions.size());
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
@@ -227,6 +231,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         PortionById.emplace(id, p);
         Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
@@ -234,6 +239,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         Intersections.Remove(id);
         AFL_VERIFY(PortionById.erase(id))("portion_id", id);
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     TOptimizationPriority BuildPriority() const {

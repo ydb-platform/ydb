@@ -1,9 +1,7 @@
 name: PR-check sharding
-# Sharding v3 research driver (workflow_dispatch). Uses pr_check_sharding_core.yml
-# with main test_ya / graph LPT — not wired into automatic PR-check yet.
-#
-# Automatic pull_request_target trigger is intentionally disabled until rollout.
-# Run manually from Actions → PR-check sharding → Run workflow.
+# Manual mirror of production PR-check sharding (workflow_dispatch only).
+# Production path is pr_check.yml → pr_check_sharding_core.yml.
+# Do not enable pull_request_target here.
 
 on:
   workflow_dispatch:
@@ -55,15 +53,10 @@ on:
         type: boolean
         default: false
       publish_integrated_status:
-        description: 'Update checks_integrated aggregate status (off until parallel PR-check replaces main)'
+        description: 'Update checks_integrated aggregate status (manual runs only)'
         required: false
         type: boolean
         default: false
-
-# Future automatic trigger (enable via CHECKS_SWITCH.pr_check_sharding):
-# pull_request_target:
-#   branches: [main, stable-*, prestable-*, stream-nb-*, dev-*, rc-*, q-stable-*]
-#   types: [opened, synchronize, reopened, labeled]
 
 concurrency:
   group: pr-check-sharding-${{ inputs.pr_number }}
@@ -245,10 +238,10 @@ jobs:
               | group_by(.context)
               | map(.[0])
               | map(select(.context | (
-                  startswith("parallel_build_relwithdebinfo")
-                  or startswith("parallel_build_release-asan")
-                  or startswith("parallel_test_relwithdebinfo")
-                  or startswith("parallel_test_release-asan")
+                  startswith("build_relwithdebinfo")
+                  or startswith("build_release-asan")
+                  or startswith("test_relwithdebinfo")
+                  or startswith("test_release-asan")
                 )))
               | if length == 4 and all(.state == "success") then "success" else "failure" end
             ')

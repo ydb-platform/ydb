@@ -1,6 +1,7 @@
 name: PR-check sharding core
-# Reusable sharding research pipeline (v3): main test_ya + plan/filter/merge.
-# Invoked by pr_check_sharding.yml (workflow_dispatch).
+# Reusable sharding engine: main test_ya + plan/filter/merge.
+# Production: called from pr_check.yml (publish=true).
+# Also used by run_and_debug_tests / pr_check_sharding (manual).
 
 on:
   workflow_call:
@@ -447,7 +448,7 @@ jobs:
             .github/scripts/tests/comment-pr.py
             .github/scripts/Indexer
       # Mute/owners must match the ref under test (shards keep checkout mute via
-      # mute lists from the checkout ref (research path uses branch .github as-is).
+      # mute lists from the checkout ref under test (not the workflow-branch checkout).
       - name: Align mute lists with tested ref
         uses: actions/checkout@v5
         with:
@@ -590,7 +591,6 @@ jobs:
           PR_NUMBER: ${{ inputs.publish && inputs.pr_number || '' }}
           ORIGINAL_HEAD: ${{ inputs.checkout_ref }}
           STATUS_SHA: ${{ inputs.status_sha != '' && inputs.status_sha || inputs.checkout_ref }}
-          STATUS_CONTEXT_PREFIX: ""
           SKIP_GITHUB_PUBLISH: ${{ inputs.publish && '0' || '1' }}
           SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
           INCLUDE_BUILD_ARTIFACTS: "1"
@@ -684,7 +684,7 @@ jobs:
           if [ "${SKIP_FAIL_CHECK:-}" != "1" ] && [ "$IS_TEST_RESULT_IGNORED" -eq 0 ]; then
             .github/scripts/tests/fail-checker.py "$REPORT_PATH"
           fi
-      # Fail-closed: if merge/publish never completes, do not leave parallel_test_*
+      # Fail-closed: if merge/publish never completes, do not leave test_*
       # missing/ambiguous when the run was meant to publish statuses.
       - name: Fail closed test status
         if: always() && inputs.publish && steps.merge.outcome != 'success'

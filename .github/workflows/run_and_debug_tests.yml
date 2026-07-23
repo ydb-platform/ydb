@@ -1,10 +1,7 @@
 name: Run and debug tests
-# Driver for sharding v3 research pipeline (pr_check_sharding_core.yml).
-#
-# Runs the pipeline over a real PR (checkout of its merge commit, like
-# PR-check does) or over a branch, without publishing anything to the PR,
-# and prints a duration summary to compare against the production PR-check
-# run of the same PR.
+# Manual debug driver for pr_check_sharding_core.yml (not production).
+# Production PR-check is pr_check.yml. Use this to compare timing vs PR-check
+# without publishing statuses (publish=false by default).
 
 on:
   workflow_dispatch:

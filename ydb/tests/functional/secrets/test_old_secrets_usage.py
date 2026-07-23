@@ -319,6 +319,11 @@ def test_disable_old_secret_creation(old_secrets_utils):
     # restart cluster with disabled old secret creation
     old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
 
+    # check that old secrets can't be used for eds
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.create_eds("eds-with-old-secret", "OldSecret")
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
     # check that old secrets can't be used for replication
     with pytest.raises(Exception) as exc_info:
         old_secrets_utils.create_async_replication("repl-with-old-secret", "repl_src", "repl_dst_old", "OldSecret")
@@ -357,7 +362,7 @@ def test_disable_old_secret_creation(old_secrets_utils):
     )
 
 
-def test_disable_old_secrets_keeps_existing_objects(old_secrets_utils):
+def test_disable_old_secrets_dont_crash_existing_objects(old_secrets_utils):
     s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = setup_s3()
     s3_location = f"{s3_endpoint}/{s3_bucket}"
 

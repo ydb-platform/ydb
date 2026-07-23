@@ -94,7 +94,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation,sa.GetSecretName());
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, sa.GetSecretName());
             status.IsFail()
         ) {
             return status;
@@ -116,7 +116,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation,mdbBasic.GetServiceAccountSecretName());
+            CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName());
             status.IsFail()
         ) {
             return status;

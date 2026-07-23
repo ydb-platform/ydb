@@ -17,7 +17,7 @@ from ydb.core.kqp.opt.rbo.verification.inspector.plan import InspectionError
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
-    OrdinalChoice,
+    BoundedChoice,
     Outcome,
     Relation,
     RelationFamily,
@@ -395,6 +395,33 @@ class ObserverTest(unittest.TestCase):
             ["success", "success"],
         )
 
+    def test_outcome_with_out_of_range_bounded_choice_is_disabled(self):
+        choice = smt.symbol("choice", smt.INT)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation((Column("x", "Int64", False),), ()),
+                smt.FALSE,
+                choices=(BoundedChoice(choice, 2),),
+            ),
+        ))
+        probes = Probes(smt.Script())
+        _add_family(probes, family)
+
+        for value, enabled in ((-1, False), (0, True), (1, True), (2, False)):
+            with self.subTest(value=value):
+                rendered = _family_json(
+                    family,
+                    probes,
+                    {"choice": value},
+                    {},
+                )
+                self.assertEqual(bool(rendered["outcomes"]), enabled)
+                self.assertEqual(
+                    rendered["disabled_outcome_count"],
+                    0 if enabled else 1,
+                )
+
     def test_query_error_status_is_probed_and_rendered(self):
         query_error = smt.symbol("query_error", smt.BOOL)
         family = RelationFamily((
@@ -440,8 +467,8 @@ class ObserverTest(unittest.TestCase):
                 relation,
                 smt.FALSE,
                 choices=(
-                    OrdinalChoice(first_ordinal, 2),
-                    OrdinalChoice(second_ordinal, 2),
+                    BoundedChoice(first_ordinal, 2),
+                    BoundedChoice(second_ordinal, 2),
                 ),
             ),
             Outcome(
@@ -450,8 +477,8 @@ class ObserverTest(unittest.TestCase):
                 smt.FALSE,
                 decisions=(("alternative", 1),),
                 choices=(
-                    OrdinalChoice(first_ordinal, 2),
-                    OrdinalChoice(second_ordinal, 2),
+                    BoundedChoice(first_ordinal, 2),
+                    BoundedChoice(second_ordinal, 2),
                 ),
             ),
         ))
@@ -608,16 +635,22 @@ class ConcreteTraceTest(unittest.TestCase):
         self.assertIsInstance(before[0][0], str)
         self.assertEqual(after, [(None,)])
 
-    def test_all_enabled_unordered_limit_choices_are_retained(self):
+    def test_selected_unordered_limit_choice_is_visible(self):
         result = prepare(_logical(ZERO), _staged_limit(), 2, 10_000).solve(
             SOLVER, 10_000
         )
         self.assertEqual(result["status"], "COUNTEREXAMPLE")
         self.assertEqual(len(result["witness"]["A"]), 2)
         outcomes = result["trace"]["after"]["boundary"]["outcomes"]
-        self.assertEqual(len(outcomes), 2)
-        self.assertTrue(all(outcome["decisions"] for outcome in outcomes))
-        self.assertEqual(_present_values(result["trace"]["after"]["boundary"]), [(0,), (0,)])
+        self.assertEqual(len(outcomes), 1)
+        self.assertFalse(outcomes[0]["decisions"])
+        self.assertEqual(len(outcomes[0]["choices"]), 1)
+        self.assertEqual(outcomes[0]["choices"][0]["bound"], 2)
+        self.assertIn(outcomes[0]["choices"][0]["value"], {0, 1})
+        self.assertEqual(
+            _present_values(result["trace"]["after"]["boundary"]),
+            [(0,)],
+        )
 
     def test_constant_trace_needs_no_model_values(self):
         for include_table, witness in ((False, {}), (True, {"A": []})):

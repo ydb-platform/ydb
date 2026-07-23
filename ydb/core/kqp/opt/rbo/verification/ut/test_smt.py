@@ -1,6 +1,7 @@
 import os
 import subprocess
 import unittest
+from itertools import combinations
 from unittest import mock
 
 try:
@@ -96,26 +97,47 @@ class SmtTest(unittest.TestCase):
         with self.assertRaisesRegex(smt.SmtError, "after.*sealed"):
             script.register_string_term(smt.symbol("late", smt.INT))
 
-    def test_string_terms_depending_on_quantified_choices_fail_closed(self):
+    def test_choice_dependent_string_terms_get_guarded_finite_domains(self):
         script = smt.Script()
         choice = script.fresh_constant("ordinal", smt.INT)
         function = script.fresh_function("string_result", (smt.INT,), smt.INT)
-        script.register_quantified_choice(choice)
-        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
-            script.register_string_term(function(choice))
+        script.register_quantified_choice(choice, 3)
+        script.register_string_term(function(choice))
+
+        formula = script.render()
+
+        self.assertIn("(forall ((v_0 Int))", formula)
+        self.assertIn("(< v_0 3)", formula)
+        self.assertEqual(
+            tuple(script.string_literals.values()),
+            ("", "\0", "\0\0"),
+        )
 
         reverse = smt.Script()
         later_choice = reverse.fresh_constant("ordinal", smt.INT)
         later_function = reverse.fresh_function("string_result", (smt.INT,), smt.INT)
         reverse.register_string_term(later_function(later_choice))
-        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
-            reverse.register_quantified_choice(later_choice)
+        reverse.register_quantified_choice(later_choice, 2)
+        reverse.seal_string_order()
+        self.assertEqual(len(reverse.string_literals), 2)
+
+        sealed = smt.Script()
+        sealed_choice = sealed.fresh_constant("ordinal", smt.INT)
+        sealed_function = sealed.fresh_function(
+            "string_result",
+            (smt.INT,),
+            smt.INT,
+        )
+        sealed.register_string_term(sealed_function(sealed_choice))
+        sealed.seal_string_order()
+        with self.assertRaisesRegex(smt.SmtError, "after.*sealed"):
+            sealed.register_quantified_choice(sealed_choice, 2)
 
     def test_global_invariants_depending_on_quantified_choices_fail_closed(self):
         script = smt.Script()
         choice = script.fresh_constant("ordinal", smt.INT)
         function = script.fresh_function("bounded_result", (smt.INT,), smt.INT)
-        script.register_quantified_choice(choice)
+        script.register_quantified_choice(choice, 2)
         with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
             script.assert_global(smt.lt(function(choice), smt.int_value(10)))
 
@@ -124,12 +146,52 @@ class SmtTest(unittest.TestCase):
         later_function = reverse.fresh_function("bounded_result", (smt.INT,), smt.INT)
         reverse.assert_global(smt.lt(later_function(later_choice), smt.int_value(10)))
         with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
-            reverse.register_quantified_choice(later_choice)
+            reverse.register_quantified_choice(later_choice, 2)
+
+    def test_choice_invariant_is_universally_guarded_by_registered_bounds(self):
+        script = smt.Script()
+        first = script.fresh_constant("first", smt.INT)
+        second = script.fresh_constant("second", smt.INT)
+        function = script.fresh_function(
+            "bounded_result",
+            (smt.INT, smt.INT),
+            smt.INT,
+        )
+        script.register_quantified_choice(first, 2)
+        script.register_quantified_choice(second, 3)
+        invariant = smt.lt(function(first, second), smt.int_value(10))
+
+        script.assert_choice_invariant(invariant)
+
+        quantified = script.assertions[0]
+        self.assertEqual(quantified.operation, "forall")
+        self.assertEqual(quantified.arguments[:-1], (first, second))
+        formula = script.render()
+        self.assertIn("(forall ((v_0 Int) (v_1 Int))", formula)
+        self.assertIn("(< v_0 2)", formula)
+        self.assertIn("(< v_1 3)", formula)
+
+    def test_quantified_choice_bounds_are_positive_and_immutable(self):
+        script = smt.Script()
+        choice = script.fresh_constant("ordinal", smt.INT)
+        script.register_quantified_choice(choice, 2)
+        assert isinstance(choice.atom, str)
+        script.register_quantified_choice(
+            smt.symbol(choice.atom, choice.sort),
+            2,
+        )
+        with self.assertRaisesRegex(smt.SmtError, "inconsistent bounds"):
+            script.register_quantified_choice(choice, 3)
+        for bound in (0, -1, True):
+            with self.subTest(bound=bound):
+                other = script.fresh_constant("other", smt.INT)
+                with self.assertRaisesRegex(smt.SmtError, "positive integer"):
+                    script.register_quantified_choice(other, bound)
 
     def test_dependency_audit_is_iterative_and_matches_copied_symbols(self):
         script = smt.Script()
         choice = script.fresh_constant("ordinal", smt.INT)
-        script.register_quantified_choice(choice)
+        script.register_quantified_choice(choice, 2)
         independent = _deep_shared_term(smt.symbol("independent", smt.INT))
         script.assert_global(smt.Term(smt.BOOL, "predicate", (independent,)))
 
@@ -158,16 +220,16 @@ class SmtTest(unittest.TestCase):
             )
         )
         with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
-            reverse.register_quantified_choice(later_choice)
+            reverse.register_quantified_choice(later_choice, 2)
 
-    def test_deep_string_terms_use_identity_storage_and_exact_choice_audit(self):
+    def test_deep_string_terms_use_identity_storage_and_exact_choice_capacity(self):
         independent = smt.Script()
         choice = independent.fresh_constant("ordinal", smt.INT)
         value = _deep_shared_term(smt.symbol("independent_string", smt.INT))
         independent.register_string_term(value)
         independent.register_string_term(value)
         self.assertEqual(len(independent._string_terms), 1)
-        independent.register_quantified_choice(choice)
+        independent.register_quantified_choice(choice, 2)
 
         deduplicated = smt.Script()
         left = _deep_shared_term(smt.symbol("same_string", smt.INT))
@@ -181,19 +243,21 @@ class SmtTest(unittest.TestCase):
 
         forward = smt.Script()
         forward_choice = forward.fresh_constant("ordinal", smt.INT)
-        forward.register_quantified_choice(forward_choice)
+        forward.register_quantified_choice(forward_choice, 3)
         assert isinstance(forward_choice.atom, str)
         forward_copy = smt.symbol(forward_choice.atom, forward_choice.sort)
-        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
-            forward.register_string_term(_deep_shared_term(forward_copy))
+        forward.register_string_term(_deep_shared_term(forward_copy))
+        forward.seal_string_order()
+        self.assertEqual(len(forward.string_literals), 3)
 
         reverse = smt.Script()
         reverse_choice = reverse.fresh_constant("ordinal", smt.INT)
         assert isinstance(reverse_choice.atom, str)
         reverse_copy = smt.symbol(reverse_choice.atom, reverse_choice.sort)
         reverse.register_string_term(_deep_shared_term(reverse_copy))
-        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
-            reverse.register_quantified_choice(reverse_choice)
+        reverse.register_quantified_choice(reverse_choice, 2)
+        reverse.seal_string_order()
+        self.assertEqual(len(reverse.string_literals), 2)
 
         bounded = smt.Script()
         with mock.patch.object(smt, "MAX_REPRESENTATIVES", 1):
@@ -202,6 +266,41 @@ class SmtTest(unittest.TestCase):
                 bounded.register_string_term(
                     smt.symbol("second_string", smt.INT)
                 )
+
+    def test_string_choice_capacity_sums_products_after_structural_compaction(self):
+        script = smt.Script()
+        first = script.fresh_constant("first", smt.INT)
+        second = script.fresh_constant("second", smt.INT)
+        function = script.fresh_function(
+            "choice_string",
+            (smt.INT, smt.INT),
+            smt.INT,
+        )
+        script.register_quantified_choice(first, 2)
+        script.register_quantified_choice(second, 3)
+        script.register_string_term(function(first, second))
+        script.register_string_term(function(first, second))
+        script.register_string_term(smt.symbol("independent_string", smt.INT))
+
+        script.seal_string_order()
+
+        self.assertEqual(len(script._string_terms), 2)
+        self.assertEqual(len(script.string_literals), 7)
+
+        too_large = smt.Script()
+        choice = too_large.fresh_constant("choice", smt.INT)
+        result = too_large.fresh_function(
+            "choice_string",
+            (smt.INT,),
+            smt.INT,
+        )
+        too_large.register_quantified_choice(choice, 2)
+        too_large.register_string_term(result(choice))
+        with (
+            mock.patch.object(smt, "MAX_REPRESENTATIVES", 1),
+            self.assertRaisesRegex(smt.SmtError, "at least 2 ranks.*limit is 1"),
+        ):
+            too_large.seal_string_order()
 
     def test_global_invariants_render_before_ordinary_obligations(self):
         script = smt.Script()
@@ -417,6 +516,40 @@ class SmtTest(unittest.TestCase):
 
         self.assertEqual(solved.returncode, 0, solved.stderr)
         self.assertEqual(solved.stdout.strip(), "sat")
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_string_capacity_covers_the_product_of_choice_domains(self):
+        script = smt.Script(timeout_ms=10_000)
+        first = script.fresh_constant("first choice", smt.INT)
+        second = script.fresh_constant("second choice", smt.INT)
+        function = script.fresh_function(
+            "choice string",
+            (smt.INT, smt.INT),
+            smt.INT,
+        )
+        script.register_quantified_choice(first, 2)
+        script.register_quantified_choice(second, 3)
+        script.register_string_term(function(first, second))
+        applications = tuple(
+            function(smt.int_value(left), smt.int_value(right))
+            for left in range(2)
+            for right in range(3)
+        )
+        for left, right in combinations(applications, 2):
+            script.assert_(smt.not_(smt.eq(left, right)))
+
+        solved = subprocess.run(
+            (SOLVER, "-in"),
+            input=script.render(),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "sat")
+        self.assertEqual(len(script.string_literals), 6)
 
     def test_let_aliases_are_hygienic(self):
         collision = smt.symbol("rbo_let_0", smt.INT)

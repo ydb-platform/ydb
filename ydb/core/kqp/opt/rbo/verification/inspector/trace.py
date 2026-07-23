@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..rbo_verifier import ir, smt
-from ..rbo_verifier.relation import FamilyComparison, RelationFamily
+from ..rbo_verifier.relation import FamilyComparison, Outcome, RelationFamily
 from ..rbo_verifier.scalar import DecimalAverageState, Value
 from ..rbo_verifier.stages import TASKS
 from ..rbo_verifier.types import family as type_family
@@ -349,7 +349,7 @@ def _family_json(
     enabled = []
     disabled = 0
     for index, outcome in enumerate(result.outcomes):
-        if probes.value(outcome.enabled, values) is not True:
+        if not _outcome_enabled(outcome, probes, values):
             disabled += 1
             continue
         relation = outcome.relation
@@ -397,6 +397,7 @@ def _family_json(
                     {"id": decision, "choice": choice}
                     for decision, choice in outcome.decisions
                 ],
+                "choices": _choices_json(outcome, probes, values),
                 "sequence": relation.sequence,
                 "order": _order_json(relation.order),
                 "rows": rows,
@@ -410,6 +411,20 @@ def _family_json(
         "disabled_outcome_count": disabled,
         "outcomes": enabled,
     }
+
+
+def _outcome_enabled(
+    outcome: Outcome,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+) -> bool:
+    if probes.value(outcome.enabled, values) is not True:
+        return False
+    for choice in outcome.choices:
+        value = probes.value(choice.term, values)
+        if type(value) is not int or not 0 <= value < choice.bound:
+            return False
+    return True
 
 
 def _cell_json(
@@ -508,7 +523,15 @@ def _mismatches(
             and probes.value(comparison.pair_equal[index][target], values) is True
         ]
         if enabled and not matches:
-            result.append(_unmatched("before", index, comparison.left))
+            result.append(
+                _unmatched(
+                    "before",
+                    index,
+                    comparison.left,
+                    probes,
+                    values,
+                )
+            )
     for index, enabled in enumerate(right_enabled):
         matches = [
             source
@@ -517,20 +540,50 @@ def _mismatches(
             and probes.value(comparison.pair_equal[source][index], values) is True
         ]
         if enabled and not matches:
-            result.append(_unmatched("after", index, comparison.right))
+            result.append(
+                _unmatched(
+                    "after",
+                    index,
+                    comparison.right,
+                    probes,
+                    values,
+                )
+            )
     return result
 
 
-def _unmatched(side: str, index: int, result: RelationFamily) -> dict[str, Any]:
+def _unmatched(
+    side: str,
+    index: int,
+    result: RelationFamily,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+) -> dict[str, Any]:
+    outcome = result.outcomes[index]
     return {
         "source": side,
         "outcome": index,
         "decisions": [
             {"id": decision, "choice": choice}
-            for decision, choice in result.outcomes[index].decisions
+            for decision, choice in outcome.decisions
         ],
+        "choices": _choices_json(outcome, probes, values),
         "matching_outcomes": [],
     }
+
+
+def _choices_json(
+    outcome: Outcome,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+) -> list[dict[str, int]]:
+    return [
+        {
+            "value": int(probes.value(choice.term, values)),
+            "bound": choice.bound,
+        }
+        for choice in outcome.choices
+    ]
 
 
 def _scope_json(scope: str) -> dict[str, Any]:

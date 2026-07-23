@@ -1115,6 +1115,80 @@ class OrderedLimitTest(unittest.TestCase):
             set(permutations(((0,), (1,), (2,), (3,)))),
         )
 
+    def test_static_dead_slots_preserve_sort_and_cross_producer_merge_languages(self):
+        columns = (
+            Column("a.k1", "Int64", False),
+            Column("a.k2", "Int64", False),
+            Column("a.payload", "Int64", False),
+        )
+        live = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "a.k1": Value("Int64", smt.FALSE, smt.ZERO),
+                    "a.k2": Value("Int64", smt.FALSE, smt.ZERO),
+                    "a.payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(index),
+                    ),
+                },
+            )
+            for index in range(4)
+        )
+        dead = Row(smt.FALSE, live[0].values)
+        padded_rows = (live[0], dead, live[1], dead, live[2], live[3])
+        order = (SortOrder("a.k1", True, False),)
+
+        padded_sort_script = smt.Script()
+        compact_sort_script = smt.Script()
+        padded_sort = relation.sort_family(
+            single(Relation(columns, padded_rows)),
+            order,
+            padded_sort_script,
+            "sort",
+        )
+        compact_sort = relation.sort_family(
+            single(Relation(columns, live)),
+            order,
+            compact_sort_script,
+            "sort",
+        )
+        live_values = tuple((0, 0, index) for index in range(4))
+        all_tie_orders = set(permutations(live_values))
+        self.assertEqual(_sequences(padded_sort, {}), all_tie_orders)
+        self.assertEqual(
+            _sequences(padded_sort, {}),
+            _sequences(compact_sort, {}),
+        )
+
+        with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
+            padded_merge = merge_family(
+                single(Relation(columns, padded_rows, sequence=True, order=order)),
+                order,
+                ((0, 1, 4), (2, 3, 5)),
+                smt.Script(),
+                "merge",
+            )
+            compact_merge = merge_family(
+                single(Relation(columns, live, sequence=True, order=order)),
+                order,
+                ((0, 2), (1, 3)),
+                smt.Script(),
+                "merge",
+            )
+        producer_interleavings = {
+            sequence
+            for sequence in all_tie_orders
+            if sequence.index(live_values[0]) < sequence.index(live_values[2])
+            and sequence.index(live_values[1]) < sequence.index(live_values[3])
+        }
+        self.assertEqual(_sequences(padded_merge, {}), producer_interleavings)
+        self.assertEqual(
+            _sequences(padded_merge, {}),
+            _sequences(compact_merge, {}),
+        )
+
 
 class SortMutationTest(unittest.TestCase):
     def test_direction_null_placement_key_order_and_top_limit_mutations_are_observable(self):

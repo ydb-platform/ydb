@@ -470,9 +470,14 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
-        if self.__cluster_details.blob_storage_config is not None:
-            normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
+        user_bs_config = self.__cluster_details.blob_storage_config
+        if user_bs_config is not None and "service_set" in user_bs_config:
+            normalized_config["blob_storage_config"] = user_bs_config
         else:
+            if user_bs_config:
+                # merge user-supplied fields (e.g. bsc_settings, infer_pdisk_slot_count_settings)
+                # on top of the generated config, keeping the generated static service set
+                normalized_config["blob_storage_config"].update(user_bs_config)
             blobstorage_config_service_set = normalized_config["blob_storage_config"]["service_set"]
             del blobstorage_config_service_set["vdisks"]
 
@@ -639,6 +644,12 @@ class StaticConfigGenerator(object):
         app_config = config_pb2.TAppConfig()
         app_config.BootstrapConfig.CopyFrom(self.boot_txt)
         app_config.BlobStorageConfig.CopyFrom(self.bs_txt)
+        user_bs_config = self.__cluster_details.blob_storage_config
+        if user_bs_config and "service_set" not in user_bs_config:
+            # keep the CMS-pushed config consistent with the generated config.yaml: merge
+            # user-supplied blob_storage_config extras (e.g. infer_pdisk_slot_count_settings)
+            # over the generated service set, as get_normalized_config() does
+            utils.wrap_parse_dict(user_bs_config, app_config.BlobStorageConfig)
         app_config.ChannelProfileConfig.CopyFrom(self.channels_txt)
         app_config.DomainsConfig.CopyFrom(self.domains_txt)
         if self.feature_flags_txt.ByteSize() > 0:
@@ -829,7 +840,8 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
-            if self.__cluster_details.blob_storage_config:
+            user_bs_config = self.__cluster_details.blob_storage_config
+            if user_bs_config and "service_set" in user_bs_config:
                 return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),

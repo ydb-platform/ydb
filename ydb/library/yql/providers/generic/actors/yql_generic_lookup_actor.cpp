@@ -538,12 +538,7 @@ namespace NYql::NDq {
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
             auto guard = Guard(*Alloc);
-            auto request = Request.lock();
-            if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
-                return "Actor destroyed";
-            }
-            for (const auto& [keys, _] : *request) {
+            for (const auto& [keys, _] : *Request) {
                 // TODO consider skipping already retrieved keys
                 // ... but careful, can we end up with zero? TODO
                 AddClause(disjunction, KeyType->GetMembersCount(), keys);

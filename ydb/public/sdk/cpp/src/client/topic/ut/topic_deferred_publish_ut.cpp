@@ -498,6 +498,9 @@ Y_UNIT_TEST(PublishRetryAfterWriteSessionAbort) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(firstResult.GetStatus(), EStatus::SESSION_EXPIRED);
+    UNIT_ASSERT_STRING_CONTAINS(
+        firstResult.GetIssues().ToString(),
+        "Cannot finalize deferred publication: associated write session was aborted");
 
     TDeferredWriteHelper writer2(topicClient, topicPath);
     writer2.WriteDeferred(payload, publication);
@@ -540,6 +543,9 @@ Y_UNIT_TEST(CancelRetryAfterWriteSessionAbort) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(firstResult.GetStatus(), EStatus::SESSION_EXPIRED);
+    UNIT_ASSERT_STRING_CONTAINS(
+        firstResult.GetIssues().ToString(),
+        "Cannot finalize deferred publication: associated write session was aborted");
 
     TDeferredWriteHelper writer2(topicClient, topicPath);
     writer2.WriteDeferred(payload, publication);

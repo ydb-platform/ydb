@@ -12,6 +12,13 @@ std::shared_ptr<TDeferredPublicationAckState> MakeAckState() {
     return std::make_shared<TDeferredPublicationAckState>();
 }
 
+TStatus MakeDeferredFinalizeAbortedError() {
+    return TStatus(
+        EStatus::SESSION_EXPIRED,
+        NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(
+            "Cannot finalize deferred publication: associated write session was aborted")});
+}
+
 } // namespace
 
 TDeferredPublication::TDeferredPublication()
@@ -104,7 +111,7 @@ void TDeferredPublicationAckState::OnUnackedAbort(ui64 unackedCount) {
     }
 
     std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
-    TStatus statusToSet = MakeSessionExpiredError();
+    TStatus statusToSet = MakeDeferredFinalizeAbortedError();
     with_lock (Lock_) {
         Y_ABORT_UNLESS(WriteCount_ >= AckCount_ + unackedCount);
         if (WaitCalled_) {

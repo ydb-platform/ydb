@@ -3,6 +3,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/kqp_user_trace_data.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -53,6 +54,10 @@ struct TEvKqpExecuter {
         // For BATCH operations only
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
         TVector<ui32> BatchOperationKeyIds;
+
+        // Set only when the user-facing channel sampled the query; the event is local, so this
+        // never crosses the interconnect. Rendered into spans by the session at reply time.
+        std::unique_ptr<TUserTraceExecutionData> UserTraceData;
 
         enum class EExecutionType {
             Data,

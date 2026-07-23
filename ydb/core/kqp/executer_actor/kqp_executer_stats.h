@@ -4,6 +4,8 @@
 
 #include "kqp_tasks_graph.h"
 
+#include <ydb/core/kqp/common/kqp_user_trace_data.h>
+
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
@@ -447,6 +449,12 @@ public:
     TDuration ResolveWallTime;
 
     bool CollectStatsByLongTasks = false;
+
+    // When set, task stats are additionally retained in TraceTaskStats so the user-facing channel
+    // can emit a span per task. Gated on the user channel being active. ComputeActors (and the
+    // plan/SVG it feeds) keeps the longest-task-only behavior regardless.
+    bool CollectTraceTaskStats = false;
+    TUserTraceTaskStats TraceTaskStats;
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)

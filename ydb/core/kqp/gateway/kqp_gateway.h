@@ -166,6 +166,9 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+        // The user-facing channel sampled this query: stamp the phase timeline and retain per-task
+        // stats for the trace (see TUserTraceExecutionData). Spans are rendered by the session.
+        bool CollectUserTraceData = false;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

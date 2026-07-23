@@ -3,6 +3,7 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
+#include "kqp_user_facing_tracing.h"
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -839,8 +840,25 @@ public:
         STLOG_D("Sending CompileQuery request",
             (trace_id, TraceId()));
 
+        MarkCompileStart();
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
+    }
+
+    // Compile window for the user-facing trace: opens at the first compile-service send (never on
+    // a cache hit), closes on compile responses only until the first execution — so per-statement
+    // compiles of a running script don't stretch it across executions. Wall clock, not
+    // TimeProvider: the simulated test clock can stand still across the round-trip.
+    void MarkCompileStart() {
+        if (QueryState && !QueryState->CompileWallStart) {
+            QueryState->CompileWallStart = TInstant::Now();
+        }
+    }
+
+    void MarkCompileEnd() {
+        if (QueryState && QueryState->CompileWallStart && QueryState->QueryStats.Executions.empty()) {
+            QueryState->CompileWallEnd = TInstant::Now();
+        }
     }
 
     void CompileSplittedQuery() {
@@ -896,6 +914,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
+        MarkCompileEnd();
 
         // saving compile response and checking that compilation status
         // is success.
@@ -968,6 +987,7 @@ public:
         STLOG_D("Sending CompileQuery request (statement)",
             (trace_id, TraceId()));
 
+        MarkCompileStart();
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
     }
@@ -1605,6 +1625,18 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            if (queryState->UserFacingTraceId) {
+                // User-facing tracing forces stats so the phase builder gets timings;
+                // collection depth scales with the trace level (BASIC/FULL/PROFILE).
+                const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
+                using TLevels = TComponentTracingLevels::TQueryProcessor;
+                const auto userMode = level >= TLevels::Detailed ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE
+                                    : level >= TLevels::Basic    ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
+                                    :                              Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                if (userMode > request.StatsMode) {
+                    request.StatsMode = userMode;
+                }
+            }
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
@@ -2032,6 +2064,7 @@ public:
             Y_ENSURE(QueryState);
             request.Orbit = std::move(QueryState->Orbit);
             request.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+            request.CollectUserTraceData = static_cast<bool>(QueryState->UserFacingTraceId);
             auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext);
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());
@@ -2188,6 +2221,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.CollectUserTraceData = QueryState && QueryState->UserFacingTraceId;
         request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
@@ -2302,6 +2336,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.CollectUserTraceData = QueryState && QueryState->UserFacingTraceId;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
 
@@ -2653,6 +2688,12 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
+            // Appended strictly in pair with Executions — the trace renderer relies on
+            // UserTraces[i] matching Executions[i], and this is the only append site.
+            auto& userTrace = QueryState->QueryStats.UserTraces.emplace_back();
+            if (ev->UserTraceData) {
+                userTrace = std::move(*ev->UserTraceData);
+            }
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
@@ -3315,6 +3356,7 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndOk();
                 }
+                FinishUserFacingSpan(*QueryState, /*success*/ true, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
         } else {
@@ -3322,6 +3364,10 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndError(response.DebugString());
                 }
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status),
+                    issues.ToOneLineString());
                 LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
         }

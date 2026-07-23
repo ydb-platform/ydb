@@ -6,6 +6,7 @@ SRCS(
     kqp_query_stats.cpp
     kqp_response.cpp
     kqp_session_actor.cpp
+    kqp_user_facing_tracing.cpp
     kqp_temp_tables_manager.cpp
     kqp_worker_actor.cpp
     kqp_worker_common.cpp

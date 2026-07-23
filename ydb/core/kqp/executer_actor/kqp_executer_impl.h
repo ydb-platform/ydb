@@ -3,6 +3,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+#include <ydb/core/kqp/common/kqp_user_trace_data.h>
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -177,8 +178,15 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
+        Stats->CollectTraceTaskStats = Request.CollectUserTraceData;
 
         StartTime = TAppData::TimeProvider->Now();
+        if (Request.CollectUserTraceData) {
+            UserTraceData = std::make_unique<TUserTraceExecutionData>();
+            // Wall clock, not TimeProvider: span timestamps must be on the same clock Wilson
+            // uses, and the simulated test clock can stand still across handlers.
+            UserTraceData->Timeline.Execute.Start = TInstant::Now();
+        }
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -325,7 +333,7 @@ protected:
             KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve", EUserTracePhase::ResolveShards);
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -1092,9 +1100,10 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EUserTracePhase::ResolveTables);
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false,
+            ExecuterStateSpan.GetTraceId());
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         KQP_STLOG_T(KQPEX, "Got request, become WaitResolveState",
@@ -1649,6 +1658,32 @@ protected:
     }
 
 protected:
+    // Operational phase: a dev child span plus a user-trace timeline stamp (the session renders
+    // the user-facing phase from the timeline, see kqp_user_facing_tracing.cpp).
+    NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EUserTracePhase userPhase,
+            NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
+        BeginUserPhase(userPhase);
+        return ExecuterSpan.CreateChild(devVerbosity, devName, flags);
+    }
+
+    // Phase windows chain: beginning a phase closes the previous one, the last one closes at
+    // response fill. Handler latency between phases lands in the earlier window — a phase's end
+    // is "when the executer moved on", which is what the user-facing timeline should show anyway.
+    void BeginUserPhase(EUserTracePhase phase) {
+        EndUserPhase();
+        if (UserTraceData) {
+            CurrentUserPhase = phase;
+            UserTraceData->Timeline.Phase(phase).Start = TInstant::Now();
+        }
+    }
+
+    void EndUserPhase() {
+        if (UserTraceData && CurrentUserPhase != EUserTracePhase::Count) {
+            UserTraceData->Timeline.Phase(CurrentUserPhase).End = TInstant::Now();
+        }
+        CurrentUserPhase = EUserTracePhase::Count;
+    }
+
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
@@ -1680,6 +1715,14 @@ protected:
             {
                 ui64 cycleCount = GetCycleCountFast();
                 Stats->ExportExecStats(*response.MutableResult()->MutableStats());
+
+                if (UserTraceData) {
+                    EndUserPhase();
+                    // Stamped after the last phase's end so children never overflow Execute.
+                    UserTraceData->Timeline.Execute.End = TInstant::Now();
+                    UserTraceData->TaskStats = std::move(Stats->TraceTaskStats);
+                    ResponseEv->UserTraceData = std::move(UserTraceData);
+                }
 
                 if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;
@@ -1901,6 +1944,10 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
+    // User-facing trace source data (timeline + per-task stats); null unless the user channel
+    // sampled the query. Shipped to the session in TEvTxResponse at response fill.
+    std::unique_ptr<TUserTraceExecutionData> UserTraceData;
+    EUserTracePhase CurrentUserPhase = EUserTracePhase::Count;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     ui64 LastTaskId = 0;

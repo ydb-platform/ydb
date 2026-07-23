@@ -1254,19 +1254,23 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     nodeStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage());
                 }
 
-                /* if (CollectProfileStats(StatsMode)) {
+                auto taskDuration = TDuration::MilliSeconds(
+                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                    : 0);
+                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
+                    CollectStatsByLongTasks = true;
+                    longestTaskDuration = taskDuration;
+                    stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
-                } else */ {
-                    auto taskDuration = TDuration::MilliSeconds(
-                        taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
-                        ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
-                        : 0);
-                    auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                    if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-                        CollectStatsByLongTasks = true;
-                        longestTaskDuration = taskDuration;
-                        stageStats.ComputeActors.clear();
-                        stageStats.ComputeActors[taskId].CopyFrom(stats);
+                }
+                if (CollectTraceTaskStats) {
+                    auto& stageTasks = TraceTaskStats[taskStats.GetStageId()];
+                    if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
+                        taskIt->second.CopyFrom(stats);
+                    } else if (stageTasks.size() < MaxUserTraceTasksPerStage) {
+                        stageTasks[taskId].CopyFrom(stats);
                     }
                 }
             }

@@ -106,6 +106,11 @@ public:
         QueryType = RequestEv->GetType();
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
+
+        // User-facing channel: own trace-id (=> separate tree from Wilson/dev), decided at the
+        // grpc proxy; empty unless sampled. No live span — the whole tree renders at reply time.
+        UserFacingTraceId = RequestEv->GetUserFacingWilsonTraceId();
+
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
@@ -189,6 +194,11 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TTraceId UserFacingTraceId; // user-facing channel root context; spans render at reply
+    // Snapshotted at compile time — the compiled query is per-statement and gone by reply time.
+    TString UserFacingRootName;
+    TInstant CompileWallStart; // real compile window (see MarkCompileStart); zero on cache hit
+    TInstant CompileWallEnd;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

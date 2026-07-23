@@ -20,8 +20,8 @@ semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
 Decimal `MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
 explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
-and eager inherited errors,
-plus the benchmark-dashboard parts of M4. The reviewed exact
+and eager inherited errors, plus uncorrelated and one-equality-correlated
+relational `EXISTS`, plus the benchmark-dashboard parts of M4. The reviewed exact
 wrapper forms retain their Optional schema through existing `IfPresent`/`If` IR
 instead of being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -40,30 +40,31 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-23
-after the general scalar-error and bounded-choice hardening described below.
-They establish formula construction for TPCH q1, q3, q5, q6,
-q10, q11, q12, q14, q15, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37,
-q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77,
-q79, q80, q82, q88, q90, q91, q93, q96, and q99: 41/121 workload queries
-(33.9%). TPCH has ten formulas, nine unsupported queries, and three optimizer
-failures; TPC-DS has thirty-one formulas, forty unsupported queries, and
-twenty-eight optimizer failures. Across both suites that is 49 unsupported
-queries and 31 optimizer failures. The complete TPCH dashboard spent
-2,928/6,655 ms and TPC-DS spent 66,719/192,475 ms in
-preparation/verification, or 69,647/199,130 ms together. Status membership is
-unchanged from the preceding complete dashboard. The refreshed unsupported
-inventory records the post-general-scalar boundary reasons, including
-TPC-DS q54's initial `Invalid Map rename source _yql_source_5.segment`.
+after relational `EXISTS` support. They establish formula construction for
+TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3,
+q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55,
+q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93,
+q96, and q99: 45/121 workload queries (37.2%). TPCH has twelve formulas, seven
+unsupported queries, and three optimizer failures; TPC-DS has thirty-three
+formulas, thirty-eight unsupported queries, and twenty-eight optimizer
+failures. Across both suites that is 45 unsupported queries and 31 optimizer
+failures. The complete TPCH dashboard spent 2,567/7,851 ms and TPC-DS spent
+55,244/175,820 ms in preparation/verification, or 57,811/183,671 ms together.
+The only status changes are the four new formulas TPCH q4/q22 and TPC-DS
+q10/q69. TPC-DS q35 passes the new subplan gate and now fails closed on
+`Unsupported scalar type Double` at both snapshot boundaries. Fifty queries
+(41.3%) reach the verifier: the 45 formula rows plus five verifier-side resource
+preflight failures. No current row reports generic
+`Unsupported operator AddDependencies`; the remaining former cases are
+classified as correlated scalar, multi-dependency `EXISTS`, or q35's deeper
+`Double` blocker.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q11, q12, q14, q15, and q19 plus TPC-DS
 q3, q42, q48, q52, q55, q90, q93, and q96: fifteen obligations (12.4% of the
-workload). The latest TPCH proof-floor run prepared/verified q3 in
-99/2,823 ms, q6 in 61/710 ms, q11 in 175/7,265 ms, q12 in 103/1,739 ms,
-q14 in 86/31,035 ms, q15 in 177/7,058 ms, and q19 in 117/913 ms. The latest
-TPC-DS proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90,
-q93, and q96 prepared/verified in 126/4,589, 101/5,068, 194/4,051, 100/4,289,
-97/3,987, 280/8,201, 109/2,252, and 115/496 ms, respectively.
+workload). The fresh TPCH proof-floor run spent 854/49,986 ms and the TPC-DS
+run spent 1,124/31,796 ms in preparation/verification. Relational `EXISTS`
+therefore expands formula coverage but does not yet expand the proof floor.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
@@ -642,12 +643,13 @@ uncorrelated.
 
 Initial catalog capture validates the subplan registry and follows every subplan
 root, so a failed initial semantic export no longer hides the final boundary.
-The snapshot now records each scalar binding's root, selected output, exact type
-and nullability, dependencies, and consumers. The first deliberately narrow
-milestone accepted only uncorrelated bindings with no dependencies, explicit
-Project/Filter consumers, and roots statically known to produce at most one
-row: `EmptySource`, an eligible ungrouped aggregate, a literal `Limit <= 1`, or
-Project/Filter/Sort wrappers over one of those shapes. Join, UnionAll,
+The snapshot records each binding's kind, root, exact type/nullability,
+dependencies, consumers, and scalar output or `EXISTS` predicate. The first
+deliberately narrow milestone accepted only uncorrelated bindings with no
+dependencies, explicit Project/Filter consumers, and roots statically known to
+produce at most one row: `EmptySource`, an eligible ungrouped aggregate, a
+literal `Limit <= 1`, or Project/Filter/Sort wrappers over one of those shapes.
+Join, UnionAll,
 intermediate or `DistinctAll` aggregation, nested subplans, and staged subplans
 failed closed at that milestone.
 
@@ -698,17 +700,46 @@ absorption through the barriers.
 Physical `EnsureAtMostOne` Limits are now serialized and evaluated rather than
 proved inert during export. The focused `*AtMostOneMarker*` C++ matrix passes
 3/3 for direct, multi-task-producer, and single-task-producer serialization.
-The current full `cpp_ut` passes 165/165, and the affected Python
-verifier/inspector/bisect/replay/confirmation gates pass 507/507. The check
-observes the exact post-Skip/post-Take relation independently in each stage
-task.
+The check observes the exact post-Skip/post-Take relation independently in each
+stage task.
 
 TPC-DS q24 still has the independent `Unsupported scalar callable Map` blocker.
 In the fresh complete dashboard, q54 fails initial export with
 `Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
-Restricted relational `EXISTS`, dynamic `IN`, and correlated subplans follow
-separately; solver/formula-size work then promotes supported `UNKNOWN`
-obligations.
+
+Relational `EXISTS` is now exact for uncorrelated bindings and for one
+equality-correlated shape. An uncorrelated descriptor has no dependency or
+predicate and returns the non-null Boolean presence of its root. A correlated
+descriptor has exactly one outer dependency and retains the complete original
+filter predicate. Exactly one conjunct references the dependency, and it
+must be a strict, non-null-safe equality between that dependency and one direct
+inner column; every other conjunct is inner-only. SQL filter truth is applied
+for each outer/inner row, then matching inner rows are collapsed with Boolean
+OR, so NULL is not a match and duplicates do not multiply the outer row.
+`NOT EXISTS` remains ordinary negation in the consumer expression.
+
+The exporter peels only plain column-projection Maps above one Filter directly
+over `AddDependencies`, then records the underlying inner root rather than
+inventing residual plan nodes. Every `EXISTS` binding has exactly one Filter
+consumer and remains virtual. C++ export and Python decoding independently
+reject registry, topology, type, nullability, dependency, consumer, nesting,
+staging, and binding-leak mismatches. An `EXISTS` root with an observable
+`EnsureAtMostOne` error also fails closed. Correlated roots additionally reject
+Limit and TopSort because their row choice would have to be independent per
+outer invocation; plain Sort and exact uncorrelated row selection remain
+admissible. Evaluation preflights at most 16,384 outer/inner row pairs. The
+optimized side remains the ordinary final StageGraph, with no subplan-specific
+equivalence shortcut.
+
+Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
+through the real host. The current complete suites pass 430/430 verifier tests,
+167/167 C++ exporter tests, 43/43 inspector tests, and 26/26 real-host
+integration tests. Dynamic `IN`, correlated scalar subplans, multiple
+dependencies, and broader correlations remain separate extensions.
+The next milestone is an auditability consolidation: independently review the
+C++/Python contract, keep the descriptor and evaluator minimal, prune stale
+current-versus-historical prose, and rerun every regression floor before adding
+another semantic family.
 
 The audit has found seven production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -754,10 +785,10 @@ drains its right input first, so the commuted empty outer input could prevent
 evaluation of the inherited scalar error. Optimizer commit `cab0dd1e89c` marks
 both synthetic Crosses `PreserveInputOrder`, makes BuildInitial/Expand CBO stop
 at those barriers while still optimizing both sides, and prevents filter
-absorption through them. The two direct rule regressions pass 2/2, the
-real-host `KqpRboYql::ExpressionSubquery` test passes 1/1 with the CBO2 nested
-case, the full `cpp_ut` passes 165/165, and the affected Python gates pass
-507/507. Defect seven is fixed.
+absorption through them. At that checkpoint the two direct rule regressions
+passed 2/2, the real-host `KqpRboYql::ExpressionSubquery` test passed 1/1 with
+the CBO2 nested case, the full `cpp_ut` passed 165/165, and the affected Python
+gates passed 507/507. Defect seven is fixed.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

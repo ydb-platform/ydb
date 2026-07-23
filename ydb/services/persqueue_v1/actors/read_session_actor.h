@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events.h"
+#include "helpers.h"
 #include "partition_actor.h"
 #include "persqueue_utils.h"
 
@@ -158,29 +159,29 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
     TDuration WaitQuotaTime;
 };
 
-template <bool UseMigrationProtocol> // Migration protocol is "pqv1"
+template <EProtocol Protocol>
 class TReadSessionActor
-    : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>>
+    : public TActorBootstrapped<TReadSessionActor<Protocol>>
     , private NPQ::TRlHelpers
     , public NActors::IActorExceptionHandler
 {
-    using TClientMessage = typename std::conditional_t<UseMigrationProtocol,
+    using TClientMessage = typename std::conditional_t<Protocol == EProtocol::PQv1,
         PersQueue::V1::MigrationStreamingReadClientMessage,
         Topic::StreamReadMessage::FromClient>;
 
-    using TServerMessage = typename std::conditional_t<UseMigrationProtocol,
+    using TServerMessage = typename std::conditional_t<Protocol == EProtocol::PQv1,
         PersQueue::V1::MigrationStreamingReadServerMessage,
         Topic::StreamReadMessage::FromServer>;
 
-    using TEvReadInit = typename std::conditional_t<UseMigrationProtocol,
+    using TEvReadInit = typename std::conditional_t<Protocol == EProtocol::PQv1,
         TEvPQProxy::TEvMigrationReadInit,
         TEvPQProxy::TEvReadInit>;
 
-    using TEvReadResponse = typename std::conditional_t<UseMigrationProtocol,
+    using TEvReadResponse = typename std::conditional_t<Protocol == EProtocol::PQv1,
         TEvPQProxy::TEvMigrationReadResponse,
         TEvPQProxy::TEvReadResponse>;
 
-    using TEvStreamReadRequest = typename std::conditional_t<UseMigrationProtocol,
+    using TEvStreamReadRequest = typename std::conditional_t<Protocol == EProtocol::PQv1,
         NGRpcService::TEvStreamPQMigrationReadRequest,
         NGRpcService::TEvStreamTopicReadRequest>;
 
@@ -366,7 +367,7 @@ private:
     const TInstant StartTimestamp;
 
     TString SdkBuildInfo;
-    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    TString UserAgent = Protocol == EProtocol::PQv1 ? "pqv1 server" : "topic server";
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;

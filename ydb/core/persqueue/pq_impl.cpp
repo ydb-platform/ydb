@@ -397,7 +397,7 @@ TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 ta
                          const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
                          const TActorContext& ctx)
 {
-    return ctx.Register(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
+    return ctx.RegisterWithSameMailbox(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/
@@ -903,7 +903,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
-    TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
+    TActorId actorId = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
                                                          newPartition,
@@ -911,8 +911,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
     Partitions.emplace(std::piecewise_construct,
                        std::forward_as_tuple(partitionId),
                        std::forward_as_tuple(actorId,
-                                             GetPartitionKeyRange(config, partition),
-                                             *Counters));
+                                             GetPartitionKeyRange(config, partition)));
     ++OriginalPartitionsCount;
 }
 
@@ -949,8 +948,7 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
 {
     Partitions.emplace(partitionId,
                        TPartitionInfo(TActorId(),
-                                      {},
-                                      *Counters));
+                                      {}));
     NewSupportivePartitions.insert(partitionId);
 }
 
@@ -976,7 +974,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
     TPartitionInfo& partition = Partitions.at(partitionId);
-    partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
+    partition.Actor = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                         TopicConverter,
                                                         MakeSupportivePartitionConfig(),
                                                         false,
@@ -1359,11 +1357,12 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     PQ_LOG_T("Handle TEvPQ::TEvPartitionCounters" <<
              " PartitionId " << ev->Get()->Partition);
 
-    const auto& partitionId = ev->Get()->Partition;
+    auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
-    auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
-    ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
-    ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
+
+    auto& counters = ev->Get()->Counters;
+    ui64 cpuUsage = counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
+    ui64 networkBytesUsage = counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
     if (ResourceMetrics) {
         if (cpuUsage > 0) {
             ResourceMetrics->CPU.Increment(cpuUsage);
@@ -1375,17 +1374,15 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
             ResourceMetrics->TryUpdate(ctx);
         }
     }
+    Counters->Percentile().Populate(counters.Percentile());
+    Counters->Cumulative().Populate(counters.Cumulative());
 
-    Counters->Populate(*diff.Get());
-    ev->Get()->Counters.RememberCurrentStateAsBaseline(partition.Baseline);
+    partition.ReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
-    ui64 reservedSize = 0;
-    for (auto& p : Partitions) {
-        if (p.second.Baseline.Simple().Size() > 0) //there could be no counters from this partition yet
-            reservedSize += p.second.Baseline.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
-    }
+    ui64 reservedSize = std::accumulate(Partitions.begin(), Partitions.end(), 0ul,
+        [](ui64 sum, const auto& p) { return sum + p.second.ReservedBytes; });
     Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
 
     // Features of the implementation of SimpleCounters. It is necessary to restore the value of
@@ -3159,7 +3156,6 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , OriginalPartitionsCount(0)
     , NewConfigShouldBeApplied(false)
     , TabletState(NKikimrPQ::ENormal)
-    , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
@@ -3175,8 +3171,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
         ECumulativeCounters_descriptor,
         EPercentileCounters_descriptor> TPersQueueCounters;
     typedef TProtobufTabletCountersPair<TKeyValueCounters, TPersQueueCounters> TCounters;
+
     TAutoPtr<TCounters> counters(new TCounters());
-    Counters = (counters->GetSecondTabletCounters()).Release();
+    Counters.reset(counters->GetSecondTabletCounters().Release());
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
@@ -3185,7 +3182,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
-    CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -5081,14 +5078,14 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {
-        quoterId = Register(new TWriteQuoter(
+        quoterId = RegisterWithSameMailbox(new TWriteQuoter(
             TopicConverter,
             Config,
             AppData()->PQConfig,
             partition,
             SelfId(),
             TabletID(),
-            *Counters
+            Counters
         ));
     }
     return quoterId;
@@ -5112,7 +5109,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           DCId,
                           IsServerless,
                           config,
-                          *Counters,
+                          Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),

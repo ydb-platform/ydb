@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
@@ -10,8 +11,6 @@
 #include <memory>
 
 namespace NYdb::inline Dev::NTopic {
-
-struct TDeferredPublication;
 
 // Per-publication in-flight write ack state. Shared by TDeferredPublication copies.
 class TDeferredPublicationAckState {
@@ -42,12 +41,8 @@ private:
     NThreading::TPromise<TStatus> AllAcksReceived_;
 };
 
-namespace NDeferredPublicationDetail {
-
-struct TDeferredPublicationAccess {
+struct TDeferredPublication::TAccess {
     static const std::shared_ptr<TDeferredPublicationAckState>& AckState(const TDeferredPublication& publication);
 };
-
-} // namespace NDeferredPublicationDetail
 
 } // namespace NYdb::NTopic

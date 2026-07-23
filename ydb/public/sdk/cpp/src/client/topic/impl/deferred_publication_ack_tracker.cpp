@@ -77,7 +77,7 @@ TDeferredPublication& TDeferredPublication::operator=(TDeferredPublication&& oth
     return *this;
 }
 
-const std::shared_ptr<TDeferredPublicationAckState>& NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(
+const std::shared_ptr<TDeferredPublicationAckState>& TDeferredPublication::TAccess::AckState(
     const TDeferredPublication& publication)
 {
     return publication.AckState_;

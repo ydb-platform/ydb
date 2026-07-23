@@ -25,7 +25,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase( Execute",
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase::Execute",
             {"txType", GetTxType()},
             {"tablet", Self->TabletID()});
 
@@ -80,7 +80,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase( Complete",
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase::Complete",
             {"txType", GetTxType()},
             {"tablet", Self->TabletID()});
 

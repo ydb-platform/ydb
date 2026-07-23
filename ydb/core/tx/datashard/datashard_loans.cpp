@@ -43,8 +43,8 @@ public:
             // open a pipe to the part owner and send part metadata batch
             YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return",
                 {"tabletId", Self->TabletID()},
-                {"batchEnd", batch.second},
-                {"batchStart", batch.first});
+                {"ownerTabletId", batch.first},
+                {"partMetaIds", batch.second});
             Self->LoanReturnTracker.ReturnLoan(batch.first, batch.second, ctx);
         }
     }
@@ -187,7 +187,7 @@ public:
         Y_ENSURE(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet " << Self->TabletID());
         Y_ENSURE(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet " << Self->TabletID());
 
-        YDB_LOG_INFO_CTX(ctx, "Initiating switch from to Offline state",
+        YDB_LOG_INFO_CTX(ctx, "Initiating switch to Offline state",
             {"tabletId", Self->TabletID()},
             {"state", DatashardStateName(Self->State)});
 
@@ -225,7 +225,7 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
             return str.Str();
         };
 
-        YDB_LOG_DEBUG_CTX(ctx, "In PreOffline state OutReadSets ChangesQueue siblings to be wait to activation",
+        YDB_LOG_DEBUG_CTX(ctx, "In PreOffline state, waiting for OutReadSets, ChangesQueue and siblings activation",
             {"tabletID", TabletID()},
             {"hasSharedBobs", HasSharedBlobs()},
             {"schemaOperations", fnListTxIds(TransQueue.GetSchemaOperations())},

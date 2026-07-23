@@ -35,7 +35,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                                                            const TActorContext &ctx)
 {
     YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Execute",
-        {"tabletId", Self->TabletID()});
+        {"tabletId", Self->TabletID()},
+        {"txId", TxId});
 
     if (!Acked) {
         // Ack event on the first execute (this will schedule the next event if any)
@@ -146,8 +147,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException &) {
-        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
-            {"0", 0},
+        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare, tablet is not ready",
             {"txId", TxId},
             {"tabletId", Self->TabletID()});
         return false;
@@ -156,7 +156,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Complete",
-        {"tabletId", Self->TabletID()});
+        {"tabletId", Self->TabletID()},
+        {"txId", TxId});
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());

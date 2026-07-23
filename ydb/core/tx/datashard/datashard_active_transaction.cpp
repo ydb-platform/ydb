@@ -173,7 +173,7 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        YDB_LOG_NOTICE_CTX(*TActivationContext::ActorSystem(), "CANCELLED TxId",
+        YDB_LOG_NOTICE_CTX(*TActivationContext::ActorSystem(), "Cancelled transaction",
             {"txId", GetTxId()},
             {"tabletId", tabletId});
     }
@@ -501,7 +501,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Tx released its data",
+    YDB_LOG_DEBUG_CTX(ctx, "Transaction released its data",
         {"txId", GetTxId()});
 }
 
@@ -528,7 +528,7 @@ void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
 
     YDB_LOG_TRACE_CTX(ctx, "Storing locks",
         {"vectorSize", vec.size()},
-        {"txid", GetTxId()},
+        {"txId", GetTxId()},
         {"tabletId", tabletId});
 }
 
@@ -542,9 +542,9 @@ void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    YDB_LOG_TRACE_CTX(ctx, "Storing",
-        {"artifactflags", ArtifactFlags},
-        {"txid", GetTxId()},
+    YDB_LOG_TRACE_CTX(ctx, "Storing artifact flags",
+        {"artifactFlags", ArtifactFlags},
+        {"txId", GetTxId()},
         {"tabletId", tabletId});
 }
 
@@ -605,7 +605,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     ReleasedTxDataSize = 0;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Tx at restored its data",
+    YDB_LOG_DEBUG_CTX(ctx, "Transaction restored its data",
         {"txId", GetTxId()},
         {"tabletId", self->TabletID()});
 
@@ -877,7 +877,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
             auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
                     kind, self.TabletID(), GetTxId(), rejectStatus);
             result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
-            YDB_LOG_NOTICE_CTX(ctx, "",
+            YDB_LOG_NOTICE_CTX(ctx, "Rejecting immediate transaction",
                 {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());

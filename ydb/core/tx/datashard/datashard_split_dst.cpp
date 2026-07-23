@@ -111,7 +111,7 @@ public:
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Ack init split/merge destination OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Ack init split/merge destination operation",
             {"tabletId", Self->TabletID()},
             {"opId", opId});
 
@@ -170,20 +170,20 @@ public:
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.contains(srcTabletId)) {
-            YDB_LOG_DEBUG_CTX(ctx, "Ignoring received snapshot for split/merge TxId from tabeltId",
+            YDB_LOG_DEBUG_CTX(ctx, "Ignoring received snapshot for split/merge operation from tablet",
                 {"tabletId", Self->TabletID()},
                 {"opId", opId},
                 {"srcTabletId", srcTabletId});
             return true;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Received snapshot for split/merge TxId from tabeltId",
+        YDB_LOG_DEBUG_CTX(ctx, "Received snapshot for split/merge operation from tablet",
             {"tabletId", Self->TabletID()},
             {"opId", opId},
             {"srcTabletId", srcTabletId});
-        YDB_LOG_TRACE_CTX(ctx, "Received",
+        YDB_LOG_TRACE_CTX(ctx, "Received split transfer snapshot record",
             {"tabletId", Self->TabletID()},
-            {"snapshot", record.DebugString()});
+            {"recordDetails", record.DebugString()});
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
@@ -311,7 +311,7 @@ public:
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Ack snapshot OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Ack snapshot operation",
             {"tabletId", Self->TabletID()},
             {"opId", opId});
 

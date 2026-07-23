@@ -54,7 +54,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    YDB_LOG_TRACE("Parsing write transaction for",
+    YDB_LOG_TRACE("Parsing write transaction",
         {"globalTxId", globalTxId},
         {"tabletId", TabletId},
         {"record", record.ShortDebugString()});
@@ -513,7 +513,7 @@ void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& 
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    YDB_LOG_DEBUG("Tx at released its data",
+    YDB_LOG_DEBUG("Transaction released its data",
         {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
@@ -536,9 +536,9 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    YDB_LOG_TRACE("Storing locks for",
+    YDB_LOG_TRACE("Storing locks",
         {"vectorSize", vec.size()},
-        {"txid", GetTxId()},
+        {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
 
@@ -549,9 +549,9 @@ void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
     NIceDb::TNiceDb db(txcDb);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    YDB_LOG_TRACE("Storing for",
-        {"artifactflags", ArtifactFlags},
-        {"txid", GetTxId()},
+    YDB_LOG_TRACE("Storing artifact flags",
+        {"artifactFlags", ArtifactFlags},
+        {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
 
@@ -615,7 +615,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     ReleasedTxDataSize = 0;
 
-    YDB_LOG_DEBUG("Tx at restored its data",
+    YDB_LOG_DEBUG("Transaction restored its data",
         {"txId", GetTxId()},
         {"tabletId", self->TabletID()});
 
@@ -755,7 +755,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
                                    << " is restarting";
 
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), rejectStatus, rejectReason);
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Rejecting immediate write transaction",
                 {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());
@@ -822,7 +822,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-    YDB_LOG_INFO("Write transaction at has an",
+    YDB_LOG_INFO("Write transaction has an error",
         {"txId", GetTxId()},
         {"tabletId", TabletId},
         {"error", errorMsg});

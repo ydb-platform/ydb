@@ -93,12 +93,12 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
 
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
-            YDB_LOG_TRACE("ValidateLocks: broken lock expected found",
+            YDB_LOG_TRACE("ValidateLocks: broken lock expected and actual values",
                 {"lockId", lockProto.GetLockId()},
-                {"lockGeneration", lockProto.GetGeneration()},
-                {"lockCounter", lockProto.GetCounter()},
-                {"lockGeneration", lock.Generation},
-                {"lockCounter", lock.Counter});
+                {"expectedGeneration", lockProto.GetGeneration()},
+                {"expectedCounter", lockProto.GetCounter()},
+                {"actualGeneration", lock.Generation},
+                {"actualCounter", lock.Counter});
             brokenLocks.emplace_back(lockProto);
         }
     }
@@ -257,7 +257,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
             if (dstTabletId != origin) {
-                YDB_LOG_WARN("Ignoring unexpected readset from to for at tablet",
+                YDB_LOG_WARN("Ignoring unexpected readset at tablet",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId},
@@ -272,7 +272,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 Y_ENSURE(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET), "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
 
                 // No readset data: participant aborted the transaction
-                YDB_LOG_TRACE("Processed readset without data from to will abort",
+                YDB_LOG_TRACE("Processed readset without data, will abort",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId});
@@ -356,7 +356,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
         validateLocksResult.SetSuccess(brokenLocks.empty());
 
         for (auto& lock : brokenLocks) {
-            YDB_LOG_TRACE("Found broken",
+            YDB_LOG_TRACE("Found broken lock",
                 {"lock", lock.ShortDebugString()});
             if (useGenericReadSets) {
                 decision = NKikimrTx::TReadSetData::DECISION_ABORT;
@@ -500,7 +500,7 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, const NKikimrDa
                 continue;
             }
 
-            YDB_LOG_TRACE("Prepare InReadsets",
+            YDB_LOG_TRACE("Prepare InReadSets",
                 {"shardId", shardId},
                 {"tabletId", tabletId});
 

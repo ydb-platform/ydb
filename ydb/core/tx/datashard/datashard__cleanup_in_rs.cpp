@@ -59,13 +59,13 @@ public:
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete outdated read sets remain",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete, outdated read sets remain",
             {"inRsToRemoveCount", Self->InRSToRemove.size()},
             {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+                {"removalInterval", REMOVAL_INTERVAL});
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);
@@ -116,10 +116,10 @@ public:
 
                 YDB_LOG_TRACE_CTX(ctx, "Found outdated InReadSet",
                     {"tabletId", Self->TabletID()},
-                    {"txid", txId},
+                    {"txId", txId},
                     {"origin", origin},
-                    {"from", from},
-                    {"to", to});
+                    {"sourceTabletId", from},
+                    {"targetTabletId", to});
             }
 
             if (!rowset.Next())
@@ -137,13 +137,13 @@ public:
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete found read sets to remove",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete, found read sets to remove",
             {"inRsToRemoveCount", Self->InRSToRemove.size()},
             {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+                {"removalInterval", REMOVAL_INTERVAL});
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);

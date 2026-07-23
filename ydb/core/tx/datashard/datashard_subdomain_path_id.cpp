@@ -58,9 +58,11 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG("",
-        {"event", "subdomain_found"});
     const auto* msg = ev->Get();
+
+    YDB_LOG_DEBUG("Subdomain found",
+        {"schemeShardId", msg->SchemeShardId},
+        {"localPathId", msg->LocalPathId});
 
     if (FindSubDomainPathIdActor == ev->Sender) {
         FindSubDomainPathIdActor = { };
@@ -178,10 +180,10 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
             .GetDomainState()
             .GetDiskQuotaExceeded();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state, outOfSpace at datashard",
+        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state",
             {"pathId", msg->PathId},
             {"outOfSpace", outOfSpace},
-            {"tabletID", TabletID()});
+            {"tabletId", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
     }

@@ -653,7 +653,8 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!InFlightCondErase || InFlightCondErase.TxId != ev->Get()->TxId) {
         YDB_LOG_WARN_CTX(ctx, "Unknown conditional erase actor registered",
-            {"at", TabletID()});
+            {"tabletId", TabletID()},
+            {"txId", ev->Get()->TxId});
         return;
     }
 

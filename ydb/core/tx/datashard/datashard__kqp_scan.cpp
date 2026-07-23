@@ -80,7 +80,7 @@ public:
         }
 
         for (auto& range : TableRanges) {
-            YDB_LOG_TRACE("--> Scan",
+            YDB_LOG_TRACE("Scanning table range",
                 {"range", DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry)});
         }
     }
@@ -106,11 +106,11 @@ private:
         }
 
         YDB_LOG_DEBUG("Got ScanDataAck",
-            {"at", ScanActorId},
+            {"scanActorId", ScanActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", ev->Get()->Generation},
-            {"tablet", DatashardActorId},
+            {"tabletId", TabletId},
             {"freeSpace", ev->Get()->FreeSpace},
             {"chunksLimiter", ChunksLimiter.DebugString()});
 
@@ -128,7 +128,7 @@ private:
             if (Sleep) {
                 Sleep = false;
                 YDB_LOG_DEBUG("Wakeup driver",
-                    {"at", ScanActorId});
+                    {"scanActorId", ScanActorId});
                 Driver->Touch(EScan::Feed);
             }
         }
@@ -151,11 +151,11 @@ private:
 
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         YDB_LOG(prio, "Got AbortExecution",
-            {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"scanActorId", ScanActorId},
+            {"tabletId", TabletId},
             {"scanId", ScanId},
             {"table", TablePath},
-            {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+            {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
             {"reason", ev->Get()->GetIssues().ToOneLineString()});
 
         AbortEvent = ev->Release();
@@ -168,10 +168,10 @@ private:
             return;
         }
 
-        YDB_LOG_ERROR("Undelivered",
+        YDB_LOG_ERROR("Undelivered scan event",
             {"event", ev->GetTypeRewrite()},
-            {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"scanActorId", ScanActorId},
+            {"tabletId", TabletId},
             {"scanId", ScanId},
             {"table", TablePath});
 
@@ -184,7 +184,7 @@ private:
 
     void HandleScan(TEvents::TEvWakeup::TPtr&) {
         YDB_LOG_ERROR("Guard execution timeout",
-            {"at", ScanActorId},
+            {"scanActorId", ScanActorId},
             {"scanId", ScanId},
             {"table", TablePath});
 
@@ -224,8 +224,8 @@ private:
         }
 
         YDB_LOG_INFO("Start scan",
-            {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"scanActorId", ScanActorId},
+            {"tabletId", TabletId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", Generation},
@@ -238,8 +238,8 @@ private:
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
-            YDB_LOG_DEBUG("TableRanges is",
-                {"at", ScanActorId},
+            YDB_LOG_DEBUG("Table ranges configured",
+                {"scanActorId", ScanActorId},
                 {"scanId", ScanId},
                 {"table", TablePath});
             return EScan::Final;
@@ -317,7 +317,7 @@ private:
     }
 
     EScan Exhausted() override {
-        YDB_LOG_DEBUG("Range of exhausted: try next one. next",
+        YDB_LOG_DEBUG("Scan range exhausted, trying next range",
             {"currentRange", CurrentRange},
             {"tableRangesCount", TableRanges.size()},
             {"table", TablePath},
@@ -349,7 +349,7 @@ private:
     TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         YDB_LOG(prio, "Finish scan",
-            {"at", ScanActorId},
+            {"scanActorId", ScanActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"reason", status},
@@ -475,8 +475,8 @@ private:
             PageFaults = 0;
 
             YDB_LOG_DEBUG("Send ScanData page",
-                {"from", ScanActorId},
-                {"to", ComputeActorId},
+                {"scanActorId", ScanActorId},
+                {"recipientActorId", ComputeActorId},
                 {"scanId", ScanId},
                 {"table", TablePath},
                 {"bytes", sendBytes},
@@ -618,7 +618,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
         auto issue = NYql::YqlIssue({}, issueCode, detailedReason);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
         Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("KQP scan failed",
             {"detailedReason", detailedReason});
     };
 
@@ -663,7 +663,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     if (request.HasOlapProgram()) {
         auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Unexpected process program in datashard scan at " << TabletID();
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Unexpected OLAP program in datashard scan",
             {"msg", msg});
 
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());

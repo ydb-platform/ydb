@@ -181,7 +181,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
                 TSchemaOperation* op = FindSchemaTx(txId);
                 if (!op) {
-                    YDB_LOG_WARN("Op was not found for persisted scan tx id on tablet",
+                    YDB_LOG_WARN("Op was not found for persisted scan transaction",
                         {"txId", txId},
                         {"tabletId", Self->TabletID()});
                     continue;
@@ -471,7 +471,7 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
         if (maxStep > outdatedStep)
             break;
 
-        YDB_LOG_TRACE("Cleaning up tx with maxStep at outdatedStep",
+        YDB_LOG_TRACE("Cleaning up transaction with maxStep below outdatedStep",
             {"txId", txId},
             {"maxStep", maxStep},
             {"outdatedStep", outdatedStep});

@@ -15,7 +15,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
-            YDB_LOG_INFO_CTX(ctx, "Cleanup tx at non-ready tablet state",
+            YDB_LOG_INFO_CTX(ctx, "Cleanup transaction at non-ready tablet state",
                 {"tabletId", Self->TabletID()},
                 {"state", Self->State});
             Self->CleanupQueue.Reset(ctx);
@@ -36,7 +36,7 @@ public:
                     // We want to send confirmed replies when cleaning up volatile transactions
                     ReplyTs = Self->ConfirmReadOnlyLease();
                 }
-                YDB_LOG_INFO_CTX(ctx, "Cleaned up old txs at TxInFly",
+                YDB_LOG_INFO_CTX(ctx, "Cleaned up old transactions",
                     {"tabletId", Self->TabletID()},
                     {"txInFly", Self->TxInFly()});
                 Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
@@ -67,7 +67,7 @@ public:
         // Cleanup is regularly executed, and an extra progress is used
         // as a workaround for possible bugs with missing progress calls
         if (Self->Pipeline.CanRunAnotherOp()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Can run another op at scheduling plan queue progress",
+            YDB_LOG_DEBUG_CTX(ctx, "Scheduling plan queue progress",
                 {"tabletId", Self->TabletID()});
             Self->PlanQueue.Progress(ctx);
         }
@@ -109,14 +109,14 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
-            YDB_LOG_INFO_CTX(ctx, "Cleanup volatile tx at non-ready tablet state",
+            YDB_LOG_INFO_CTX(ctx, "Cleanup volatile transaction at non-ready tablet state",
                 {"tabletId", Self->TabletID()},
                 {"state", Self->State});
             return true;
         }
 
         if (Self->Pipeline.CleanupVolatile(TxId, ctx, Replies)) {
-            YDB_LOG_INFO_CTX(ctx, "Cleaned up volatile tx at TxInFly",
+            YDB_LOG_INFO_CTX(ctx, "Cleaned up volatile transaction",
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
                 {"txInFly", Self->TxInFly()});

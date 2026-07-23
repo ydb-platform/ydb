@@ -31,7 +31,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
-        YDB_LOG_DEBUG_CTX(ctx, "Received split OpId at state",
+        YDB_LOG_DEBUG_CTX(ctx, "Received split operation",
             {"tabletId", Self->TabletID()},
             {"opId", opId},
             {"state", DatashardStateName(Self->State)});
@@ -176,7 +176,7 @@ public:
         }
 
         ui64 opId = Self->SrcSplitOpId;
-        YDB_LOG_DEBUG_CTX(ctx, "Starting snapshot for split OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Starting snapshot for split operation",
             {"tabletId", Self->TabletID()},
             {"opId", opId});
 
@@ -199,7 +199,7 @@ public:
             if (isStrictCheck) { \
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
-                YDB_LOG_ERROR_CTX(ctx, "", \
+                YDB_LOG_ERROR_CTX(ctx, "Table is not empty when starting split", \
                     {"tableLabel", #table " table is not empty when starting Split at tablet "}, \
                     {"tabletId", Self->TabletID()}, \
                     {"nonEmptyRows", str.Str()}); \
@@ -275,7 +275,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Self->SrcSplitOpId;
-        YDB_LOG_DEBUG_CTX(ctx, "Snapshot complete for split OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Snapshot complete for split operation",
             {"tabletId", Self->TabletID()},
             {"opId", opId});
 
@@ -346,14 +346,14 @@ public:
                 }
 
                 if (snapBody.empty()) {
-                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot needs to load pages for table for split OpId",
+                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot needs to load pages for split operation",
                         {"tabletId", Self->TabletID()},
                         {"localTableId", localTableId},
                         {"opId", opId});
                     needToReadPages = true;
                 } else {
                     totalSnapshotSize += snapBody.size();
-                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot: table snapshot size is total snapshot size is for split OpId",
+                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot: table and total snapshot sizes",
                         {"tabletId", Self->TabletID()},
                         {"localTableId", localTableId},
                         {"snapBodySize", snapBody.size()},
@@ -426,7 +426,7 @@ public:
         }
 
         if (needToReadPages) {
-            YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot is restarting for split OpId",
+            YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot is restarting for split operation",
                 {"tabletId", Self->TabletID()},
                 {"opId", opId});
             return false;
@@ -452,7 +452,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Sending snapshots from src for split OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Sending snapshots from source for split operation",
             {"tabletId", Self->TabletID()},
             {"srcSplitOpId", Self->SrcSplitOpId});
         Self->SplitSrcSnapshotSender.DoSend(ctx);
@@ -490,7 +490,7 @@ public:
 
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
         ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
-        YDB_LOG_DEBUG_CTX(ctx, "Received snapshot Ack from dst for split OpId",
+        YDB_LOG_DEBUG_CTX(ctx, "Received snapshot ack from destination for split operation",
             {"tabletId", Self->TabletID()},
             {"dstTabletId", dstTabletId},
             {"opId", opId});
@@ -606,7 +606,7 @@ void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, con
     SrcAckPartitioningChangedTo[ev->Sender].insert(opId);
 
     if (ChangesQueue || !ChangeSenderActivator.AllAcked()) {
-        YDB_LOG_NOTICE_CTX(ctx, "Delay partitioning changed ack ChangesQueue siblings to be",
+        YDB_LOG_NOTICE_CTX(ctx, "Delaying partitioning changed ack until ChangesQueue and siblings are activated",
             {"tabletID", TabletID()},
             {"size", ChangesQueue.size()},
             {"activated", ChangeSenderActivator.Dump()});

@@ -43,7 +43,7 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
         return true;
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Migrate SS from to at datashard",
+    YDB_LOG_DEBUG_CTX(ctx, "Migrating scheme shard at datashard",
         {"currentId", currentId},
         {"newId", newId},
         {"tabletId", tabletId});

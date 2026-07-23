@@ -28,20 +28,20 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
                                                               const TActorContext &ctx)
 {
     if (Self->IsFollower()) {
-        YDB_LOG_ERROR_CTX(ctx, "Unexpected TTxCancelTransactionProposal at tablet follower txId",
+        YDB_LOG_ERROR_CTX(ctx, "Unexpected TTxCancelTransactionProposal on follower",
             {"tabletId", Self->TabletID()},
             {"txId", TxId});
         return true;
     }
 
     if (Self->State == TShardState::Offline || Self->State == TShardState::PreOffline) {
-        YDB_LOG_DEBUG_CTX(ctx, "Ignoring TTxCancelTransactionProposal at tablet txId because the tablet is going offline",
+        YDB_LOG_DEBUG_CTX(ctx, "Ignoring TTxCancelTransactionProposal because the tablet is going offline",
             {"tabletId", Self->TabletID()},
             {"txId", TxId});
         return true;
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Start TTxCancelTransactionProposal at tablet txId",
+    YDB_LOG_DEBUG_CTX(ctx, "Start TTxCancelTransactionProposal",
         {"tabletId", Self->TabletID()},
         {"txId", TxId});
 
@@ -71,8 +71,8 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
 
 void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
     ui64 txId = ev->Get()->Record.GetTxId();
-    YDB_LOG_DEBUG_CTX(ctx, "Got TEvDataShard::TEvCancelTransactionProposal txId",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG_CTX(ctx, "Got TEvDataShard::TEvCancelTransactionProposal",
+        {"tabletId", TabletID()},
         {"txId", txId});
 
     // Immediately remove any queued proposals with this txId from the ProposeQueue,

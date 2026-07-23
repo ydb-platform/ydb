@@ -37,7 +37,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
         return false;
     }
 
-    YDB_LOG_TRACE_CTX(ctx, "Persist scan progress for key size status",
+    YDB_LOG_TRACE_CTX(ctx, "Persist scan progress",
         {"txId", txId},
         {"lastKeySize", event->LastKey.size()},
         {"statusCode", event->StatusCode},

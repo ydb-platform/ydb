@@ -194,7 +194,7 @@ public:
             endKeyInclusive = false;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key end at key last path: common",
+        YDB_LOG_DEBUG_CTX(ctx, "S3 listing started",
             {"tabletId", Self->TabletID()},
             {"startKey", JoinVectorIntoString(key, " ")},
             {"endKey", JoinVectorIntoString(endKey, " ")},
@@ -296,7 +296,7 @@ public:
             }
 
             TDbTupleRef value = iter->GetValues();
-            YDB_LOG_TRACE_CTX(ctx, "Dump #_Self->TabletID, path, #_num_0",
+            YDB_LOG_TRACE_CTX(ctx, "Dumping object storage listing entry",
                 {"tabletId", Self->TabletID()},
                 {"path", path},
                 {"leafPathDetails", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
@@ -462,7 +462,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished description: common",
+        YDB_LOG_DEBUG_CTX(ctx, "S3 listing finished",
             {"tabletId", Self->TabletID()},
             {"status", Result->Record.GetStatus()},
             {"errorDescription", Result->Record.GetErrorDescription()},

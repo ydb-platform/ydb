@@ -27,8 +27,9 @@ TDataShard::TTxWrite::TTxWrite(TDataShard* self,
 { }
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "TTxWrite:: execute",
-        {"tablet", Self->TabletID()});
+    YDB_LOG_TRACE_CTX(ctx, "TTxWrite::Execute",
+        {"tabletId", Self->TabletID()},
+        {"txId", TxId});
 
     if (Ev) {
         auto* request = Ev->Get();
@@ -142,8 +143,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException&) {
-        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
-            {"0", 0},
+        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare, tablet is not ready",
             {"txId", TxId},
             {"tabletId", Self->TabletID()});
         return false;
@@ -153,8 +153,9 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
 }
 
 void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "TTxWrite complete",
-        {"tablet", Self->TabletID()});
+    YDB_LOG_TRACE_CTX(ctx, "TTxWrite::Complete",
+        {"tabletId", Self->TabletID()},
+        {"txId", TxId});
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());
@@ -187,7 +188,7 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
 
 void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle TTxWrite",
-        {"tablet", TabletID()});
+        {"tabletId", TabletID()});
 
     auto* msg = ev->Get();
     const auto& record = msg->Record;
@@ -211,8 +212,8 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     }
 
     if (Pipeline.HasProposeDelayers()) {
-        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed at until dependency graph is restored",
-            {"tabletID", TabletID()});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed until dependency graph is restored",
+            {"tabletId", TabletID()});
         LWTRACK(ProposeTransactionWaitDelayers, msg->GetOrbit());
         DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
@@ -220,8 +221,8 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     }
 
     if (CheckTxNeedWait(ev)) {
-        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed at until interesting plan step will come",
-            {"tabletID", TabletID()});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed until plan step arrives",
+            {"tabletId", TabletID()});
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;

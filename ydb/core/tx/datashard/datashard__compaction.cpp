@@ -21,11 +21,11 @@ public:
         auto& record = Ev->Get()->Record;
 
         if (!Self->IsStateActive()) {
-            YDB_LOG_WARN_CTX(ctx, "Compaction tx at non-ready tablet with cookie state requested",
+            YDB_LOG_WARN_CTX(ctx, "Compaction tx requested at non-ready tablet state",
                 {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
                 {"state", Self->State},
-                {"sender", Ev->Sender});
+                {"senderActorId", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
@@ -38,11 +38,11 @@ public:
         const auto pathId = TPathId::FromProto(record.GetPathId());
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
-            YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of not owned self path owner",
+            YDB_LOG_WARN_CTX(ctx, "Compaction requested for table not owned by shard",
                 {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
                 {"pathId", pathId},
-                {"id", Self->GetPathOwnerId()});
+                {"pathOwnerId", Self->GetPathOwnerId()});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -54,11 +54,11 @@ public:
         const auto& tableId = pathId.LocalPathId;
         auto it = Self->TableInfos.find(tableId);
         if (it == Self->TableInfos.end()) {
-            YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of unknown requested",
+            YDB_LOG_WARN_CTX(ctx, "Compaction requested for unknown table",
                 {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
                 {"pathId", pathId},
-                {"sender", Ev->Sender});
+                {"senderActorId", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -75,11 +75,11 @@ public:
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains borrowed parts, failed",
-                {"tablet", Self->TabletID()},
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction request contains borrowed parts, failed",
+                {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
-                {"path", pathId},
-                {"from", Ev->Sender});
+                {"pathId", pathId},
+                {"senderActorId", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_BORROWED);
 
@@ -94,11 +94,11 @@ public:
         if (Self->Executor()->HasLoanedParts()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains loaned parts, failed",
-                {"tablet", Self->TabletID()},
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction request contains loaned parts, failed",
+                {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
-                {"path", pathId},
-                {"from", Ev->Sender});
+                {"pathId", pathId},
+                {"senderActorId", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_LOANED);
 
@@ -116,11 +116,11 @@ public:
         bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(tableInfo.LocalTid);
         if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
-            YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested is not needed",
-                {"tablet", Self->TabletID()},
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction is not needed",
+                {"tabletId", Self->TabletID()},
                 {"cookie", Ev->Cookie},
-                {"path", pathId},
-                {"from", Ev->Sender});
+                {"pathId", pathId},
+                {"senderActorId", Ev->Sender});
 
             Self->IncCounter(COUNTER_TX_COMPACTION_NOT_NEEDED);
 
@@ -134,13 +134,13 @@ public:
 
         auto compactionId = Self->Executor()->CompactTable(tableInfo.LocalTid);
         if (compactionId) {
-            YDB_LOG_INFO_CTX(ctx, "Started with cookie of requested",
-                {"compaction", compactionId},
+            YDB_LOG_INFO_CTX(ctx, "Compaction started",
+                {"compactionId", compactionId},
                 {"cookie", Ev->Cookie},
                 {"tabletId", Self->TabletID()},
                 {"tableId", tableId},
                 {"localTid", localTid},
-                {"sender", Ev->Sender},
+                {"senderActorId", Ev->Sender},
                 {"partsCount", stats.PartCount},
                 {"memtableSize", stats.MemDataSize},
                 {"memtableWaste", stats.MemDataWaste},
@@ -189,10 +189,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Updated last full compaction of last full",
-            {"tablet", Self->TabletID()},
+        YDB_LOG_DEBUG_CTX(ctx, "Updated last full compaction timestamp",
+            {"tabletId", Self->TabletID()},
             {"tableId", TableId},
-            {"compaction", Ts});
+            {"compactionTs", Ts});
     }
 };
 
@@ -203,9 +203,9 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
 void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
-    YDB_LOG_DEBUG_CTX(ctx, "CompactionComplete of finished ts",
-        {"tablet", TabletID()},
-        {"table", tableId},
+    YDB_LOG_DEBUG_CTX(ctx, "Compaction completed",
+        {"tabletId", TabletID()},
+        {"tableId", tableId},
         {"edge", finishedInfo.Edge},
         {"fullCompactionTs", finishedInfo.FullCompactionTs});
 
@@ -241,11 +241,11 @@ void TDataShard::ReplyCompactionWaiters(
     const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
     const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of finished",
-        {"tablet", TabletID()},
-        {"table", tableId},
+    YDB_LOG_DEBUG_CTX(ctx, "Replying compaction waiters, compaction finished",
+        {"tabletId", TabletID()},
+        {"tableId", tableId},
         {"edge", compactionInfo.Edge},
-        {"front", (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId)});
+        {"frontCompactionId", (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId)});
 
     auto fullCompactionQueue = CompactionWaiters.FindPtr(tableId);
     while (fullCompactionQueue && !fullCompactionQueue->empty()) {
@@ -261,10 +261,10 @@ void TDataShard::ReplyCompactionWaiters(
             NKikimrTxDataShard::TEvCompactTableResult::OK);
         ctx.Send(waiter.ActorId, std::move(response), 0, waiter.Cookie);
 
-        YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of sending TEvCompactTableResult",
-            {"tablet", TabletID()},
-            {"table", tableId},
-            {"to", waiter.ActorId},
+        YDB_LOG_DEBUG_CTX(ctx, "Replying compaction waiters with TEvCompactTableResult",
+            {"tabletId", TabletID()},
+            {"tableId", tableId},
+            {"recipientActorId", waiter.ActorId},
             {"pathId", TPathId(GetPathOwnerId(), localPathId)});
 
         fullCompactionQueue->pop_front();
@@ -285,10 +285,10 @@ void TDataShard::ReplyCompactionWaiters(
                         waiter->RequestedTable);
                     ctx.Send(waiter->ActorId, std::move(response));
 
-                    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters of sending TEvCompactBorrowedResult",
-                        {"tablet", TabletID()},
-                        {"table", tableId},
-                        {"to", waiter->ActorId},
+                    YDB_LOG_DEBUG_CTX(ctx, "Replying compaction waiters with TEvCompactBorrowedResult",
+                        {"tabletId", TabletID()},
+                        {"tableId", tableId},
+                        {"recipientActorId", waiter->ActorId},
                         {"pathId", TPathId(GetPathOwnerId(), waiter->RequestedTable)});
                 }
 

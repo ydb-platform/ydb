@@ -156,7 +156,7 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
     // previous actor id.
     if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
         NIceDb::TNiceDb db(txc.DB);
-        YDB_LOG_DEBUG_CTX(ctx, "DataShard persisting started state actor id in generation",
+        YDB_LOG_DEBUG_CTX(ctx, "DataShard persisting started state",
             {"tabletId", Self->TabletID()},
             {"inMemoryStateActorId", Self->InMemoryStateActorId},
             {"generation", Self->Generation()});
@@ -904,10 +904,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSysUpdate", FollowerState.LastSysUpdate},
-            {"lastSysUpdate", lastSysUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower",
+            {"tabletId", TabletID()},
+            {"prevLastSysUpdate", FollowerState.LastSysUpdate},
+            {"currentLastSysUpdate", lastSysUpdate});
 
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
@@ -921,10 +921,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSchemeUpdate", FollowerState.LastSchemeUpdate},
-            {"lastSchemeUpdate", lastSchemeUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower",
+            {"tabletId", TabletID()},
+            {"prevLastSchemeUpdate", FollowerState.LastSchemeUpdate},
+            {"currentLastSchemeUpdate", lastSchemeUpdate});
 
         struct TRow {
             TPathId TableId;
@@ -992,10 +992,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
-            {"lastSnapshotsUpdate", lastSnapshotsUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower",
+            {"tabletId", TabletID()},
+            {"prevLastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
+            {"currentLastSnapshotsUpdate", lastSnapshotsUpdate});
 
         NIceDb::TNiceDb db(txc.DB);
         if (!SnapshotManager.ReloadSnapshots(db)) {

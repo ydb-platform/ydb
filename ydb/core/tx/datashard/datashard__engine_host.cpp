@@ -526,7 +526,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     auto txId = stepTxId.TxId;
     const TActorSystem* actorSystem = ctx.ActorSystem();
     EngineSettings->LogErrorWriter = [actorSystem, tabletId, txId](const TString& message) {
-        YDB_LOG_ERROR_CTX(*actorSystem, "Shard % txid % engine",
+        YDB_LOG_ERROR_CTX(*actorSystem, "Shard engine error",
             {"tabletId", tabletId},
             {"txId", txId},
             {"error", message});
@@ -536,7 +536,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
         EngineSettings->BacktraceWriter =
             [actorSystem, tabletId, txId](const char * operation, ui32 line, const TBackTrace* backtrace)
             {
-                YDB_LOG_DEBUG_CTX(*actorSystem, "Shard txid %, )\n",
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Shard engine backtrace",
                     {"tabletId", tabletId},
                     {"txId", txId},
                     {"operation", operation},

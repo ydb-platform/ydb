@@ -142,7 +142,7 @@ public:
             Result->Record.SetLastKeyInclusive(ShardFinished ? ShardEnd.Inclusive : true);
             Result->Record.SetEndOfShard(ShardFinished);
 
-            YDB_LOG_DEBUG("Read columns scan result for table rows, bytes (event size",
+            YDB_LOG_DEBUG("Read columns scan result",
                 {"tabletId", TabletId},
                 {"tableName", TableName},
                 {"rows", Rows},
@@ -227,7 +227,7 @@ public:
             return true;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Read",
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvReadColumnsRequest",
             {"tabletId", Self->TabletID()},
             {"columns", Ev->Get()->Record});
 

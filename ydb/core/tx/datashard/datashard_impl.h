@@ -2461,7 +2461,7 @@ private:
                 return size;
             };
 
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split opId from datashard to datashard size",
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split operation",
                 {"operationCookie", ev->Record.GetOperationCookie()},
                 {"srcTabletId", ev->Record.GetSrcTabletId()},
                 {"dstTabletId", dstTabletId},
@@ -3335,8 +3335,8 @@ protected:
 
     void Enqueue(STFUNC_SIG) override {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event",
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"eventType", ev->GetTypeRewrite()},
+            {"eventDetails", ev->ToString()});
     }
 
     // In this state we are not handling external pipes to datashard tablet (it's just another init phase)
@@ -3355,8 +3355,8 @@ protected:
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()});
             }
             break;
         }
@@ -3507,8 +3507,8 @@ protected:
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event",
-                        {"type", ev->GetTypeRewrite()},
-                        {"event", ev->ToString()});
+                        {"eventType", ev->GetTypeRewrite()},
+                        {"eventDetails", ev->ToString()});
                 }
                 break;
         }
@@ -3540,8 +3540,8 @@ protected:
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()});
             }
             break;
         }
@@ -3602,15 +3602,15 @@ protected:
 
             // Don't report stats until they are build for the first time
             if (!ti.Stats.StatsUpdateTime && !IsFollower()) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard for tableId but no stats yet",
-                    {"tabletID", TabletID()},
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats: no stats yet for table",
+                    {"tabletId", TabletID()},
                     {"tableId", tableId});
                 continue;
             }
 
             if (!DbStatsReportPipe) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard FollowerId TableInfos size",
-                    {"tabletID", TabletID()},
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats: registering new pipe",
+                    {"tabletId", TabletID()},
                     {"followerId", FollowerId()},
                     {"tableInfosCount", TableInfos.size()});
 
@@ -3705,8 +3705,8 @@ protected:
             if (DstSplitDescription)
                 ev->Record.SetIsDstSplit(true);
 
-            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard FollowerId tableId",
-                {"tabletID", TabletID()},
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats: sending periodic table stats",
+                {"tabletId", TabletID()},
                 {"followerId", FollowerId()},
                 {"tableId", tableId});
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());

@@ -898,7 +898,7 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, THashSet<TString>&
     // For each result item, we want to process result lambda to extract aggregations and pre/post expressions.
     for (ui32 i = 0, e = result->Child(1)->ChildrenSize(); i < e; ++i) {
         auto resultItem = result->Child(1)->ChildPtr(i);
-        ProcessAggregations(resultItem->ChildPtr(2), TString(resultItem->Child(0)->Content()), aggregationUniqueColNames, expressionsMapPreAgg,
+        ProcessAggregations(resultItem->TailPtr(), TString(resultItem->Child(0)->Content()), aggregationUniqueColNames, expressionsMapPreAgg,
                             groupByKeysExpressionsMap, aggTraits, distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll,
                             ctx, pos);
     }
@@ -1554,7 +1554,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
             // We can have a single column or mutlitple columns in the item
             if (maybeColumn->IsAtom()) {
-                processResultColumn(maybeColumn, resultItem->Child(2));
+                processResultColumn(maybeColumn, resultItem->TailPtr());
             }
             // In case of a list of columns, we have different cases:
             // - Each column can be a list of input/output column names
@@ -1574,7 +1574,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     }
                     else {
                         outputColumn = columnSpec;
-                        auto starLambda = resultItem->Child(2);
+                        auto starLambda = resultItem->TailPtr();
                         Y_ENSURE(starLambda->IsLambda());
                         // Output column can be found in the struct inside lambda
                         if (starLambda->Child(1)->IsCallable("AsStruct")) {

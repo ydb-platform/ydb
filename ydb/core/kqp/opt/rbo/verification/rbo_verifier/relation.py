@@ -323,7 +323,7 @@ class Evaluator:
                 for consumer in subplan.consumers
             }
         }
-        self.scalar_subplan_values: dict[str, Value] = {}
+        self.scalar_subplan_families: dict[str, RelationFamily] = {}
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -406,10 +406,10 @@ class Evaluator:
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
-            bindings = self._consumer_subplan_values(node.id)
-            return map_family(
+            return self._with_consumer_subplans(
+                node.id,
                 source,
-                lambda relation: Relation(
+                lambda relation, bindings: Relation(
                     columns,
                     tuple(
                         Row(
@@ -434,10 +434,10 @@ class Evaluator:
 
         if isinstance(node, Filter):
             source = self._input(node.id, 0, node.input)
-            bindings = self._consumer_subplan_values(node.id)
-            return map_family(
+            return self._with_consumer_subplans(
+                node.id,
                 source,
-                lambda relation: Relation(
+                lambda relation, bindings: Relation(
                     relation.columns,
                     tuple(
                         Row(
@@ -468,6 +468,7 @@ class Evaluator:
                 node.count,
                 node.offset,
                 f"{self.choice_scope}:limit:{node.id}",
+                ensure_at_most_one=node.ensure_at_most_one,
             )
 
         if isinstance(node, Sort):
@@ -978,50 +979,126 @@ class Evaluator:
         key = (parent, ordinal)
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
-    def _consumer_subplan_values(self, node_id: str) -> Mapping[str, Value]:
-        result: dict[str, Value] = {}
-        for subplan in self.subplans_by_consumer.get(node_id, ()):
-            value = self.scalar_subplan_values.get(subplan.binding)
-            if value is None:
-                value = self._evaluate_scalar_subplan(subplan)
-                self.scalar_subplan_values[subplan.binding] = value
-            result[subplan.binding] = value
-        return result
+    def _with_consumer_subplans(
+        self,
+        node_id: str,
+        source: RelationFamily,
+        transform: Callable[[Relation, Mapping[str, Value]], Relation],
+    ) -> RelationFamily:
+        subplans = self.subplans_by_consumer.get(node_id, ())
+        if not subplans:
+            return map_family(source, lambda relation: transform(relation, {}))
 
-    def _evaluate_scalar_subplan(self, subplan: ScalarSubplan) -> Value:
-        # The descriptor was strictly validated before evaluation.  Keeping the
-        # runtime checks here makes this semantic boundary fail closed even when
-        # an otherwise valid at-most-one shape expands to conditional choices.
+        binding_families: list[RelationFamily] = []
+        for subplan in subplans:
+            family = self.scalar_subplan_families.get(subplan.binding)
+            if family is None:
+                family = self._evaluate_scalar_subplan(subplan)
+                self.scalar_subplan_families[subplan.binding] = family
+            binding_families.append(family)
+
+        def apply(relations: tuple[Relation, ...]) -> Relation:
+            bindings = {
+                subplan.binding: relations[index].rows[0].values[subplan.binding]
+                for index, subplan in enumerate(subplans, start=1)
+            }
+            return transform(relations[0], bindings)
+
+        def errors(
+            relations: tuple[Relation, ...],
+            outcome_errors: tuple[smt.Term, ...],
+        ) -> smt.Term:
+            # Legacy KQP evaluates every scalar binding once this relational
+            # consumer has a row, including bindings under a dead scalar branch.
+            # With no input row it does not execute the binding at all.
+            demanded = smt.or_(*(row.present for row in relations[0].rows))
+            return smt.or_(
+                outcome_errors[0],
+                *(
+                    smt.and_(demanded, error)
+                    for error in outcome_errors[1:]
+                ),
+            )
+
+        return combine_families(
+            (source, *binding_families),
+            apply,
+            combine_errors=errors,
+        )
+
+    def _evaluate_scalar_subplan(
+        self,
+        subplan: ScalarSubplan,
+    ) -> RelationFamily:
         binding = subplan.binding
         family = self.node(subplan.root)
-        if len(family.outcomes) != 1:
-            raise RelationError(
-                f"scalar subplan {binding!r} has conditional relation outcomes"
+        column = Column(binding, subplan.type, True)
+        outcomes: list[Outcome] = []
+        for outcome in family.outcomes:
+            selected = self.scalar.null(subplan.type)
+            for row in outcome.relation.rows:
+                candidate = row.values[subplan.output.column]
+                if candidate.decimal_average_state is not None:
+                    raise RelationError(
+                        f"scalar subplan {binding!r} exposes an intermediate AVG state"
+                    )
+                selected = self._select_value(row.present, candidate, selected)
+            present_count = smt.add(
+                *(
+                    smt.ite(row.present, smt.ONE, smt.ZERO)
+                    for row in outcome.relation.rows
+                )
             )
-        outcome = family.outcomes[0]
-        if (
-            outcome.enabled != smt.TRUE
-            or outcome.decisions
-            or outcome.choices
-        ):
-            raise RelationError(
-                f"scalar subplan {binding!r} requires a relational decision or choice"
+            outcomes.append(
+                Outcome(
+                    outcome.enabled,
+                    Relation(
+                        (column,),
+                        (
+                            Row(
+                                smt.TRUE,
+                                {binding: selected},
+                                Occurrence("scalar_subplan", binding),
+                            ),
+                        ),
+                    ),
+                    smt.or_(
+                        outcome.error,
+                        smt.lt(smt.ONE, present_count),
+                    ),
+                    outcome.decisions,
+                    outcome.choices,
+                )
             )
-        relation = outcome.relation
-        if len(relation.rows) > 1:
+        return RelationFamily(tuple(outcomes))
+
+    @staticmethod
+    def _select_value(
+        condition: smt.Term,
+        selected: Value,
+        fallback: Value,
+    ) -> Value:
+        if selected.type != fallback.type:
             raise RelationError(
-                f"scalar subplan {binding!r} expands to more than one candidate row"
+                "scalar subplan candidate types disagree: "
+                f"{selected.type!r} and {fallback.type!r}"
             )
-        if not relation.rows:
-            return self.scalar.null(subplan.type)
-        row = relation.rows[0]
-        source = row.values[subplan.output.column]
+        finite_abs_bound = (
+            max(
+                selected.decimal_finite_abs_bound,
+                fallback.decimal_finite_abs_bound,
+            )
+            if (
+                selected.decimal_finite_abs_bound is not None
+                and fallback.decimal_finite_abs_bound is not None
+            )
+            else None
+        )
         return Value(
-            source.type,
-            smt.or_(smt.not_(row.present), source.is_null),
-            source.value,
-            source.decimal_finite_abs_bound,
-            source.decimal_average_state,
+            selected.type,
+            smt.ite(condition, selected.is_null, fallback.is_null),
+            smt.ite(condition, selected.value, fallback.value),
+            finite_abs_bound,
         )
 
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
@@ -1369,31 +1446,35 @@ def map_family(
 def combine_families(
     families: tuple[RelationFamily, ...],
     combine: Callable[[tuple[Relation, ...]], Relation],
+    combine_errors: Callable[
+        [tuple[Relation, ...], tuple[smt.Term, ...]],
+        smt.Term,
+    ] | None = None,
 ) -> RelationFamily:
-    """Take a compatible product, preserving shared-DAG limit choices."""
+    """Take a compatible product, preserving choices and observable errors."""
 
     partials: list[
         tuple[
             smt.Term,
             tuple[Relation, ...],
-            smt.Term,
+            tuple[smt.Term, ...],
             tuple[tuple[str, int], ...],
             tuple[OrdinalChoice, ...],
         ]
     ] = [
-        (smt.TRUE, (), smt.FALSE, (), ())
+        (smt.TRUE, (), (), (), ())
     ]
     for relation_family in families:
         expanded: list[
             tuple[
                 smt.Term,
                 tuple[Relation, ...],
-                smt.Term,
+                tuple[smt.Term, ...],
                 tuple[tuple[str, int], ...],
                 tuple[OrdinalChoice, ...],
             ]
         ] = []
-        for enabled, relations, error, decisions, choices in partials:
+        for enabled, relations, errors, decisions, choices in partials:
             for outcome in relation_family.outcomes:
                 merged = _merge_decisions(decisions, outcome.decisions)
                 if merged is None:
@@ -1402,7 +1483,7 @@ def combine_families(
                     (
                         smt.and_(enabled, outcome.enabled),
                         relations + (outcome.relation,),
-                        smt.or_(error, outcome.error),
+                        errors + (outcome.error,),
                         merged,
                         _merge_choices(choices, outcome.choices),
                     )
@@ -1417,8 +1498,18 @@ def combine_families(
         raise RelationError("relation family has no compatible outcomes")
     return RelationFamily(
         tuple(
-            Outcome(enabled, combine(relations), error, decisions, choices)
-            for enabled, relations, error, decisions, choices in partials
+            Outcome(
+                enabled,
+                combine(relations),
+                (
+                    smt.or_(*errors)
+                    if combine_errors is None
+                    else combine_errors(relations, errors)
+                ),
+                decisions,
+                choices,
+            )
+            for enabled, relations, errors, decisions, choices in partials
         )
     )
 
@@ -1869,6 +1960,8 @@ def limit_family(
     count_expression: Expr,
     offset_expression: Expr | None,
     decision: str,
+    *,
+    ensure_at_most_one: bool = False,
 ) -> RelationFamily:
     count = _uint64_literal(count_expression, "limit count")
     offset = (
@@ -1883,7 +1976,7 @@ def limit_family(
             for outcome in source.outcomes
         )
     ):
-        return map_family(
+        result = map_family(
             source,
             lambda relation: Relation(
                 relation.columns,
@@ -1891,21 +1984,51 @@ def limit_family(
                 sequence=relation.sequence,
             ),
         )
-    if (
+    elif (
         offset == 0
         and all(
             len(outcome.relation.rows) <= 1
             for outcome in source.outcomes
         )
     ):
-        return source
-    if source.sequence:
-        return _ordered_limit_family(source, count_expression, offset_expression)
-    return _unordered_limit_family(
-        source,
-        count_expression,
-        offset_expression,
-        decision,
+        result = source
+    elif source.sequence:
+        result = _ordered_limit_family(source, count_expression, offset_expression)
+    else:
+        result = _unordered_limit_family(
+            source,
+            count_expression,
+            offset_expression,
+            decision,
+        )
+    return _ensure_at_most_one(result) if ensure_at_most_one else result
+
+
+def _ensure_at_most_one(source: RelationFamily) -> RelationFamily:
+    """Observe the exact post-Skip/post-Take scalar-cardinality failure."""
+
+    return RelationFamily(
+        tuple(
+            Outcome(
+                outcome.enabled,
+                outcome.relation,
+                smt.or_(
+                    outcome.error,
+                    smt.lt(
+                        smt.ONE,
+                        smt.add(
+                            *(
+                                smt.ite(row.present, smt.ONE, smt.ZERO)
+                                for row in outcome.relation.rows
+                            )
+                        ),
+                    ),
+                ),
+                outcome.decisions,
+                outcome.choices,
+            )
+            for outcome in source.outcomes
+        )
     )
 
 

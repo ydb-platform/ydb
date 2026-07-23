@@ -205,7 +205,8 @@ def render_node(node: ir.PlanNode) -> str:
         return (
             prefix + f"limit input={_quote(node.input)} "
             f"count={render_expression(node.count)} "
-            f"offset={_optional(node.offset, render_expression)} phase={node.phase}"
+            f"offset={_optional(node.offset, render_expression)} phase={node.phase} "
+            f"ensure_at_most_one={_boolean(node.ensure_at_most_one)}"
         )
     if isinstance(node, ir.Sort):
         return (

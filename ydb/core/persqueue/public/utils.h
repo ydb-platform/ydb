@@ -46,6 +46,7 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
 // stored in TPartitionConfig.ReadQuota keyed by ClientId.
 const NKikimrPQ::TPartitionConfig::TReadQuota* GetReadQuota(const NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
 NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config);
 
 // The graph of split-merge operations.
 class TPartitionGraph {

@@ -182,6 +182,12 @@ NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletC
     return newQuota;
 }
 
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config) {
+    EraseIf(*config.MutablePartitionConfig()->MutableReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() != CLIENTID_WITHOUT_CONSUMER;
+    });
+}
+
 TPartitionGraph::TPartitionGraph() {
 }
 

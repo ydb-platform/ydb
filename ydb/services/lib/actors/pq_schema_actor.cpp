@@ -235,7 +235,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& /*pqConfig*/
     ) {
         config->ClearConsumers();
-        config->MutablePartitionConfig()->ClearReadQuota();
+        NPQ::ClearReadQuotaExceptWithoutConsumer(*config);
 
         bool removed = false;
 
@@ -250,8 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             auto* srcReadQuota = NPQ::GetReadQuota(originalConfig, consumer.GetName());
             if (srcReadQuota) {
                 auto* dstReadQuota = NPQ::GetOrAddReadQuota(*config, consumer.GetName());
-                if (dstReadQuota)
-                    dstReadQuota->CopyFrom(*srcReadQuota);
+                dstReadQuota->CopyFrom(*srcReadQuota);
             }
         }
 

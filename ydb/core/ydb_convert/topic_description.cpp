@@ -22,10 +22,14 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
 
     // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
     if (const auto* readQuota = NPQ::GetReadQuota(config, in.GetName())) {
-        out.set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
-        out.set_partition_read_burst_bytes(readQuota->GetBurstSize());
-        out.set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
-        out.set_partition_read_burst_messages(readQuota->GetBurstSizeInMessages());
+        if (readQuota->HasSpeedInBytesPerSecond())
+            out.set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+        if (readQuota->HasBurstSize())
+            out.set_partition_read_burst_bytes(readQuota->GetBurstSize());
+        if (readQuota->HasSpeedInMessagesPerSecond())
+            out.set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+        if (readQuota->HasBurstSizeInMessages())
+            out.set_partition_read_burst_messages(readQuota->GetBurstSizeInMessages());
     }
     out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
     auto version = in.GetVersion();
@@ -225,10 +229,14 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     // Read speed for reading a single partition without a consumer is stored in
     // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
     if (const auto* readQuota = NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER)) {
-        out.set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
-        out.set_partition_read_without_consumer_burst_bytes(readQuota->GetBurstSize());
-        out.set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
-        out.set_partition_read_without_consumer_burst_messages(readQuota->GetBurstSizeInMessages());
+        if (readQuota->HasSpeedInBytesPerSecond())
+            out.set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
+        if (readQuota->HasBurstSize())
+            out.set_partition_read_without_consumer_burst_bytes(readQuota->GetBurstSize());
+        if (readQuota->HasSpeedInMessagesPerSecond())
+            out.set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
+        if (readQuota->HasBurstSizeInMessages())
+            out.set_partition_read_without_consumer_burst_messages(readQuota->GetBurstSizeInMessages());
     }
 
     for (const auto &codec : config.GetCodecs().GetIds()) {

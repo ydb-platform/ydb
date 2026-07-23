@@ -253,10 +253,14 @@ TResult ApplyChangesInt(
     if (request.partition_read_without_consumer_speed_bytes_per_second() || request.partition_read_without_consumer_burst_bytes()
             || request.partition_read_without_consumer_speed_messages_per_second() || request.partition_read_without_consumer_burst_messages()) {
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
-        readQuota->SetSpeedInBytesPerSecond(request.partition_read_without_consumer_speed_bytes_per_second());
-        readQuota->SetBurstSize(request.partition_read_without_consumer_burst_bytes());
-        readQuota->SetSpeedInMessagesPerSecond(request.partition_read_without_consumer_speed_messages_per_second());
-        readQuota->SetBurstSizeInMessages(request.partition_read_without_consumer_burst_messages());
+        if (request.partition_read_without_consumer_speed_bytes_per_second())
+            readQuota->SetSpeedInBytesPerSecond(request.partition_read_without_consumer_speed_bytes_per_second());
+        if (request.partition_read_without_consumer_burst_bytes())
+            readQuota->SetBurstSize(request.partition_read_without_consumer_burst_bytes());
+        if (request.partition_read_without_consumer_speed_messages_per_second())
+            readQuota->SetSpeedInMessagesPerSecond(request.partition_read_without_consumer_speed_messages_per_second());
+        if (request.partition_read_without_consumer_burst_messages())
+            readQuota->SetBurstSizeInMessages(request.partition_read_without_consumer_burst_messages());
     }
 
     return {};

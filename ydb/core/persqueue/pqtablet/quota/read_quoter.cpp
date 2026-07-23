@@ -141,12 +141,12 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
     TVector<std::pair<TString, ui64>> updatedMessagesQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
         if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
-        GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx))) {
             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
 
         if (consumerQuota.PartitionPerConsumerMessageQuotaTracker.UpdateConfigIfChanged(
-                GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx))) {
             updatedMessagesQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerMessageQuotaTracker.GetTotalSpeed()});
         }
     }

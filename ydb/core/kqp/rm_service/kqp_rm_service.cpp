@@ -22,6 +22,8 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <utility>
+
 namespace NKikimr::NKqp {
 namespace NResourceManager {
 
@@ -599,10 +601,10 @@ public:
         return NKikimrServices::TActivity::KQP_RESOURCE_MANAGER;
     }
 
-    TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        std::shared_ptr<IKqpResourceManager>&& resourceManager, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, TDuration warmupDeadline)
-        : Config(config)
+    TKqpResourceManagerActor(NKikimrConfig::TTableServiceConfig::TResourceManager config,
+        std::shared_ptr<IKqpResourceManager> resourceManager, const TActorId& resourceBrokerId,
+        std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, TDuration warmupDeadline)
+        : Config(std::move(config))
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , ResourceManager(std::dynamic_pointer_cast<TKqpResourceManager>(std::move(resourceManager)))

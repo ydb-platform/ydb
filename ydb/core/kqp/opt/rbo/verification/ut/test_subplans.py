@@ -10,6 +10,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator,
+    RelationError,
     family_equal,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
@@ -22,6 +23,17 @@ BINDING = "$scalar"
 
 def _literal(scalar_type, value):
     return {"kind": "literal", "type": scalar_type, "value": value}
+
+
+def _equality(left, right, *, null_safe=False):
+    expression = {
+        "kind": "eq",
+        "left": {"kind": "column", "column": left},
+        "right": {"kind": "column", "column": right},
+    }
+    if null_safe:
+        expression["null_safe"] = True
+    return expression
 
 
 def _base_snapshot(expression=None):
@@ -173,6 +185,112 @@ def _scan_scalar_snapshot():
     ]
     raw["plan"]["subplans"][0]["root"] = "sub_scan"
     return raw
+
+
+def _exists_snapshot(
+    *,
+    inner_present=True,
+    correlated=True,
+    negate=False,
+    repeat_binding=False,
+    limit_inner=False,
+):
+    nodes = [
+        {
+            "id": "outer_scan",
+            "op": "scan",
+            "table": "A",
+            "columns": [{"source": "x", "output": "outer.x"}],
+            "predicate": None,
+            "pushed_limit": None,
+        },
+        {
+            "id": "inner_scan",
+            "op": "scan",
+            "table": "A",
+            "columns": [{"source": "y", "output": "inner.x"}],
+            "predicate": None,
+            "pushed_limit": None,
+        },
+    ]
+    inner_root = "inner_scan"
+    if not inner_present:
+        nodes.append(
+            {
+                "id": "inner_empty",
+                "op": "filter",
+                "input": inner_root,
+                "predicate": _literal("Bool", False),
+            }
+        )
+        inner_root = "inner_empty"
+    if limit_inner:
+        nodes.append(
+            {
+                "id": "inner_one",
+                "op": "limit",
+                "input": inner_root,
+                "count": _literal("Uint64", 1),
+                "offset": None,
+                "phase": "undefined",
+            }
+        )
+        inner_root = "inner_one"
+
+    binding_expr = {"kind": "column", "column": "$exists"}
+    if repeat_binding:
+        binding_expr = {
+            "kind": "or",
+            "args": [binding_expr, copy.deepcopy(binding_expr)],
+        }
+    if negate:
+        binding_expr = {"kind": "not", "arg": binding_expr}
+    nodes.append(
+        {
+            "id": "main_filter",
+            "op": "filter",
+            "input": "outer_scan",
+            "predicate": binding_expr,
+        }
+    )
+    return {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "A",
+                    "columns": [
+                        {"name": "x", "type": "Int64", "nullable": True},
+                        {"name": "y", "type": "Int64", "nullable": True},
+                    ],
+                    "unique_keys": [],
+                }
+            ]
+        },
+        "plan": {
+            "nodes": nodes,
+            "root": "main_filter",
+            "output": ["outer.x"],
+            "subplans": [
+                {
+                    "binding": "$exists",
+                    "kind": "exists",
+                    "root": inner_root,
+                    "predicate": (
+                        _equality("outer.x", "inner.x")
+                        if correlated
+                        else None
+                    ),
+                    "type": "Bool",
+                    "nullable": False,
+                    "dependencies": ["outer.x"] if correlated else [],
+                    "consumers": ["main_filter"],
+                }
+            ],
+        },
+        "stage_graph": None,
+    }
 
 
 def _lowered_scalar_snapshot(*, check_mode, empty_outer=False):
@@ -372,6 +490,21 @@ def _database_constants(database, present, values=(10, 20)):
     return constants
 
 
+def _exists_constants(database, outer, inner):
+    constants = {}
+    for row, outer_value, inner_value in zip(
+        database.witness["A"],
+        outer,
+        inner,
+    ):
+        constants[row.present.atom] = True
+        for name, value in (("x", outer_value), ("y", inner_value)):
+            cell = row.cells[name]
+            constants[cell.is_null.atom] = value is None
+            constants[cell.value.atom] = 0 if value is None else value
+    return constants
+
+
 def _enabled_outcomes(family, constants):
     enabled = []
     for outcome in family.outcomes:
@@ -400,7 +533,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
         self.assertEqual(result.type, "Int64")
         self.assertEqual(result.is_null, smt.FALSE)
         self.assertEqual(result.value, smt.int_value(7))
-        self.assertEqual(set(evaluator.scalar_subplan_families), {BINDING})
+        self.assertEqual(set(evaluator.subplan_families), {BINDING})
 
     def test_nullable_scalar_value_remains_null(self):
         raw = _base_snapshot({"kind": "null", "type": "Int64"})
@@ -444,7 +577,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
         self.assertEqual(result.is_null, smt.FALSE)
         self.assertEqual(result.value, smt.int_value(14))
         self.assertEqual(observed.count("sub_value"), 1)
-        self.assertEqual(len(evaluator.scalar_subplan_families), 1)
+        self.assertEqual(len(evaluator.subplan_families), 1)
 
     def test_nondeterministic_binding_is_shared_across_consumers(self):
         raw = _scan_scalar_snapshot()
@@ -1070,6 +1203,165 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                 )
 
 
+class ExistsSubplanEvaluationTest(unittest.TestCase):
+    @staticmethod
+    def _evaluate(raw, row_bound=2):
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, row_bound, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        return evaluator, database, evaluator.root()
+
+    @staticmethod
+    def _present_values(relation, constants):
+        return [
+            _ground(row.values["outer.x"].value, constants)
+            for row in relation.rows
+            if _ground(row.present, constants)
+        ]
+
+    def test_correlated_exists_uses_sql_true_without_multiplying_outer_rows(self):
+        evaluator, database, family = self._evaluate(_exists_snapshot())
+        relation = family.certain()
+        for outer, inner in (((None, 2), (2, 2)), ((1, 2), (None, 2))):
+            with self.subTest(outer=outer, inner=inner):
+                constants = _exists_constants(database, outer, inner)
+                self.assertEqual(
+                    self._present_values(relation, constants),
+                    [2],
+                )
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(set(evaluator.subplan_families), {"$exists"})
+
+    def test_uncorrelated_empty_nonempty_not_and_repeated_binding(self):
+        cases = (
+            (_exists_snapshot(correlated=False), [1, 2]),
+            (
+                _exists_snapshot(
+                    correlated=False,
+                    inner_present=False,
+                ),
+                [],
+            ),
+            (_exists_snapshot(negate=True), [1]),
+            (_exists_snapshot(repeat_binding=True), [2]),
+        )
+        for raw, expected in cases:
+            with self.subTest(expected=expected):
+                _, database, family = self._evaluate(raw)
+                constants = _exists_constants(database, (1, 2), (2, None))
+                self.assertEqual(
+                    self._present_values(family.certain(), constants),
+                    expected,
+                )
+
+    def test_exists_and_not_exists_match_semi_and_anti_join(self):
+        def lowered(raw, join_kind):
+            result = copy.deepcopy(raw)
+            descriptor = result["plan"]["subplans"][0]
+            consumer = next(
+                node
+                for node in result["plan"]["nodes"]
+                if node["id"] == "main_filter"
+            )
+            consumer.clear()
+            consumer.update(
+                {
+                    "id": "main_filter",
+                    "op": "join",
+                    "left": "outer_scan",
+                    "right": descriptor["root"],
+                    "kind": join_kind,
+                    "predicate": descriptor["predicate"],
+                }
+            )
+            result["plan"]["subplans"] = []
+            return result
+
+        for negate, join_kind in ((False, "left_semi"), (True, "left_anti")):
+            with self.subTest(join_kind=join_kind):
+                raw = _exists_snapshot(negate=negate)
+                before = parse_snapshot(raw)
+                after = parse_snapshot(lowered(raw, join_kind))
+                script = smt.Script()
+                database = Database(before, 2, script)
+                scalar = ScalarEncoder(script)
+                equality = family_equal(
+                    Evaluator(before, database, scalar).root(),
+                    Evaluator(after, database, scalar).root(),
+                    scalar,
+                )
+                constants = _exists_constants(database, (1, 2), (2, 2))
+                self.assertTrue(_ground(equality, constants))
+
+    def test_complete_correlated_predicate_is_applied_per_inner_row(self):
+        raw = _exists_snapshot()
+        descriptor = raw["plan"]["subplans"][0]
+        descriptor["predicate"] = {
+            "kind": "and",
+            "args": [
+                descriptor["predicate"],
+                {
+                    "kind": "lt",
+                    "left": _literal("Int64", 0),
+                    "right": {"kind": "column", "column": "inner.x"},
+                },
+                {
+                    "kind": "lt",
+                    "left": {"kind": "column", "column": "inner.x"},
+                    "right": _literal("Int64", 3),
+                },
+            ],
+        }
+
+        _, database, family = self._evaluate(raw)
+        for outer, inner in (
+            ((-1, 2), (-1, 2)),
+            ((2, 4), (2, 4)),
+            ((None, 2), (None, 2)),
+        ):
+            with self.subTest(outer=outer, inner=inner):
+                constants = _exists_constants(database, outer, inner)
+                self.assertEqual(
+                    self._present_values(family.certain(), constants),
+                    [2],
+                )
+
+    def test_scalar_and_correlated_exists_bindings_share_row_scope(self):
+        raw = _exists_snapshot()
+        scalar = _base_snapshot(_literal("Bool", True))
+        raw["plan"]["nodes"].extend(scalar["plan"]["nodes"][2:])
+        scalar_descriptor = scalar["plan"]["subplans"][0]
+        scalar_descriptor["consumers"] = ["main_filter"]
+        raw["plan"]["subplans"].append(scalar_descriptor)
+        consumer = next(
+            node
+            for node in raw["plan"]["nodes"]
+            if node["id"] == "main_filter"
+        )
+        consumer["predicate"] = {
+            "kind": "and",
+            "args": [
+                consumer["predicate"],
+                {"kind": "column", "column": BINDING},
+            ],
+        }
+
+        _, database, family = self._evaluate(raw)
+        constants = _exists_constants(database, (1, 2), (2, None))
+        self.assertEqual(
+            self._present_values(family.certain(), constants),
+            [2],
+        )
+
+    def test_exists_row_pair_construction_is_bounded(self):
+        with self.assertRaisesRegex(
+            RelationError,
+            "EXISTS evaluation requires 16641 candidate-row pairs",
+        ):
+            self._evaluate(_exists_snapshot(), row_bound=129)
+
+
 class ScalarSubplanValidationTest(unittest.TestCase):
     def test_legacy_plan_without_subplans_defaults_to_empty(self):
         raw = _base_snapshot()
@@ -1109,14 +1401,14 @@ class ScalarSubplanValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
 
-    def test_dependencies_and_non_scalar_kinds_fail_closed(self):
+    def test_scalar_dependencies_and_unknown_kinds_fail_closed(self):
         raw = _base_snapshot()
         raw["plan"]["subplans"][0]["dependencies"] = ["outer.x"]
         with self.assertRaisesRegex(SnapshotError, "correlated scalar"):
             parse_snapshot(raw)
 
         raw = _base_snapshot()
-        raw["plan"]["subplans"][0]["kind"] = "exists"
+        raw["plan"]["subplans"][0]["kind"] = "tuple"
         with self.assertRaisesRegex(SnapshotError, "unsupported subplan kind"):
             parse_snapshot(raw)
 
@@ -1468,6 +1760,154 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         self.assertFalse(family.outcomes[0].decisions)
         self.assertEqual(len(family.outcomes[0].choices), 1)
         self.assertEqual(family.outcomes[0].choices[0].bound, 2)
+
+
+class ExistsSubplanValidationTest(unittest.TestCase):
+    def test_only_bool_nonnullable_descriptors_are_admitted(self):
+        for field, value, message in (
+            ("type", "Int64", "must have type 'Bool'"),
+            ("nullable", True, "must be non-nullable"),
+        ):
+            with self.subTest(field=field):
+                raw = _exists_snapshot()
+                raw["plan"]["subplans"][0][field] = value
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+        raw = _exists_snapshot()
+        raw["plan"]["subplans"][0]["output"] = {}
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: output"):
+            parse_snapshot(raw)
+
+    def test_dependency_and_predicate_contract_is_exact(self):
+        for dependencies, predicate, message in (
+            (["outer.x"], None, "exactly when EXISTS is correlated"),
+            (
+                [],
+                _equality("outer.x", "inner.x"),
+                "exactly when EXISTS is correlated",
+            ),
+            (
+                ["outer.x", "outer.y"],
+                _literal("Bool", True),
+                "at most one outer dependency",
+            ),
+        ):
+            with self.subTest(message=message):
+                raw = _exists_snapshot()
+                descriptor = raw["plan"]["subplans"][0]
+                descriptor["dependencies"] = dependencies
+                descriptor["predicate"] = predicate
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_correlation_requires_one_plain_outer_inner_column_equality(self):
+        for predicate, message in (
+            (_literal("Bool", True), "dependency-bearing conjunct"),
+            (
+                {
+                    "kind": "and",
+                    "args": [
+                        _equality("outer.x", "inner.x"),
+                        _equality("outer.x", "inner.x"),
+                    ],
+                },
+                "exactly one dependency-bearing conjunct",
+            ),
+            (
+                _equality("outer.x", "inner.x", null_safe=True),
+                "non-null-safe column equality",
+            ),
+            (
+                _equality("inner.x", "inner.x"),
+                "dependency-bearing conjunct",
+            ),
+            (
+                _equality("outer.x", "missing"),
+                "is not produced by the subplan root",
+            ),
+        ):
+            with self.subTest(message=message):
+                raw = _exists_snapshot()
+                raw["plan"]["subplans"][0]["predicate"] = predicate
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+        raw = _exists_snapshot()
+        raw["schema"]["tables"][0]["columns"][1]["type"] = "Uint64"
+        with self.assertRaisesRegex(SnapshotError, "types must match exactly"):
+            parse_snapshot(raw)
+
+    def test_consumer_and_error_outcome_shapes_fail_closed(self):
+        raw = _exists_snapshot()
+        raw["plan"]["subplans"][0]["consumers"] = ["outer_scan"]
+        with self.assertRaisesRegex(SnapshotError, "must be a Filter"):
+            parse_snapshot(raw)
+
+        raw = _exists_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "second_filter",
+                "op": "filter",
+                "input": "main_filter",
+                "predicate": {"kind": "column", "column": "$exists"},
+            }
+        )
+        raw["plan"]["root"] = "second_filter"
+        raw["plan"]["subplans"][0]["consumers"].append("second_filter")
+        with self.assertRaisesRegex(SnapshotError, "exactly one Filter consumer"):
+            parse_snapshot(raw)
+
+        raw = _exists_snapshot(limit_inner=True)
+        limit = next(
+            node for node in raw["plan"]["nodes"] if node["id"] == "inner_one"
+        )
+        limit["ensure_at_most_one"] = True
+        with self.assertRaisesRegex(SnapshotError, "observable error outcomes"):
+            parse_snapshot(raw)
+
+    def test_correlated_row_selection_fails_closed(self):
+        def with_sort(raw, *, limit):
+            descriptor = raw["plan"]["subplans"][0]
+            raw["plan"]["nodes"].insert(
+                2,
+                {
+                    "id": "inner_sort",
+                    "op": "sort",
+                    "input": descriptor["root"],
+                    "order": [
+                        {
+                            "column": "inner.x",
+                            "ascending": True,
+                            "nulls_first": True,
+                        }
+                    ],
+                    "limit": None if limit is None else _literal("Uint64", limit),
+                    "phase": "undefined",
+                },
+            )
+            descriptor["root"] = "inner_sort"
+            return raw
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "per-invocation row selection",
+        ):
+            parse_snapshot(_exists_snapshot(limit_inner=True))
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "per-invocation row selection",
+        ):
+            parse_snapshot(with_sort(_exists_snapshot(), limit=1))
+
+        parse_snapshot(_exists_snapshot(correlated=False, limit_inner=True))
+        parse_snapshot(
+            with_sort(
+                _exists_snapshot(correlated=False),
+                limit=1,
+            )
+        )
+        parse_snapshot(with_sort(_exists_snapshot(), limit=None))
 
 
 if __name__ == "__main__":

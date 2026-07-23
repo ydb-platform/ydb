@@ -239,13 +239,23 @@ class ScalarSubplan:
     """One exact, uncorrelated scalar binding captured outside relational edges."""
 
     binding: str
-    kind: str
     root: str
     output: SubplanOutput
-    type: str
-    nullable: bool
-    dependencies: tuple[str, ...]
     consumers: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ExistsSubplan:
+    """One EXISTS binding with one correlation equality and inner-only residuals."""
+
+    binding: str
+    root: str
+    predicate: Expr | None
+    dependency: str | None
+    consumers: tuple[str, ...]
+
+
+Subplan: TypeAlias = ScalarSubplan | ExistsSubplan
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,7 +263,7 @@ class Plan:
     nodes: tuple[PlanNode, ...]
     root: str
     output: tuple[str, ...]
-    subplans: tuple[ScalarSubplan, ...]
+    subplans: tuple[Subplan, ...]
 
     def node_map(self) -> dict[str, PlanNode]:
         return {node.id: node for node in self.nodes}
@@ -1052,50 +1062,92 @@ def _parse_stage_graph(value: Any, path: str) -> StageGraph:
     )
 
 
-def _parse_subplan(value: Any, path: str) -> ScalarSubplan:
+def _parse_subplan(value: Any, path: str) -> Subplan:
     obj = _object(value, path)
-    _keys(
-        obj,
-        {
-            "binding",
-            "kind",
-            "root",
-            "output",
-            "type",
-            "nullable",
-            "dependencies",
-            "consumers",
-        },
-        path,
-    )
-    kind = _string(obj["kind"], f"{path}.kind")
-    if kind != "scalar":
+    kind = _string(obj.get("kind"), f"{path}.kind")
+    common_keys = {
+        "binding",
+        "kind",
+        "root",
+        "type",
+        "nullable",
+        "dependencies",
+        "consumers",
+    }
+    if kind not in {"scalar", "exists"}:
         _fail(f"{path}.kind", f"unsupported subplan kind {kind!r}")
-    raw_output = _object(obj["output"], f"{path}.output")
-    _keys(raw_output, {"column", "type", "nullable"}, f"{path}.output")
-    return ScalarSubplan(
-        binding=_string(obj["binding"], f"{path}.binding"),
-        kind=kind,
-        root=_string(obj["root"], f"{path}.root"),
-        output=SubplanOutput(
+    variant_keys = {"output"} if kind == "scalar" else {"predicate"}
+    _keys(obj, common_keys | variant_keys, path)
+    binding = _string(obj["binding"], f"{path}.binding")
+    root = _string(obj["root"], f"{path}.root")
+    scalar_type = _scalar_type(obj["type"], f"{path}.type")
+    nullable = _bool(obj["nullable"], f"{path}.nullable")
+    dependencies = tuple(
+        _string(item, f"{path}.dependencies[{index}]")
+        for index, item in enumerate(
+            _array(obj["dependencies"], f"{path}.dependencies")
+        )
+    )
+    consumers = tuple(
+        _string(item, f"{path}.consumers[{index}]")
+        for index, item in enumerate(
+            _array(obj["consumers"], f"{path}.consumers")
+        )
+    )
+    if kind == "scalar":
+        raw_output = _object(obj["output"], f"{path}.output")
+        _keys(raw_output, {"column", "type", "nullable"}, f"{path}.output")
+        output = SubplanOutput(
             column=_string(raw_output["column"], f"{path}.output.column"),
             type=_scalar_type(raw_output["type"], f"{path}.output.type"),
             nullable=_bool(raw_output["nullable"], f"{path}.output.nullable"),
-        ),
-        type=_scalar_type(obj["type"], f"{path}.type"),
-        nullable=_bool(obj["nullable"], f"{path}.nullable"),
-        dependencies=tuple(
-            _string(item, f"{path}.dependencies[{index}]")
-            for index, item in enumerate(
-                _array(obj["dependencies"], f"{path}.dependencies")
+        )
+        if scalar_type != output.type:
+            _fail(
+                f"{path}.type",
+                "must exactly match the scalar subplan output type",
             )
-        ),
-        consumers=tuple(
-            _string(item, f"{path}.consumers[{index}]")
-            for index, item in enumerate(
-                _array(obj["consumers"], f"{path}.consumers")
+        if not nullable:
+            _fail(
+                f"{path}.nullable",
+                "a scalar subplan binding must be nullable because zero rows yield NULL",
             )
-        ),
+        if dependencies:
+            _fail(
+                f"{path}.dependencies",
+                "correlated scalar subplans are not modeled",
+            )
+        return ScalarSubplan(
+            binding=binding,
+            root=root,
+            output=output,
+            consumers=consumers,
+        )
+    if scalar_type != BOOL:
+        _fail(f"{path}.type", "an EXISTS binding must have type 'Bool'")
+    if nullable:
+        _fail(f"{path}.nullable", "an EXISTS binding must be non-nullable")
+    if len(dependencies) > 1:
+        _fail(
+            f"{path}.dependencies",
+            "EXISTS supports at most one outer dependency",
+        )
+    predicate = (
+        None
+        if obj["predicate"] is None
+        else _parse_expr(obj["predicate"], f"{path}.predicate")
+    )
+    if bool(dependencies) != (predicate is not None):
+        _fail(
+            f"{path}.predicate",
+            "must be present exactly when EXISTS is correlated",
+        )
+    return ExistsSubplan(
+        binding=binding,
+        root=root,
+        predicate=predicate,
+        dependency=dependencies[0] if dependencies else None,
+        consumers=consumers,
     )
 
 
@@ -1922,6 +1974,16 @@ def _expression_columns(expression: Expr) -> frozenset[str]:
     return columns
 
 
+def _conjuncts(expression: Expr) -> tuple[Expr, ...]:
+    if expression.kind != "and":
+        return (expression,)
+    return tuple(
+        conjunct
+        for argument in expression.args
+        for conjunct in _conjuncts(argument)
+    )
+
+
 def _node_expression_columns(node: PlanNode) -> frozenset[str]:
     if isinstance(node, Scan):
         expressions = tuple(
@@ -1986,29 +2048,26 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     virtual_columns: dict[str, dict[str, Column]] = {}
     for index, subplan in enumerate(snapshot.plan.subplans):
         path = f"snapshot.plan.subplans[{index}]"
-        if subplan.kind != "scalar":
-            _fail(f"{path}.kind", f"unsupported subplan kind {subplan.kind!r}")
         if subplan.root not in nodes:
             _fail(f"{path}.root", f"unknown node {subplan.root!r}")
-        if subplan.type != subplan.output.type:
-            _fail(
-                f"{path}.type",
-                "must exactly match the scalar subplan output type",
-            )
-        if not subplan.nullable:
-            _fail(
-                f"{path}.nullable",
-                "a scalar subplan binding must be nullable because zero rows yield NULL",
-            )
-        if subplan.dependencies:
-            _fail(
-                f"{path}.dependencies",
-                "correlated scalar subplans are not modeled",
-            )
         if not subplan.consumers:
-            _fail(f"{path}.consumers", "scalar subplan binding is unused")
-        _unique(subplan.dependencies, f"{path}.dependencies")
+            _fail(f"{path}.consumers", "subplan binding is unused")
         _unique(subplan.consumers, f"{path}.consumers")
+
+        if isinstance(subplan, ExistsSubplan):
+            if (subplan.dependency is None) != (subplan.predicate is None):
+                _fail(
+                    f"{path}.predicate",
+                    "must be present exactly when EXISTS is correlated",
+                )
+            if len(subplan.consumers) != 1:
+                _fail(
+                    f"{path}.consumers",
+                    "an EXISTS binding must have exactly one Filter consumer",
+                )
+        elif not isinstance(subplan, ScalarSubplan):
+            raise AssertionError(f"unknown subplan class {type(subplan).__name__}")
+
         for consumer_id in subplan.consumers:
             consumer = nodes.get(consumer_id)
             if consumer is None:
@@ -2016,10 +2075,19 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"{path}.consumers",
                     f"references unknown node {consumer_id!r}",
                 )
-            if not isinstance(consumer, (Project, Filter)):
+            allowed_consumer = (
+                isinstance(consumer, (Project, Filter))
+                if isinstance(subplan, ScalarSubplan)
+                else isinstance(consumer, Filter)
+            )
+            if not allowed_consumer:
                 _fail(
                     f"{path}.consumers",
-                    "scalar subplan consumers must be Project or Filter nodes",
+                    (
+                        "scalar subplan consumers must be Project or Filter nodes"
+                        if isinstance(subplan, ScalarSubplan)
+                        else "an EXISTS consumer must be a Filter node"
+                    ),
                 )
             if subplan.binding not in _node_expression_columns(consumer):
                 _fail(
@@ -2027,10 +2095,15 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"node {consumer_id!r} does not reference binding "
                     f"{subplan.binding!r}",
                 )
+            value_type = (
+                ValueType(subplan.output.type, True)
+                if isinstance(subplan, ScalarSubplan)
+                else ValueType(BOOL, False)
+            )
             virtual_columns.setdefault(consumer_id, {})[subplan.binding] = Column(
                 subplan.binding,
-                subplan.type,
-                True,
+                value_type.name,
+                value_type.nullable,
             )
 
     schemas: dict[str, dict[str, Column]] = {}
@@ -2352,33 +2425,128 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if leaked_bindings:
             _fail(
                 f"node {node.id!r}",
-                "scalar subplan bindings must remain virtual and may not appear "
+                "subplan bindings must remain virtual and may not appear "
                 "in relational output: "
                 + ", ".join(sorted(leaked_bindings)),
             )
     for index, subplan in enumerate(snapshot.plan.subplans):
         path = f"snapshot.plan.subplans[{index}]"
         schema = subplan_schemas[subplan.binding]
-        actual = schema.get(subplan.output.column)
-        if actual is None:
+        if isinstance(subplan, ExistsSubplan) and any(
+            isinstance(nodes[node_id], Limit)
+            and nodes[node_id].ensure_at_most_one
+            for node_id in subplan_nodes[subplan.binding]
+        ):
             _fail(
-                f"{path}.output",
-                "declared scalar output column is not produced by its root",
+                f"{path}.root",
+                "EXISTS roots with observable error outcomes are not modeled",
             )
-        expected = Column(
-            subplan.output.column,
-            subplan.output.type,
-            subplan.output.nullable,
-        )
-        if actual != expected:
+        if (
+            isinstance(subplan, ExistsSubplan)
+            and subplan.predicate is not None
+            and any(
+                isinstance(nodes[node_id], Limit)
+                or (
+                    isinstance(nodes[node_id], Sort)
+                    and nodes[node_id].limit is not None
+                )
+                for node_id in subplan_nodes[subplan.binding]
+            )
+        ):
             _fail(
-                f"{path}.output",
-                "declared scalar output schema does not match its root",
+                f"{path}.root",
+                "correlated EXISTS roots with per-invocation row selection are not modeled",
             )
+        if isinstance(subplan, ScalarSubplan):
+            actual = schema.get(subplan.output.column)
+            if actual is None:
+                _fail(
+                    f"{path}.output",
+                    "declared scalar output column is not produced by its root",
+                )
+            expected = Column(
+                subplan.output.column,
+                subplan.output.type,
+                subplan.output.nullable,
+            )
+            if actual != expected:
+                _fail(
+                    f"{path}.output",
+                    "declared scalar output schema does not match its root",
+                )
+        else:
+            assert isinstance(subplan, ExistsSubplan)
+            if subplan.predicate is not None:
+                assert subplan.dependency is not None
+                dependency = subplan.dependency
+                consumer = nodes[subplan.consumers[0]]
+                assert isinstance(consumer, Filter)
+                outer_schema = schemas[consumer.input]
+                outer_column = outer_schema.get(dependency)
+                if outer_column is None:
+                    _fail(
+                        f"{path}.dependencies",
+                        f"outer column {dependency!r} is not available to the consumer",
+                    )
+                if dependency in schema:
+                    _fail(
+                        f"{path}.dependencies",
+                        f"outer column {dependency!r} collides with an inner column",
+                    )
+                predicate = subplan.predicate
+                dependent_conjuncts = tuple(
+                    conjunct
+                    for conjunct in _conjuncts(predicate)
+                    if dependency in _expression_columns(conjunct)
+                )
+                if len(dependent_conjuncts) != 1:
+                    _fail(
+                        f"{path}.predicate",
+                        "correlated EXISTS requires exactly one dependency-bearing conjunct",
+                    )
+                correlation = dependent_conjuncts[0]
+                if (
+                    correlation.kind != "eq"
+                    or correlation.null_safe
+                    or len(correlation.args) != 2
+                    or any(argument.kind != "column" for argument in correlation.args)
+                ):
+                    _fail(
+                        f"{path}.predicate",
+                        "correlated EXISTS requires one non-null-safe column equality",
+                    )
+                predicate_columns = tuple(
+                    argument.column for argument in correlation.args
+                )
+                if predicate_columns.count(dependency) != 1:
+                    _fail(
+                        f"{path}.predicate",
+                        "correlated EXISTS equality must reference its outer dependency once",
+                    )
+                inner_column = next(
+                    column for column in predicate_columns if column != dependency
+                )
+                if inner_column not in schema:
+                    _fail(
+                        f"{path}.predicate",
+                        f"inner column {inner_column!r} is not produced by the subplan root",
+                    )
+                if outer_column.type != schema[inner_column].type:
+                    _fail(
+                        f"{path}.predicate",
+                        "EXISTS equality column types must match exactly",
+                    )
+                predicate_type = _infer_expr(
+                    predicate,
+                    dict(schema) | {dependency: outer_column},
+                    f"{path}.predicate",
+                )
+                if predicate_type.name != BOOL:
+                    _fail(f"{path}.predicate", "EXISTS predicate must be Boolean")
         if subplan.root in main_nodes:
             _fail(
                 f"{path}.root",
-                "scalar subplan root is nested in the main relational plan",
+                "subplan root is nested in the main relational plan",
             )
         nested_roots = (
             subplan_nodes[subplan.binding] & subplan_roots
@@ -2386,7 +2554,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if nested_roots:
             _fail(
                 f"{path}.root",
-                "nested scalar subplans are not modeled",
+                "nested subplans are not modeled",
             )
         nested_bindings = frozenset().union(
             *(
@@ -2397,13 +2565,22 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if nested_bindings:
             _fail(
                 f"{path}.root",
-                "scalar subplan expressions may not reference subplan bindings",
+                "subplan expressions may not reference subplan bindings",
+            )
+        if (
+            isinstance(subplan, ExistsSubplan)
+            and subplan.predicate is not None
+            and _expression_columns(subplan.predicate) & all_bindings
+        ):
+            _fail(
+                f"{path}.predicate",
+                "EXISTS predicate may not reference subplan bindings",
             )
         non_main_consumers = set(subplan.consumers) - main_nodes
         if non_main_consumers:
             _fail(
                 f"{path}.consumers",
-                "scalar subplan consumers must be reachable from the main root",
+                "subplan consumers must be reachable from the main root",
             )
     _validate_average_state_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)

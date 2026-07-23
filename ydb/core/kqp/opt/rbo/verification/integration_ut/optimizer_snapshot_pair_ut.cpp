@@ -157,6 +157,21 @@ const NJson::TJsonValue& OnlyPlanNode(
     return *matches.front();
 }
 
+const NJson::TJsonValue& PlanNode(
+    const NJson::TJsonValue& snapshot,
+    const TString& id)
+{
+    const NJson::TJsonValue* match = nullptr;
+    for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+        if (node["id"].GetStringSafe() == id) {
+            UNIT_ASSERT_C(!match, id);
+            match = &node;
+        }
+    }
+    UNIT_ASSERT_C(match, id);
+    return *match;
+}
+
 void CollectConjuncts(
     const NJson::TJsonValue& expression,
     TVector<const NJson::TJsonValue*>& conjuncts)
@@ -289,6 +304,26 @@ void CreateDateColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateExistsColumnTables(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboExistsOuter` (
+            Id Int64 NOT NULL,
+            MatchKey Int64 NOT NULL,
+            Payload Int64,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+
+        CREATE TABLE `/Root/RboExistsInner` (
+            Id Int64 NOT NULL,
+            MatchKey Int64,
+            Payload Int64,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TKikimrRunner MakeTpcdsRunner() {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
@@ -363,6 +398,51 @@ NJson::TJsonValue BuildVerificationProblem(
         NJson::ReadJsonTree(command.GetOutput(), &verdict, true),
         command.GetOutput());
     return verdict;
+}
+
+struct TVerifiedSnapshotPair {
+    NJson::TJsonValue Initial;
+    NJson::TJsonValue Final;
+};
+
+TVerifiedSnapshotPair VerifyRealHostSnapshotPair(
+    TKikimrRunner& kikimr,
+    const TString& query)
+{
+    NYql::TExprContext moduleContext;
+    NYql::IModuleResolver::TPtr moduleResolver;
+    UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+    auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+    auto host = MakeHost(
+        kikimr.GetTestServer(),
+        std::move(moduleResolver),
+        sink);
+    IKqpHost::TPrepareSettings settings;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    const auto prepared = host->SyncPrepareDataQuery(query, settings);
+    UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+    const auto results = sink->Extract();
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+    UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+    UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+
+    auto initial = ParseSnapshot(results[0]);
+    auto final = ParseSnapshot(results[1]);
+    UNIT_ASSERT(initial["stage_graph"].IsNull());
+    UNIT_ASSERT(final["stage_graph"].IsMap());
+
+    const auto verdict = BuildVerificationProblem(results[0], results[1]);
+    UNIT_ASSERT_VALUES_EQUAL(
+        verdict["status"].GetStringSafe(),
+        "VERIFIED_BOUNDED");
+    UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    return {
+        .Initial = std::move(initial),
+        .Final = std::move(final),
+    };
 }
 
 } // namespace
@@ -533,6 +613,248 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesUncorrelatedExists) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Id
+            FROM `/Root/RboExistsOuter` AS outer_row
+            WHERE EXISTS (
+                SELECT inner_row.Id
+                FROM `/Root/RboExistsInner` AS inner_row
+                WHERE inner_row.Payload > 0
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subplans[0]["kind"].GetStringSafe(), "exists");
+        UNIT_ASSERT(subplans[0]["predicate"].IsNull());
+        UNIT_ASSERT(subplans[0]["dependencies"].GetArraySafe().empty());
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesEqualityCorrelatedExists) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Id
+            FROM `/Root/RboExistsOuter` AS outer_row
+            WHERE EXISTS (
+                SELECT inner_row.Id
+                FROM `/Root/RboExistsInner` AS inner_row
+                WHERE inner_row.MatchKey == outer_row.MatchKey
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subplans[0]["kind"].GetStringSafe(), "exists");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplans[0]["predicate"]["kind"].GetStringSafe(),
+            "eq");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplans[0]["dependencies"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Id
+            FROM `/Root/RboExistsOuter` AS outer_row
+            WHERE outer_row.Payload == (
+                SELECT scalar_row.Payload
+                FROM `/Root/RboExistsInner` AS scalar_row
+                WHERE scalar_row.MatchKey == 0
+            ) AND NOT EXISTS (
+                SELECT inner_row.Id
+                FROM `/Root/RboExistsInner` AS inner_row
+                WHERE inner_row.MatchKey == outer_row.MatchKey
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 2);
+        THashSet<TString> kinds;
+        const NJson::TJsonValue* exists = nullptr;
+        TString consumerId;
+        for (const auto& subplan : subplans) {
+            const TString kind = subplan["kind"].GetStringSafe();
+            UNIT_ASSERT(kinds.insert(kind).second);
+            const auto& consumers = subplan["consumers"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            if (consumerId.empty()) {
+                consumerId = consumers[0].GetStringSafe();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    consumers[0].GetStringSafe(),
+                    consumerId);
+            }
+            if (kind == "scalar") {
+                UNIT_ASSERT(subplan["dependencies"].GetArraySafe().empty());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(kind, "exists");
+                exists = &subplan;
+                UNIT_ASSERT_VALUES_EQUAL(
+                    subplan["predicate"]["kind"].GetStringSafe(),
+                    "eq");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    subplan["dependencies"].GetArraySafe().size(),
+                    1);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            kinds,
+            THashSet<TString>({"exists", "scalar"}));
+
+        UNIT_ASSERT(exists);
+        const auto& consumer = PlanNode(pair.Initial, consumerId);
+        TVector<const NJson::TJsonValue*> negations;
+        CollectExpressions(consumer["predicate"], "not", negations);
+        UNIT_ASSERT_VALUES_EQUAL(negations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*negations[0])["arg"]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*negations[0])["arg"]["column"].GetStringSafe(),
+            (*exists)["binding"].GetStringSafe());
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesWorkloadShapedCorrelatedExists) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const TVector<TString> queries = {
+            R"(--!syntax_v1
+                SELECT outer_row.Id
+                FROM `/Root/RboExistsOuter` AS outer_row
+                WHERE EXISTS (
+                    SELECT a.Id
+                    FROM `/Root/RboExistsInner` AS a
+                    WHERE a.MatchKey == outer_row.MatchKey
+                      AND a.MatchKey > 0
+                      AND a.Payload > 0
+                ) AND (
+                    EXISTS (
+                        SELECT b.Id
+                        FROM `/Root/RboExistsInner` AS b
+                        WHERE b.MatchKey == outer_row.MatchKey
+                          AND b.MatchKey > 10
+                          AND b.Payload > 10
+                    ) OR EXISTS (
+                        SELECT c.Id
+                        FROM `/Root/RboExistsInner` AS c
+                        WHERE c.MatchKey == outer_row.MatchKey
+                          AND c.MatchKey > 20
+                          AND c.Payload > 20
+                    )
+                );
+            )",
+            R"(--!syntax_v1
+                SELECT outer_row.Id
+                FROM `/Root/RboExistsOuter` AS outer_row
+                WHERE EXISTS (
+                    SELECT a.Id
+                    FROM `/Root/RboExistsInner` AS a
+                    WHERE a.MatchKey == outer_row.MatchKey
+                      AND a.MatchKey > 0
+                      AND a.Payload > 0
+                ) AND NOT EXISTS (
+                    SELECT b.Id
+                    FROM `/Root/RboExistsInner` AS b
+                    WHERE b.MatchKey == outer_row.MatchKey
+                      AND b.MatchKey > 10
+                      AND b.Payload > 10
+                ) AND NOT EXISTS (
+                    SELECT c.Id
+                    FROM `/Root/RboExistsInner` AS c
+                    WHERE c.MatchKey == outer_row.MatchKey
+                      AND c.MatchKey > 20
+                      AND c.Payload > 20
+                );
+            )",
+        };
+
+        for (const auto& query : queries) {
+            const auto pair = VerifyRealHostSnapshotPair(kikimr, query);
+            const auto& subplans =
+                pair.Initial["plan"]["subplans"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 3);
+
+            THashSet<TString> bindings;
+            THashSet<TString> roots;
+            THashSet<TString> consumers;
+            for (const auto& subplan : subplans) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    subplan["kind"].GetStringSafe(),
+                    "exists");
+                UNIT_ASSERT(bindings.insert(
+                    subplan["binding"].GetStringSafe()).second);
+                UNIT_ASSERT(roots.insert(
+                    subplan["root"].GetStringSafe()).second);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    subplan["dependencies"].GetArraySafe().size(),
+                    1);
+                const auto& subplanConsumers =
+                    subplan["consumers"].GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL(subplanConsumers.size(), 1);
+                consumers.insert(subplanConsumers[0].GetStringSafe());
+
+                TVector<const NJson::TJsonValue*> conjuncts;
+                CollectConjuncts(subplan["predicate"], conjuncts);
+                UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 3);
+                TVector<const NJson::TJsonValue*> equalities;
+                TVector<const NJson::TJsonValue*> comparisons;
+                CollectExpressions(
+                    subplan["predicate"],
+                    "eq",
+                    equalities);
+                CollectExpressions(
+                    subplan["predicate"],
+                    "gt",
+                    comparisons);
+                UNIT_ASSERT_VALUES_EQUAL(equalities.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(comparisons.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    PlanNode(
+                        pair.Initial,
+                        subplan["root"].GetStringSafe())["op"].GetStringSafe(),
+                    "scan");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(bindings.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(roots.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+
+            bool sawNullableInnerKey = false;
+            for (const auto& table :
+                pair.Initial["schema"]["tables"].GetArraySafe())
+            {
+                if (!table["name"].GetStringSafe().Contains(
+                        "/Root/RboExistsInner"))
+                {
+                    continue;
+                }
+                for (const auto& column :
+                    table["columns"].GetArraySafe())
+                {
+                    if (column["name"].GetStringSafe() == "MatchKey") {
+                        sawNullableInnerKey =
+                            column["nullable"].GetBooleanSafe();
+                    }
+                }
+            }
+            UNIT_ASSERT(sawNullableInnerKey);
+        }
     }
 
     Y_UNIT_TEST(RealHostCompletionAndHashPrefixIncludeAtomicStages) {

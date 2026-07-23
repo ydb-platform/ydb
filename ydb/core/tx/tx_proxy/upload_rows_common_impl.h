@@ -1475,7 +1475,7 @@ private:
 
     void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
         AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
-        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "",
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Error",
             {"logPrefix", LogPrefix()},
             {"error", status.GetErrorMessage()});
         RaiseIssue(NYql::TIssue(LogPrefix() << status.GetErrorMessage()));
@@ -1486,7 +1486,7 @@ private:
         UploadCountersGuard.OnReply(status, WrittenBytes);
         SendResult(ctx, status.GetCode());
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed with status",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed",
             {"status", status.GetCode()});
 
         if (LongTxId != NLongTxService::TLongTxId()) {

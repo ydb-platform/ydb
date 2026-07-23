@@ -1411,7 +1411,7 @@ private:
         Y_DEBUG_ABORT_UNLESS(state.State == EShardState::SnapshotPlanned);
 
         if (msg->GetTxId() != TxId) {
-            YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot expected)",
+            YDB_LOG_ERROR("Unexpected TEvProposeTransactionResult (snapshot tx)",
                 {"logPrefix", LogPrefix},
                 {"txId", TxId});
             return;

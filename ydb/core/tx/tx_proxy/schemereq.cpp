@@ -664,7 +664,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 {"txId", TxId},
                 {"issues", result->Record.GetIssues()});
         }
-        YDB_LOG_DEBUG_CTX(ctx, "SEND status",
+        YDB_LOG_DEBUG_CTX(ctx, "Send status",
             {"selfId", ctx.SelfID},
             {"txId", TxId},
             {"to", Source},

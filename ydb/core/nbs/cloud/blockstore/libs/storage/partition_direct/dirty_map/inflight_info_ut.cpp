@@ -670,6 +670,35 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.UnlockPBuffer();
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
     }
+
+    Y_UNIT_TEST(ShouldRemoveHostsNotCompleteFlushWithEmptyConfirmed)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Request flush for host 0 only; do NOT confirm it.
+        // FlushDesired = {0}, FlushConfirmed = {}.
+        UNIT_ASSERT_VALUES_EQUAL(
+            THostIndex{0},
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+
+        // Remove host 0 — this empties FlushDesired while FlushConfirmed is
+        // still empty. The flush must NOT be considered complete.
+        THostMask removed;
+        removed.Set(THostIndex{0});
+        inflightInfo.RemoveHosts(removed);
+
+        // State must stay PBufferFlushing and erase must NOT be registered.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

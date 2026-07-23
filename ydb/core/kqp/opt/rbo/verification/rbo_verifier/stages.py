@@ -31,7 +31,7 @@ from .relation import (
     merge_family,
     single,
 )
-from .scalar import Encoder as ScalarEncoder, Value
+from .scalar import DecimalAverageState, Encoder as ScalarEncoder, Value
 from .types import family
 
 
@@ -486,6 +486,8 @@ def _same_values(
         left.values[column.name].type == right.values[column.name].type
         and left.values[column.name].is_null == right.values[column.name].is_null
         and left.values[column.name].value == right.values[column.name].value
+        and left.values[column.name].decimal_average_state
+        == right.values[column.name].decimal_average_state
         for column in columns
     )
 
@@ -519,7 +521,40 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
         for row, alternative in reversed(list(zip(rows[:-1], alternatives[:-1]))):
             is_null = smt.ite(row.present, alternative.is_null, is_null)
             value = smt.ite(row.present, alternative.value, value)
-        values[column.name] = Value(alternatives[0].type, is_null, value, bound)
+        average_states = [
+            alternative.decimal_average_state
+            for alternative in alternatives
+        ]
+        average_state = None
+        if any(state is not None for state in average_states):
+            if any(state is None for state in average_states):
+                raise StageError(
+                    "exclusive row compaction mixed Decimal avg state and scalar values"
+                )
+            states = [state for state in average_states if state is not None]
+            if any(state.sum_type != states[0].sum_type for state in states[1:]):
+                raise StageError(
+                    "exclusive row compaction received different Decimal avg state types"
+                )
+            state_sum = states[-1].sum
+            state_count = states[-1].count
+            for row, state in reversed(list(zip(rows[:-1], states[:-1]))):
+                state_sum = smt.ite(row.present, state.sum, state_sum)
+                state_count = smt.ite(row.present, state.count, state_count)
+            average_state = DecimalAverageState(
+                sum_type=states[0].sum_type,
+                sum=state_sum,
+                count=state_count,
+                finite_abs_bound=max(state.finite_abs_bound for state in states),
+                count_bound=max(state.count_bound for state in states),
+            )
+        values[column.name] = Value(
+            alternatives[0].type,
+            is_null,
+            value,
+            bound,
+            average_state,
+        )
 
     common_facts = set(rows[0].partition_facts)
     for row in rows[1:]:

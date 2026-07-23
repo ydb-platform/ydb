@@ -23,7 +23,10 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     RelationFamily,
     Row,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Value
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    DecimalAverageState,
+    Value,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem
 
 
@@ -250,6 +253,33 @@ OPAQUE_STRING = {
 NULL_STRING = {"kind": "null", "type": "String"}
 
 
+def _average_family(
+    state: DecimalAverageState,
+    is_null: smt.Term,
+) -> RelationFamily:
+    return RelationFamily((
+        Outcome(
+            smt.TRUE,
+            Relation(
+                (Column("average", "Decimal(12,2)", True),),
+                (
+                    Row(
+                        smt.TRUE,
+                        {
+                            "average": Value(
+                                "Decimal(12,2)",
+                                is_null,
+                                smt.ONE,
+                                decimal_average_state=state,
+                            )
+                        },
+                    ),
+                ),
+            ),
+        ),
+    ))
+
+
 class ObserverTest(unittest.TestCase):
     def test_probe_interning_is_iterative_exact_and_bounded(self):
         left = smt.symbol("same_probe", smt.INT)
@@ -413,6 +443,65 @@ class ObserverTest(unittest.TestCase):
             ],
             [20, 10],
         )
+
+    def test_decimal_average_state_is_probed_and_rendered_as_optional_tuple(self):
+        state_sum = smt.symbol("average_state_sum", smt.INT)
+        state_count = smt.symbol("average_state_count", smt.INT)
+        state = DecimalAverageState(
+            sum_type="Decimal(35,2)",
+            sum=state_sum,
+            count=state_count,
+            finite_abs_bound=75,
+            count_bound=2,
+        )
+
+        for is_null, expected_value, model in (
+            (
+                smt.FALSE,
+                {"sum": 75, "count": 2},
+                {"average_state_sum": 75, "average_state_count": 2},
+            ),
+            (smt.TRUE, None, {}),
+        ):
+            with self.subTest(is_null=is_null):
+                family = _average_family(state, is_null)
+                probes = Probes(smt.Script())
+                _add_family(probes, family)
+
+                self.assertIn(state_sum, probes.requested)
+                self.assertIn(state_count, probes.requested)
+                cell = _family_json(family, probes, model, {})[
+                    "outcomes"
+                ][0]["rows"][0]["values"][0]
+                self.assertEqual(
+                    cell["average_state"],
+                    {
+                        "sum_type": "Decimal(35,2)",
+                        "count_type": "Uint64",
+                        "value": expected_value,
+                        "proof_bounds": {
+                            "finite_sum_abs": 75,
+                            "count": 2,
+                        },
+                    },
+                )
+
+    def test_decimal_average_state_cannot_be_silently_partially_rendered(self):
+        state = DecimalAverageState(
+            sum_type="Decimal(35,2)",
+            sum=smt.symbol("unregistered_state_sum", smt.INT),
+            count=smt.symbol("unregistered_state_count", smt.INT),
+            finite_abs_bound=1,
+            count_bound=1,
+        )
+        family = _average_family(state, smt.FALSE)
+        probes = Probes(smt.Script())
+        probes.add(smt.TRUE)
+        probes.add(smt.FALSE)
+        probes.add(smt.ONE)
+
+        with self.assertRaisesRegex(InspectionError, "unregistered trace term"):
+            _family_json(family, probes, {}, {})
 
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")

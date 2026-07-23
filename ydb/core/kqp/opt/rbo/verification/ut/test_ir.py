@@ -1238,6 +1238,152 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "only Decimal is modeled"):
             parse_snapshot(non_decimal)
 
+    def test_decimal_avg_requires_explicit_sum_count_state_and_exact_phase_lineage(self):
+        def trait(input_name, output_name):
+            return {
+                "input": input_name,
+                "function": "avg",
+                "output": output_name,
+                "type": "Decimal(7,2)",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+                "state": {
+                    "sum_type": "Decimal(35,2)",
+                    "count_type": "Uint64",
+                    "nullable": True,
+                },
+            }
+
+        logical = minimal_snapshot()
+        logical["schema"]["tables"][0]["columns"][0].update(
+            type="Decimal(7,2)",
+            nullable=True,
+        )
+        logical_aggregate = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [trait("a.k", "result")],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        logical["plan"].update(
+            nodes=[logical["plan"]["nodes"][0], logical_aggregate],
+            root="aggregate",
+            output=["result"],
+        )
+        parsed = parse_snapshot(logical)
+        state = parsed.plan.nodes[-1].aggregates[0].state
+        self.assertEqual(
+            (state.sum_type, state.count_type, state.nullable),
+            ("Decimal(35,2)", "Uint64", True),
+        )
+
+        for path, replacement, reason in (
+            (("sum_type",), "Decimal(34,2)", "exact .* accumulator"),
+            (("count_type",), "Int64", "exact .* accumulator"),
+            (("nullable",), False, "nullable=true"),
+        ):
+            with self.subTest(path=path):
+                malformed = copy.deepcopy(logical)
+                malformed["plan"]["nodes"][-1]["aggregates"][0]["state"][
+                    path[0]
+                ] = replacement
+                with self.assertRaisesRegex(SnapshotError, reason):
+                    parse_snapshot(malformed)
+
+        missing_state = copy.deepcopy(logical)
+        del missing_state["plan"]["nodes"][-1]["aggregates"][0]["state"]
+        with self.assertRaisesRegex(SnapshotError, "missing fields: state"):
+            parse_snapshot(missing_state)
+
+        partial = copy.deepcopy(logical_aggregate)
+        partial.update(id="partial", phase="intermediate")
+        partial["aggregates"][0].update(output="_state")
+        final = copy.deepcopy(logical_aggregate)
+        final.update(id="final", input="partial", phase="final")
+        final["aggregates"][0].update(input="_state")
+        split = copy.deepcopy(logical)
+        split["plan"].update(
+            nodes=[split["plan"]["nodes"][0], partial, final],
+            root="final",
+            output=["result"],
+        )
+        parse_snapshot(split)
+
+        no_final = copy.deepcopy(split)
+        no_final["plan"].update(root="partial", output=["_state"])
+        no_final["plan"]["nodes"].pop()
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "intermediate avg state must have one direct final",
+        ):
+            parse_snapshot(no_final)
+
+        wrong_source = copy.deepcopy(split)
+        wrong_source["plan"]["nodes"][-1]["aggregates"][0]["input"] = "result"
+        with self.assertRaisesRegex(SnapshotError, "input column 'result'.*not available"):
+            parse_snapshot(wrong_source)
+
+        leaked_state = copy.deepcopy(split)
+        leaked_state["plan"]["nodes"][-1]["aggregates"].append({
+            "input": "_state",
+            "function": "sum",
+            "output": "state_sum",
+            "type": "Decimal(35,2)",
+            "nullable": True,
+            "distinct": False,
+            "unwrap": False,
+        })
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "intermediate avg state must be used only",
+        ):
+            parse_snapshot(leaked_state)
+
+        routed_state = copy.deepcopy(split)
+        routed_state["stage_graph"] = {
+            "root_stage": "root",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan", "partial"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "partial"}],
+                    "source_storage": "column",
+                },
+                {
+                    "id": "root",
+                    "nodes": ["final"],
+                    "inputs": ["partial"],
+                    "outputs": [{"index": 0, "node": "final"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "state_shuffle",
+                    "producer": "source",
+                    "consumer": "root",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "hash_shuffle",
+                    "keys": ["_state"],
+                    "hash_function": "HashV1",
+                    "use_spilling": False,
+                }
+            ],
+            "assumptions": [],
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "intermediate avg state may only be transported as payload",
+        ):
+            parse_snapshot(routed_state)
+
     def test_void_is_an_exact_non_nullable_count_input_expression(self):
         value = count_star_snapshot()
         snapshot = parse_snapshot(value)

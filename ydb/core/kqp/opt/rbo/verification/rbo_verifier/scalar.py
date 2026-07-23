@@ -33,6 +33,17 @@ def integer_domain(value: smt.Term, scalar_type: str) -> smt.Term:
 
 
 @dataclass(frozen=True, slots=True)
+class DecimalAverageState:
+    """Symbolic physical (sum, count) state with conservative proof bounds."""
+
+    sum_type: str
+    sum: smt.Term
+    count: smt.Term
+    finite_abs_bound: int
+    count_bound: int
+
+
+@dataclass(frozen=True, slots=True)
 class Value:
     type: str
     is_null: smt.Term
@@ -41,6 +52,9 @@ class Value:
     # finite valuation. It intentionally says nothing about specials; None is
     # an unknown bound.
     decimal_finite_abs_bound: int | None = None
+    # Present only on the hidden state IU produced by an intermediate AVG.
+    # Snapshot validation forbids routing it through ordinary scalar flow.
+    decimal_average_state: DecimalAverageState | None = None
 
 
 @dataclass(frozen=True, slots=True)

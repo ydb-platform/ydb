@@ -27,7 +27,7 @@ from .ir import (
     plan_node_inputs,
     validate_snapshot,
 )
-from .scalar import Encoder as ScalarEncoder
+from .scalar import DecimalAverageState, Encoder as ScalarEncoder
 from .scalar import Value, date_domain, integer_domain, smt_sort
 from .types import DATE, family, is_decimal_type, is_ordered_type
 
@@ -521,7 +521,8 @@ class Evaluator:
         if any(trait.unwrap for trait in node.aggregates):
             raise RelationError("unwrapped aggregate semantics are not modeled")
         unsupported = sorted(
-            {trait.function for trait in node.aggregates} - {"count", "max", "sum"}
+            {trait.function for trait in node.aggregates}
+            - {"avg", "count", "max", "sum"}
         )
         if unsupported:
             raise RelationError(
@@ -728,11 +729,17 @@ class Evaluator:
             else {key: candidate.values[key] for key in node.keys}
         )
         for trait in node.aggregates:
-            values[trait.output] = self._aggregate_value(trait, source, matches)
+            values[trait.output] = self._aggregate_value(
+                node,
+                trait,
+                source,
+                matches,
+            )
         return values
 
     def _aggregate_value(
         self,
+        node: Aggregate,
         trait: AggregateTrait,
         source: Relation,
         matches: tuple[smt.Term, ...],
@@ -811,6 +818,88 @@ class Evaluator:
                 trait.output_type,
                 smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
                 _wrap_sum(total, trait.output_type),
+            )
+        if trait.function == "avg":
+            assert trait.state is not None
+            guarded_sums: list[tuple[smt.Term, smt.Term]] = []
+            count_terms: list[smt.Term] = []
+            finite_abs_bound = 0
+            count_bound = 0
+            for guard, row in zip(non_null, source.rows):
+                if guard == smt.FALSE:
+                    continue
+                value = row.values[trait.input]
+                if node.phase == "final":
+                    state = value.decimal_average_state
+                    if state is None or state.sum_type != trait.state.sum_type:
+                        raise RelationError(
+                            "final avg input does not carry its validated "
+                            "intermediate Decimal state"
+                        )
+                    guarded_sums.append((guard, state.sum))
+                    finite_abs_bound += state.finite_abs_bound
+                    count_bound += state.count_bound
+                    count_terms.append(smt.ite(guard, state.count, smt.ZERO))
+                else:
+                    guarded_sums.append((guard, value.value))
+                    finite_abs_bound += _decimal_finite_abs_bound(value)
+                    count_bound += 1
+                    count_terms.append(smt.ite(guard, smt.ONE, smt.ZERO))
+
+            state_type = decimal.parse_type(trait.state.sum_type)
+            assert state_type is not None
+            if finite_abs_bound >= 10**state_type.precision:
+                raise RelationError(
+                    f"Decimal avg sum may overflow its {trait.state.sum_type} "
+                    "accumulator within the current bound; non-associative "
+                    "overflow is not modeled"
+                )
+            if count_bound >= 1 << 64:
+                raise RelationError(
+                    "Decimal avg count may wrap its Uint64 accumulator "
+                    "within the current bound"
+                )
+            total = decimal.sum_with_headroom(
+                tuple(guarded_sums),
+                trait.state.sum_type,
+                finite_abs_bound,
+            )
+            count = smt.add(*count_terms)
+            average = decimal.narrow_same_scale(
+                decimal.divide(
+                    total,
+                    count,
+                    trait.state.sum_type,
+                    trait.state.count_type,
+                ),
+                trait.state.sum_type,
+                trait.output_type,
+            )
+            output_type = decimal.parse_type(trait.output_type)
+            assert output_type is not None
+            return Value(
+                trait.output_type,
+                (
+                    smt.not_(smt.or_(*non_null))
+                    if trait.output_nullable
+                    else smt.FALSE
+                ),
+                average,
+                decimal_finite_abs_bound=min(
+                    finite_abs_bound,
+                    10**output_type.precision - 1,
+                ),
+                decimal_average_state=(
+                    DecimalAverageState(
+                        sum_type=trait.state.sum_type,
+                        sum=total,
+                        count=count,
+                        finite_abs_bound=finite_abs_bound,
+                        count_bound=count_bound,
+                    )
+                    if node.phase == "intermediate"
+                    else None
+                ),
             )
         raise AssertionError(f"unsupported aggregate function {trait.function!r}")
 

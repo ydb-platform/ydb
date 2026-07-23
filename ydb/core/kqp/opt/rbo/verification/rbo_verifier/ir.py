@@ -168,6 +168,15 @@ class Sort:
 
 
 @dataclass(frozen=True, slots=True)
+class AverageStateType:
+    """Physical Decimal AVG accumulator hidden by the logical RBO IU type."""
+
+    sum_type: str
+    count_type: str
+    nullable: bool
+
+
+@dataclass(frozen=True, slots=True)
 class AggregateTrait:
     input: str
     function: str
@@ -176,6 +185,7 @@ class AggregateTrait:
     output_nullable: bool
     distinct: bool
     unwrap: bool
+    state: AverageStateType | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -795,20 +805,49 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         for index, raw_trait in enumerate(_array(obj["aggregates"], f"{path}.aggregates")):
             trait_path = f"{path}.aggregates[{index}]"
             trait = _object(raw_trait, trait_path)
+            fields = {
+                "input", "function", "output", "type", "nullable", "distinct", "unwrap"
+            }
+            if trait.get("function") == "avg":
+                fields.add("state")
             _keys(
                 trait,
-                {"input", "function", "output", "type", "nullable", "distinct", "unwrap"},
+                fields,
                 trait_path,
             )
+            function = _string(trait["function"], f"{trait_path}.function")
+            state = None
+            if function == "avg":
+                raw_state = _object(trait["state"], f"{trait_path}.state")
+                _keys(
+                    raw_state,
+                    {"sum_type", "count_type", "nullable"},
+                    f"{trait_path}.state",
+                )
+                state = AverageStateType(
+                    sum_type=_scalar_type(
+                        raw_state["sum_type"],
+                        f"{trait_path}.state.sum_type",
+                    ),
+                    count_type=_scalar_type(
+                        raw_state["count_type"],
+                        f"{trait_path}.state.count_type",
+                    ),
+                    nullable=_bool(
+                        raw_state["nullable"],
+                        f"{trait_path}.state.nullable",
+                    ),
+                )
             aggregates.append(
                 AggregateTrait(
                     input=_string(trait["input"], f"{trait_path}.input"),
-                    function=_string(trait["function"], f"{trait_path}.function"),
+                    function=function,
                     output=_string(trait["output"], f"{trait_path}.output"),
                     output_type=_scalar_type(trait["type"], f"{trait_path}.type"),
                     output_nullable=_bool(trait["nullable"], f"{trait_path}.nullable"),
                     distinct=_bool(trait["distinct"], f"{trait_path}.distinct"),
                     unwrap=_bool(trait["unwrap"], f"{trait_path}.unwrap"),
+                    state=state,
                 )
             )
         if not aggregates:
@@ -1262,6 +1301,125 @@ def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
 
 def _void_columns(columns: Mapping[str, Column]) -> set[str]:
     return {name for name, column in columns.items() if column.type == VOID}
+
+
+def _validate_average_state_dataflow(snapshot: Snapshot) -> None:
+    """Keep hidden AVG tuples on one exact intermediate-to-final edge.
+
+    The RBO operator graph annotates an intermediate AVG IU with its logical
+    Decimal result type even though physical lowering carries an optional
+    ``(Decimal(35, scale) sum, Uint64 count)`` tuple.  Admitting that IU as an
+    ordinary scalar would silently model an average of partial averages.
+    """
+
+    nodes = snapshot.plan.node_map()
+    consumers: dict[str, list[PlanNode]] = {node.id: [] for node in snapshot.plan.nodes}
+    for consumer in snapshot.plan.nodes:
+        for producer in plan_node_inputs(consumer):
+            consumers[producer].append(consumer)
+
+    for node in snapshot.plan.nodes:
+        if not isinstance(node, Aggregate):
+            continue
+
+        final_average_traits = tuple(
+            trait for trait in node.aggregates if trait.function == "avg"
+        )
+        if node.phase == "final":
+            child = nodes.get(node.input)
+            if final_average_traits and (
+                not isinstance(child, Aggregate)
+                or child.phase != "intermediate"
+                or child.keys != node.keys
+            ):
+                _fail(
+                    f"node {node.id!r}.aggregates",
+                    "final avg must directly consume an intermediate aggregate "
+                    "with the same ordered keys",
+                )
+            if isinstance(child, Aggregate) and child.phase == "intermediate":
+                child_traits = {trait.output: trait for trait in child.aggregates}
+                for trait in final_average_traits:
+                    source = child_traits.get(trait.input)
+                    if (
+                        source is None
+                        or source.function != "avg"
+                        or source.output_type != trait.output_type
+                        or source.state != trait.state
+                    ):
+                        _fail(
+                            f"node {node.id!r}.aggregates",
+                            "final avg must consume the matching intermediate "
+                            "avg state with identical Decimal metadata",
+                        )
+
+        if node.phase != "intermediate":
+            continue
+        intermediate_average_traits = tuple(
+            trait for trait in node.aggregates if trait.function == "avg"
+        )
+        if not intermediate_average_traits:
+            continue
+        node_consumers = consumers[node.id]
+        if (
+            len(node_consumers) != 1
+            or not isinstance(node_consumers[0], Aggregate)
+            or node_consumers[0].phase != "final"
+            or node_consumers[0].input != node.id
+        ):
+            _fail(
+                f"node {node.id!r}.aggregates",
+                "intermediate avg state must have one direct final aggregate consumer",
+            )
+        final = node_consumers[0]
+        assert isinstance(final, Aggregate)
+        if final.keys != node.keys:
+            _fail(
+                f"node {node.id!r}.keys",
+                "intermediate and final avg must have the same ordered keys",
+            )
+        for trait in intermediate_average_traits:
+            uses = tuple(
+                candidate
+                for candidate in final.aggregates
+                if candidate.input == trait.output
+            )
+            if (
+                trait.output in final.keys
+                or len(uses) != 1
+                or uses[0].function != "avg"
+                or uses[0].output_type != trait.output_type
+                or uses[0].state != trait.state
+            ):
+                _fail(
+                    f"node {node.id!r}.aggregates",
+                    "each intermediate avg state must be used only by one "
+                    "matching final avg trait",
+                )
+
+        graph = snapshot.stage_graph
+        if graph is not None:
+            output_stages = {
+                (stage.id, output.index): output.node
+                for stage in graph.stages
+                for output in stage.outputs
+            }
+            hidden_outputs = {
+                trait.output for trait in intermediate_average_traits
+            }
+            for edge in graph.edges:
+                if output_stages.get(
+                    (edge.producer, edge.producer_output)
+                ) != node.id:
+                    continue
+                routed = set(edge.keys) | {
+                    item.column for item in edge.order
+                }
+                if hidden_outputs & routed:
+                    _fail(
+                        f"stage edge {edge.id!r}",
+                        "intermediate avg state may only be transported as payload",
+                    )
 
 
 def _validate_void_dataflow(
@@ -1835,6 +1993,39 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             trait_path,
                             "max output nullability does not match its input, phase, and keys",
                         )
+                elif trait.function == "avg":
+                    if not decimal.is_type(input_column.type):
+                        _fail(
+                            trait_path,
+                            f"avg does not support {input_column.type!r}; "
+                            "only Decimal is modeled",
+                        )
+                    if trait.output_type != input_column.type:
+                        _fail(
+                            trait_path,
+                            "avg output type must exactly match its Decimal input "
+                            f"{input_column.type!r}, got {trait.output_type!r}",
+                        )
+                    expected_state = AverageStateType(
+                        sum_type=decimal.sum_type(input_column.type) or "",
+                        count_type="Uint64",
+                        nullable=input_column.nullable,
+                    )
+                    if trait.state != expected_state:
+                        _fail(
+                            f"{trait_path}.state",
+                            "avg state must be the exact "
+                            f"({expected_state.sum_type}, Uint64) accumulator "
+                            f"with nullable={str(expected_state.nullable).lower()}",
+                        )
+                    expected_nullable = input_column.nullable
+                    if not node.keys and node.phase != "intermediate":
+                        expected_nullable = True
+                    if trait.output_nullable != expected_nullable:
+                        _fail(
+                            trait_path,
+                            "avg output nullability does not match its input, phase, and keys",
+                        )
 
                 result[trait.output] = Column(
                     trait.output,
@@ -1903,6 +2094,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     for column in snapshot.plan.output:
         if column not in root_schema:
             _fail("snapshot.plan.output", f"column {column!r} is not produced by the root")
+    _validate_average_state_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas)
     return schemas

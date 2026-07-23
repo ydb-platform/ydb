@@ -66,6 +66,10 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         const TString value = std::visit(TClassifierSettings::TExtractor(), setting);
         if (property == TResourcePoolClassifierConfig::TDecoder::Rank) {
             result.SetColumn(property, NMetadata::NInternal::TYDBValue::Int64(FromString<i64>(value)));
+        } else if (property == "has_stream") {
+            if (!value.empty()) {
+                configJson.InsertValue(property, value == "true");
+            }
         } else {
             configJson.InsertValue(property, value);
         }

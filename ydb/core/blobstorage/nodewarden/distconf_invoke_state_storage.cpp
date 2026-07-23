@@ -15,15 +15,27 @@ namespace NKikimr::NStorage {
         const NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
         bool result = true;
         std::unordered_set<ui32> usedNodes;
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes, config.GetStateStorageConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
-        if (pileupReplicas) {
-            usedNodes.clear();
-        }
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes, config.GetStateStorageBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
-        if (pileupReplicas) {
-            usedNodes.clear();
-        }
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes, config.GetSchemeBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+
+#define GENERATE_CONFIG(NAME) \
+    { \
+        std::unordered_set<ui32> nodesToUse; \
+        if (Self->Cfg->SelfManagementConfig && Self->Cfg->SelfManagementConfig->NAME##SelfHealAllowedNodesSize()) { \
+            const auto& allowedNodes = Self->Cfg->SelfManagementConfig->Get##NAME##SelfHealAllowedNodes(); \
+            nodesToUse.insert(allowedNodes.begin(), allowedNodes.end()); \
+        } \
+        const bool automaticManagement = !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(); \
+        result &= Self->GenerateStateStorageConfig(currentConfig->Mutable##NAME##Config(), config, usedNodes, nodesToUse, config.Get##NAME##Config(), automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume); \
+        if (pileupReplicas) { \
+            usedNodes.clear(); \
+        } \
+    }
+
+        GENERATE_CONFIG(StateStorage)
+        GENERATE_CONFIG(StateStorageBoard)
+        GENERATE_CONFIG(SchemeBoard)
+
+#undef GENERATE_CONFIG
+
         return result;
     }
 

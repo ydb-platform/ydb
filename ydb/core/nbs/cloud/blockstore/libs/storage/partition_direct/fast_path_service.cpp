@@ -95,12 +95,8 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
-size_t RegionCount(ui64 blockCount, ui32 blockSize)
-{
-    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
-}
-
 TVector<TRegionPtr> CreateRegions(
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -109,7 +105,7 @@ TVector<TRegionPtr> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const size_t regionCount = RegionCount(blockCount, blockSize);
+    const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
@@ -117,6 +113,7 @@ TVector<TRegionPtr> CreateRegions(
 
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
+            traceService,
             partitionDirectService,
             i,
             directBlockGroups,
@@ -154,6 +151,7 @@ TFastPathService::TFastPathService(
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
+          this,
           this,
           blockCount,
           blockSize,
@@ -197,7 +195,7 @@ NThreading::TFuture<void> TFastPathService::Run()
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        initialReadyFutures.push_back(dbg->Run(this));
+        initialReadyFutures.push_back(dbg->Run(this, this));
     }
     for (const auto& region: Regions) {
         region->Run();
@@ -376,10 +374,13 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+void TFastPathService::QueryAddHost(
+    size_t directBlockGroupId,
+    size_t newHostIndex)
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
-        directBlockGroupId);
+        directBlockGroupId,
+        newHostIndex);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
@@ -592,6 +593,13 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     ScheduleDirtyMapDebugPrint();
     ++DumpCount;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize)
+{
+    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -10,6 +10,7 @@ import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/data_events.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
@@ -322,6 +323,7 @@ message TQueryResponse {
     optional string QueryDiagnostics = 15;
     optional TQueryResponseExtraInfo ExtraInfo = 16;
     optional string EffectivePoolId = 17;
+    optional Ydb.VirtualTimestamp CommitTimestamp = 18;
 }
 
 message TEvQueryResponse {

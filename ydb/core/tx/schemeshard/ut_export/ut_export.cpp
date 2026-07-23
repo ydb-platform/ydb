@@ -54,7 +54,8 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "",
-            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false) {
+            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false,
+            const TVector<TString>& columnTables = {}) {
 
         TTablesWithAttrs tables;
 
@@ -146,6 +147,11 @@ namespace {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             }, userAttrs);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+
+        for (const auto& table : columnTables) {
+            TestCreateColumnTable(runtime, schemeshardId, ++txId, dbName, table);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -1248,6 +1254,24 @@ namespace {
             }
 
             return info;
+        }
+
+        void VerifyColumnTableS3ExportHasData(const TString& destinationPrefix) {
+            const TString prefix = destinationPrefix.empty()
+                ? TString()
+                : (destinationPrefix.StartsWith('/') ? destinationPrefix : "/" + destinationPrefix);
+
+            UNIT_ASSERT(HasS3File(prefix + "/scheme.pb"));
+
+            bool hasDataFile = false;
+            for (const auto& [path, content] : S3Mock().GetData()) {
+                // "metadata.json" contains "data" as a substring, so match a data-path component instead.
+                if (path.StartsWith(prefix + "/") && path.Contains("/data") && !content.empty()) {
+                    hasDataFile = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(hasDataFile, "Expected at least one non-empty data file under '" << (prefix.empty() ? "/" : prefix) << "'");
         }
 
         ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {
@@ -5295,5 +5319,456 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             NLs::PathExist,
             NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
         });
+    }
+
+    Y_UNIT_TEST(ExportImportRowAndColumnTablesTogether) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "RowTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        UpdateRow(Runtime(), "RowTable", 1, "rowValue");
+
+        const auto columnInfo = CreateColumnTableWithData(txId, "ColumnTable");
+        Y_UNUSED(columnInfo);
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/RowTable"
+                destination_prefix: "RowExport"
+              }
+              items {
+                source_path: "/MyRoot/ColumnTable"
+                destination_prefix: "ColumnExport"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        VerifyColumnTableS3ExportHasData("ColumnExport");
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "RowExport"
+                destination_path: "/MyRoot/RowImported"
+              }
+              items {
+                source_prefix: "ColumnExport"
+                destination_path: "/MyRoot/ColumnImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/RowImported"), {NLs::PathExist, NLs::IsTable});
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnImported"), {
+            NLs::PathExist,
+            NLs::IsColumnTable,
+        });
+
+        {
+            auto tableDesc = DescribePath(Runtime(), "/MyRoot/RowImported", true, false, true);
+            const auto& partitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT(!partitions.empty());
+            const auto rowContent = ReadTable(
+                Runtime(), partitions[0].GetDatashardId(), "RowImported", {"key"}, {"key", "value"});
+            const auto rowList = NClient::TValue::Create(rowContent)["Result"]["List"];
+            UNIT_ASSERT_VALUES_EQUAL(rowList.Size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rowList[0]["key"]), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(TString(rowList[0]["value"]), "rowValue");
+        }
+    }
+
+    Y_UNIT_TEST(ExportImportColumnTableAfterAddAndDropColumns) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                Columns { Name: "to_drop" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        {
+            auto describe = DescribePath(Runtime(), "/MyRoot/ColumnTable");
+            TestDescribeResult(describe, {NLs::PathExist, NLs::IsColumnTable});
+            pathId = describe.GetPathId();
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+        }
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(shardId);
+
+        auto writeRows = [&](const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::pair<ui64, ui64>& rows) {
+            TActorId sender = Runtime().AllocateEdgeActor();
+            const auto data = NTxUT::MakeTestBlob(rows, ydbSchema, {}, {"timestamp"});
+            ui64 writeId = 0;
+            std::vector<ui64> writeIds;
+            ++txId;
+            NTxUT::WriteData(Runtime(), sender, shardId, ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+            auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(Runtime(), sender, shardId, planStep, {txId});
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> schemaBeforeAlter = {
+            NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
+            NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("to_drop", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+        };
+        writeRows(schemaBeforeAlter, {0, 50});
+
+        TestAlterColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                DropColumns { Name: "to_drop" }
+                AddColumns { Name: "added" Type: "Uint64" }
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const std::vector<NArrow::NTest::TTestColumn> schemaAfterAlter = {
+            NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
+            NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("added", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
+        };
+        writeRows(schemaAfterAlter, {50, 100});
+
+        auto hasColumn = [](const NKikimrScheme::TEvDescribeSchemeResult& descr, const TString& columnName) {
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (const auto& col : schema.GetColumns()) {
+                if (col.GetName() == columnName) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        {
+            auto descr = DescribePrivatePath(Runtime(), "/MyRoot/ColumnTable");
+            UNIT_ASSERT(hasColumn(descr, "added"));
+            UNIT_ASSERT(!hasColumn(descr, "to_drop"));
+        }
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/ColumnTable"
+                destination_prefix: "AlteredColumnExport"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "AlteredColumnExport"
+                destination_path: "/MyRoot/ColumnImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        {
+            auto descr = DescribePrivatePath(Runtime(), "/MyRoot/ColumnImported");
+            UNIT_ASSERT(hasColumn(descr, "timestamp"));
+            UNIT_ASSERT(hasColumn(descr, "value"));
+            UNIT_ASSERT(hasColumn(descr, "added"));
+            UNIT_ASSERT(!hasColumn(descr, "to_drop"));
+        }
+    }
+
+    Y_UNIT_TEST(ShouldWriteBillRecordOnColumnTableServerlessDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", true, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        if (billRecords.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&billRecords](IEventHandle&) -> bool {
+                return !billRecords.empty();
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"cloud_id\":\"CLOUD_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"folder_id\":\"FOLDER_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"resource_id\":\"DATABASE_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"schema\":\"ydb.serverless.requests.v1\"");
+    }
+
+    Y_UNIT_TEST(ShouldNotWriteBillRecordOnColumnTableCommonDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", false, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        UNIT_ASSERT(billRecords.empty());
+    }
+
+    Y_UNIT_TEST(ShouldFailExportColumnTableWhenBackupDisabled) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(false);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/ColumnTable"
+                destination_prefix: "DisabledExport"
+              }
+            }
+        )", S3Port()), "", "", Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(ExportImportMultiShardColumnTable) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "MultiShardColumnTable"
+            ColumnShardCount: 2
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        ui64 pathId = 0;
+        TVector<ui64> shardIds;
+        {
+            auto describe = DescribePath(Runtime(), "/MyRoot/MultiShardColumnTable");
+            TestDescribeResult(describe, {NLs::PathExist, NLs::IsColumnTable});
+            pathId = describe.GetPathId();
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 2);
+            for (ui64 id : sharding.GetColumnShards()) {
+                shardIds.push_back(id);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(shardIds.size(), 2);
+        UNIT_ASSERT(pathId);
+
+        {
+            TActorId sender = Runtime().AllocateEdgeActor();
+            const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
+                NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
+                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+            };
+            for (size_t i = 0; i < shardIds.size(); ++i) {
+                const auto data = NTxUT::MakeTestBlob({i * 100, i * 100 + 50}, ydbSchema, {}, {"timestamp"});
+                ui64 writeId = 0;
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(Runtime(), sender, shardIds[i], ++writeId, pathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                auto planStep = NTxUT::ProposeCommit(Runtime(), sender, shardIds[i], txId, writeIds, txId);
+                NTxUT::PlanCommit(Runtime(), sender, shardIds[i], planStep, {txId});
+            }
+        }
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/MultiShardColumnTable"
+                destination_prefix: "MultiShardExport"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        VerifyColumnTableS3ExportHasData("MultiShardExport");
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "MultiShardExport"
+                destination_path: "/MyRoot/MultiShardImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        {
+            auto describe = DescribePath(Runtime(), "/MyRoot/MultiShardImported");
+            TestDescribeResult(describe, {NLs::PathExist, NLs::IsColumnTable});
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldFailImportColumnTableWithInvalidScheme) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        CreateColumnTableWithData(txId, "ColumnTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/ColumnTable"
+                destination_prefix: "ColumnCorruptScheme"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        auto schemeIt = S3Mock().GetData().find("/ColumnCorruptScheme/scheme.pb");
+        UNIT_ASSERT_C(schemeIt != S3Mock().GetData().end(), "scheme.pb must exist after export");
+        schemeIt->second = "this is not a valid scheme protobuf";
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "ColumnCorruptScheme"
+                destination_path: "/MyRoot/ColumnImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnImported"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ShouldFailExportNonexistentColumnTable) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/NoSuchColumnTable"
+                destination_prefix: "Missing"
+              }
+            }
+        )", S3Port()), "", "", Ydb::StatusIds::BAD_REQUEST);
     }
 }

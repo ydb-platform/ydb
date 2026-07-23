@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include "partition_direct_service_mock.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
@@ -29,10 +31,13 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+    std::shared_ptr<TTraceServiceMock> TraceService =
+        std::make_shared<TTraceServiceMock>();
+    std::shared_ptr<TPartitionDirectServiceMock> Service;
     // Mock services created by RunAndGetInitialReady(). Kept alive for the
     // whole test because TDirectBlockGroup::Run() stores a raw pointer to the
     // service.
-    TVector<std::shared_ptr<TPartitionDirectServiceMock>> Services;
+    TVector<IPartitionDirectServicePtr> OldServices;
 
     void SetUp(NUnitTest::TTestContext& context) override;
     void TearDown(NUnitTest::TTestContext& context) override;

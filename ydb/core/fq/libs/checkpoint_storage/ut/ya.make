@@ -12,7 +12,6 @@ FORK_SUBTESTS()
 PEERDIR(
     library/cpp/retry
     library/cpp/testing/unittest
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/testlib
     ydb/core/testlib/default

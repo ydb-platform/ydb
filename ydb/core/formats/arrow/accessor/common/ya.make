@@ -2,6 +2,7 @@ LIBRARY(library-formats-arrow-accessor-common)
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/json
     library/cpp/json/writer
     ydb/library/actors/core
     ydb/library/formats/arrow/protos

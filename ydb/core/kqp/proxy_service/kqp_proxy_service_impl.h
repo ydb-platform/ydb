@@ -3,14 +3,14 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
-#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
-#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
+#include <ydb/services/workload_manager/query_classifier.h>
+#include <ydb/services/workload_manager/session_updater.h>
+#include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -79,9 +79,9 @@ public:
     }
 };
 
-class TWmSessionUpdater final : public NWorkload::ISessionUpdater {
+class TWmSessionUpdater final : public NWorkloadManager::ISessionUpdater {
 public:
-    using EState = NWorkload::ISessionUpdater::EState;
+    using EState = NWorkloadManager::ISessionUpdater::EState;
 
     void SetRequestState(EState state, TInstant timestamp) override {
         const ui64 ts = timestamp.MicroSeconds();
@@ -511,12 +511,12 @@ public:
     }
 
     std::optional<TPoolInfo> GetPoolInfo(const TString& databaseId, const TString& poolId, TActorContext actorContext) const {
-        auto it = PoolsCache.find(GetPoolKey(databaseId, poolId));
+        auto it = PoolsCache.find(NWorkloadManager::GetPoolKey(databaseId, poolId));
         if (it == PoolsCache.end()) {
             Y_ASSERT(!poolId.empty());
 
             actorContext.Send(MakeKqpSchedulerServiceId(actorContext.SelfID.NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+            actorContext.Send(NWorkloadManager::MakeServiceId(actorContext.SelfID.NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             return std::nullopt;
         }
         return it->second;
@@ -533,7 +533,7 @@ public:
     }
 
     void UpdatePoolInfo(const TString& databaseId, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject, TActorContext actorContext) {
-        const TString& poolKey = GetPoolKey(databaseId, poolId);
+        const TString& poolKey = NWorkloadManager::GetPoolKey(databaseId, poolId);
         if (!config) {
             auto it = PoolsCache.find(poolKey);
             if (it == PoolsCache.end()) {
@@ -545,7 +545,7 @@ public:
             } else {
                 // Refresh pool subscription
                 it->second.Expired = true;
-                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
+                actorContext.Send(NWorkloadManager::MakeServiceId(actorContext.SelfID.NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             }
         } else {
             auto& poolInfo = PoolsCache[poolKey];
@@ -557,7 +557,7 @@ public:
         BuildResourcePoolMapSnapshot();
     }
 
-    void UpdateResourcePoolClassifiersInfo(std::shared_ptr<TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
+    void UpdateResourcePoolClassifiersInfo(std::shared_ptr<NWorkloadManager::TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
         LastClassifierSnapshot = snapshot;
         for (const auto& [databaseId, info] : snapshot->GetResourcePoolClassifierConfigs()) {
             for (const auto& [_, classifier] : info.ByName) {
@@ -569,23 +569,23 @@ public:
     void UnsubscribeFromResourcePoolClassifiers(TActorContext actorContext) {
         if (SubscribedOnResourcePoolClassifiers) {
             SubscribedOnResourcePoolClassifiers = false;
-            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(std::make_shared<NWorkloadManager::TResourcePoolClassifierSnapshotsFetcher>()));
         }
     }
 
-    TClassifierConfigsView GetClassifierViewFor(const TString& databaseId) const {
-        return TClassifierConfigsView(LastClassifierSnapshot, databaseId);
+    NWorkloadManager::TClassifierConfigsView GetClassifierViewFor(const TString& databaseId) const {
+        return NWorkloadManager::TClassifierConfigsView(LastClassifierSnapshot, databaseId);
     }
 
 
 private:
     void BuildResourcePoolMapSnapshot() {
-        auto pools = std::make_shared<TResourcePoolMap>();
+        auto pools = std::make_shared<NWorkloadManager::TResourcePoolMap>();
 
         pools->reserve(PoolsCache.size());
         for (const auto& [key, info] : PoolsCache) {
             if (!info.Expired) {
-                pools->emplace(key, TResourcePoolEntry{info.Config, info.SecurityObject});
+                pools->emplace(key, NWorkloadManager::TResourcePoolEntry{info.Config, info.SecurityObject});
             }
         }
         
@@ -603,7 +603,7 @@ private:
     void SubscribeOnResourcePoolClassifiers(TActorContext actorContext) {
         if (!SubscribedOnResourcePoolClassifiers && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             SubscribedOnResourcePoolClassifiers = true;
-            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+            actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<NWorkloadManager::TResourcePoolClassifierSnapshotsFetcher>()));
         }
     }
 
@@ -620,17 +620,17 @@ private:
     }
 
 public:
-    const std::shared_ptr<const TResourcePoolClassifierSnapshot>& GetLastClassifierSnapshot() const {
+    const std::shared_ptr<const NWorkloadManager::TResourcePoolClassifierSnapshot>& GetLastClassifierSnapshot() const {
         return LastClassifierSnapshot;
     }
 
-    const std::shared_ptr<const TResourcePoolMap>& GetLastResourcePoolMapSnapshot() const {
+    const std::shared_ptr<const NWorkloadManager::TResourcePoolMap>& GetLastResourcePoolMapSnapshot() const {
         return LastResourcePoolMapSnapshot;
     }
 
 private:
-    std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
-    std::shared_ptr<const TResourcePoolMap> LastResourcePoolMapSnapshot;
+    std::shared_ptr<const NWorkloadManager::TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
+    std::shared_ptr<const NWorkloadManager::TResourcePoolMap> LastResourcePoolMapSnapshot;
 
     std::unordered_map<TString, TPoolInfo> PoolsCache;
     std::unordered_map<TString, TDatabaseInfo> DatabasesCache;

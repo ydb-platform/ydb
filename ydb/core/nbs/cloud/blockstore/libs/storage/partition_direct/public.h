@@ -39,6 +39,12 @@ struct IRequestExecutor;
 using IRequestExecutorPtr = std::shared_ptr<IRequestExecutor>;
 using IRequestExecutorWeakPtr = std::weak_ptr<IRequestExecutor>;
 
+struct IPartitionDirectService;
+using IPartitionDirectServicePtr = std::shared_ptr<IPartitionDirectService>;
+
+class TFastPathService;
+using TFastPathServicePtr = std::shared_ptr<TFastPathService>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -71,7 +71,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -153,7 +155,7 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
-    void QueryAddHost() override;
+    void QueryAddHost(THostIndex newHostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -180,22 +182,23 @@ private:
         [[nodiscard]] TString DebugPrint() const;
     };
 
+    [[nodiscard]] size_t GetHostCount() const;
+    void AddDDiskAndPBufferConnection(
+        THostIndex host,
+        const NKikimr::NBsController::TDDiskId& ddiskId,
+        const NKikimr::NBsController::TDDiskId& pbufferId);
     void DoEstablishConnections();
-    void DoEstablishConnection(size_t index, EConnectionType connectionType);
-
-    // Live AddHost: grow all vchunks and the Oracle to the new connection.
-    void SyncHostsWithConnections();
-
-    // Catch one vchunk / the Oracle up to the current connection count.
-    void GrowVChunkToConnections(TVChunk& vChunk);
-    void GrowOracleToConnections();
-
+    void DoEstablishConnection(
+        THostIndex hostIndex,
+        EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
-        size_t index,
+        THostIndex hostIndex,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
-    void ReEstablishDDiskConnection(size_t index, TDuration reconnectDelay);
+    void ReEstablishConnection(
+        EConnectionType connectionType,
+        THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
@@ -249,8 +252,6 @@ private:
     void Thinking();
     void ScheduleOracleThinking();
 
-    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
-
     void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
     [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
@@ -270,6 +271,7 @@ private:
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
     TLogTitle LogTitle;
+    ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;

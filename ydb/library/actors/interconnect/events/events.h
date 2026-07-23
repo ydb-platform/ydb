@@ -68,6 +68,12 @@ namespace NActors {
         // wake for the direct-session (v1) lock-free registration queue
         EvProcessDirectSessionQueue,
 
+        // internal event for v2 queue dispatching
+        EvRegisterCallback,
+        EvRegisterSession,
+        EvUnregisterSession,
+        EvStop,
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

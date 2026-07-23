@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/protobuf/json
     ydb/core/client/server
     ydb/core/grpc_services
-    ydb/core/kqp/workload_service/actors
+    ydb/services/workload_manager/actors
     ydb/core/testlib
     ydb/core/util
     ydb/library/aclib

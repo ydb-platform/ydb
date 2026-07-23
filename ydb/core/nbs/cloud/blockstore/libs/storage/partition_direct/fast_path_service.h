@@ -1,13 +1,14 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "partition_direct_service.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -20,6 +21,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TFastPathService
     : public IStorage
+    , public ITraceService
     , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
@@ -101,9 +103,11 @@ public:
 
     void ReportIOError() override;
 
+    // ITraceService implementation
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
 
     void ScheduleAfterDelay(
         NYdb::NBS::TExecutorPtr executor,
@@ -112,7 +116,7 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    void RequestAddHost(size_t directBlockGroupId) override;
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
     ui64 GenerateLsn() override;
 
@@ -142,5 +146,11 @@ private:
         std::optional<ui64> safeBarrier);
     void FinishPBufferCleanup();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

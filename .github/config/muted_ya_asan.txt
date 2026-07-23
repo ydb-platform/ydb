@@ -45,6 +45,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNo
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthHigher
+ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine1
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine5
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumer
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumerWithFlag
@@ -117,6 +119,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueSetsDef
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithEmptyName
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithEmptySecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteKafkaBatchMiddleOffsetDoesNotDeleteBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessage
@@ -198,6 +201,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVi
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatchMixedTimeouts
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityExtendTimeout
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityZeroTimeout
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicNoConsumer
@@ -207,6 +211,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueFifo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithCustomConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithEmptyName
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndSameParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueNonExisting
@@ -267,6 +272,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
+ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.ANALYZE_TPCН_11
@@ -291,6 +297,7 @@ ydb/core/kqp/ut/tli KqpTli.ManyUpserts
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
+ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks

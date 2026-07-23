@@ -1029,10 +1029,10 @@ public:
     }
 
     void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId_ = std::move(id);
+        UserFacingTraceId = std::move(id);
     }
     NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId_);
+        return NWilson::TTraceId(UserFacingTraceId);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -1158,7 +1158,7 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
-    NWilson::TTraceId UserFacingTraceId_;
+    NWilson::TTraceId UserFacingTraceId;
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
@@ -1429,10 +1429,10 @@ public:
     }
 
     void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId_ = std::move(id);
+        UserFacingTraceId = std::move(id);
     }
     NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId_);
+        return NWilson::TTraceId(UserFacingTraceId);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -1642,7 +1642,7 @@ private:
 protected:
     NWilson::TSpan Span_;
 private:
-    NWilson::TTraceId UserFacingTraceId_;
+    NWilson::TTraceId UserFacingTraceId;
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
@@ -2062,10 +2062,10 @@ public:
     }
 
     void SetUserFacingTraceId(NWilson::TTraceId id) override {
-        UserFacingTraceId_ = std::move(id);
+        UserFacingTraceId = std::move(id);
     }
     NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId_);
+        return NWilson::TTraceId(UserFacingTraceId);
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
@@ -2135,7 +2135,7 @@ public:
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;
     NWilson::TSpan Span;
-    NWilson::TTraceId UserFacingTraceId_;
+    NWilson::TTraceId UserFacingTraceId;
     IGRpcProxyCounters::TPtr Counters;
     TMaybe<NRpcService::TRlPath> RlPath;
     TAuditLogParts AuditLogParts;

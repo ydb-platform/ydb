@@ -523,6 +523,10 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
 
+    // Deliberately the same traceparent for both channels: the user-facing tree continues the
+    // client's application trace (its whole point), and the dev tree keeps attaching to it too —
+    // the pre-existing external-tracing behavior. When both channels sample such a request, the
+    // client's trace gets two YDB subtrees side by side: the curated user one and the dev one.
     NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
         ctx.GetRequestDiscriminator(), ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER));
     if (userTraceId) {

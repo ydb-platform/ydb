@@ -67,6 +67,7 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool ReportVDiskMetricsInPDiskMock = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -103,6 +104,7 @@ struct TEnvironmentSetup {
                         : TPDiskMockState::ESpaceColorPolicy::None;
                 state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
                         cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
+                state->SetReportVDiskMetrics(Env.Settings.ReportVDiskMetricsInPDiskMock);
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);

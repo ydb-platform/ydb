@@ -2,14 +2,14 @@
 """Unit tests for PR-check sharding helpers."""
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
-from collections import Counter
+from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sharding"
 SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
@@ -17,24 +17,25 @@ SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
 if str(SHARDING_DIR) not in sys.path:
     sys.path.insert(0, str(SHARDING_DIR))
 
-from choose_shard_count import (  # noqa: E402
-    choose_shard_count,
-    enrich_plan_timing_estimate,
-    estimate_critical_path_minutes,
-    min_shards_for_wall_budget,
+from filter import filter_for_shard  # noqa: E402
+from merge import (  # noqa: E402
+    merge_reports,
+    merge_reports_latest_wins,
 )
-from filter_graph_for_shard import filter_for_shard  # noqa: E402
-from graph_plan_utils import (  # noqa: E402
+from plan import (  # noqa: E402
     WEIGHT_MODE_HISTORY,
     WEIGHT_MODE_TIMEOUT_BUDGET,
-    assign_result_uids_to_shards,
+    build_plan,
+    choose_shard_count,
     cpu_slots,
+    enrich_plan_timing_estimate,
+    estimate_critical_path_minutes,
     extract_node_path,
     load_graph,
+    min_shards_for_wall_budget,
     plan_uid_weights,
+    print_summary,
 )
-from render_artifacts_nav import render_nav_html  # noqa: E402
-from render_shard_plan_summary import render as render_shard_plan_summary  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -46,13 +47,12 @@ def _run(script: str, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-class ShardingToolsTest(unittest.TestCase):
-
+class MergeReportsTest(unittest.TestCase):
     def test_merge_build_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "merged.json"
             _run(
-                "merge_build_reports.py",
+                "merge.py",
                 "-o",
                 str(out),
                 str(FIXTURES / "report_shard_0.json"),
@@ -80,91 +80,35 @@ class ShardingToolsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             out = Path(tmp) / "merged.json"
-            _run("merge_build_reports.py", "-o", str(out), str(shard_a), str(shard_b))
+            _run("merge.py", "-o", str(out), str(shard_a), str(shard_b))
             merged = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(len(merged["results"]), 1)
             self.assertEqual(merged["results"][0]["status"], "FAILED")
 
-
-
-
-
-    def test_extract_failed_test_filters(self):
-        proc = subprocess.run(
-            [sys.executable, str(SHARDING_DIR / "extract_failed_test_filters.py"), str(FIXTURES / "report_shard_0.json")],
-            check=True,
-            capture_output=True,
-            text=True,
+    def test_merge_reports_worst_status_wins_in_memory(self):
+        row = {"path": "p", "name": "n", "subtest_name": "s", "type": "test"}
+        merged = merge_reports(
+            [
+                {"results": [{**row, "status": "OK"}]},
+                {"results": [{**row, "status": "ERROR"}]},
+            ]
         )
-        self.assertEqual(proc.stdout.strip().splitlines(), ["Suite::Slow"])
+        self.assertEqual(len(merged["results"]), 1)
+        self.assertEqual(merged["results"][0]["status"], "ERROR")
 
-    def test_extract_failed_suite_paths(self):
-        proc = subprocess.run(
-            [sys.executable, str(SHARDING_DIR / "extract_failed_suite_paths.py"), str(FIXTURES / "report_shard_0.json")],
-            check=True,
-            capture_output=True,
-            text=True,
+    def test_merge_reports_latest_wins_in_memory(self):
+        row = {"path": "p", "name": "n", "subtest_name": "s", "type": "test"}
+        merged = merge_reports_latest_wins(
+            [
+                {"results": [{**row, "status": "FAILED"}]},
+                {"results": [{**row, "status": "OK"}]},
+            ]
         )
-        self.assertEqual(proc.stdout.strip().splitlines(), ["ydb/core/foo/ut"])
-
-    def test_extract_failed_suite_paths_includes_chunk_failures(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            report_path = Path(tmp) / "report.json"
-            report_path.write_text(
-                json.dumps(
-                    {
-                        "results": [
-                            {
-                                "path": "ydb/core/kqp/ut/scheme",
-                                "name": "KqpConstraints",
-                                "subtest_name": "AlterTableSetDropDefaultAsyncIndexOnColumn",
-                                "status": "FAILED",
-                                "type": "test",
-                            },
-                            {
-                                "path": "ydb/core/tx/datashard/ut_read_iterator",
-                                "name": "ReadIteratorExternalBlobs",
-                                "subtest_name": "chunk 3",
-                                "status": "FAILED",
-                                "type": "test",
-                                "chunk": True,
-                            },
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
-            suites = subprocess.run(
-                [sys.executable, str(SHARDING_DIR / "extract_failed_suite_paths.py"), str(report_path)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            filters = subprocess.run(
-                [sys.executable, str(SHARDING_DIR / "extract_failed_test_filters.py"), str(report_path)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(
-                suites.stdout.strip().splitlines(),
-                ["ydb/core/kqp/ut/scheme", "ydb/core/tx/datashard/ut_read_iterator"],
-            )
-            self.assertEqual(
-                filters.stdout.strip().splitlines(),
-                ["KqpConstraints::AlterTableSetDropDefaultAsyncIndexOnColumn"],
-            )
+        self.assertEqual(len(merged["results"]), 1)
+        self.assertEqual(merged["results"][0]["status"], "OK")
 
 
-
-
-
-
-
-
-
-
-class MergeReportsLatestWinsTest(unittest.TestCase):
+class MergeReportsLatestWinsCLITest(unittest.TestCase):
     def test_later_attempt_overrides_status(self):
         with tempfile.TemporaryDirectory() as tmp:
             try1 = Path(tmp) / "try_1.json"
@@ -191,7 +135,7 @@ class MergeReportsLatestWinsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             out = Path(tmp) / "final.json"
-            _run("merge_build_reports.py", "--latest-wins", "-o", str(out), str(try1), str(try2))
+            _run("merge.py", "--latest-wins", "-o", str(out), str(try1), str(try2))
             final = json.loads(out.read_text(encoding="utf-8"))
             statuses = {r["subtest_name"]: r["status"] for r in final["results"]}
             self.assertEqual(statuses, {"ok": "OK", "flaky": "OK"})
@@ -257,7 +201,9 @@ class ChooseShardCountTest(unittest.TestCase):
         self.assertEqual(plan["estimated_critical_path_min"], round(5200.0 / 60.0 / 52.0, 1))
         self.assertEqual(plan["estimated_single_job_min"], round(10000.0 / 60.0 / 52.0, 1))
 
-    def test_render_shard_plan_summary_includes_estimate(self):
+
+class PrintSummaryTest(unittest.TestCase):
+    def test_print_summary_includes_estimate_and_table(self):
         plan = enrich_plan_timing_estimate(
             {
                 "plan_mode": "increment_graph",
@@ -271,85 +217,16 @@ class ChooseShardCountTest(unittest.TestCase):
             },
             52,
         )
-        text = render_shard_plan_summary(plan)
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            print_summary(plan)
+        text = buffer.getvalue()
         self.assertIn("Estimated wall time (slowest shard)", text)
         self.assertIn("Monolith equivalent", text)
-
-    def test_cli_reads_summary_json(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            summary = Path(tmp) / "list_summary.json"
-            # 150 estimated minutes on 52 threads -> 8 shards off-peak.
-            summary.write_text(json.dumps({"total_weight": 150 * 60 * 52}), encoding="utf-8")
-            result = _run(
-                "choose_shard_count.py",
-                str(summary),
-                "--now-utc-hour",
-                "3",
-            )
-            self.assertEqual(result.stdout.strip(), "8")
-            result_peak = _run(
-                "choose_shard_count.py",
-                str(summary),
-                "--now-utc-hour",
-                "12",
-            )
-            self.assertEqual(result_peak.stdout.strip(), "4")
+        self.assertIn("| Shard | Graph nodes | Weight | Sample paths |", text)
 
 
-class FilterGraphForShardTest(unittest.TestCase):
-    @staticmethod
-    def _two_shard_plan() -> dict:
-        return {
-            "shard_count": 2,
-            "shards": [
-                {"id": 0, "tests": ["ydb/tests/foo"]},
-                {"id": 1, "tests": ["ydb/tests/bar"]},
-            ],
-        }
-
-    def test_assignments_partition_result_and_keep_components(self):
-        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
-        assignments = assign_result_uids_to_shards(self._two_shard_plan(), graph)
-        self.assertEqual(len(assignments), len(graph["result"]))
-        self.assertEqual(set(assignments), set(graph["result"]))
-        # foo component (tests + build-a) stays on one shard.
-        foo_nodes = {"test-a1", "test-a2", "build-a"}
-        bar_nodes = {"test-b1", "build-b"}
-        self.assertEqual(len({assignments[uid] for uid in foo_nodes}), 1)
-        self.assertEqual(len({assignments[uid] for uid in bar_nodes}), 1)
-        self.assertNotEqual(assignments["test-a1"], assignments["test-b1"])
-
-    def test_filter_for_shard_writes_subset_result(self):
-        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
-        plan = self._two_shard_plan()
-        assignments = assign_result_uids_to_shards(plan, graph)
-        plan["uid_assignments"] = assignments
-        plan["plan_mode"] = "increment_graph"
-        shard_id = assignments["test-a1"]
-        filtered, _, _ = filter_for_shard(plan, graph, shard_id)
-        self.assertLess(len(filtered["result"]), len(graph["result"]))
-        self.assertEqual(len(filtered["graph"]), len(graph["graph"]))
-        for uid in filtered["result"]:
-            self.assertEqual(assignments[uid], shard_id)
-
-    def test_split_graph_result_fixture(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            plan_path = Path(tmp) / "plan.json"
-            _run(
-                "split_graph_result.py",
-                str(FIXTURES / "graph_for_shard_filter.json"),
-                "--shard-count",
-                "2",
-                "-o",
-                str(plan_path),
-            )
-            plan = json.loads(plan_path.read_text(encoding="utf-8"))
-            self.assertEqual(plan["plan_mode"], "increment_graph")
-            self.assertEqual(plan["shard_count"], 2)
-            self.assertEqual(len(plan["uid_assignments"]), plan["total_graph_nodes"])
-            self.assertIn("estimated_critical_path_min", plan)
-            self.assertEqual(plan["estimate_threads"], 52)
-
+class PlanUidWeightsTest(unittest.TestCase):
     def test_extract_node_path_prefers_kv_path_over_clang_format_input(self):
         node = {
             "uid": "test-lint",
@@ -484,7 +361,6 @@ class FilterGraphForShardTest(unittest.TestCase):
         self.assertLess(sum(without_large.values()), sum(with_large.values()))
 
     def test_cpu_slots_reads_any_requirement_value(self):
-        # Any positive int from requirements.cpu; "all" and values > threads → threads.
         cases = [
             ({}, 1),
             ({"requirements": {"cpu": 1}}, 1),
@@ -565,6 +441,52 @@ class FilterGraphForShardTest(unittest.TestCase):
         self.assertEqual(plan["estimate_threads"], 52)
         self.assertAlmostEqual(plan["estimated_critical_path_min"], round(100.0 / 60.0, 1))
 
+
+class BuildPlanAndFilterTest(unittest.TestCase):
+    def test_build_plan_partitions_result_uids_across_shards(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        plan = build_plan(graph, 2, duration_p90={})
+        assignments = plan["uid_assignments"]
+        self.assertEqual(set(assignments), set(graph["result"]))
+        self.assertEqual(plan["total_graph_nodes"], len(graph["result"]))
+        self.assertEqual(plan["shard_count"], len({sid for sid in assignments.values()}))
+
+    def test_filter_for_shard_writes_subset_result(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        plan = build_plan(graph, 2, duration_p90={})
+        assignments = plan["uid_assignments"]
+        # Pick a shard that has at least one node.
+        shard_id = next(iter(sorted({sid for sid in assignments.values()})))
+        filtered, _, returned = filter_for_shard(plan, graph, shard_id)
+        self.assertLessEqual(len(filtered["result"]), len(graph["result"]))
+        self.assertGreater(len(filtered["result"]), 0)
+        self.assertEqual(len(filtered["graph"]), len(graph["graph"]))
+        for uid in filtered["result"]:
+            self.assertEqual(returned[uid], shard_id)
+
+    def test_filter_for_shard_requires_uid_assignments(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        with self.assertRaises(ValueError):
+            filter_for_shard({"shard_count": 2, "shards": []}, graph, 0)
+
+    def test_split_graph_result_fixture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            _run(
+                "plan.py",
+                str(FIXTURES / "graph_for_shard_filter.json"),
+                "--shard-count",
+                "2",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["plan_mode"], "increment_graph")
+            self.assertEqual(plan["shard_count"], 2)
+            self.assertEqual(len(plan["uid_assignments"]), plan["total_graph_nodes"])
+            self.assertIn("estimated_critical_path_min", plan)
+            self.assertEqual(plan["estimate_threads"], 52)
+
     def test_split_graph_result_balances_large_connected_component(self):
         graph = {
             "conf": {},
@@ -595,7 +517,7 @@ class FilterGraphForShardTest(unittest.TestCase):
             plan_path = Path(tmp) / "plan.json"
             graph_path.write_text(json.dumps(graph), encoding="utf-8")
             _run(
-                "split_graph_result.py",
+                "plan.py",
                 str(graph_path),
                 "--shard-count",
                 "4",
@@ -613,10 +535,17 @@ class FilterGraphForShardTest(unittest.TestCase):
     def test_cli_filters_graph_for_shard(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"
-            plan_path.write_text(json.dumps(self._two_shard_plan()), encoding="utf-8")
+            _run(
+                "plan.py",
+                str(FIXTURES / "graph_for_shard_filter.json"),
+                "--shard-count",
+                "2",
+                "-o",
+                str(plan_path),
+            )
             out = Path(tmp) / "graph_shard_0.json"
             _run(
-                "filter_graph_for_shard.py",
+                "filter.py",
                 "--graph",
                 str(FIXTURES / "graph_for_shard_filter.json"),
                 "--plan",
@@ -629,74 +558,6 @@ class FilterGraphForShardTest(unittest.TestCase):
             filtered = json.loads(out.read_text(encoding="utf-8"))
             self.assertTrue(filtered["result"])
             self.assertLess(len(filtered["result"]), 5)
-
-
-class RenderArtifactsNavTest(unittest.TestCase):
-    def test_render_root_index_lists_top_level_folders(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            merged = Path(tmp)
-            (merged / "try_1").mkdir()
-            (merged / "try_2").mkdir()
-            (merged / "try_1" / "shard_0.json").write_text("{}", encoding="utf-8")
-            (merged / "try_1" / "shard_1.json").write_text("{}", encoding="utf-8")
-            html = render_nav_html(
-                base_url="https://s3.example/run/x86-64",
-                tries_dir=merged,
-                include_build=True,
-                include_plan=True,
-            )
-            # S3-safe links (folder/index.html), not bare trailing-slash dirs.
-            self.assertIn('href="build/index.html"', html)
-            self.assertIn('href="plan/index.html"', html)
-            self.assertIn('href="shard_0/index.html"', html)
-            self.assertIn('href="shard_1/index.html"', html)
-            self.assertIn('href="try_1/index.html"', html)
-            self.assertIn('href="try_2/index.html"', html)
-            self.assertIn('href="final/index.html"', html)
-            self.assertIn("<table", html)
-            self.assertNotIn("<h2>Merged</h2>", html)
-
-    def test_render_root_index_without_plan(self):
-        html = render_nav_html(
-            base_url="https://s3.example/run/x86-64",
-            tries_dir=None,
-            include_build=True,
-            include_plan=False,
-        )
-        self.assertIn('href="build/index.html"', html)
-        self.assertNotIn("plan/index.html", html)
-
-    def test_render_root_index_from_shard_count_after_merge(self):
-        """After merge, only try_*/report.json remains — use shard_count/meta."""
-        with tempfile.TemporaryDirectory() as tmp:
-            merged = Path(tmp)
-            (merged / "try_1").mkdir()
-            (merged / "try_1" / "report.json").write_text('{"results":[]}', encoding="utf-8")
-            (merged / "meta.txt").write_text("shard_reports=3\n", encoding="utf-8")
-            html = render_nav_html(
-                base_url="https://s3.example/run/x86-64",
-                tries_dir=merged,
-                include_build=True,
-                include_plan=True,
-            )
-            self.assertIn('href="shard_0/index.html"', html)
-            self.assertIn('href="shard_1/index.html"', html)
-            self.assertIn('href="shard_2/index.html"', html)
-            self.assertIn('href="try_1/index.html"', html)
-
-    def test_render_root_index_explicit_shard_count(self):
-        html = render_nav_html(
-            base_url="https://s3.example/run/x86-64",
-            tries_dir=None,
-            include_build=False,
-            include_plan=False,
-            shard_count=2,
-        )
-        self.assertIn('href="shard_0/index.html"', html)
-        self.assertIn('href="shard_1/index.html"', html)
-        self.assertIn('href="final/index.html"', html)
-
-
 
 
 if __name__ == "__main__":

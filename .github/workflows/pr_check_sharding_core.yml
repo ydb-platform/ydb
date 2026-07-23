@@ -1,22 +1,6 @@
-name: PR-check-parallel pipeline
-# Reusable parallel test pipeline (PR-check sharding, stage 2).
-#
-# Differences from the pr-check-sharding-pilot branch:
-#   - change-volume classifier picks single vs sharded mode before any build;
-#   - shard count is adaptive: from estimated work (nightly history p90 by default) with
-#     a cap during shared-pool peak hours (see choose_shard_count.py);
-#   - build, ya test -L and shard planning share one job on one runner:
-#     listing runs in the background while the (cached, ~3 min) build runs in
-#     the foreground, then the plan is computed locally. This keeps list off
-#     the critical path and saves a big-runner allocation plus two
-#     artifact round-trips compared to separate build/list/plan jobs;
-#   - retries run in-shard (attempts 2-3 on the same warm machine) instead of
-#     a separate cross-shard retry job, saving its runner spin-up, checkout
-#     and relink (~15-35 min on the critical path of every yellow run).
-#
-# Until merged into pr_check.yml this pipeline is invoked by:
-#   - PR-check-parallel (manual PR runs, publish opt-in via workflow input)
-#   - Run and debug tests (publish=false, timing summary)
+name: PR-check sharding core
+# Reusable sharding research pipeline (v3): main test_ya + plan/filter/merge.
+# Invoked by pr_check_sharding.yml (workflow_dispatch).
 
 on:
   workflow_call:
@@ -263,42 +247,34 @@ jobs:
           HISTORY_BRANCH: ${{ inputs.history_branch }}
           HISTORY_DAYS_BACK: "14"
           TEST_THREADS: "52"
-          DISABLE_PEAK_CAP: ${{ inputs.disable_peak_cap && '1' || '' }}
-          # Optional hard cap via MAX_SHARDS (plan_graph_shards.sh).
+          # Optional hard cap via MAX_SHARDS (read by plan.py).
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -eux
           python3 -m pip install pyyaml ydb --quiet
           mkdir -p shard_plan_out
-          chmod +x .github/scripts/tests/sharding/plan_graph_shards.sh
           if [ "${{ inputs.increment }}" = "true" ]; then
-            export PLAN_MODE=increment_graph
+            plan_mode=increment_graph
           else
-            export PLAN_MODE=full_graph
+            plan_mode=full_graph
           fi
-          .github/scripts/tests/sharding/plan_graph_shards.sh \
-            graph.json \
-            "$SHARD_COUNT" \
-            shard_plan_out
-          plan_suffix="${{ inputs.test_targets }}, test_size=${{ inputs.test_size }}"
-          if [ "${{ inputs.increment }}" = "true" ]; then
-            plan_suffix="$plan_suffix, increment"
+          plan_args=(
+            graph.json
+            --shard-count "$SHARD_COUNT"
+            --profile "${SHARD_PROFILE:-soft}"
+            --plan-mode "$plan_mode"
+            -o shard_plan_out/shard_plan.json
+            --build-type "${BUILD_PRESET:-relwithdebinfo}"
+            --branch "${HISTORY_BRANCH:-main}"
+            --days-back "${HISTORY_DAYS_BACK:-14}"
+            --threads "${TEST_THREADS:-52}"
+            --weight-mode history
+          )
+          if [ -f context.json ]; then
+            plan_args+=(--context context.json)
           fi
-          plan_title="Shard plan (${{ inputs.checkout_ref }}, ${{ inputs.build_preset }}, $plan_suffix)"
-          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
-            shard_plan_out/shard_plan.json \
-            --title "$plan_title" \
-            -o shard_plan_out/shard_plan_summary.md
-          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
-            shard_plan_out/shard_plan.json \
-            --title "$plan_title" \
-            >> "$GITHUB_STEP_SUMMARY"
-          if [ -f shard_plan_out/list_summary.json ]; then
-            jq -r '.weighting | if .mode == "graph_uid_timeout_budget_lpt" then "Timeout-budget weights: \(.timeout_budget_units // 0) units (N_chunks * SIZE timeout), max shard share \(.max_shard_weight_ratio // 0)" elif (.mode == "graph_uid_history_p90_lpt" or .mode == "graph_uid_history_p50_lpt") then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" elif .mode == "suite_timeout_budget" then "Suite timeout-budget weights: N_tests * SIZE timeout" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p90 (\(.branch // "main"), \(.days_back // 14)d)" end' \
-              shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
-          fi
-          jq -r '"Estimated wall time (slowest shard): ~\(.estimated_critical_path_min // 0) min (\(.estimate_threads // 52) threads, max shard weight \(.estimated_max_shard_weight_sec // 0)s)"' \
-            shard_plan_out/shard_plan.json >> "$GITHUB_STEP_SUMMARY" || true
+          plan_args+=(--summary shard_plan_out/shard_plan_summary.md)
+          python3 .github/scripts/tests/sharding/plan.py "${plan_args[@]}"
           echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
           echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan
@@ -327,8 +303,19 @@ jobs:
         shell: bash
         run: |
           set -eux
-          bash .github/scripts/tests/sharding/upload_plan_artifacts_to_s3.sh \
-            graph.json context.json shard_plan_out
+          staging=plan_upload
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp graph.json context.json "$staging/"
+          cp shard_plan_out/shard_plan.json "$staging/"
+          .github/scripts/Indexer/indexer.py -r "$staging/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+            "$staging/" "$S3_BUCKET_PATH/"
+          {
+            echo ""
+            echo "## Plan artifacts (S3)"
+            echo "[Plan index](${S3_URL_PREFIX}/index.html) | [shard_plan.json](${S3_URL_PREFIX}/shard_plan.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   test_shard:
     needs:
@@ -363,7 +350,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p shard_graph_out
-          python3 .github/scripts/tests/sharding/filter_graph_for_shard.py \
+          python3 .github/scripts/tests/sharding/filter.py \
             --graph build_graph/graph.json \
             --context build_graph/context.json \
             --plan shard_plan/shard_plan.json \
@@ -525,7 +512,7 @@ jobs:
             n=$(basename "$td")           # try_1, try_2, ...
             mapfile -t shard_files < <(ls "$td"shard_*.json 2>/dev/null | sort)
             [ "${#shard_files[@]}" -eq 0 ] && continue
-            python3 .github/scripts/tests/sharding/merge_build_reports.py \
+            python3 .github/scripts/tests/sharding/merge.py \
               -o "merged/$n/report.json" \
               "${shard_files[@]}"
             final_inputs+=("merged/$n/report.json")
@@ -534,7 +521,7 @@ jobs:
           # test that failed try_1 but passed on retry counts as passed. Shards
           # have heterogeneous attempt counts, hence latest-wins across the
           # stitched per-try reports (not just the last try).
-          python3 .github/scripts/tests/sharding/merge_build_reports.py \
+          python3 .github/scripts/tests/sharding/merge.py \
             --latest-wins \
             -o merged/final_report.json \
             "${final_inputs[@]}"
@@ -603,7 +590,7 @@ jobs:
           PR_NUMBER: ${{ inputs.publish && inputs.pr_number || '' }}
           ORIGINAL_HEAD: ${{ inputs.checkout_ref }}
           STATUS_SHA: ${{ inputs.status_sha != '' && inputs.status_sha || inputs.checkout_ref }}
-          STATUS_CONTEXT_PREFIX: parallel_
+          STATUS_CONTEXT_PREFIX: ""
           SKIP_GITHUB_PUBLISH: ${{ inputs.publish && '0' || '1' }}
           SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
           INCLUDE_BUILD_ARTIFACTS: "1"
@@ -611,7 +598,92 @@ jobs:
           SHARD_COUNT: ${{ steps.merge.outputs.shard_count }}
         run: |
           set -eux
-          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/final_report.json merged
+          REPORT_PATH=merged/final_report.json
+          TRIES_DIR=merged
+          PUBLIC_DIR="${PUBLIC_DIR:-tmp/results}"
+          SUMMARY_LINKS="$PUBLIC_DIR/summary_links.txt"
+          mkdir -p "$PUBLIC_DIR/final"
+          for td in "$TRIES_DIR"/try_*/; do
+            [ -f "$td/report.json" ] || continue
+            n=$(basename "$td")
+            mkdir -p "$PUBLIC_DIR/$n"
+            cp "$td/report.json" "$PUBLIC_DIR/$n/report.json"
+          done
+          cp "$REPORT_PATH" "$PUBLIC_DIR/final/report.json"
+          : > "$SUMMARY_LINKS"
+          if [ -n "${PUBLIC_DIR_URL:-}" ]; then
+            .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
+            echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+          fi
+          IS_TEST_RESULT_IGNORED=0
+          case "$BUILD_PRESET" in release-asan|release-msan) IS_TEST_RESULT_IGNORED=1 ;; esac
+          gen_args=(
+            --summary_links "$SUMMARY_LINKS"
+            --public_dir "$PUBLIC_DIR"
+            --public_dir_url "$PUBLIC_DIR_URL"
+            --build_preset "$BUILD_PRESET"
+            --branch "$BRANCH_NAME"
+            --is_test_result_ignored "$IS_TEST_RESULT_IGNORED"
+          )
+          [ -n "${PR_NUMBER:-}" ] && gen_args+=(--pr_number "$PR_NUMBER")
+          [ -n "${GITHUB_RUN_ID:-}" ] && gen_args+=(--workflow_run_id "$GITHUB_RUN_ID")
+          mapfile -t try_reports < <(find "$TRIES_DIR" -mindepth 2 -maxdepth 2 -path '*/try_*/report.json' 2>/dev/null | sort -V)
+          if [ "${#try_reports[@]}" -gt 0 ]; then
+            try_idx=0
+            for report in "${try_reports[@]}"; do
+              try_idx=$((try_idx + 1))
+              try_name=$(basename "$(dirname "$report")")
+              is_retry=0
+              [ "$try_idx" -gt 1 ] && is_retry=1
+              python3 .github/scripts/tests/generate-summary.py \
+                "${gen_args[@]}" \
+                --status_report_file "$PUBLIC_DIR/.statusrep.try_${try_idx}.txt" \
+                --is_retry "$is_retry" --is_last_retry 0 \
+                --comment_color_file "$PUBLIC_DIR/.summary_color.try_${try_idx}.txt" \
+                --comment_text_file "$PUBLIC_DIR/.summary_text.try_${try_idx}.txt" \
+                "Tests" "${try_name}/ya-test.html" "$report"
+            done
+            python3 .github/scripts/tests/generate-summary.py \
+              "${gen_args[@]}" --no_step_summary \
+              --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+              --is_retry 0 --is_last_retry 1 \
+              --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+              --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+              "Tests" "final/ya-test.html" "$PUBLIC_DIR/final/report.json"
+          else
+            mkdir -p "$PUBLIC_DIR/try_1"
+            cp "$REPORT_PATH" "$PUBLIC_DIR/try_1/report.json"
+            python3 .github/scripts/tests/generate-summary.py \
+              "${gen_args[@]}" \
+              --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+              --is_retry 0 --is_last_retry 1 \
+              --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+              --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+              "Tests" "try_1/ya-test.html" "$REPORT_PATH"
+          fi
+          if [ -n "${S3_BUCKET_PATH:-}" ]; then
+            s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 \
+              "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          fi
+          if [ -f "$SUMMARY_LINKS" ]; then
+            cat "$SUMMARY_LINKS" | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin if l.strip()], key=lambda a: (int(a[0]), a))]))' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${SKIP_GITHUB_PUBLISH:-}" != "1" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${PR_NUMBER:-}" ]; then
+            cat "$PUBLIC_DIR/summary_text.txt" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color "$(cat "$PUBLIC_DIR/summary_color.txt")"
+          fi
+          teststatus=$(cat "$PUBLIC_DIR/statusrep.txt")
+          if [ "$teststatus" = "success" ]; then testmessage="The check has been completed successfully"; else testmessage="The check has been failed"; fi
+          if [ "${SKIP_GITHUB_PUBLISH:-}" != "1" ] && [ -n "$STATUS_SHA" ]; then
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
+              -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"test_${BUILD_PRESET}\"}"
+          fi
+          if [ "${SKIP_FAIL_CHECK:-}" != "1" ] && [ "$IS_TEST_RESULT_IGNORED" -eq 0 ]; then
+            .github/scripts/tests/fail-checker.py "$REPORT_PATH"
+          fi
       # Fail-closed: if merge/publish never completes, do not leave parallel_test_*
       # missing/ambiguous when the run was meant to publish statuses.
       - name: Fail closed test status
@@ -626,4 +698,4 @@ jobs:
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${{ github.repository }}/statuses/${STATUS_SHA}" \
-            -d "{\"state\":\"failure\",\"description\":\"Shard merge failed\",\"context\":\"parallel_test_${BUILD_PRESET}\"}"
+            -d "{\"state\":\"failure\",\"description\":\"Shard merge failed\",\"context\":\"test_${BUILD_PRESET}\"}"

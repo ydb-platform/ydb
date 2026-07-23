@@ -103,7 +103,7 @@ exporters and invoke the verifier; their current verifier-side `UNSUPPORTED`
 results do not count as formulas, while any later formula or proof still
 satisfies this depth floor. The formula-construction floor requires TPCH q3,
 q5, q6, q10, q12, q14, and q19 plus TPC-DS q3,
-q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
+q15, q19, q37, q40, q42, q43, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
 q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
 requires TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55,
@@ -148,22 +148,22 @@ StageGraph remains a separate diagnostic step.
 
 ## Latest measured formula coverage
 
-The TPCH formula-only dashboard was rerun against the hardened q12 exporter on
-2026-07-23. The TPC-DS table remains the latest complete baseline from
-2026-07-22; its eight-query proof floor was rerun after that hardening and
-remained green. Together the latest suite measurements emitted the 28-query
-floor below and recorded an outcome for every workload entry.
+Both complete formula-only dashboards were rerun on current code on
+2026-07-23. Together they emitted the 29-query floor below and recorded an
+outcome for every workload entry. The TPC-DS rerun includes the exact Decimal
+wrapper hardening described below; its eight-query proof floor was also rerun
+after the preceding exporter hardening and remained green.
 `FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
 checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 7 (q3, q5, q6, q10, q12, q14, q19) | 12 | 3 | 22 |
-| TPCDS_YQL | 21 (q3, q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, q99) | 49 | 29 | 99 |
+| TPCDS_YQL | 22 (q3, q15, q19, q37, q40, q42, q43, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, q99) | 48 | 29 | 99 |
 
-The supported formula slice is 28/121 queries (23.1%). This is a useful end-to-end
+The supported formula slice is 29/121 queries (24.0%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 93 workload entries or larger
+slice rather than a claim about the remaining 92 workload entries or larger
 inputs.
 
 ### TPCH inventory
@@ -212,7 +212,7 @@ The 29 optimizer-preparation failures were q9, q12, q14, q17, q20, q23, q27,
 q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58, q60, q63,
 q67, q70, q83, q86, q89, q95, and q98.
 
-The exporter matrix below covers the boundary failures among 35 of the 49
+The exporter matrix below covers the boundary failures among 34 of the 48
 currently known unsupported queries. IDs can appear in both exporter columns or
 under more than one reason because both snapshots are audited independently.
 The fourteen queries that pass export and fail closed inside the verifier are listed
@@ -221,9 +221,11 @@ after the matrix.
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | Catalog required for subplans | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 | q1, q6, q10, q16, q24, q30, q32, q35, q54, q69, q81, q92, q94 |
+| Unavailable physical column `__kqp_rbo_ignore_arg_149` | - | q2 |
+| Unavailable physical column `__kqp_rbo_ignore_arg_152` | - | q59 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
 | Unavailable physical column `year` | - | q66 |
-| Opaque scalar with unordered children | q2, q43, q59, q66 | q2, q43, q59 |
+| Restricted `Concat` has no storage-bounded String member | q66 | - |
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `/` | q73, q78 | q73, q78 |
@@ -237,16 +239,17 @@ output above the 4,096-row relation bound. q11's join matching and q25/q29's
 grouped aggregates each require 65,536 candidate-row pairs above the 16,384-pair
 bound. q31 likewise rejects a 32,768-pair join-matching matrix before allocation.
 q5 passes Decimal `sum` headroom and then rejects a 32,896-pair Merge above the
-16,384-pair construction bound. q80's grouped aggregate requires 82,944
-candidate-row pairs above that same bound.
+16,384-pair construction bound after 1,581/39,739 ms of preparation/verifier
+work. q80's grouped aggregate requires 82,944 candidate-row pairs above that
+same bound after 1,845/11,011 ms.
 q46, q68, and q91 each reject 32,640 Merge candidate-row pairs above the
 16,384-pair construction bound, q64 rejects an 8,192-row join output, and q74
 rejects 65,536 join-matching pairs above that same cap. q65 passes both exports
 and fails closed because aggregate `avg` is not modeled. q77 passes both
-exports and fails closed because its Decimal `sum` cannot establish the finite
-headroom required for order-independent partial aggregation. The focused q68 run
-passed both snapshot exports and reached its Merge audit cap after 11,175 ms of
-verifier work. The complete dashboard took 349,431 ms to reach q91's Merge cap;
+exports and finite Decimal `sum` headroom, then rejects a 25,600-pair grouped
+aggregate above the same cap after 2,063/442 ms of preparation/verifier work.
+The complete q68 row reached its Merge audit cap after 293/11,061 ms. The
+complete dashboard took 230/322,599 ms to reach q91's Merge cap;
 that late preflight is a known construction-performance gap, not a correctness
 candidate.
 
@@ -334,6 +337,24 @@ literals.
 It lowers the wrapper through schema-preserving `if_present` and leaves broader
 Boolean trees opaque. q12 now emits a formula, raising TPCH formula coverage to
 7/22 and total workload formula coverage to 28/121 (23.1%).
+
+A subsequent exact Decimal-wrapper gate accepts only a direct
+`Coalesce(Optional<Decimal(p,s)> member, zero)` whose member, result, fallback,
+canonical type, closed-world safety metadata, and live binding all match. The
+zero may be either a typed Decimal semantic zero or a complete
+`SafeCast(Int32("0"), Decimal(p,s))`; narrower or incomplete casts remain
+opaque. The corresponding reviewed `Just` shape is lowered recursively through
+the existing schema-preserving `If` representation. This moves q43 through
+formula construction after 145/4,760 ms and moves q77 past finite Decimal `SUM`
+headroom to the 25,600-pair grouped-aggregate construction cap after
+2,063/442 ms. The first complete dashboard exposed a classifier regression:
+an incomplete Decimal cast was rejected instead of remaining opaque, losing
+q40's formula and q80's verifier entry. A negative near-match test and a
+fail-closed classifier fix restore both rows in the final complete rerun.
+TPC-DS therefore reaches 22/99 formulas and the combined workload reaches
+29/121 (24.0%). A focused q43 solver run returned `UNKNOWN` after
+147/69,391 ms at the 60-second budget, so the proof floor remains 13/121 and no
+candidate or optimizer bug arose.
 
 ## Curated proof floor and focused results
 
@@ -481,6 +502,15 @@ Boolean trees opaque. q12 now emits a formula, raising TPCH formula coverage to
   `VERIFIED_BOUNDED`, raising formula coverage to 28/121 (23.1%) and the proof
   floor to 13/121 (10.7%). No candidate or optimizer bug arose.
 
+- Exact direct Decimal `Coalesce(member, zero)` and the corresponding reviewed
+  Decimal `Just` form move TPC-DS q43 through formula construction after
+  145/4,760 ms. Its focused 60-second solver run returned `UNKNOWN` after
+  147/69,391 ms, so q43 is formula-covered but not proved. q77 clears both
+  exporters and finite Decimal `SUM` headroom, then fails closed at the
+  25,600-pair grouped-aggregate construction cap after 2,063/442 ms. It emits
+  no formula. These results raise formula coverage to 29/121 (24.0%) without
+  changing the thirteen-query proof floor or producing a candidate.
+
 - Finite Decimal headroom now starts at exact finite/special/NULL literals and
   complete non-null integral casts, propagates through exact `+`/`-` and
   `If`/`IfPresent`, and remains unknown when any required operand bound is
@@ -509,7 +539,8 @@ Boolean trees opaque. q12 now emits a formula, raising TPCH formula coverage to
   provenance failures, all ten join kinds, and the two-Olap-occurrence
   rejection; a one-Olap-occurrence real-host initial/final obligation is
   `VERIFIED_BOUNDED`.
-  The complete dashboard records TPC-DS q5 as verifier-side `UNSUPPORTED` on Decimal
+  At that milestone the complete dashboard recorded TPC-DS q5 as verifier-side
+  `UNSUPPORTED` on Decimal
   SUM headroom after 1,800 ms of preparation and 822 ms of verifier work, and
   q80 on its 82,944-pair grouped aggregate after 1,946 ms and 11,975 ms. q84's
   two Olap String occurrences exceed the allocation-totality bound and remain

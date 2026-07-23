@@ -151,19 +151,27 @@ membership normalization admits only
 1..512 non-null exact-type items; generic dictionaries and `Contains` remain
 unsupported.
 
-Two reviewed optimizer-generated wrappers reuse those existing exact nodes.
+Three reviewed optimizer-generated wrapper normalizations reuse those existing
+exact nodes.
 `Coalesce(predicate, false)` lowers to `if_present` only when the first child
 is either one direct nullable ordinary comparison or exactly binary
 `Or(member == literal, member == literal)`/`And(member != literal, member != literal)`.
 The binary form requires the same direct `Optional<String>` member and a
 non-null `String` literal in each leaf. The fallback is exact non-null
 `Bool(false)`, and the result is exact non-null `Bool`. Larger Boolean trees,
-other fallbacks, and different Optional shapes remain opaque. `Just(decimal)`
-lowers to `if(true, decimal, typed-null)` only when its child is a direct
-canonical Decimal literal or a complete integer-literal `SafeCast`/`Convert`
-to canonical Decimal, and its result is the matching `Optional<Decimal>`.
+other fallbacks, and different Optional shapes remain opaque.
+`Coalesce(member, zero)` lowers to `if_present(member, bound(0), zero)` only
+for one direct visible `Optional<Decimal(p,s)>` member, a non-null matching
+Decimal result, and either a canonical Decimal zero or a complete
+`SafeCast(Int32("0"), Decimal(p,s))` fallback. `Just(decimal)` lowers to
+`if(true, decimal, typed-null)` only when its child is a direct canonical
+Decimal literal, a complete integer-literal `SafeCast`/`Convert` to canonical
+Decimal, or that exact Decimal Coalesce-zero form, and its result is the
+matching `Optional<Decimal>`.
 The unreachable typed-NULL branch preserves the Optional schema while the
-constant-true condition preserves `Just` runtime presence. Both gates retain
+constant-true condition preserves `Just` runtime presence. Incomplete,
+mismatched, dynamic, nonzero, or broader safe near-matches remain opaque.
+All three gates retain
 the full closed-world scalar safety validation and shared normalized-node,
 source-depth, and live-binding limits.
 
@@ -863,10 +871,24 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `FORMULA_EMITTED` after 81/5,732 ms of preparation/verifier work; an earlier
   focused formula run recorded 108/5,816 ms. Focused and policy-floor solver
   runs return `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms,
-  respectively. TPCH formula coverage is now 7/22, total
-  formula coverage is 28/121 (23.1%), TPCH has five proofs, and the workload
+  respectively. At that milestone TPCH formula coverage was 7/22, total
+  formula coverage was 28/121 (23.1%), TPCH had five proofs, and the workload
   proof floor is 13/121 (10.7%). No proof produced a candidate, so replay was
   not invoked and no optimizer correctness bug was found.
+- Exact direct Decimal Coalesce-zero normalization accepts only one visible
+  `Optional<Decimal>` member and either a matching canonical zero or a complete
+  Int32-zero `SafeCast`, including the matching `Just` wrapper. It reuses
+  `if_present` and `if` without erasing nullability. The complete current-code
+  TPC-DS dashboard moves q43 through formula construction after 145/4,760 ms
+  and moves q77 past finite Decimal `SUM` headroom to the 25,600-pair grouped
+  aggregate cap after 2,063/442 ms. TPC-DS reaches 22/99 formulas and the
+  workload 29/121 (24.0%); q77 remains unsupported. q43 is `UNKNOWN` at the
+  60-second solver budget after 147/69,391 ms, so the proof floor remains
+  thirteen. The first complete run caught incomplete Decimal zero casts in
+  q40/q80 entering the strict exact-cast path; classification now leaves those
+  near-matches opaque, focused regressions cover both bare and wrapped forms,
+  and the repeated complete dashboard restores q40's formula and q80's
+  verifier-entry result. No candidate or optimizer bug arose.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -961,25 +983,27 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 28-query formula floor must keep constructing SMT, and the
+  the verifier, the 29-query formula floor must keep constructing SMT, and the
   thirteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  latest suite measurements combine the hardened TPCH run from 2026-07-23
-  with the earlier complete TPC-DS baseline from 2026-07-22. They emit TPCH
+  latest suite measurements reran both complete suites on current code on
+  2026-07-23. They emit TPCH
   q3, q5, q6, q10, q12, q14, and q19 (7/22)
-  and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
-  q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for
-  28/121 workload queries (23.1%). TPCH has 12 unsupported and three
-  optimizer-failure results; TPC-DS has 49 unsupported and 29 optimizer-failure
+  and TPC-DS q3, q15, q19, q37, q40, q42, q43, q48, q50, q52, q55,
+  q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (22/99), for
+  29/121 workload queries (24.0%). TPCH has 12 unsupported and three
+  optimizer-failure results; TPC-DS has 48 unsupported and 29 optimizer-failure
   results. Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each quadratic construction at 16384 candidate-row pairs. This
   preserves q71's 9072-term Merge ordinal construction while q31 fails closed
-  before allocating its 32768-pair join matrix.
+  before allocating its 32768-pair join matrix. q77 now passes export and
+  Decimal `SUM` headroom before its 25,600-pair grouped aggregate fails this
+  preflight.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
   at 1,024 normalized occurrences and depth 128. Independent C++ and Python
   checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG
@@ -999,7 +1023,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   thirteen curated proofs (10.7% of the workload). q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. q15, q61, q62, q76,
-  q79, and q88 return `UNKNOWN` at the 60-second solver budget. q61's
+  q79, and q88 return `UNKNOWN` at the 60-second solver budget. q43 likewise
+  returns `UNKNOWN` after 147/69,391 ms. q61's
   1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
   verification. Focused q76 formula construction recorded 391 ms of
   preparation and 14,169 ms of verification; its solver experiment recorded 419

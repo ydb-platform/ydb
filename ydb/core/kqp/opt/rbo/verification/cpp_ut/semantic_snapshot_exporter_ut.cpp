@@ -28,6 +28,7 @@
 #include <initializer_list>
 #include <limits>
 #include <stdexcept>
+#include <tuple>
 
 namespace {
 
@@ -4197,6 +4198,528 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 expression["fingerprint"].GetStringSafe(),
                 "Just");
+        }
+    }
+
+    Y_UNIT_TEST(ExactDirectDecimalCoalesceZeroIsNarrow) {
+        const auto exportExpression = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr expression,
+            std::function<void(TExprNode&)> mutate = {},
+            TStringBuf decimalColumnType = "Decimal(35,2)")
+        {
+            const auto& table = AddTable(ctx, "/Root/DecimalCoalesce", {
+                {"x", TString(decimalColumnType), false},
+                {"y", "Int32", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x", "y"});
+            TExpression typedExpression(
+                std::move(expression),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            if (mutate) {
+                mutate(*typedExpression.GetExpressionBody());
+            }
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    std::move(typedExpression))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+        const auto makeFallback = [](
+            TExportTestContext& ctx,
+            TStringBuf callable,
+            TStringBuf value = "0",
+            bool dynamic = false)
+        {
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            if (callable == "Decimal") {
+                return TypedDecimalLiteral(
+                    ctx,
+                    value,
+                    "35",
+                    "2",
+                    decimalType);
+            }
+
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            return TypedCallable(
+                ctx,
+                callable,
+                {
+                    dynamic
+                        ? TypedMember(ctx, "a.y", intType)
+                        : TypedLiteral(ctx, "Int32", value, intType),
+                    DecimalDataTypeDescriptor(
+                        ctx,
+                        "35",
+                        "2",
+                        decimalType),
+                },
+                decimalType);
+        };
+        const auto makeCoalesce = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr fallback,
+            bool wrapJust = false,
+            TStringBuf memberName = "x")
+        {
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "35",
+                "2",
+                true);
+            auto coalesce = TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    TypedMember(
+                        ctx,
+                        TStringBuilder() << "a." << memberName,
+                        optionalDecimalType),
+                    std::move(fallback),
+                },
+                decimalType);
+            if (!wrapJust) {
+                return coalesce;
+            }
+            return TypedCallable(
+                ctx,
+                "Just",
+                {std::move(coalesce)},
+                optionalDecimalType);
+        };
+        const auto normalized = [&](
+            TExportTestContext& ctx,
+            TExprNode::TPtr expression,
+            std::function<void(TExprNode&)> mutate = {})
+        {
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                std::move(expression),
+                std::move(mutate)));
+            return FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+        };
+
+        TString bareEncoding;
+        TString wrappedEncoding;
+        for (const TStringBuf spelling : {
+            TStringBuf("Decimal"),
+            TStringBuf("SafeCast"),
+        }) {
+            for (const bool wrapJust : {false, true}) {
+                TExportTestContext ctx;
+                const auto expression = normalized(
+                    ctx,
+                    makeCoalesce(
+                        ctx,
+                        makeFallback(ctx, spelling),
+                        wrapJust));
+                const auto& inner = wrapJust
+                    ? expression["then"]
+                    : expression;
+                if (wrapJust) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["kind"].GetStringSafe(),
+                        "if");
+                    UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["else"]["kind"].GetStringSafe(),
+                        "null");
+                }
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["kind"].GetStringSafe(),
+                    "if_present");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["optional"]["kind"].GetStringSafe(),
+                    "column");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["optional"]["column"].GetStringSafe(),
+                    "a.x");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["present"]["kind"].GetStringSafe(),
+                    "bound");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["present"]["depth"].GetUIntegerSafe(),
+                    0);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["missing"]["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["missing"]["value"]["scaled"].GetStringSafe(),
+                    "0");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    inner["type"].GetStringSafe(),
+                    "Decimal(35,2)");
+                UNIT_ASSERT(!inner["nullable"].GetBooleanSafe());
+
+                const TString encoded = NJson::WriteJson(
+                    expression,
+                    false,
+                    true);
+                TString& expected = wrapJust
+                    ? wrappedEncoding
+                    : bareEncoding;
+                if (expected.empty()) {
+                    expected = encoded;
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(encoded, expected);
+                }
+            }
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto expression = normalized(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "-",
+                    {
+                        makeCoalesce(
+                            ctx,
+                            makeFallback(ctx, "SafeCast")),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "1",
+                            "35",
+                            "2",
+                            decimalType),
+                    },
+                    decimalType));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "sub");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["left"]["kind"].GetStringSafe(),
+                "if_present");
+        }
+
+        for (const auto [callable, value, dynamic] : {
+            std::tuple<TStringBuf, TStringBuf, bool>{"Decimal", "1", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"Decimal", "nan", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"Decimal", "inf", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"Decimal", "-inf", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"SafeCast", "1", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"Convert", "0", false},
+            std::tuple<TStringBuf, TStringBuf, bool>{"SafeCast", "0", true},
+        }) {
+            TExportTestContext ctx;
+            const auto expression = normalized(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    makeFallback(ctx, callable, value, dynamic)));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                expression["kind"].GetStringSafe(),
+                "opaque",
+                callable);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto expression = normalized(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    makeFallback(ctx, "Decimal", "1"),
+                    true));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+            UNIT_ASSERT_STRING_CONTAINS(
+                expression["fingerprint"].GetStringSafe(),
+                "Just");
+        }
+
+        for (const bool wrapJust : {false, true}) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* decimalType = DecimalType(ctx, "7", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "7",
+                "2",
+                true);
+            auto coalesce = TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    TypedMember(ctx, "a.x", optionalDecimalType),
+                    TypedCallable(
+                        ctx,
+                        "SafeCast",
+                        {
+                            TypedLiteral(ctx, "Int32", "0", intType),
+                            DecimalDataTypeDescriptor(
+                                ctx,
+                                "7",
+                                "2",
+                                decimalType),
+                        },
+                        decimalType),
+                },
+                decimalType);
+            TExprNode::TPtr expression = std::move(coalesce);
+            if (wrapJust) {
+                expression = TypedCallable(
+                    ctx,
+                    "Just",
+                    {std::move(expression)},
+                    optionalDecimalType);
+            }
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                std::move(expression),
+                {},
+                "Decimal(7,2)"));
+            const auto& normalizedExpression = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                normalizedExpression["kind"].GetStringSafe(),
+                "opaque",
+                wrapJust);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "35",
+                "2",
+                true);
+            const auto expression = normalized(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "Just",
+                            {
+                                TypedDecimalLiteral(
+                                    ctx,
+                                    "1",
+                                    "35",
+                                    "2",
+                                    decimalType),
+                            },
+                            optionalDecimalType),
+                        makeFallback(ctx, "Decimal"),
+                    },
+                    decimalType));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "35",
+                "2",
+                true);
+            const auto expression = normalized(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        makeFallback(ctx, "Decimal"),
+                        TypedMember(ctx, "a.x", optionalDecimalType),
+                    },
+                    decimalType));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "35",
+                "2",
+                true);
+            const auto expression = normalized(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedMember(ctx, "a.x", optionalDecimalType),
+                        makeFallback(ctx, "Decimal"),
+                        makeFallback(ctx, "Decimal"),
+                    },
+                    decimalType));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    TypedDecimalLiteral(
+                        ctx,
+                        "0",
+                        "35",
+                        "3",
+                        DecimalType(ctx, "35", "3"))));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "inconsistent types");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    makeFallback(ctx, "Decimal"),
+                    false,
+                    "missing"));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "direct visible input member");
+        }
+
+        for (const bool unsafeMember : {false, true}) {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    makeFallback(ctx, "Decimal")),
+                [unsafeMember](TExprNode& expression) {
+                    TExprNode* unsafe = unsafeMember
+                        ? expression.Child(0)
+                        : &expression;
+                    unsafe->SetSideEffects(ESideEffects::General);
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    makeFallback(ctx, "SafeCast")),
+                [](TExprNode& expression) {
+                    expression.Child(1)->SetUnorderedChildren();
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+        const auto nestedDecimalCoalesce = [&](
+            TExportTestContext& ctx,
+            size_t depth)
+        {
+            const auto* decimalType = DecimalType(ctx, "35", "2");
+            const auto* optionalDecimalType = DecimalType(
+                ctx,
+                "35",
+                "2",
+                true);
+            TVector<TExprNode::TPtr> arguments;
+            arguments.reserve(depth);
+            for (size_t index = 0; index < depth; ++index) {
+                auto argument = ctx.ExprCtx.NewArgument(
+                    TPositionHandle(),
+                    TStringBuilder() << "decimal_" << index);
+                argument->SetTypeAnn(decimalType);
+                arguments.push_back(std::move(argument));
+            }
+
+            auto row = ctx.ExprCtx.NewArgument(TPositionHandle(), "row");
+            const auto directMember = [&]() {
+                return TypedCallable(
+                    ctx,
+                    "Member",
+                    {
+                        row,
+                        ctx.ExprCtx.NewAtom(TPositionHandle(), "a.x"),
+                    },
+                    optionalDecimalType);
+            };
+            TExprNode::TPtr expression = TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    directMember(),
+                    makeFallback(ctx, "Decimal"),
+                },
+                decimalType);
+            for (size_t index = depth; index > 0; --index) {
+                const size_t level = index - 1;
+                auto optional = level == 0
+                    ? directMember()
+                    : TypedCallable(
+                        ctx,
+                        "Just",
+                        {arguments[level - 1]},
+                        optionalDecimalType);
+                expression = TypedCallable(
+                    ctx,
+                    "IfPresent",
+                    {
+                        std::move(optional),
+                        TypedUnaryLambda(
+                            ctx,
+                            arguments[level],
+                            std::move(expression)),
+                        TypedDecimalLiteral(
+                            ctx,
+                            "0",
+                            "35",
+                            "2",
+                            decimalType),
+                    },
+                    decimalType);
+            }
+            return TypedUnaryLambda(ctx, row, std::move(expression));
+        };
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                nestedDecimalCoalesce(ctx, 63));
+            UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                nestedDecimalCoalesce(ctx, 64));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Exact Decimal Coalesce zero binding depth exceeds");
         }
     }
 

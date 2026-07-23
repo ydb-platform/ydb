@@ -1726,6 +1726,111 @@ void ValidateExactBinaryStringMembership(
     }
 }
 
+struct TExactDecimalCoalesceZero {
+    const TExprNode* Optional = nullptr;
+    const TExprNode* Zero = nullptr;
+    TString ResultType;
+
+    explicit operator bool() const {
+        return Optional && Zero && !ResultType.empty();
+    }
+};
+
+bool IsExactDecimalZeroFallback(
+    const TExprNode& node,
+    TStringBuf expectedType)
+{
+    bool nullable = false;
+    if (ScalarTypeName(node, &nullable) != expectedType || nullable) {
+        return false;
+    }
+
+    if (node.IsCallable("Decimal")) {
+        DecimalLiteralExpr(node);
+        const auto parameters = ParseCanonicalDecimalType(expectedType);
+        if (!parameters) {
+            return false;
+        }
+        const auto value = NYql::NDecimal::FromString(
+            node.Child(0)->Content(),
+            parameters->Precision,
+            parameters->Scale);
+        return !NYql::NDecimal::IsError(value) &&
+            value == NYql::NDecimal::TInt128(0);
+    }
+
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2) {
+        return false;
+    }
+    const auto& source = *node.Child(0);
+    bool sourceNullable = false;
+    if (ScalarTypeName(source, &sourceNullable) != "Int32" ||
+        sourceNullable ||
+        !source.IsCallable("Int32") ||
+        source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom("0"))
+    {
+        return false;
+    }
+
+    if (!IsCompleteIntegerLiteralDecimalCast(node)) {
+        return false;
+    }
+    DecimalConstantCastExpr(node);
+    return true;
+}
+
+TExactDecimalCoalesceZero ExactDecimalCoalesceZeroArgument(
+    const TExprNode& node)
+{
+    if (!node.IsCallable("Coalesce") || node.ChildrenSize() != 2) {
+        return {};
+    }
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    if (resultNullable || !ParseCanonicalDecimalType(resultType)) {
+        return {};
+    }
+
+    const auto& optional = *node.Child(0);
+    bool optionalNullable = false;
+    if (!optional.IsCallable("Member") ||
+        optional.ChildrenSize() != 2 ||
+        ScalarTypeName(optional, &optionalNullable) != resultType ||
+        !optionalNullable)
+    {
+        return {};
+    }
+
+    const auto& zero = *node.Child(1);
+    if (!IsExactDecimalZeroFallback(zero, resultType)) {
+        return {};
+    }
+    return {&optional, &zero, resultType};
+}
+
+void ValidateExactDecimalCoalesceZeroMember(
+    const TExactDecimalCoalesceZero& exact,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    if (!exact) {
+        Unsupported("Exact Decimal Coalesce zero shape is missing");
+    }
+    const auto& member = *exact.Optional;
+    if (!rowArgument ||
+        member.Child(0) != rowArgument ||
+        !member.Child(1)->IsAtom() ||
+        !visibleColumns.contains(TString(member.Child(1)->Content())))
+    {
+        Unsupported(
+            "Exact Decimal Coalesce zero requires a direct visible input member");
+    }
+    CheckScalarSafetyMetadata(member);
+    CheckScalarSafetyMetadata(*member.Child(1));
+}
+
 const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
     if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
         return nullptr;
@@ -1743,7 +1848,9 @@ const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
         argument.IsCallable({"SafeCast", "Convert"}) &&
         argument.ChildrenSize() == 2 &&
         IsCompleteIntegerLiteralDecimalCast(argument);
-    if (!directLiteral && !completeLiteralCast) {
+    const bool directDecimalCoalesceZero =
+        static_cast<bool>(ExactDecimalCoalesceZeroArgument(argument));
+    if (!directLiteral && !completeLiteralCast && !directDecimalCoalesceZero) {
         return nullptr;
     }
 
@@ -3049,10 +3156,11 @@ NJson::TJsonValue ExportExprNode(
 
     if (const auto* argument = ExactDecimalJustArgument(node)) {
         // Just never changes the value of its non-null argument.  Keep this
-        // normalization deliberately closed over constant Decimal forms whose
-        // exact value is already audited below.  The unreachable NULL branch
-        // preserves the source Optional type in the normalized IR and output
-        // schema while the true condition makes runtime presence exact.
+        // normalization deliberately closed over reviewed non-null exact
+        // Decimal forms whose semantics are already audited below.  The
+        // unreachable NULL branch preserves the source Optional type in the
+        // normalized IR and output schema while the true condition makes
+        // runtime presence exact.
         TOpaqueExpressionEncoder(
             rowArgument,
             visibleColumns,
@@ -3149,6 +3257,50 @@ NJson::TJsonValue ExportExprNode(
             normalizedDepth + 1,
             sourceDepth + 1);
         result["type"] = "Bool";
+        result["nullable"] = false;
+        return result;
+    }
+
+    if (const auto exact = ExactDecimalCoalesceZeroArgument(node); exact) {
+        // This is the exact SQL value operation `optional ?? 0`, not an opaque
+        // syntax identity. Normalize only the reviewed structural shape
+        // observed in q77: one direct optional Decimal member and either a
+        // canonical Decimal zero or the complete Int32-zero SafeCast spelling
+        // that constant folding replaces it with.
+        ValidateExactDecimalCoalesceZeroMember(
+            exact,
+            rowArgument,
+            visibleColumns);
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported(
+                "Exact Decimal Coalesce zero binding depth exceeds the audit limit");
+        }
+
+        budget.Charge(normalizedDepth + 1); // Synthetic identity handler bound value.
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportExprNode(
+            *exact.Optional,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["present"] = BoundExpr(0);
+        result["missing"] = ExportExprNode(
+            *exact.Zero,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["type"] = exact.ResultType;
         result["nullable"] = false;
         return result;
     }

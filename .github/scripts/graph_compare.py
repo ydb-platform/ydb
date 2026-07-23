@@ -36,7 +36,7 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
 
     log('Checkout head commit...')
     exec(f'git checkout {head_commit}')
-    # Base configure caches under ~/.ya/build; reuse can hide BadDep on head.
+    # Base configure fills ~/.ya/build; reuse on head can hide configure errors.
     ya_build_cache = os.path.expanduser('~/.ya/build')
     if os.path.exists(ya_build_cache):
         log(f'Clear {ya_build_cache} before head configure...')

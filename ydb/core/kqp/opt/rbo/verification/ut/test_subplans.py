@@ -174,7 +174,9 @@ def _scan_scalar_snapshot():
     return raw
 
 
-def _lowered_scalar_snapshot(*, checked, empty_outer=False):
+def _lowered_scalar_snapshot(*, check_mode, empty_outer=False):
+    if check_mode not in {"gated", "eager", "none"}:
+        raise AssertionError(f"unknown scalar check mode {check_mode!r}")
     nodes = [{"id": "main_source", "op": "empty_source"}]
     outer = "main_source"
     if empty_outer:
@@ -187,24 +189,72 @@ def _lowered_scalar_snapshot(*, checked, empty_outer=False):
             }
         )
         outer = "empty_outer"
+    nodes.append(
+        {
+            "id": "sub_scan",
+            "op": "scan",
+            "table": "A",
+            "columns": [{"source": "x", "output": "sub.value"}],
+            "predicate": None,
+            "pushed_limit": None,
+        }
+    )
+    checked_input = "sub_scan"
+    if check_mode == "gated":
+        nodes.extend(
+            [
+                {
+                    "id": "outer_gate",
+                    "op": "limit",
+                    "input": outer,
+                    "count": _literal("Uint64", 1),
+                    "offset": None,
+                    "phase": "undefined",
+                },
+                {
+                    "id": "scalar_bound",
+                    "op": "limit",
+                    "input": "sub_scan",
+                    "count": _literal("Uint64", 2),
+                    "offset": None,
+                    "phase": "undefined",
+                },
+                {
+                    "id": "gate_cross",
+                    "op": "join",
+                    "left": "outer_gate",
+                    "right": "scalar_bound",
+                    "kind": "cross",
+                    "predicate": _literal("Bool", True),
+                },
+            ]
+        )
+        checked_input = "gate_cross"
     nodes.extend(
         [
             {
-                "id": "sub_scan",
-                "op": "scan",
-                "table": "A",
-                "columns": [{"source": "x", "output": "sub.value"}],
-                "predicate": None,
-                "pushed_limit": None,
-            },
-            {
                 "id": "checked",
                 "op": "limit",
-                "input": "sub_scan",
+                "input": checked_input,
                 "count": _literal("Uint64", 2),
                 "offset": None,
                 "phase": "undefined",
-                "ensure_at_most_one": checked,
+                "ensure_at_most_one": check_mode != "none",
+            },
+            {
+                "id": "descriptor",
+                "op": "project",
+                "input": "checked",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "sub.value",
+                        "expression": {
+                            "kind": "column",
+                            "column": "sub.value",
+                        },
+                    }
+                ],
             },
             {"id": "fallback_source", "op": "empty_source"},
             {
@@ -223,7 +273,7 @@ def _lowered_scalar_snapshot(*, checked, empty_outer=False):
                 "id": "value_or_null",
                 "op": "union_all",
                 "inputs": [
-                    {"node": "checked", "columns": ["sub.value"]},
+                    {"node": "descriptor", "columns": ["sub.value"]},
                     {"node": "fallback", "columns": ["sub.value"]},
                 ],
                 "output": ["sub.value"],
@@ -635,7 +685,9 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
 
     def test_checked_scalar_lowering_matches_a_demanded_initial_binding(self):
         before = parse_snapshot(_scan_scalar_snapshot())
-        after = parse_snapshot(_lowered_scalar_snapshot(checked=True))
+        after = parse_snapshot(
+            _lowered_scalar_snapshot(check_mode="gated")
+        )
         script = smt.Script()
         database = Database(before, 2, script)
         scalar = ScalarEncoder(script)
@@ -666,7 +718,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                     _ground(equality, _database_constants(database, present))
                 )
 
-    def test_dropped_check_and_eager_empty_outer_are_counterexamples(self):
+    def test_missing_and_eager_checks_are_counterexamples(self):
         before = parse_snapshot(_scan_scalar_snapshot())
 
         def equal_to(raw_after):
@@ -694,7 +746,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
             )
 
         self.assertFalse(
-            equal_to(_lowered_scalar_snapshot(checked=False))
+            equal_to(_lowered_scalar_snapshot(check_mode="none"))
         )
 
         empty_before_raw = _scan_scalar_snapshot()
@@ -717,7 +769,7 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
             Evaluator(
                 parse_snapshot(
                     _lowered_scalar_snapshot(
-                        checked=True,
+                        check_mode="eager",
                         empty_outer=True,
                     )
                 ),
@@ -732,6 +784,58 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                 _database_constants(database, (True, True)),
             )
         )
+
+    def test_gated_check_matches_an_empty_consumer(self):
+        before_raw = _scan_scalar_snapshot()
+        before_raw["plan"]["nodes"].insert(
+            1,
+            {
+                "id": "empty_outer",
+                "op": "filter",
+                "input": "main_source",
+                "predicate": _literal("Bool", False),
+            },
+        )
+        before_raw["plan"]["nodes"][2]["input"] = "empty_outer"
+        before = parse_snapshot(before_raw)
+        after = parse_snapshot(
+            _lowered_scalar_snapshot(
+                check_mode="gated",
+                empty_outer=True,
+            )
+        )
+        script = smt.Script()
+        database = Database(before, 2, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            Evaluator(
+                before,
+                database,
+                scalar,
+                choice_scope="before",
+            ).root(),
+            Evaluator(
+                after,
+                database,
+                scalar,
+                choice_scope="after",
+            ).root(),
+            scalar,
+        )
+
+        for present in (
+            (False, False),
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            with self.subTest(present=present):
+                self.assertTrue(
+                    _ground(
+                        equality,
+                        _database_constants(database, present),
+                    )
+                )
 
 
 class ScalarSubplanValidationTest(unittest.TestCase):

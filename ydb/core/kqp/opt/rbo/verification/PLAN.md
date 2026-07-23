@@ -152,8 +152,11 @@ membership normalization admits only
 unsupported.
 
 Two reviewed optimizer-generated wrappers reuse those existing exact nodes.
-`Coalesce(comparison, false)` lowers to `if_present` only when the first child
-is one direct nullable ordinary comparison, the fallback is exact non-null
+`Coalesce(predicate, false)` lowers to `if_present` only when the first child
+is either one direct nullable ordinary comparison or exactly binary
+`Or(member == literal, member == literal)`/`And(member != literal, member != literal)`.
+The binary form requires the same direct `Optional<String>` member and a
+non-null `String` literal in each leaf. The fallback is exact non-null
 `Bool(false)`, and the result is exact non-null `Bool`. Larger Boolean trees,
 other fallbacks, and different Optional shapes remain opaque. `Just(decimal)`
 lowers to `if(true, decimal, typed-null)` only when its child is a direct
@@ -819,10 +822,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Synthetic result, boundary, mutation, binder, and wrap tests plus a real-host
   pushed-filter proof cover the gate. The complete TPCH dashboard now emits
   formulas for q5, q6, q10, and q14 after 170/113,378, 55/222, 108/7,886, and
-  53/267 ms of preparation/verifier work, respectively. q12 passes the shift
-  fold but remains unsupported on unordered scalar children at both snapshot
-  boundaries. This raises TPCH formula coverage to 6/22 and total formula
-  coverage to 27/121 (22.3%). At that milestone, focused solver experiments
+  53/267 ms of preparation/verifier work, respectively. At that milestone q12
+  passed the shift fold and exposed unordered scalar children at both snapshot
+  boundaries. This raised TPCH formula coverage to 6/22 and total formula
+  coverage to 27/121 (22.3%). Focused solver experiments at that milestone
   left the proof floor unchanged: q5 was `SOLVER_ERROR` after 180/230,982 ms
   of preparation/verifier work and the 65-second external-process watchdog,
   q10 was `UNKNOWN` after 142/74,871 ms, and q6/q14 produced symbolic
@@ -840,6 +843,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   returns `VERIFIED_BOUNDED` for q6 after 72/749 ms and q14 after 97/33,152 ms
   of preparation/verification. Their former candidates disappear under the
   exact model, so both enter the proof floor and neither is an optimizer bug.
+- Exact q12 membership/complement normalization accepts only
+  `Coalesce(Or(member == literal, member == literal), false)` and
+  `Coalesce(And(member != literal, member != literal), false)`, with both leaves
+  comparing the same direct `Optional<String>` member with a non-null `String`
+  literal. It reuses schema-preserving `if_present`; broader Boolean trees
+  remain opaque. The fresh complete TPCH dashboard records q12 as
+  `FORMULA_EMITTED` after 81/5,732 ms of preparation/verifier work; an earlier
+  focused formula run recorded 108/5,816 ms. Focused and policy-floor solver
+  runs return `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms,
+  respectively. TPCH formula coverage is now 7/22, total
+  formula coverage is 28/121 (23.1%), TPCH has five proofs, and the workload
+  proof floor is 13/121 (10.7%). No proof produced a candidate, so replay was
+  not invoked and no optimizer correctness bug was found.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -926,16 +942,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 27-query formula floor must keep constructing SMT, and the
-  twelve-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
+  the verifier, the 28-query formula floor must keep constructing SMT, and the
+  thirteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
   `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
   satisfy every weaker tier without pinning brittle blocker text.
 - Occurrence/routing compaction, bounded symbolic ordered choices, and scoped
   shared-term rendering remove the former factorial construction gate. The
-  2026-07-22 complete current-code formula-only dashboard emits TPCH q3, q5,
-  q6, q10, q14, and q19 (6/22) and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
+  latest suite measurements combine the hardened TPCH run from 2026-07-23
+  with the earlier complete TPC-DS baseline from 2026-07-22. They emit TPCH
+  q3, q5, q6, q10, q12, q14, and q19 (7/22)
+  and TPC-DS q3, q15, q19, q37, q40, q42, q48, q50, q52, q55,
   q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, and q99 (21/99), for
-  27/121 workload queries (22.3%). TPCH has 13 unsupported and three
+  28/121 workload queries (23.1%). TPCH has 12 unsupported and three
   optimizer-failure results; TPC-DS has 49 unsupported and 29 optimizer-failure
   results. Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
@@ -951,14 +969,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   64-live-`IfPresent` limits. Opaque fingerprints retain their independent
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
-  q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96 with a
-  fixed 60-second per-query budget. The complete current-code TPCH run recorded
-  128/13,291 ms of preparation/verification for q3, 72/749 ms for q6,
-  97/33,152 ms for q14, and 110/902 ms for q19; q42 recorded 95 ms of
-  preparation and 15,210 ms of verification. q48 recorded 179 ms of
-  preparation and 2,997 ms of verification in a proof-floor run; that run also
-  recorded 227 ms of q90 preparation and 7,299 ms of verification. These are
-  twelve curated proofs (9.9% of the workload). q50 emits a formula but its
+  q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96
+  with a fixed 60-second per-query budget. The latest TPCH run recorded
+  114/13,345 ms of preparation/verification for q3, 56/777 ms for q6,
+  106/40,602 ms for q12, 123/34,122 ms for q14, and 122/871 ms for q19; q42
+  recorded 95 ms of preparation and 15,210 ms of verification. q48 recorded
+  179 ms of preparation and 2,997 ms of verification in a proof-floor run;
+  that run also recorded 227 ms of q90 preparation and 7,299 ms of verification.
+  These are
+  thirteen curated proofs (10.7% of the workload). q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. q15, q61, q62, q76,
   q79, and q88 return `UNKNOWN` at the 60-second solver budget. q61's
@@ -969,7 +988,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   83,339 ms in the verifier/formula-emission phase of the complete run before a
   focused solver
   attempt reached the external process deadline. q76 is formula-covered but is
-  not one of the twelve proofs. The Date additions q37 and q82 return `UNKNOWN`
+  not one of the thirteen proofs. The Date additions q37 and q82 return `UNKNOWN`
   at the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
   retained formulas are 4,201,832 and 2,841,844 bytes. A separate non-gating
   q40 scaling experiment used a 10-second solver budget, prepared in 178 ms,
@@ -1005,7 +1024,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the twelve curated workload proofs have separate
+- Formula construction and the thirteen curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

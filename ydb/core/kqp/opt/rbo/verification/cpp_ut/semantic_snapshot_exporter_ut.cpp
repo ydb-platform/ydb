@@ -24,6 +24,7 @@
 #include <yql/essentials/public/udf/udf_type_ops.h>
 
 #include <algorithm>
+#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <stdexcept>
@@ -4224,7 +4225,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 },
                 boolType);
         };
-        const auto makeComparison = [](TExportTestContext& ctx) {
+        const auto makeComparison = [](
+            TExportTestContext& ctx,
+            TStringBuf callable = ">=")
+        {
             const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
             const auto* optionalInt = ScalarType(
                 ctx,
@@ -4232,7 +4236,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 true);
             return TypedCallable(
                 ctx,
-                ">=",
+                callable,
                 {
                     TypedMember(ctx, "a.x", optionalInt),
                     TypedLiteral(ctx, "Int32", "1", intType),
@@ -4263,6 +4267,58 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "executed Result node");
+        }
+
+        for (const TStringBuf callable : {TStringBuf("=="), TStringBuf("!=")}) {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeCoalesce(ctx, makeComparison(ctx, callable)),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()->Child(0)->SetUnorderedChildren();
+            const auto snapshot = ParseSupported(ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression),
+                true));
+            const auto& lowered = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                lowered["kind"].GetStringSafe(),
+                "if_present");
+            if (callable == "==") {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    lowered["optional"]["kind"].GetStringSafe(),
+                    "eq");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    lowered["optional"]["kind"].GetStringSafe(),
+                    "not");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    lowered["optional"]["arg"]["kind"].GetStringSafe(),
+                    "eq");
+            }
+        }
+
+        {
+            TExportTestContext ctx;
+            TExpression expression(
+                makeCoalesce(ctx, makeComparison(ctx, "==")),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            expression.GetExpressionBody()
+                ->Child(0)
+                ->Child(0)
+                ->SetUnorderedChildren();
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
         }
 
         {
@@ -4324,6 +4380,325 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
+                "unordered children");
+        }
+    }
+
+    Y_UNIT_TEST(ExactBinaryStringMembershipCoalesceFalseIsNarrow) {
+        const auto exportExpression = [](
+            TExportTestContext& ctx,
+            TExprNode::TPtr expression,
+            std::function<void(TExprNode&)> mutate = {})
+        {
+            const auto& table = AddTable(ctx, "/Root/StringMembership", {
+                {"x", "String", false},
+                {"y", "String", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x", "y"});
+            TExpression typedExpression(
+                std::move(expression),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            if (mutate) {
+                mutate(*typedExpression.GetExpressionBody());
+            }
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    std::move(typedExpression))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+        const auto makeComparison = [](
+            TExportTestContext& ctx,
+            TStringBuf callable,
+            TStringBuf memberName,
+            TStringBuf literal,
+            NUdf::EDataSlot slot,
+            bool reverse = false)
+        {
+            const auto* valueType = ScalarType(ctx, slot);
+            const auto* optionalValueType = ScalarType(ctx, slot, true);
+            TVector<TExprNode::TPtr> operands = {
+                TypedMember(
+                    ctx,
+                    TStringBuilder() << "a." << memberName,
+                    optionalValueType),
+                TypedLiteral(
+                    ctx,
+                    NUdf::GetDataTypeInfo(slot).Name,
+                    literal,
+                    valueType),
+            };
+            if (reverse) {
+                std::swap(operands[0], operands[1]);
+            }
+            auto result = TypedCallable(
+                ctx,
+                callable,
+                std::move(operands),
+                ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+            return result;
+        };
+        const auto makeCoalesce = [&](
+            TExportTestContext& ctx,
+            TStringBuf booleanCallable,
+            TStringBuf comparisonCallable,
+            TStringBuf secondMember = "x",
+            NUdf::EDataSlot slot = NUdf::EDataSlot::String)
+        {
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            return TypedCallable(
+                ctx,
+                "Coalesce",
+                {
+                    TypedCallable(
+                        ctx,
+                        booleanCallable,
+                        {
+                            makeComparison(
+                                ctx,
+                                comparisonCallable,
+                                "x",
+                                "1-URGENT",
+                                slot),
+                            makeComparison(
+                                ctx,
+                                comparisonCallable,
+                                secondMember,
+                                "2-HIGH",
+                                slot,
+                                true),
+                        },
+                        optionalBool),
+                    TypedLiteral(ctx, "Bool", "false", boolType),
+                },
+                boolType);
+        };
+        const auto markComparisonsUnordered = [](TExprNode& expression) {
+            for (const auto& comparison : expression.Child(0)->Children()) {
+                comparison->SetUnorderedChildren();
+            }
+        };
+
+        for (const auto [booleanCallable, comparisonCallable] : {
+            std::pair<TStringBuf, TStringBuf>{"Or", "=="},
+            std::pair<TStringBuf, TStringBuf>{"And", "!="},
+        }) {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                makeCoalesce(ctx, booleanCallable, comparisonCallable),
+                markComparisonsUnordered));
+            const auto& lowered = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                lowered["kind"].GetStringSafe(),
+                "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                lowered["optional"]["kind"].GetStringSafe(),
+                to_lower(TString(booleanCallable)));
+            for (const auto& child : lowered["optional"]["args"].GetArraySafe()) {
+                if (comparisonCallable == "==") {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        child["kind"].GetStringSafe(),
+                        "eq");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        child["kind"].GetStringSafe(),
+                        "not");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        child["arg"]["kind"].GetStringSafe(),
+                        "eq");
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                lowered["missing"]["value"].GetBooleanSafe(),
+                false);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(
+                    ctx,
+                    "Or",
+                    "==",
+                    "x",
+                    NUdf::EDataSlot::Utf8),
+                markComparisonsUnordered);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must contain one Member and one literal");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto result = exportExpression(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "Or",
+                            {
+                                makeComparison(
+                                    ctx,
+                                    "==",
+                                    "x",
+                                    "1-URGENT",
+                                    NUdf::EDataSlot::String),
+                                makeComparison(
+                                    ctx,
+                                    "==",
+                                    "x",
+                                    "2-HIGH",
+                                    NUdf::EDataSlot::String),
+                                makeComparison(
+                                    ctx,
+                                    "==",
+                                    "x",
+                                    "3-MEDIUM",
+                                    NUdf::EDataSlot::String),
+                            },
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType),
+                markComparisonsUnordered);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(ctx, "Or", "==", "y"),
+                markComparisonsUnordered);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "same member");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(ctx, "Or", "==", "missing"),
+                markComparisonsUnordered);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "not a direct input value");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(ctx, "And", "!="),
+                [&](TExprNode& expression) {
+                    markComparisonsUnordered(expression);
+                    expression.Child(0)
+                        ->Child(0)
+                        ->Child(0)
+                        ->SetSideEffects(ESideEffects::General);
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(ctx, "Or", "=="),
+                [&](TExprNode& expression) {
+                    markComparisonsUnordered(expression);
+                    expression.Child(0)
+                        ->Child(0)
+                        ->Child(1)
+                        ->SetUnorderedChildren();
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                makeCoalesce(ctx, "Or", "=="),
+                [](TExprNode& expression) {
+                    expression.Child(0)->SetUnorderedChildren();
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto expression = exportExpression(
+                ctx,
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "Or",
+                            {
+                                makeComparison(
+                                    ctx,
+                                    "==",
+                                    "x",
+                                    "1-URGENT",
+                                    NUdf::EDataSlot::String),
+                                makeComparison(
+                                    ctx,
+                                    "!=",
+                                    "x",
+                                    "2-HIGH",
+                                    NUdf::EDataSlot::String),
+                            },
+                            optionalBool),
+                        TypedLiteral(ctx, "Bool", "false", boolType),
+                    },
+                    boolType),
+                markComparisonsUnordered);
+            UNIT_ASSERT(!expression.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                expression.UnsupportedReason,
                 "unordered children");
         }
     }

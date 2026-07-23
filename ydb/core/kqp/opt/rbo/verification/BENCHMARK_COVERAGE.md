@@ -49,9 +49,9 @@ RBO_COVERAGE_USE_SOLVER=0 ./ya make --build relwithdebinfo -tA \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the twelve curated obligations with the pinned
+The checked-in proof floor runs the thirteen curated obligations with the pinned
 Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3,
-q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96
+q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96
 directly from the policy, accepts only `VERIFIED_BOUNDED`, and ignores every
 ambient `RBO_COVERAGE_*` variable:
 
@@ -102,12 +102,12 @@ requires TPCH q1 and TPC-DS q5, q65, and q80 to keep passing both snapshot
 exporters and invoke the verifier; their current verifier-side `UNSUPPORTED`
 results do not count as formulas, while any later formula or proof still
 satisfies this depth floor. The formula-construction floor requires TPCH q3,
-q5, q6, q10, q14, and q19 plus TPC-DS q3,
+q5, q6, q10, q12, q14, and q19 plus TPC-DS q3,
 q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82,
 q88, q90, q93, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof floor
-requires TPCH q3, q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
-q93, and q96;
+requires TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55,
+q90, q93, and q96;
 dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
@@ -146,29 +146,31 @@ is not a confirmed real-execution divergence before that result is
 `REAL_RESULT_DIVERGENCE`; attributing a reproduced divergence to the captured
 StageGraph remains a separate diagnostic step.
 
-## Current measured formula coverage
+## Latest measured formula coverage
 
-The complete current-code full-corpus dashboard was rerun on 2026-07-22 in
-formula-only mode. It emitted the 27-query floor below and recorded an
-outcome for every workload entry. `FORMULA_EMITTED` is not a solver proof. Both
-measured suites meet the updated checked-in floors: TPCH q1 and TPC-DS q5, q65,
-and q80 reach verifier entry.
+The TPCH formula-only dashboard was rerun against the hardened q12 exporter on
+2026-07-23. The TPC-DS table remains the latest complete baseline from
+2026-07-22; its eight-query proof floor was rerun after that hardening and
+remained green. Together the latest suite measurements emitted the 28-query
+floor below and recorded an outcome for every workload entry.
+`FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
+checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 6 (q3, q5, q6, q10, q14, q19) | 13 | 3 | 22 |
+| TPCH_YQL | 7 (q3, q5, q6, q10, q12, q14, q19) | 12 | 3 | 22 |
 | TPCDS_YQL | 21 (q3, q15, q19, q37, q40, q42, q48, q50, q52, q55, q61, q62, q71, q76, q79, q82, q88, q90, q93, q96, q99) | 49 | 29 | 99 |
 
-The supported formula slice is 27/121 queries (22.3%). This is a useful end-to-end
+The supported formula slice is 28/121 queries (23.1%). This is a useful end-to-end
 pre-physical optimizer sample, but it remains a bounded and feature-limited
-slice rather than a claim about the remaining 94 workload entries or larger
+slice rather than a claim about the remaining 93 workload entries or larger
 inputs.
 
 ### TPCH inventory
 
 Optimizer preparation failed for q16, q18, and q20 on unsupported PG
-semantics. Twelve queries fail closed at a snapshot boundary as follows; a
-query can have both an initial and final reason. TPCH q1 is the thirteenth
+semantics. Eleven queries fail closed at a snapshot boundary as follows; a
+query can have both an initial and final reason. TPCH q1 is the twelfth
 unsupported query and reaches the verifier before stopping at aggregate `avg`.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -177,14 +179,15 @@ unsupported query and reaches the verifier before stopping at aggregate `avg`.
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
 | Callable `Map` | q7, q8 | q7, q8 |
-| Scalar node with unordered children | q12 | q12 |
 | OLAP `string_contains` | - | q9 |
 | `KqpOlapApply` | - | q13 |
 
 Exact Date literals and ordering removed the previous Date blockers and exposed
 the deeper scalar and OLAP reasons above. Restricted static `IN` similarly
-removed the first blocker from q12 and q19. Exact Decimal comparison,
-non-null integral `SafeCast`, scoped unary `IfPresent`, and its restricted
+removed the first blocker from q12 and q19. A later exact same-member String
+membership/complement gate removes q12's composite-Boolean blocker.
+Exact Decimal comparison, non-null integral `SafeCast`, scoped unary
+`IfPresent`, and its restricted
 static-membership lowering now let q19 construct a complete formula and prove
 bounded equivalence.
 
@@ -194,12 +197,14 @@ Routing-aware row compaction and symbolic Sort ordinals then let both snapshots
 construct a complete formula for q3. Exact direct numeric Date/Interval folding
 moves q1 through both snapshot
 exporters to verifier-side aggregate `avg` after 109 ms of preparation and 214
-ms of verifier work. Exact constant DateTime2 calendar-shift folding then moves
-q5, q6, q10, and q14 through formula construction, raising TPCH to 6/22. The
-complete run recorded preparation/verifier times of 170/113,378, 55/222,
-108/7,886, and 53/267 ms, respectively. q12 clears the calendar shift and now
-fails on unordered scalar children at both boundaries; q7 and q8 remain on
-generic `Map`.
+ms of verifier work. Exact constant DateTime2 calendar-shift folding then moved
+q5, q6, q10, and q14 through formula construction, raising TPCH to 6/22 at that
+milestone. The complete run recorded preparation/verifier times of
+170/113,378, 55/222, 108/7,886, and 53/267 ms, respectively. q12 clears the
+calendar shift and now
+passes the narrow exact composite-Boolean gate described below. Its fresh
+complete-dashboard row is `FORMULA_EMITTED` after 81/5,732 ms, raising TPCH to
+7/22; q7 and q8 remain on generic `Map`.
 
 ### TPC-DS inventory
 
@@ -319,20 +324,35 @@ Synthetic exact-result, leap-day, month-end, Date-boundary, structural-mutation,
 and year-wrap cases plus a real-host pushed-filter proof cover the gate. The
 full TPCH dashboard emits formulas for q5, q6, q10, and q14 at 153/109,903,
 55/213, 109/8,144, and 59/247 ms of preparation/verifier work, respectively.
-q12 passes this fold but remains unsupported on unordered scalar children at
-both snapshot boundaries. This raises TPCH formula coverage to 6/22 and total
-workload formula coverage to 27/121 (22.3%).
+At that milestone q12 passed this fold and exposed unordered scalar children at
+both snapshot boundaries, leaving TPCH formula coverage at 6/22 and total
+workload formula coverage at 27/121 (22.3%). A subsequent gate accepts only
+exact `Coalesce(Or(member == literal, member == literal), false)` and
+`Coalesce(And(member != literal, member != literal), false)` forms whose leaves
+compare the same direct `Optional<String>` member with non-null `String`
+literals.
+It lowers the wrapper through schema-preserving `if_present` and leaves broader
+Boolean trees opaque. q12 now emits a formula, raising TPCH formula coverage to
+7/22 and total workload formula coverage to 28/121 (23.1%).
 
 ## Curated proof floor and focused results
 
 - The complete current-code proof floor returns `VERIFIED_BOUNDED` for TPCH q3,
-  q6, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96,
-  each at two rows per referenced table and two tasks. These are twelve bounded
-  proofs (9.9% of the workload) for the modeled pre-physical semantics, not
-  unbounded SQL-equivalence claims. The current TPCH run spent 128/13,291 ms of
-  preparation/verification on q3, 72/749 ms on q6, 97/33,152 ms on q14, and
-  110/902 ms on q19; q42 spent 95 ms preparing and 15,210 ms verifying in its
-  recorded proof-floor run.
+  q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96,
+  each at two rows per referenced table and two tasks. These are thirteen
+  bounded proofs (10.7% of the workload) for the modeled pre-physical
+  semantics, not unbounded SQL-equivalence claims. The latest TPCH run spent
+  114/13,345 ms of preparation/verification on q3, 56/777 ms on q6,
+  106/40,602 ms on q12,
+  123/34,122 ms on q14, and 122/871 ms on q19; q42 spent 95 ms preparing and
+  15,210 ms verifying in its recorded proof-floor run.
+
+- TPCH q12's fresh complete-dashboard formula row spent 81/5,732 ms on
+  preparation/verification; an earlier focused formula-only run spent
+  108/5,816 ms. Focused and policy-backed solver runs returned
+  `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms, respectively. Neither
+  proof produced a candidate, so replay was not invoked and no optimizer
+  correctness bug was found.
 
 - TPCH q19 newly reaches formula construction through exact scoped unary
   `IfPresent` and restricted static-membership lowering. Its focused
@@ -431,8 +451,8 @@ workload formula coverage to 27/121 (22.3%).
   while a shifted value outside the Date domain becomes typed NULL. Synthetic
   result/boundary/mutation tests and a real-host pushed-filter obligation cover
   the gate. TPCH q5, q6, q10, and q14 now emit formulas, raising the formula
-  slice to 27/121 (22.3%). q12 remains unsupported on unordered children.
-  At that milestone, focused solver experiments did not promote any proof: q5
+  slice to 27/121 (22.3%). At that milestone q12 exposed unordered children.
+  Focused solver experiments at that milestone did not promote any proof: q5
   reported `SOLVER_ERROR` after 180/230,982 ms of preparation/verifier work and the
   65-second external-process watchdog, and q10 returned `UNKNOWN` after
   142/74,871 ms. q6 and q14 returned symbolic counterexamples after 54/788 and
@@ -452,6 +472,14 @@ workload formula coverage to 27/121 (22.3%).
   TPCH floor returns `VERIFIED_BOUNDED` after 72/749 and 97/33,152 ms of
   preparation/verification, respectively. Both obligations now belong to the
   proof floor, with no bounded witness requiring replay.
+
+- Exact q12 membership/complement normalization admits only binary
+  `Or(==, ==)` or `And(!=, !=)` under `Coalesce(..., false)`, with the same
+  direct `Optional<String>` member and a non-null `String` literal in each leaf.
+  It reuses schema-preserving `if_present`; larger or differently
+  shaped Boolean trees still fail closed. q12 now emits a formula and is
+  `VERIFIED_BOUNDED`, raising formula coverage to 28/121 (23.1%) and the proof
+  floor to 13/121 (10.7%). No candidate or optimizer bug arose.
 
 - Restricted stored-String `Concat` is admitted only as a Map-body root whose
   binary tree contains canonical String literals and one or two catalog-backed
@@ -556,11 +584,11 @@ workload formula coverage to 27/121 (22.3%).
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
 
-No proof-floor or focused run has confirmed an optimizer correctness bug. q6,
-q14, and q19 are bounded proofs, while q68 is a construction-bound coverage gap
-rather than a candidate divergence. The former q6/q14 candidates and the q79
-and q88 candidates above were verifier-modeling false positives; replay remains
-the confirmation boundary for any future symbolic counterexample.
+No proof-floor or focused run has confirmed an optimizer correctness bug. q3,
+q6, q12, q14, and q19 are bounded proofs, while q68 is a construction-bound
+coverage gap rather than a candidate divergence. The former q6/q14 candidates
+and the q79 and q88 candidates above were verifier-modeling false positives;
+replay remains the confirmation boundary for any future symbolic counterexample.
 
 When this inventory changes, retain the old report as a test artifact, inspect
 every newly supported, unsupported, failed, or solver-changed query, and update

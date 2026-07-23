@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest import mock
 
 try:
     import yatest.common as yatest_common
@@ -12,6 +13,7 @@ from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
     _family_json,
     prepare,
 )
+from ydb.core.kqp.opt.rbo.verification.inspector.plan import InspectionError
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
@@ -249,6 +251,41 @@ NULL_STRING = {"kind": "null", "type": "String"}
 
 
 class ObserverTest(unittest.TestCase):
+    def test_probe_interning_is_iterative_exact_and_bounded(self):
+        left = smt.symbol("same_probe", smt.INT)
+        right = smt.symbol("same_probe", smt.INT)
+        for _ in range(2000):
+            left = smt.Term(smt.INT, "deep_probe", (left, left))
+            right = smt.Term(smt.INT, "deep_probe", (right, right))
+
+        probes = Probes(smt.Script())
+        probes.add(left)
+        probes.add(right)
+        self.assertEqual(len(probes._terms), 2)
+        self.assertEqual(len(probes.requested), 1)
+        self.assertIs(probes._bound[id(left)], probes._bound[id(right)])
+        alias = probes._bound[id(left)]
+        assert isinstance(alias.atom, str)
+        self.assertEqual(probes.value(left, {alias.atom: 7}), 7)
+        self.assertEqual(probes.value(right, {alias.atom: 7}), 7)
+        with self.assertRaisesRegex(InspectionError, "after sealing"):
+            probes.add(smt.ZERO)
+
+        bounded = Probes(smt.Script())
+        bounded.add(smt.symbol("first_probe", smt.INT))
+        bounded.add(smt.symbol("second_probe", smt.INT))
+        with (
+            mock.patch(
+                "ydb.core.kqp.opt.rbo.verification.inspector.trace.MAX_TRACE_PROBES",
+                1,
+            ),
+            self.assertRaisesRegex(
+                InspectionError,
+                "1 unique-probe audit bound",
+            ),
+        ):
+            bounded.seal()
+
     def test_read_only_observers_do_not_change_the_obligation(self):
         before = _logical(COLUMN)
         after = _staged(COLUMN, split=True)

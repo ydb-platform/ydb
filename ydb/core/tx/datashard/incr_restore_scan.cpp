@@ -12,6 +12,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
+
 namespace NKikimr::NDataShard {
 
 using namespace NActors;
@@ -92,7 +94,8 @@ public:
     }
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvServe",
+            {"ev", ev->Get()->ToString()});
 
         // Store/update the actorId on each command receipt (handles SchemeShard restarts)
         OperatorActorId = ev->Sender;
@@ -101,7 +104,8 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -115,7 +119,8 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
@@ -125,12 +130,15 @@ public:
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvFinished " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvFinished",
+            {"ev", ev->Get()->ToString()});
 
         Driver->Touch(EScan::Final);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvIncrementalRestoreScan::TEvServe, Start);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
@@ -148,7 +156,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64) override {
-        LOG_D("Seek");
+        YDB_LOG_DEBUG("Seek");
 
         if (LastKey) {
             lead.To(ValueTags, LastKey->GetCells(), ESeek::Upper);
@@ -176,7 +184,7 @@ public:
     }
 
     EScan Exhausted() override {
-        LOG_D("Exhausted");
+        YDB_LOG_DEBUG("Exhausted");
 
         NoMoreData = true;
 
@@ -189,15 +197,17 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        LOG_D("Finish " << status);
+        YDB_LOG_DEBUG("Finish",
+            {"status", status});
 
         const bool success = IsScanSuccess(status);
         const auto endStatus = MapScanStatus(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
             // DS classifies cause (EndStatus); SS owns retry policy.
-            LOG_E("IncrementalRestoreScan finished with error status: " << status
-                  << " endStatus=" << static_cast<int>(endStatus));
+            YDB_LOG_ERROR("IncrementalRestoreScan finished with error",
+                {"status", status},
+                {"endStatus", static_cast<int>(endStatus)});
         }
 
         TString errorMsg;

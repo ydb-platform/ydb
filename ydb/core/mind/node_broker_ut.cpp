@@ -80,7 +80,8 @@ THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 void SetupServices(TTestActorRuntime &runtime,
                    ui32 maxDynNodes,
                    bool enableNodeBrokerDeltaProtocol,
-                   bool enableNodeBrokerLongLease = false)
+                   bool enableNodeBrokerLongLease = false,
+                   bool forceDistconfDisable = false)
 {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
@@ -196,6 +197,12 @@ void SetupServices(TTestActorRuntime &runtime,
     app.FeatureFlags.SetEnableStableNodeNames(true);
     app.FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
     app.FeatureFlags.SetEnableNodeBrokerLongLease(enableNodeBrokerLongLease);
+    // The node warden's TDistributedConfigKeeper on every runtime node also
+    // subscribes to static node changes. Tests that push a fabricated static
+    // node table (SetNameserverStaticNodes) would make the keeper re-process a
+    // list that excludes its own static node id and abort. Such tests disable
+    // distconf, which is incidental to the node broker / nameservice under test.
+    app.FeatureFlags.SetForceDistconfDisable(forceDistconfDisable);
 
     runtime.Initialize(app.Unwrap());
 
@@ -335,7 +342,8 @@ void Setup(TTestActorRuntime& runtime,
            ui32 maxDynNodes = 3,
            const TVector<TString>& databases = {},
            bool enableNodeBrokerDeltaProtocol = false,
-           bool enableNodeBrokerLongLease = false)
+           bool enableNodeBrokerLongLease = false,
+           bool forceDistconfDisable = false)
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -351,7 +359,7 @@ void Setup(TTestActorRuntime& runtime,
     runtime.SetScheduledEventFilter(scheduledFilter);
 
     SetupLogging(runtime);
-    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol, enableNodeBrokerLongLease);
+    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol, enableNodeBrokerLongLease, forceDistconfDisable);
 
     TActorId sender = runtime.AllocateEdgeActor();
     ui32 txId = 100;
@@ -5543,7 +5551,11 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
     Y_UNIT_TEST(OnlyAliveDynamicNodesStaticNodeChangeSubscribers)
     {
         TTestBasicRuntime runtime(8, false);
-        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        // Disable distconf: SetNameserverStaticNodes below pushes a fabricated
+        // static node table that excludes the runtime's own static nodes, which
+        // would make the node warden's TDistributedConfigKeeper abort.
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true,
+              /* forceDistconfDisable */ true);
         TActorId sender = runtime.AllocateEdgeActor();
 
         SetLeaseDuration(runtime, sender, TDuration::Minutes(5));

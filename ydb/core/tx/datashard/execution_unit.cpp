@@ -212,8 +212,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         op->Abort();
         return true;
@@ -230,8 +229,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         op->Abort();
         return true;
@@ -269,8 +267,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         op->Abort();
         return true;

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeAlias
@@ -13,12 +15,13 @@ from .relation import (
     Database,
     Evaluator,
     FamilyComparison,
+    MismatchBranch,
     NodeObserver,
     RelationError,
     RelationFamily,
     WitnessRow,
     compare_families,
-    family_equal,
+    family_mismatch,
 )
 from .scalar import Encoder as ScalarEncoder
 from .stages import (
@@ -43,6 +46,10 @@ class SolverError(RuntimeError):
     pass
 
 
+class _ProcessDeadlineExceeded(RuntimeError):
+    pass
+
+
 BoundaryObserver: TypeAlias = Callable[[str, RelationFamily], None]
 ComparisonObserver: TypeAlias = Callable[[FamilyComparison], None]
 
@@ -51,6 +58,7 @@ ComparisonObserver: TypeAlias = Callable[[FamilyComparison], None]
 class Problem:
     script: smt.Script
     witness: Mapping[str, tuple[WitnessRow, ...]]
+    mismatch_branches: tuple[MismatchBranch, ...] | None = None
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -63,9 +71,33 @@ class Problem:
                     values.append(cell.value)
         return tuple(values)
 
-    def formula(self, values: Iterable[smt.Term] = ()) -> str:
+    def formula(
+        self,
+        values: Iterable[smt.Term] = (),
+        timeout_ms: int | None = None,
+    ) -> str:
         try:
-            return self.script.render(values)
+            return self.script.render(values, timeout_ms)
+        except smt.SmtError as error:
+            raise VerificationError(str(error)) from error
+
+    def branch_formula(
+        self,
+        branch: MismatchBranch,
+        values: Iterable[smt.Term] = (),
+        timeout_ms: int | None = None,
+    ) -> str:
+        if self.mismatch_branches is None or not any(
+            branch is candidate
+            for candidate in self.mismatch_branches
+        ):
+            raise VerificationError("solver branch does not belong to this problem")
+        try:
+            return self.script.render_branch(
+                branch.predicate,
+                values,
+                timeout_ms,
+            )
         except smt.SmtError as error:
             raise VerificationError(str(error)) from error
 
@@ -97,6 +129,59 @@ class SolverQuery:
     values: Mapping[str, bool | int | str]
     reason: str | None = None
     phase: str = "check"
+
+
+_PROCESS_TERMINATION_GRACE_SECONDS = 5.0
+_CANONICAL_PROBE_NUMERATOR = 3
+_CANONICAL_PROBE_DENOMINATOR = 4
+
+
+@dataclass(frozen=True, slots=True)
+class _SolverBudget:
+    solver_deadline: float | None
+    process_deadline: float | None
+
+    @classmethod
+    def start(cls, timeout_ms: int | None) -> _SolverBudget:
+        if timeout_ms is None:
+            return cls(None, None)
+        if type(timeout_ms) is not int or timeout_ms <= 0:
+            raise SolverError("solver timeout must be a positive integer")
+        now = time.monotonic()
+        solver_deadline = now + timeout_ms / 1000.0
+        return cls(
+            solver_deadline,
+            solver_deadline + _PROCESS_TERMINATION_GRACE_SECONDS,
+        )
+
+    def remaining_ms(self) -> int | None:
+        if self.solver_deadline is None:
+            return None
+        remaining = self.solver_deadline - time.monotonic()
+        return 0 if remaining <= 0 else max(1, math.ceil(remaining * 1000.0))
+
+    def process_timeout_seconds(
+        self,
+        solver_timeout_ms: int | None = None,
+    ) -> float | None:
+        if self.process_deadline is None:
+            global_timeout = None
+        else:
+            global_timeout = max(
+                0.0,
+                self.process_deadline - time.monotonic(),
+            )
+        if solver_timeout_ms is None:
+            return global_timeout
+        check_timeout = (
+            solver_timeout_ms / 1000.0
+            + _PROCESS_TERMINATION_GRACE_SECONDS
+        )
+        return (
+            check_timeout
+            if global_timeout is None
+            else min(check_timeout, global_timeout)
+        )
 
 
 def build_problem(
@@ -203,8 +288,8 @@ def _build_problem(
                 f"{left.nullable!r} and {right.nullable!r}"
             )
 
-    script = smt.Script(timeout_ms)
     try:
+        script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)
         scalar = ScalarEncoder(script)
         router = Router(script)
@@ -246,16 +331,16 @@ def _build_problem(
         if boundary_observer is not None:
             boundary_observer("before", before_family)
             boundary_observer("after", after_family)
-        if comparison_observer is None:
-            equivalent = family_equal(before_family, after_family, scalar)
-        else:
+        if comparison_observer is not None:
             comparison = compare_families(before_family, after_family, scalar)
             comparison_observer(comparison)
-            equivalent = comparison.equivalent
+            mismatch = comparison.mismatch
+        else:
+            mismatch = family_mismatch(before_family, after_family, scalar)
     except (RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
-    script.assert_(smt.not_(equivalent))
-    return Problem(script, database.witness)
+    script.assert_obligation(mismatch.counterexample)
+    return Problem(script, database.witness, mismatch.branches)
 
 
 def _check_boundary_roles(before: Snapshot, after: Snapshot) -> None:
@@ -276,18 +361,177 @@ def query_solver(
     timeout_ms: int | None = None,
 ) -> SolverQuery:
     requested = tuple(requested_values)
-    first = _run_solver(solver, problem.formula(), timeout_ms)
+    effective_timeout = (
+        problem.script.timeout_ms
+        if timeout_ms is None
+        else timeout_ms
+    )
+    budget = _SolverBudget.start(effective_timeout)
+    branches = problem.mismatch_branches
+    if branches is None:
+        return _query_obligation(
+            problem,
+            solver,
+            requested,
+            budget,
+            None,
+        )
+    if not branches:
+        raise SolverError("exact mismatch decomposition has no branches")
+
+    canonical_limit = (
+        None
+        if effective_timeout is None
+        else max(
+            1,
+            effective_timeout
+            * _CANONICAL_PROBE_NUMERATOR
+            // _CANONICAL_PROBE_DENOMINATOR,
+        )
+    )
+    canonical = _query_obligation(
+        problem,
+        solver,
+        requested,
+        budget,
+        None,
+        canonical_limit,
+    )
+    if canonical.status in {"sat", "unsat"} or canonical.phase == "model":
+        return canonical
+
+    first_unknown: str | None = None
+    for index, branch in enumerate(branches):
+        if budget.remaining_ms() == 0:
+            first_unknown = (
+                f"global solver deadline expired before branch "
+                f"{index + 1}/{len(branches)} ({branch.name})"
+            )
+            break
+        query = _query_obligation(
+            problem,
+            solver,
+            requested,
+            budget,
+            branch,
+        )
+        if query.status == "sat" or query.phase == "model":
+            return query
+        if query.status == "unknown" and first_unknown is None:
+            first_unknown = (
+                f"branch {index + 1}/{len(branches)} "
+                f"({branch.name}): {query.reason or 'solver returned unknown'}"
+            )
+
+    if first_unknown is not None:
+        return SolverQuery(
+            "unknown",
+            {},
+            f"counterexample decomposition remains unresolved; "
+            f"first: {first_unknown}",
+        )
+    return SolverQuery("unsat", {})
+
+
+def _query_obligation(
+    problem: Problem,
+    solver: str | Path,
+    requested: tuple[smt.Term, ...],
+    budget: _SolverBudget,
+    branch: MismatchBranch | None,
+    check_limit_ms: int | None = None,
+) -> SolverQuery:
+    timeout_ms = budget.remaining_ms()
+    if timeout_ms == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "global solver deadline expired before satisfiability check",
+        )
+    if check_limit_ms is not None:
+        timeout_ms = (
+            check_limit_ms
+            if timeout_ms is None
+            else min(timeout_ms, check_limit_ms)
+        )
+    formula = (
+        problem.formula(timeout_ms=timeout_ms)
+        if branch is None
+        else problem.branch_formula(branch, timeout_ms=timeout_ms)
+    )
+    if budget.remaining_ms() == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "global solver deadline expired while rendering the satisfiability check",
+        )
+    try:
+        first = _run_solver(
+            solver,
+            formula,
+            budget.process_timeout_seconds(timeout_ms),
+        )
+    except _ProcessDeadlineExceeded:
+        return SolverQuery(
+            "unknown",
+            {},
+            "solver process exceeded its satisfiability deadline",
+        )
     _ensure_clean(first)
     status = _single_status(first)
     if status == "unknown":
-        reason = first.stderr.strip() or "solver returned unknown"
-        return SolverQuery(status, {}, reason)
+        return SolverQuery(status, {}, "solver returned unknown")
+    if status == "unsat" and budget.remaining_ms() == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "solver returned UNSAT after the global solver deadline",
+        )
     if status == "unsat" or not requested:
         return SolverQuery(status, {})
     if status != "sat":
         raise SolverError(_diagnostic(first))
 
-    second = _run_solver(solver, problem.formula(requested), timeout_ms)
+    timeout_ms = budget.remaining_ms()
+    if timeout_ms == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "counterexample found, but the global solver deadline expired "
+            "before extracting its model",
+            "model",
+        )
+    formula = (
+        problem.formula(requested, timeout_ms=timeout_ms)
+        if branch is None
+        else problem.branch_formula(
+            branch,
+            requested,
+            timeout_ms=timeout_ms,
+        )
+    )
+    if budget.remaining_ms() == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "counterexample found, but the global solver deadline expired "
+            "while rendering its model query",
+            "model",
+        )
+    try:
+        second = _run_solver(
+            solver,
+            formula,
+            budget.process_timeout_seconds(),
+        )
+    except _ProcessDeadlineExceeded:
+        return SolverQuery(
+            "unknown",
+            {},
+            "counterexample found, but the solver process exceeded the global "
+            "deadline while extracting its model",
+            "model",
+        )
     responses = _responses(second.stdout)
     if responses and responses[0] == "unknown":
         return SolverQuery(
@@ -297,7 +541,16 @@ def query_solver(
             "model",
         )
     _ensure_clean(second)
-    return SolverQuery("sat", _get_values(second.stdout))
+    values = _get_values(second.stdout)
+    if budget.remaining_ms() == 0:
+        return SolverQuery(
+            "unknown",
+            {},
+            "counterexample found, but its model arrived after the global "
+            "solver deadline",
+            "model",
+        )
+    return SolverQuery("sat", values)
 
 
 def solve(
@@ -333,22 +586,23 @@ def _check_catalogs(before: Snapshot, after: Snapshot) -> None:
 def _run_solver(
     solver: str | Path,
     formula: str,
-    timeout_ms: int | None,
+    process_timeout_seconds: float | None,
 ) -> subprocess.CompletedProcess[str]:
-    process_timeout = None if timeout_ms is None else timeout_ms / 1000.0 + 5.0
+    if process_timeout_seconds is not None and process_timeout_seconds <= 0:
+        raise _ProcessDeadlineExceeded
     try:
         return subprocess.run(
             [str(solver), "-in", "-smt2"],
             input=formula,
             text=True,
             capture_output=True,
-            timeout=process_timeout,
+            timeout=process_timeout_seconds,
             check=False,
         )
     except FileNotFoundError as error:
         raise SolverError(f"solver executable not found: {solver}") from error
     except subprocess.TimeoutExpired as error:
-        raise SolverError(f"solver process exceeded {process_timeout} seconds") from error
+        raise _ProcessDeadlineExceeded from error
 
 
 def _ensure_clean(process: subprocess.CompletedProcess[str]) -> None:

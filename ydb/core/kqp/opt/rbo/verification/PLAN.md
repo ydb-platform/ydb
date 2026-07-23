@@ -565,8 +565,9 @@ Implementation sequence:
 29. M4: mechanical C++ subplan-exporter phase separation;
 30. M4: typed C++ subplan-descriptor variant with explicit kind states;
 31. M4: repeatable proof-depth sweep over the newly admitted formulas;
-32. next: exact proof scaling and decomposition driven by `UNKNOWN` formulas;
-33. then: equality-correlated scalar semantics;
+32. M4: exact canonical-first, per-outcome mismatch decomposition under one
+    solver deadline;
+33. next: equality-correlated scalar semantics;
 34. later: dynamic `IN`, broader `EXISTS`, distinct expansion, range reads, and
     other OLAP pushdowns.
 
@@ -1312,13 +1313,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3, q42, q48, q52,
   q55, q69, q90, q93, and q96 with a fixed 60-second per-query budget. The
-  fresh TPCH run spent 1,080/57,062 ms in preparation/verification and produced
+  canonical-first exact-branch portfolio's fresh TPCH run spent 1,145/56,389
+  ms in preparation/verification and produced
   report SHA-256
-  `cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`;
-  the TPC-DS run spent 1,498/36,022 ms and produced
-  `bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`.
+  `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
+  the TPC-DS run spent 1,446/36,036 ms and produced
+  `136deef295abfe9c1fa8b4c7d8b01fe8e5131a76886ec998c0a90cbd8b778846`.
   These are eighteen curated proofs (14.9% of the workload). Relational
   `EXISTS` extends the proof floor through TPCH q4/q22 and TPC-DS q69.
+  The solver first checks the stable grouped mismatch with a three-quarter SMT
+  timeout, then, only after `UNKNOWN`, replaces that assertion with the exact
+  two language-absence predicates and one guarded unmatched predicate per
+  normalized source outcome in either direction. Canonical `UNSAT`, or timely
+  `UNSAT` for every branch, proves the same theorem. One monotonic deadline
+  covers both phases and model extraction. Branch-only solving initially lost
+  the existing TPCH q15 proof; the canonical-first portfolio restored all
+  eighteen policy obligations before this milestone was accepted.
   Independent focused sweeps returned `VERIFIED_BOUNDED` for TPCH q4 after
   85/924 ms and again after 98/949 ms, TPCH q22 after 200/5,645 ms and again
   after 158/5,636 ms, and TPC-DS q69 after 374/3,781 ms and again after
@@ -1348,6 +1358,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and q99 after 218/63,299 ms. These complete formulas are the immediate input
   to proof scaling and decomposition work; no optimizer correctness bug is
   confirmed by these runs.
+  The completed portfolio repeat keeps q19, q65, and q99 `UNKNOWN` after
+  207/61,602, 259/73,190, and 206/62,883 ms. It identifies the first unresolved
+  exact obligations as q19 left outcome 0 unmatched (branch 3/28), q65 right
+  language absent (branch 2/4), and q99 left outcome 0 unmatched (branch 3/4).
+  Report SHA-256 is
+  `58cc491e30e2b866f36916f2b01db36e385f005ffe3b38685f250d95ccd10164`.
+  This milestone improves proof isolation but does not promote a new workload
+  proof or confirm an optimizer bug.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q6/q14 and
   q79/q88 investigations, and explicit unsupported/optimizer-failure inventory.
@@ -1464,7 +1482,7 @@ side remains the normal StageGraph, with no `EXISTS`-specific equivalence
 shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
-through the real host. Current full suites pass 431/431 verifier, 167/167 C++,
+through the real host. Current full suites pass 446/446 verifier, 167/167 C++,
 43/43 inspector, and 26/26 real-host integration tests. The complete dashboards
 move TPCH q4/q22 and TPC-DS q10/q69 to formula construction; q35 instead exposes
 `Unsupported scalar type Double`. TPCH q4/q22 and TPC-DS q69 now extend the
@@ -1475,10 +1493,11 @@ The auditability consolidation is complete in commits `7a3639d1c16`,
 trusted-core map, subplan export is separated into explicit phases, and the C++
 descriptor is a typed variant with explicit kind states. The completed
 proof-depth sweep promotes only repeatable `VERIFIED_BOUNDED` obligations. The
-next slice is exact proof scaling and formula decomposition driven by the
-current `UNKNOWN` obligations, followed by equality-correlated scalar
-semantics. Dynamic `IN`, multiple dependencies, and broader correlations remain
-later work.
+exact solver portfolio now preserves the stable canonical formula while
+isolating language absence and directional membership failures after
+`UNKNOWN`. The next semantic slice is equality-correlated scalar subplans;
+dynamic `IN`, multiple dependencies, and broader correlations remain later
+work.
 
 The milestone audit has independently found seven production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule

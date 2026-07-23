@@ -186,6 +186,22 @@ NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
 
 
 @dataclass(frozen=True, slots=True)
+class MismatchBranch:
+    """One exact, independently solvable part of the mismatch predicate."""
+
+    name: str
+    predicate: smt.Term
+
+
+@dataclass(frozen=True, slots=True)
+class FamilyMismatch:
+    """Canonical mismatch formula and its exact distributive decomposition."""
+
+    counterexample: smt.Term
+    branches: tuple[MismatchBranch, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class FamilyComparison:
     """The exact normalized outcome pairs used by family equivalence."""
 
@@ -193,7 +209,7 @@ class FamilyComparison:
     right: RelationFamily
     ordered: bool
     pair_equal: tuple[tuple[smt.Term, ...], ...]
-    equivalent: smt.Term
+    mismatch: FamilyMismatch
 
 
 @dataclass(frozen=True, slots=True)
@@ -3045,12 +3061,28 @@ def _outcomes_equal(
     )
 
 
-def _families_equivalent(
+def _outcome_equal_matrix(
     left: RelationFamily,
     right: RelationFamily,
     scalar: ScalarEncoder,
     ordered: bool,
-) -> smt.Term:
+) -> tuple[tuple[smt.Term, ...], ...]:
+    return tuple(
+        tuple(
+            _outcomes_equal(left_outcome, right_outcome, scalar, ordered)
+            for right_outcome in right.outcomes
+        )
+        for left_outcome in left.outcomes
+    )
+
+
+def _family_mismatch(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+    ordered: bool,
+    left_to_right_equal: tuple[tuple[smt.Term, ...], ...],
+) -> FamilyMismatch:
     def choice_terms(outcome: Outcome) -> tuple[smt.Term, ...]:
         return tuple(choice.term for choice in outcome.choices)
 
@@ -3062,54 +3094,82 @@ def _families_equivalent(
             )
         )
 
-    def target_contains(source_outcome: Outcome, target: RelationFamily) -> smt.Term:
+    def target_contains(
+        target: RelationFamily,
+        equalities: tuple[smt.Term, ...],
+    ) -> smt.Term:
         return smt.or_(
             *(
                 smt.exists(
                     choice_terms(target_outcome),
                     smt.and_(
                         target_outcome.enabled,
-                        _outcomes_equal(
-                            source_outcome,
-                            target_outcome,
-                            scalar,
-                            ordered,
-                        ),
+                        equalities[index],
                     ),
                 )
-                for target_outcome in target.outcomes
+                for index, target_outcome in enumerate(target.outcomes)
             )
         )
 
-    def unmatched(source: RelationFamily, target: RelationFamily) -> smt.Term:
+    def unmatched(
+        source: RelationFamily,
+        target: RelationFamily,
+        equality: tuple[tuple[smt.Term, ...], ...],
+    ) -> tuple[smt.Term, ...]:
         # Source choices stay globally existential and inspectable.  Target
         # choices are shadowed by the existential membership test; negating it
         # therefore proves that no legal target sequence matches this source.
-        return smt.or_(
-            *(
-                smt.and_(
-                    outcome.enabled,
-                    smt.not_(target_contains(outcome, target)),
-                )
-                for outcome in source.outcomes
+        return tuple(
+            smt.and_(
+                outcome.enabled,
+                smt.not_(target_contains(target, equality[index])),
             )
+            for index, outcome in enumerate(source.outcomes)
         )
 
+    right_to_left_equal = _outcome_equal_matrix(
+        right,
+        left,
+        scalar,
+        ordered,
+    )
     left_exists = exists_enabled(left)
     right_exists = exists_enabled(right)
     globally_enabled = smt.and_(
         smt.or_(*(outcome.enabled for outcome in left.outcomes)),
         smt.or_(*(outcome.enabled for outcome in right.outcomes)),
     )
-    different = smt.or_(
-        smt.not_(left_exists),
-        smt.not_(right_exists),
+    left_unmatched = unmatched(left, right, left_to_right_equal)
+    right_unmatched = unmatched(right, left, right_to_left_equal)
+    left_empty = smt.not_(left_exists)
+    right_empty = smt.not_(right_exists)
+    counterexample = smt.or_(
+        left_empty,
+        right_empty,
         smt.and_(
             globally_enabled,
-            smt.or_(unmatched(left, right), unmatched(right, left)),
+            smt.or_(*left_unmatched, *right_unmatched),
         ),
     )
-    return smt.not_(different)
+    branches = (
+        MismatchBranch("left_language_empty", left_empty),
+        MismatchBranch("right_language_empty", right_empty),
+        *(
+            MismatchBranch(
+                f"left_outcome_{index}_unmatched",
+                smt.and_(globally_enabled, predicate),
+            )
+            for index, predicate in enumerate(left_unmatched)
+        ),
+        *(
+            MismatchBranch(
+                f"right_outcome_{index}_unmatched",
+                smt.and_(globally_enabled, predicate),
+            )
+            for index, predicate in enumerate(right_unmatched)
+        ),
+    )
+    return FamilyMismatch(counterexample, branches)
 
 
 def compare_families(
@@ -3125,15 +3185,54 @@ def compare_families(
         scalar.script,
         "compare_families",
     )
-    pair_equal = tuple(
-        tuple(
-            _outcomes_equal(left_outcome, right_outcome, scalar, ordered)
-            for right_outcome in right.outcomes
-        )
-        for left_outcome in left.outcomes
+    pair_equal = _outcome_equal_matrix(
+        left,
+        right,
+        scalar,
+        ordered,
     )
-    equivalent = _families_equivalent(left, right, scalar, ordered)
-    return FamilyComparison(left, right, ordered, pair_equal, equivalent)
+    mismatch = _family_mismatch(
+        left,
+        right,
+        scalar,
+        ordered,
+        pair_equal,
+    )
+    return FamilyComparison(
+        left,
+        right,
+        ordered,
+        pair_equal,
+        mismatch,
+    )
+
+
+def family_mismatch(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+) -> FamilyMismatch:
+    """Return the canonical mismatch and exact independently solvable branches."""
+
+    left, right, ordered = _comparison_inputs(
+        left,
+        right,
+        scalar.script,
+        "family_mismatch",
+    )
+    left_to_right_equal = _outcome_equal_matrix(
+        left,
+        right,
+        scalar,
+        ordered,
+    )
+    return _family_mismatch(
+        left,
+        right,
+        scalar,
+        ordered,
+        left_to_right_equal,
+    )
 
 
 def family_equal(
@@ -3143,10 +3242,4 @@ def family_equal(
 ) -> smt.Term:
     """Mutual inclusion of enabled bags or initial-query result sequences."""
 
-    left, right, ordered = _comparison_inputs(
-        left,
-        right,
-        scalar.script,
-        "family_equal",
-    )
-    return _families_equivalent(left, right, scalar, ordered)
+    return smt.not_(family_mismatch(left, right, scalar).counterexample)

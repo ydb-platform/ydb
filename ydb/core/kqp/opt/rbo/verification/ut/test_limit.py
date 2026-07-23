@@ -1,6 +1,13 @@
 import copy
+import os
+import subprocess
 import unittest
 from itertools import combinations, permutations, product
+
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -42,6 +49,13 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     VerificationError,
     build_logical_kernel_problem_for_tests,
     build_problem,
+)
+
+
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
 )
 
 
@@ -561,6 +575,94 @@ class LimitIrTest(unittest.TestCase):
 
 
 class LimitOutcomeTest(unittest.TestCase):
+    @staticmethod
+    def _two_outcome_family(script, scope, first, second):
+        choice = script.fresh_constant(f"{scope} choice", smt.INT)
+        error = script.fresh_constant(f"{scope} conditional error", smt.BOOL)
+        columns = (Column("value", "Int64", False),)
+
+        def payload(value):
+            return Relation(
+                columns,
+                (
+                    Row(
+                        smt.TRUE,
+                        {
+                            "value": Value(
+                                "Int64",
+                                smt.FALSE,
+                                smt.int_value(value),
+                            )
+                        },
+                    ),
+                ),
+            )
+
+        bounded = (BoundedChoice(choice, 2),)
+        return RelationFamily((
+            Outcome(
+                smt.eq(choice, smt.ZERO),
+                payload(first),
+                error,
+                choices=bounded,
+            ),
+            Outcome(
+                smt.eq(choice, smt.ONE),
+                payload(second),
+                smt.not_(error),
+                choices=bounded,
+            ),
+        ))
+
+    def test_mismatch_branches_have_one_fixed_canonical_order(self):
+        script = smt.Script()
+        comparison = compare_families(
+            self._two_outcome_family(script, "left", 1, 2),
+            self._two_outcome_family(script, "right", 1, 3),
+            ScalarEncoder(script),
+        )
+
+        self.assertEqual(
+            tuple(branch.name for branch in comparison.mismatch.branches),
+            (
+                "left_language_empty",
+                "right_language_empty",
+                "left_outcome_0_unmatched",
+                "left_outcome_1_unmatched",
+                "right_outcome_0_unmatched",
+                "right_outcome_1_unmatched",
+            ),
+        )
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_mismatch_branches_exactly_decompose_grouped_counterexample(self):
+        script = smt.Script(timeout_ms=10_000)
+        comparison = compare_families(
+            self._two_outcome_family(script, "left", 1, 2),
+            self._two_outcome_family(script, "right", 1, 3),
+            ScalarEncoder(script),
+        )
+        distributed = smt.or_(
+            *(branch.predicate for branch in comparison.mismatch.branches)
+        )
+        script.assert_(
+            smt.not_(
+                smt.eq(comparison.mismatch.counterexample, distributed)
+            )
+        )
+
+        solved = subprocess.run(
+            (SOLVER, "-in"),
+            input=script.render(),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "unsat")
+
     def test_comparison_registers_and_range_guards_hand_built_choices(self):
         script = smt.Script()
         choice = script.fresh_constant("choice", smt.INT)

@@ -27,7 +27,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--rows", type=int, default=2, help="symbolic row slots per table")
     result.add_argument("--timeout-ms", type=int, default=10_000)
     result.add_argument("--solver", type=Path, help="explicit Z3 executable")
-    result.add_argument("--emit-smt", type=Path, help="write the exact SMT-LIB obligation")
+    result.add_argument(
+        "--emit-smt",
+        type=Path,
+        help="write the exact canonical SMT-LIB obligation, not the solver portfolio transcript",
+    )
     result.add_argument(
         "--diagnostic-transformation-prefix",
         action="store_true",

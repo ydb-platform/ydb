@@ -27,6 +27,12 @@ def _deep_shared_term(leaf, depth=2000):
 
 
 class SmtTest(unittest.TestCase):
+    def test_script_timeout_requires_a_positive_exact_integer(self):
+        for value in (0, -1, True, 1.0):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(smt.SmtError, "positive integer"):
+                    smt.Script(value)
+
     def test_literal_constructors_require_exact_python_types(self):
         for value in (None, 0, 1):
             with self.subTest(constructor="bool", value=value):
@@ -326,6 +332,29 @@ class SmtTest(unittest.TestCase):
             formula.index("(assert v_1)"),
             formula.index("(assert v_0)"),
         )
+
+    def test_render_branch_replaces_only_the_marked_obligation(self):
+        script = smt.Script()
+        before = script.fresh_constant("before", smt.BOOL)
+        obligation = script.fresh_constant("obligation", smt.BOOL)
+        after = script.fresh_constant("after", smt.BOOL)
+        branch = script.fresh_constant("branch", smt.BOOL)
+        script.assert_(before)
+        script.assert_obligation(obligation)
+        script.assert_(after)
+
+        formula = script.render_branch(branch)
+
+        assertions = [
+            line
+            for line in formula.splitlines()
+            if line.startswith("(assert ")
+        ]
+        self.assertEqual(
+            assertions,
+            ["(assert v_0)", "(assert v_3)", "(assert v_2)"],
+        )
+        self.assertIn("(assert v_1)", script.render())
 
     def test_deferred_string_domains_render_before_the_obligation(self):
         script = smt.Script()

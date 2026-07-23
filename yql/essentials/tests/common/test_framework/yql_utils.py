@@ -130,21 +130,13 @@ def find_file(path):
     return res
 
 
-output_path_cache = {}
-
-
 def yql_output_path(*args, **kwargs):
     if not get_param('LOCAL_BENCH_XX'):
         # abspath is needed, because output_path may be relative when test is run directly (without ya make).
         return os.path.abspath(yatest.common.output_path(*args, **kwargs))
 
     else:
-        if args and args in output_path_cache:
-            return output_path_cache[args]
-        res = os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
-        if args:
-            output_path_cache[args] = res
-        return res
+        return os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
 
 
 def yql_binary_path(*args, **kwargs):

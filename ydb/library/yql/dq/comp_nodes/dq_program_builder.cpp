@@ -132,14 +132,66 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TArrayRef<const ui32>& rightKeyColumns,
                                                 const TArrayRef<const ui32>& leftRenames,
                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                                TBlockHashJoinSettings settings) {
+                                                TBlockHashJoinSettings settings,
+                                                const TJoinFilterLambda& leftFilter,
+                                                const TJoinFilterLambda& rightFilter,
+                                                const TJoinCommonFilterLambda& commonFilter) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
-    // TODO (mfilitov): add validation like here:
-    // https://github.com/ydb-platform/ydb/blob/e8af538b05a1bd7bc4a3bcba2fdcbe430675f69c/yql/essentials/minikql/mkql_program_builder.cpp#L5849
+    const bool hasFilters = leftFilter || rightFilter || commonFilter;
+    MKQL_ENSURE(!hasFilters || !settings.LeftIsBuild(), "Join filters are not supported with LeftIsBuild block join");
+
+    // The three ON-clause predicates stay separate so the runtime can apply each at its natural
+    // granularity (left per probe row, right per build row, common per matched pair) and decode only
+    // the sides it actually needs. A wide-row arg list has one Arg per data column (the last wide
+    // component is the block-length scalar). For a LEFT join the right side is decoded as Optional,
+    // so its argument types are wrapped to match.
+    const auto makeScalarRowArgs = [this](TRuntimeNode stream, bool wrapOptional) {
+        const auto components = GetWideComponents(stream.GetStaticType());
+        MKQL_ENSURE(!components.empty(), "Expected at least the block-length column");
+        TRuntimeNode::TList args;
+        args.reserve(components.size() - 1);
+        for (size_t i = 0; i + 1 < components.size(); ++i) {
+            TType* itemType = AS_TYPE(TBlockType, components[i])->GetItemType();
+            if (wrapOptional && !itemType->IsOptional()) {
+                itemType = NewOptionalType(itemType);
+            }
+            args.push_back(Arg(itemType));
+        }
+        return args;
+    };
+    const bool rightIsOptional = joinKind == EJoinKind::Left;
+
+    // Absent filters are encoded as empty argument tuples plus a constant-true body.
+    TRuntimeNode leftFilterArgs = NewEmptyTuple();
+    TRuntimeNode leftFilterBody = NewDataLiteral<bool>(true);
+    if (leftFilter) {
+        const auto args = makeScalarRowArgs(leftStream, /*wrapOptional=*/false);
+        leftFilterBody = leftFilter(args);
+        leftFilterArgs = NewTuple(args);
+    }
+
+    TRuntimeNode rightFilterArgs = NewEmptyTuple();
+    TRuntimeNode rightFilterBody = NewDataLiteral<bool>(true);
+    if (rightFilter) {
+        const auto args = makeScalarRowArgs(rightStream, /*wrapOptional=*/rightIsOptional);
+        rightFilterBody = rightFilter(args);
+        rightFilterArgs = NewTuple(args);
+    }
+
+    TRuntimeNode commonFilterLeftArgs = NewEmptyTuple();
+    TRuntimeNode commonFilterRightArgs = NewEmptyTuple();
+    TRuntimeNode commonFilterBody = NewDataLiteral<bool>(true);
+    if (commonFilter) {
+        const auto leftArgs = makeScalarRowArgs(leftStream, /*wrapOptional=*/false);
+        const auto rightArgs = makeScalarRowArgs(rightStream, /*wrapOptional=*/rightIsOptional);
+        commonFilterBody = commonFilter(leftArgs, rightArgs);
+        commonFilterLeftArgs = NewTuple(leftArgs);
+        commonFilterRightArgs = NewTuple(rightArgs);
+    }
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
@@ -149,8 +201,14 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-
     callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
+    callableBuilder.Add(leftFilterArgs);
+    callableBuilder.Add(leftFilterBody);
+    callableBuilder.Add(rightFilterArgs);
+    callableBuilder.Add(rightFilterBody);
+    callableBuilder.Add(commonFilterLeftArgs);
+    callableBuilder.Add(commonFilterRightArgs);
+    callableBuilder.Add(commonFilterBody);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -159,21 +217,56 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
                                                  const TArrayRef<const ui32>& leftKeyColumns,
                                                  const TArrayRef<const ui32>& rightKeyColumns,
                                                  const TArrayRef<const ui32>& leftRenames,
-                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType) {
+                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                                 const TJoinFilterLambda& leftFilter,
+                                                 const TJoinFilterLambda& rightFilter,
+                                                 const TJoinCommonFilterLambda& commonFilter) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 
-    TRuntimeNode::TList leftKeyColumnsNodes;
-    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
-    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
-                   [this](const ui32 idx) { return NewDataLiteral(idx); });
+    const auto leftComponents = GetWideComponents(leftFlow.GetStaticType());
+    const auto rightComponents = GetWideComponents(rightFlow.GetStaticType());
 
-    TRuntimeNode::TList rightKeyColumnsNodes;
-    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
-    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(), std::back_inserter(rightKeyColumnsNodes),
-                   [this](const ui32 idx) { return NewDataLiteral(idx); });
+    // Build a wide-row argument list (one Arg per input column) for a side.
+    const auto makeRowArgs = [this](const TArrayRef<TType* const>& components) {
+        TRuntimeNode::TList args;
+        args.reserve(components.size());
+        for (auto* type : components) {
+            args.push_back(Arg(type));
+        }
+        return args;
+    };
+
+    // Absent filters are encoded as an empty argument tuple plus a constant-true body, so the
+    // runtime wrapper can cheaply detect and skip them (see WrapDqScalarHashJoin).
+    TRuntimeNode leftFilterArgs = NewEmptyTuple();
+    TRuntimeNode leftFilterBody = NewDataLiteral<bool>(true);
+    if (leftFilter) {
+        const auto args = makeRowArgs(leftComponents);
+        leftFilterBody = leftFilter(args);
+        leftFilterArgs = NewTuple(args);
+    }
+
+    TRuntimeNode rightFilterArgs = NewEmptyTuple();
+    TRuntimeNode rightFilterBody = NewDataLiteral<bool>(true);
+    if (rightFilter) {
+        const auto args = makeRowArgs(rightComponents);
+        rightFilterBody = rightFilter(args);
+        rightFilterArgs = NewTuple(args);
+    }
+
+    TRuntimeNode commonFilterLeftArgs = NewEmptyTuple();
+    TRuntimeNode commonFilterRightArgs = NewEmptyTuple();
+    TRuntimeNode commonFilterBody = NewDataLiteral<bool>(true);
+    if (commonFilter) {
+        const auto leftArgs = makeRowArgs(leftComponents);
+        const auto rightArgs = makeRowArgs(rightComponents);
+        commonFilterBody = commonFilter(leftArgs, rightArgs);
+        commonFilterLeftArgs = NewTuple(leftArgs);
+        commonFilterRightArgs = NewTuple(rightArgs);
+    }
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftFlow);
@@ -183,6 +276,13 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
+    callableBuilder.Add(leftFilterArgs);
+    callableBuilder.Add(leftFilterBody);
+    callableBuilder.Add(rightFilterArgs);
+    callableBuilder.Add(rightFilterBody);
+    callableBuilder.Add(commonFilterLeftArgs);
+    callableBuilder.Add(commonFilterRightArgs);
+    callableBuilder.Add(commonFilterBody);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

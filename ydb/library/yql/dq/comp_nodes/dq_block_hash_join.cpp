@@ -12,12 +12,36 @@
 #include <arrow/scalar.h>
 
 #include "dq_join_common.h"
+#include "dq_block_hash_join_filter.h"
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
+
+// Callable input layout for "DqBlockHashJoin"; must match TDqProgramBuilder::DqBlockHashJoin.
+namespace NBlockHashJoinParams {
+    enum : ui32 {
+        LeftStream = 0,
+        RightStream = 1,
+        JoinKind = 2,
+        LeftKeyColumns = 3,
+        RightKeyColumns = 4,
+        LeftRenames = 5,
+        RightRenames = 6,
+        Settings = 7,
+        LeftFilterArgs = 8,
+        LeftFilterBody = 9,
+        RightFilterArgs = 10,
+        RightFilterBody = 11,
+        CommonFilterLeftArgs = 12,
+        CommonFilterRightArgs = 13,
+        CommonFilterBody = 14,
+        Count = 15,
+    };
+}
 
 struct TDqBlockJoinContext {
     TSides<TVector<TBlockType*>> InputTypes;
@@ -246,15 +270,20 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     bool LeftIsBuild_;
 };
 
-template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {
+template <EJoinKind Kind, bool HasFilter>
+class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind, HasFilter>> {
   private:
     using TBaseComputation = TMutableComputationNode<TBlockHashJoinWrapper>;
 
   public:
-    TBlockHashJoinWrapper(TComputationMutables& mutables, TDqBlockJoinContext meta, TSides<IComputationNode*> streams)
+    TBlockHashJoinWrapper(TComputationMutables& mutables, TDqBlockJoinContext meta, TSides<IComputationNode*> streams,
+                          TJoinFilter leftFilter, TJoinFilter rightFilter, TJoinCommonFilter commonFilter)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Meta_(std::make_unique<TDqBlockJoinContext>(meta))
         , Streams_(streams)
+        , LeftFilter_(std::move(leftFilter))
+        , RightFilter_(std::move(rightFilter))
+        , CommonFilter_(std::move(commonFilter))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -269,8 +298,39 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
+
+        // The filter path is only instantiated when a filter is present (HasFilter).
+        std::optional<TBlockJoinPairFilter> pairFilter;
+        if constexpr (HasFilter) {
+            // Probe == left input, Build == right input. Decode a side only if some filter needs it.
+            const bool needLeft = LeftFilter_ || CommonFilter_;
+            const bool needRight = RightFilter_ || CommonFilter_;
+            // Scalar converters share the block converters' packed layout, so a matched packed tuple
+            // can be decoded into scalar values for filter evaluation.
+            TSides<std::unique_ptr<IScalarLayoutConverter>> scalarConverters;
+            const auto makeConverter = [&](ESide side) {
+                TVector<NPackedTuple::EColumnRole> roles(userTypes.SelectSide(side).size(),
+                                                         NPackedTuple::EColumnRole::Payload);
+                for (int column : Meta_->KeyColumns.SelectSide(side)) {
+                    roles[column] = NPackedTuple::EColumnRole::Key;
+                }
+                scalarConverters.SelectSide(side) =
+                    MakeScalarLayoutConverter(helper, userTypes.SelectSide(side), roles, ctx.HolderFactory);
+            };
+            if (needLeft) {
+                makeConverter(ESide::Probe);
+            }
+            if (needRight) {
+                makeConverter(ESide::Build);
+            }
+            const TSides<int> widths{.Build = static_cast<int>(userTypes.Build.size()),
+                                     .Probe = static_cast<int>(userTypes.Probe.size())};
+            pairFilter.emplace(ctx, std::move(scalarConverters), Meta_->ColumnPermutation, widths, LeftFilter_,
+                               RightFilter_, CommonFilter_);
+        }
+
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,
-            std::move(layouts), Meta_.get(), userNullTypes);
+            std::move(layouts), Meta_.get(), userNullTypes, std::move(pairFilter));
     }
 
   private:
@@ -281,7 +341,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
                      TSides<std::unique_ptr<IBlockLayoutConverter>> converters, const TDqBlockJoinContext* meta,
-                     const TVector<TType*>& userBuildTypes)
+                     const TVector<TType*>& userBuildTypes, std::optional<TBlockJoinPairFilter> pairFilter)
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
@@ -293,6 +353,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
+            , PairFilter_(std::move(pairFilter))
         {}
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
@@ -320,7 +381,13 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 return Output_.SizeTuples() >= MaxOutputRows_;
             };
             while (!outputIsFull()) {
-                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
+                EFetchResult res;
+                if constexpr (HasFilter) {
+                    res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull, std::ref(*PairFilter_));
+                } else {
+                    res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull,
+                                          NJoinPackedTuples::AlwaysPassPair{});
+                }
                 switch (res) {
                 case EFetchResult::Finish: {
                     if (Output_.SizeTuples() == 0) {
@@ -344,6 +411,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
+        std::optional<TBlockJoinPairFilter> PairFilter_;
         static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };
@@ -351,16 +419,39 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     void RegisterDependencies() const final {
         this->DependsOn(Streams_.Build);
         this->DependsOn(Streams_.Probe);
+
+        if constexpr (HasFilter) {
+            const auto ownArgs = [&](const TComputationExternalNodePtrVector& args) {
+                for (auto* arg : args) {
+                    this->Own(arg);
+                }
+            };
+            const auto dependOnBody = [&](IComputationNode* body) {
+                if (body) {
+                    this->DependsOn(body);
+                }
+            };
+            ownArgs(LeftFilter_.Args);
+            dependOnBody(LeftFilter_.Body);
+            ownArgs(RightFilter_.Args);
+            dependOnBody(RightFilter_.Body);
+            ownArgs(CommonFilter_.LeftArgs);
+            ownArgs(CommonFilter_.RightArgs);
+            dependOnBody(CommonFilter_.Body);
+        }
     }
 
     std::unique_ptr<TDqBlockJoinContext> Meta_;
     TSides<IComputationNode*> Streams_;
+    TJoinFilter LeftFilter_;
+    TJoinFilter RightFilter_;
+    TJoinCommonFilter CommonFilter_;
 };
 
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
+    MKQL_ENSURE(callable.GetInputsCount() == NBlockHashJoinParams::Count, "Expected 15 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -525,15 +616,37 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
         : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
 
+    // The three ON-clause predicates stay separate; empty argument tuples encode an absent filter.
+    TJoinFilter leftFilter =
+        ParseJoinFilter(ctx, callable, NBlockHashJoinParams::LeftFilterArgs, NBlockHashJoinParams::LeftFilterBody);
+    TJoinFilter rightFilter =
+        ParseJoinFilter(ctx, callable, NBlockHashJoinParams::RightFilterArgs, NBlockHashJoinParams::RightFilterBody);
+    TJoinCommonFilter commonFilter = ParseJoinCommonFilter(
+        ctx, callable, NBlockHashJoinParams::CommonFilterLeftArgs, NBlockHashJoinParams::CommonFilterRightArgs,
+        NBlockHashJoinParams::CommonFilterBody);
+    const bool hasFilter = leftFilter || rightFilter || commonFilter;
+    MKQL_ENSURE(!hasFilter || !meta.Settings.LeftIsBuild(),
+                "Join filters are not supported with LeftIsBuild block join");
+
+    // Filter presence is known here, so we pick the HasFilter template instantiation and never
+    // compile the filter (decode/eval) path into the no-filter join, nor a runtime branch for it.
+    const auto makeWrapper = [&]<EJoinKind K>() -> IComputationNode* {
+        if (hasFilter) {
+            return new TBlockHashJoinWrapper<K, true>(ctx.Mutables, meta, streams, std::move(leftFilter),
+                                                      std::move(rightFilter), std::move(commonFilter));
+        }
+        return new TBlockHashJoinWrapper<K, false>(ctx.Mutables, meta, streams, {}, {}, {});
+    };
+
     using enum EJoinKind;
     if (joinKind == Inner) {
-        return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, streams);
+        return makeWrapper.template operator()<Inner>();
     } else if (joinKind == LeftOnly) {
-        return new TBlockHashJoinWrapper<LeftOnly>(ctx.Mutables, meta, streams);
+        return makeWrapper.template operator()<LeftOnly>();
     } else if (joinKind == LeftSemi) {
-        return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, streams);
+        return makeWrapper.template operator()<LeftSemi>();
     } else if (joinKind == Left) {
-        return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, streams);
+        return makeWrapper.template operator()<Left>();
     } else {
         MKQL_ENSURE(false, "unsupported join type in block hash join");
     }

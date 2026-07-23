@@ -8,7 +8,6 @@ from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     NODE_MODULES_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
-    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     NPM_REGISTRY_URL,
 )
 from .lockfile import Lockfile
@@ -17,14 +16,12 @@ from .utils import (
     build_pre_lockfile_path,
     build_ws_config_path,
     b_rooted,
-    build_nm_bundle_path,
     build_nm_path,
     build_pj_path,
     build_pnpm_store_path,
     s_rooted,
 )
 from .pnpm_workspace import PnpmWorkspace
-from .node_modules_bundler import bundle_node_modules
 from .timeit import timeit
 from .package_json import PackageJson
 
@@ -319,7 +316,6 @@ class PackageManager(object):
         yatool_prebuilder_path=None,
         use_legacy_pnpm_virtual_store=False,
         local_cli=False,
-        nm_bundle=False,
         original_lf_path=None,
     ):
         """
@@ -342,15 +338,7 @@ class PackageManager(object):
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
-        if nm_bundle:
-            # TODO: how to bundle node_modules with GVS?
-            bundle_node_modules(
-                build_root=self.build_root,
-                node_modules_path=self._nm_path(),
-                peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
-                bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
-                inject_peers=self.inject_peers,
-            )
+        return ws
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.
@@ -428,7 +416,7 @@ class PackageManager(object):
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(
-        self, store_path: str, has_deps: bool, local_cli: bool
+        self, store_path: str, has_deps: bool, local_cli: bool, include_peer_outputs: bool = False
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [
             s_rooted(build_pj_path(self.module_path)),
@@ -438,6 +426,15 @@ class PackageManager(object):
             b_rooted(build_ws_config_path(self.module_path)),
         ]
         resources = []
+
+        # Hermetic node_modules preparation merges generated workspace metadata
+        # from peers. Keep these inputs out of the legacy graph.
+        # TS_PROTO_AUTO has no source package.json to inspect here.
+        if include_peer_outputs and os.path.exists(build_pj_path(self.sources_path)):
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_ws_config_path(dep_path)))
+                if not self.inject_peers:
+                    ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
 
         if has_deps and not local_cli:
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
@@ -460,6 +457,8 @@ class PackageManager(object):
         outs = []
 
         if nm_bundle:
+            from .utils import build_nm_bundle_path
+
             outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs

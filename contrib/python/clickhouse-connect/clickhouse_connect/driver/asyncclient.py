@@ -2044,8 +2044,10 @@ class AsyncClient(Client):
                         else:
                             form.add_field(field_name, field_value, content_type="text/plain")
                     request_kwargs["data"] = form
-                elif isinstance(data, dict):
-                    request_kwargs["data"] = data
+                elif isinstance(data, (bytes, bytearray, memoryview)):
+                    request_kwargs["data"] = io.BytesIO(data)
+                elif isinstance(data, str):
+                    request_kwargs["data"] = io.BytesIO(data.encode())
                 else:
                     request_kwargs["data"] = data
 

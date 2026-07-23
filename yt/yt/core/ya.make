@@ -424,6 +424,7 @@ END()
 RECURSE(
     http
     test_framework
+    yaml
 )
 
 IF (NOT OPENSOURCE AND OS_LINUX)

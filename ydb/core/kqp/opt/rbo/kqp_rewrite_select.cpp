@@ -898,7 +898,7 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, THashSet<TString>&
     // For each result item, we want to process result lambda to extract aggregations and pre/post expressions.
     for (ui32 i = 0, e = result->Child(1)->ChildrenSize(); i < e; ++i) {
         auto resultItem = result->Child(1)->ChildPtr(i);
-        ProcessAggregations(resultItem->ChildPtr(2), TString(resultItem->Child(0)->Content()), aggregationUniqueColNames, expressionsMapPreAgg,
+        ProcessAggregations(resultItem->TailPtr(), TString(resultItem->Child(0)->Content()), aggregationUniqueColNames, expressionsMapPreAgg,
                             groupByKeysExpressionsMap, aggTraits, distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll,
                             ctx, pos);
     }
@@ -998,7 +998,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
     if (sublinks.empty()) {
         return node;
     }
-    
+
     while (auto currentSize = sublinks.size()) {
         auto& sublink = sublinks[currentSize-1];
 
@@ -1044,7 +1044,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
-    
+
     if(translated.contains(input.Get())) {
         return translated.at(input.Get());
     }
@@ -1160,7 +1160,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     TVector<TExprNode::TPtr> joinPredicates;
                     TExprNode::TPtr joinLambda;
                     Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
-                
+
                     auto yqlWhere = join->ChildPtr(1);
                     Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
                     Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
@@ -1544,7 +1544,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 .ForceOptional().Value("False").Build()
             .Done().Ptr());
             // clang-format on
-            
+
             finalProjection.push_back(columnName);
         };
 
@@ -1554,7 +1554,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
             // We can have a single column or mutlitple columns in the item
             if (maybeColumn->IsAtom()) {
-                processResultColumn(maybeColumn, resultItem->Child(2));
+                processResultColumn(maybeColumn, resultItem->TailPtr());
             }
             // In case of a list of columns, we have different cases:
             // - Each column can be a list of input/output column names
@@ -1574,13 +1574,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     }
                     else {
                         outputColumn = columnSpec;
-                        auto starLambda = resultItem->Child(2);
+                        auto starLambda = resultItem->TailPtr();
                         Y_ENSURE(starLambda->IsLambda());
                         // Output column can be found in the struct inside lambda
                         if (starLambda->Child(1)->IsCallable("AsStruct")) {
                             auto member = starLambda->Child(1)->Child(i);
                             inputColumn = member->Child(1)->Child(1);
-                        } 
+                        }
                         // Input is the same as output
                         else {
                             inputColumn = outputColumn;

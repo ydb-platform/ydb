@@ -1215,4 +1215,3 @@ class LoggingDowngrade(object):
         for name, level in self.loggers:
             log = logging.getLogger(name)
             log.setLevel(level)
-        return True

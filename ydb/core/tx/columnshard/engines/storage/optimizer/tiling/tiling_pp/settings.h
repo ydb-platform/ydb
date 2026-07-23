@@ -48,7 +48,7 @@ struct TTilingSettings {
     /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).
     ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
     bool EnableCompatibilityMode = true;
-    i64 MaxPriorityGap = 3;
+    ui32 MaxPriorityGap = 3;
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

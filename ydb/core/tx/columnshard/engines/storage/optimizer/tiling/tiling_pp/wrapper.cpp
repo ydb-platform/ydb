@@ -50,7 +50,7 @@ struct TPlannerSettings {
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
         json["compaction_threads"] = CompactionThreads;
         json["enable_compatibility_mode"] = TilingSettings.EnableCompatibilityMode;
-        json["max_priority_gap"] = (ui64)TilingSettings.MaxPriorityGap;
+        json["max_priority_gap"] = TilingSettings.MaxPriorityGap;
         return json;
     }
 
@@ -176,7 +176,7 @@ struct TPlannerSettings {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: max_priority_gap must be an unsigned integer");
                 }
-                TilingSettings.MaxPriorityGap = static_cast<i64>(value.GetUInteger());
+                TilingSettings.MaxPriorityGap = value.GetUInteger();
             } else {
                 YDB_LOG_ERROR("",
                     {"event", "tiling_core_unknown_setting_ignored"},

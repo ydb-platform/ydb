@@ -2730,6 +2730,10 @@ public:
 
         QueryState->TxCtx->AcceptIncomingSnapshot(ev->Snapshot);
 
+        if (ev->CommitTimestamp) {
+            QueryState->CommitTimestamp = std::move(ev->CommitTimestamp);
+        }
+
         if (ev->LockHandle) {
             QueryState->TxCtx->LockHandle = std::move(ev->LockHandle);
         }
@@ -3039,6 +3043,12 @@ public:
 
         FillTxInfo(response);
         FillPoolId(response);
+
+        if (QueryState->CommitTimestamp) {
+            auto* ts = response->MutableCommitTimestamp();
+            ts->set_plan_step(QueryState->CommitTimestamp->PlanStep);
+            ts->set_tx_id(QueryState->CommitTimestamp->TxId);
+        }
 
         UpdateQueryExecutionCounters();
 

@@ -42,7 +42,8 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-23
-after relational `EXISTS` support. They establish formula construction for
+after relational `EXISTS` support and the auditability consolidation. They
+establish formula construction for
 TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3,
 q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55,
 q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93,
@@ -50,8 +51,12 @@ q96, and q99: 45/121 workload queries (37.2%). TPCH has twelve formulas, seven
 unsupported queries, and three optimizer failures; TPC-DS has thirty-three
 formulas, thirty-eight unsupported queries, and twenty-eight optimizer
 failures. Across both suites that is 45 unsupported queries and 31 optimizer
-failures. The complete TPCH dashboard spent 2,567/7,851 ms and TPC-DS spent
-55,244/175,820 ms in preparation/verification, or 57,811/183,671 ms together.
+failures. The complete TPCH dashboard spent 2,811/7,940 ms and produced report
+SHA-256
+`5d84a01f3aa2bba0be86415a176e7ba4f01f194c4d80c842d778a78fb5c93fe8`;
+TPC-DS spent 54,643/176,453 ms and produced
+`67d99fb092ef0d6686f2a9d838f9bb9a35e6b4935fad3459283461e0286e7198`.
+Together they spent 57,454/184,393 ms in preparation/verification.
 The only status changes are the four new formulas TPCH q4/q22 and TPC-DS
 q10/q69. TPC-DS q35 passes the new subplan gate and now fails closed on
 `Unsupported scalar type Double` at both snapshot boundaries. Fifty queries
@@ -62,22 +67,31 @@ classified as correlated scalar, multi-dependency `EXISTS`, or q35's deeper
 `Double` blocker.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
-`VERIFIED_BOUNDED` for TPCH q3, q6, q11, q12, q14, q15, and q19 plus TPC-DS
-q3, q42, q48, q52, q55, q90, q93, and q96: fifteen obligations (12.4% of the
-workload). The fresh TPCH proof-floor run spent 854/49,986 ms and the TPC-DS
-run spent 1,124/31,796 ms in preparation/verification. Relational `EXISTS`
-therefore expands formula coverage but does not yet expand the proof floor.
+`VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus
+TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: eighteen obligations
+(14.9% of the workload). The fresh TPCH proof-floor run spent 1,080/57,062 ms
+and produced report SHA-256
+`cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`;
+the TPC-DS run spent 1,498/36,022 ms and produced
+`bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`.
+The new relational `EXISTS` formulas therefore extend the proof floor through
+TPCH q4/q22 and TPC-DS q69. Independent focused sweeps returned
+`VERIFIED_BOUNDED` for TPCH q4 after 85/924 ms and again after 98/949 ms, TPCH
+q22 after 200/5,645 ms and again after 158/5,636 ms, and TPC-DS q69 after
+374/3,781 ms and again after 359/3,758 ms.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
 q62, q76, q79, and q88 are `UNKNOWN` at the 60-second solver budget. The q37
 and q82 obligations are likewise `UNKNOWN` at 60 seconds. q43 is formula-covered
-but returned `UNKNOWN` after 147/69,391 ms at that same budget. A separate non-gating
-q40 experiment with a 10-second solver budget reported `SOLVER_ERROR` after the
-external solver exceeded its 15.0-second process deadline; the focused `ya`
-experiment failed on that status as designed. These obligations are
-formula-covered, not proved, and not part of the proof floor. None is evidence
-of an optimizer correctness bug.
+but returned `UNKNOWN` after 147/69,391 ms at that same budget. Fresh TPC-DS
+experiments also returned `UNKNOWN` for q10 after 524/81,517 ms, q19 after
+219/61,811 ms, q65 after 283/80,633 ms, and q99 after 218/63,299 ms. A separate
+non-gating q40 experiment with a 10-second solver budget reported
+`SOLVER_ERROR` after the external solver exceeded its 15.0-second process
+deadline; the focused `ya` experiment failed on that status as designed. These
+obligations are formula-covered, not proved, and not part of the proof floor.
+None is evidence of an optimizer correctness bug.
 After exact direct literal-to-Date normalization, regenerated full TPC-DS
 solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend
@@ -86,7 +100,8 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The proof floor is the fifteen obligations above.
+The proof floor is the eighteen obligations above; formula coverage remains
+45/121 (37.2%).
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -738,10 +753,9 @@ through the real host. The current complete suites pass 431/431 verifier tests,
 167/167 C++ exporter tests, 43/43 inspector tests, and 26/26 real-host
 integration tests. Dynamic `IN`, correlated scalar subplans, multiple
 dependencies, and broader correlations remain separate extensions.
-The next milestone is an auditability consolidation: independently review the
-C++/Python contract, keep the descriptor and evaluator minimal, prune stale
-current-versus-historical prose, and rerun every regression floor before adding
-another semantic family.
+The auditability consolidation is complete in commits `7a3639d1c16`,
+`ebcfdbb1263`, and `4b7f27d492e`. The next focus is exact proof
+scaling/decomposition before adding another semantic family.
 
 The audit has found seven production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix

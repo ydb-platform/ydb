@@ -69,9 +69,9 @@ this map, recorded:
 | Nine trusted Python semantic modules | 9,375 |
 | C++ exporter (`semantic_snapshot.cpp` and `.h`) | 7,492 |
 | **Proof-producing code total** | **16,867** |
-| Tests, outside the TCB | 39,573 |
+| Tests, outside the TCB | 39,577 |
 | Diagnostic/orchestration tools, outside the TCB | 5,082 |
-| Documentation, outside the TCB | 4,400 |
+| Documentation, outside the TCB | 4,444 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by

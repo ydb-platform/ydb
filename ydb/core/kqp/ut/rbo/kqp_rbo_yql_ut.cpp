@@ -8180,6 +8180,23 @@ FROM (
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar
+                WHERE bar.lastname = (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id < 0);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar
+                WHERE bar.lastname = (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == 2);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar
+                WHERE bar.lastname = (
+                    SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == 2 ORDER BY foo.name
+                );
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar
                 WHERE NOT bar.flag AND EXISTS (SELECT foo.id FROM `/Root/foo` as foo)
                 ORDER BY bar.id;
             )",
@@ -8192,6 +8209,9 @@ FROM (
             R"([[0]])",
             R"([[0]])",
             R"([[0]])",
+            R"([])",
+            R"([[2]])",
+            R"([[2]])",
             R"([[0]])",
         };
 
@@ -8202,6 +8222,36 @@ FROM (
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+
+        auto multirowScalar = session2.ExecuteDataQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT bar.id FROM `/Root/bar` as bar
+            WHERE bar.lastname = (
+                SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id < 2
+            );
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            multirowScalar.GetStatus(),
+            EStatus::PRECONDITION_FAILED,
+            multirowScalar.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            multirowScalar.GetIssues().ToString(),
+            "More than one row returned by a subquery used as an expression");
+
+        auto orderedMultirowScalar = session2.ExecuteDataQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT bar.id FROM `/Root/bar` as bar
+            WHERE bar.lastname = (
+                SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id < 2 ORDER BY foo.name
+            );
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            orderedMultirowScalar.GetStatus(),
+            EStatus::PRECONDITION_FAILED,
+            orderedMultirowScalar.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            orderedMultirowScalar.GetIssues().ToString(),
+            "More than one row returned by a subquery used as an expression");
     }
 
     Y_UNIT_TEST(CorrelatedSubquery) {

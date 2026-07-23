@@ -12,6 +12,7 @@
 #include "kqp_rbo_physical_table_effect_builder.h"
 #include "kqp_rbo_physical_query_builder.h"
 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -20,6 +21,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;

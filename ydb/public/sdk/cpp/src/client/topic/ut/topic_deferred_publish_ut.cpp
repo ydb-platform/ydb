@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/ydb_topic_deferred_publish.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -160,6 +161,8 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyExtPublicationId) {
     auto result = client.BeginPublication("").GetValueSync();
     UNIT_ASSERT(!result.IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+    UNIT_ASSERT_EXCEPTION(result.GetPublication(), TContractViolation);
+    UNIT_ASSERT_EXCEPTION(result.GetIntPublicationId(), TContractViolation);
 }
 
 Y_UNIT_TEST(BeginPublicationDisabledByDefault) {
@@ -170,6 +173,8 @@ Y_UNIT_TEST(BeginPublicationDisabledByDefault) {
     auto result = client.BeginPublication("ext-disabled").GetValueSync();
     UNIT_ASSERT(!result.IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+    UNIT_ASSERT_EXCEPTION(result.GetPublication(), TContractViolation);
+    UNIT_ASSERT_EXCEPTION(result.GetIntPublicationId(), TContractViolation);
 }
 
 Y_UNIT_TEST(BeginPublicationCreatesPublication) {

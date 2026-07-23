@@ -163,7 +163,7 @@ bool ColumnsOrder(const TVector<ui32>& tags) override {
         return false;
     }
 
-    Schema = schemaRes.ValueOrDie();
+    Schema.swap(schemaRes.ValueOrDie());
 
     {
         arrow::FieldVector fields = Schema->fields();

@@ -1035,7 +1035,13 @@ public:
     IGraphTransformer::TStatus ComputeTypes(TRBOContext& ctx);
 
     TString PlanToString(TExprContext& ctx, ui32 printOptions = 0x0);
-    void PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TStringBuilder& builder, int ntabs, ui32 printOptions = 0x0) const;
+    void PlanToStringRec(
+        TIntrusivePtr<IOperator> op,
+        TExprContext& ctx,
+        TStringBuilder& builder,
+        int ntabs,
+        absl::flat_hash_set<const IOperator*>& expanded,
+        ui32 printOptions = 0x0) const;
 
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);

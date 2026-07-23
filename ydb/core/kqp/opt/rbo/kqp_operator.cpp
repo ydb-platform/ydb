@@ -1246,25 +1246,42 @@ TString TOpRoot::ToString(TExprContext& ctx) {
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
+    absl::flat_hash_set<const IOperator*> expanded;
+    expanded.reserve(96);
     for (const auto& [iu, subplan] : PlanProps.Subplans.PlanMap) {
         builder << "Subplan binding to " << iu.GetFullName() << ":\n";
-        PlanToStringRec(CastOperator<IOperator>(subplan.Plan), ctx, builder, 0, printOptions);
+        PlanToStringRec(CastOperator<IOperator>(subplan.Plan), ctx, builder, 0, expanded, printOptions);
     }
-    PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
+    PlanToStringRec(GetInput(), ctx, builder, 0, expanded, printOptions);
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TStringBuilder& builder, int tabs, ui32 printOptions) const {
+void TOpRoot::PlanToStringRec(
+    TIntrusivePtr<IOperator> op,
+    TExprContext& ctx,
+    TStringBuilder& builder,
+    int tabs,
+    absl::flat_hash_set<const IOperator*>& expanded,
+    ui32 printOptions) const
+{
     TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
         tabString << "  ";
     }
 
+    const bool firstOccurrence = expanded.insert(op.Get()).second;
     builder << tabString << op->ToString(ctx);
+    if (!firstOccurrence) {
+        builder << " [shared]";
+    }
     if (op->Props.StageId.has_value()) {
         builder << " StageId: " << *op->Props.StageId;
     }
     builder << "\n";
+
+    if (!firstOccurrence) {
+        return;
+    }
 
     if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata) && op->Props.Metadata.has_value()) {
         builder << tabString << " ";
@@ -1278,7 +1295,7 @@ void TOpRoot::PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TS
     }
 
     for (auto c : op->Children) {
-        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
+        PlanToStringRec(c, ctx, builder, tabs + 1, expanded, printOptions);
     }
 }
 

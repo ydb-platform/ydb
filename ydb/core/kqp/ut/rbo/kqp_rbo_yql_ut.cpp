@@ -12,11 +12,13 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -32,6 +34,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -150,6 +153,44 @@ const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& plan
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (const auto& child : plans->second.GetArraySafe()) {
             if (const auto* op = FindOperatorByStringField(child, fieldName, fieldValue)) {
+                return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const NJson::TJsonValue* FindOperatorByIntegerField(
+    const NJson::TJsonValue& planNode,
+    const TString& fieldName,
+    i64 fieldValue)
+{
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find(fieldName);
+            if (field != op.end()
+                && field->second.IsInteger()
+                && field->second.GetIntegerSafe() == fieldValue)
+            {
+                return &opNode;
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* op = FindOperatorByIntegerField(
+                    child,
+                    fieldName,
+                    fieldValue))
+            {
                 return op;
             }
         }
@@ -1222,6 +1263,506 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_VALUES_EQUAL(count, 61);
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
+    }
+
+    Y_UNIT_TEST(DiagnosticRenderersExpandSharedDagLinearly) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        constexpr size_t depth = 16;
+
+        TIntrusivePtr<IOperator> op = MakeIntrusive<TOpEmptySource>(pos);
+        for (size_t i = 0; i < depth; ++i) {
+            op = MakeIntrusive<TOpJoin>(
+                op,
+                op,
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        }
+        TOpRoot root(op, pos, TVector<TString>{});
+
+        const auto textPlan = root.PlanToString(exprCtx);
+        const size_t renderedLines = std::count(textPlan.begin(), textPlan.end(), '\n');
+        size_t sharedMarkers = 0;
+        size_t markerPos = 0;
+        while ((markerPos = textPlan.find("[shared]", markerPos)) != TString::npos) {
+            ++sharedMarkers;
+            markerPos += TStringBuf("[shared]").size();
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(renderedLines, 2 * depth + 1, textPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(sharedMarkers, depth, textPlan);
+
+        const auto htmlPlan = BuildPlanNodeFromRoot(root, exprCtx, 0);
+        const optimizer_trace::Node* expandedNode = &htmlPlan;
+        size_t htmlNodeCount = 1;
+        for (size_t i = 0; i < depth; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(expandedNode->childCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(expandedNode->childAt(1).childCount(), 0);
+            htmlNodeCount += 2;
+            expandedNode = &expandedNode->childAt(0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expandedNode->childCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(htmlNodeCount, 2 * depth + 1);
+    }
+
+    Y_UNIT_TEST(ExecutionJsonExpandsSharedStageDagLinearly) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        constexpr size_t depth = 10;
+        const auto limitValue = MakeConstant("Uint64", "1", pos, &exprCtx);
+
+        auto empty = MakeIntrusive<TOpEmptySource>(pos);
+        TIntrusivePtr<IOperator> current = MakeIntrusive<TOpLimit>(
+            empty,
+            pos,
+            limitValue,
+            EOpPhase::Undefined);
+        current->Props.Statistics = TRBOStatistics{};
+        current->Props.Cost = 0.0;
+
+        TOpRoot root(current, pos, TVector<TString>{});
+        auto& stageGraph = root.PlanProps.StageGraph;
+        ui32 currentStage = stageGraph.AddStage();
+        empty->Props.StageId = currentStage;
+        current->Props.StageId = currentStage;
+
+        for (size_t i = 0; i < depth; ++i) {
+            auto left = MakeIntrusive<TOpLimit>(
+                current,
+                pos,
+                limitValue,
+                EOpPhase::Undefined);
+            auto right = MakeIntrusive<TOpLimit>(
+                current,
+                pos,
+                limitValue,
+                EOpPhase::Undefined);
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+
+            left->Props.Statistics = TRBOStatistics{};
+            left->Props.Cost = 0.0;
+            right->Props.Statistics = TRBOStatistics{};
+            right->Props.Cost = 0.0;
+            join->Props.Statistics = TRBOStatistics{};
+            join->Props.Cost = 0.0;
+            join->Props.JoinAlgo = NKqp::EJoinAlgoType::MapJoin;
+            join->Props.UseBlockHashJoin = false;
+
+            const ui32 leftStage = stageGraph.AddStage();
+            const ui32 rightStage = stageGraph.AddStage();
+            const ui32 joinStage = stageGraph.AddStage();
+            left->Props.StageId = leftStage;
+            right->Props.StageId = rightStage;
+            join->Props.StageId = joinStage;
+
+            stageGraph.Connect(
+                currentStage,
+                leftStage,
+                MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(currentStage)));
+            stageGraph.Connect(
+                currentStage,
+                rightStage,
+                MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(currentStage)));
+            stageGraph.Connect(
+                leftStage,
+                joinStage,
+                MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(leftStage)));
+            stageGraph.Connect(
+                rightStage,
+                joinStage,
+                MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(rightStage)));
+
+            current = join;
+            currentStage = joinStage;
+        }
+        root.SetInput(current);
+
+        ui64 nodeCounter = 0;
+        THashMap<IOperator*, ui32> operatorIds;
+        const auto executionJson = root.GetExecutionJson(nodeCounter, operatorIds);
+
+        size_t renderedPlanNodes = 0;
+        THashSet<TString> cteDefinitions;
+        THashSet<TString> cteReferences;
+        THashSet<TString> stageGuids;
+        TVector<const NJson::TJsonValue*> pending{&executionJson};
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            ++renderedPlanNodes;
+
+            const auto& nodeMap = node->GetMapSafe();
+            if (const auto stageGuid = nodeMap.find("StageGuid");
+                stageGuid != nodeMap.end()) {
+                UNIT_ASSERT(stageGuids.insert(
+                    stageGuid->second.GetStringSafe()).second);
+            }
+            if (const auto definition = nodeMap.find("Subplan Name");
+                definition != nodeMap.end()) {
+                cteDefinitions.insert(definition->second.GetStringSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    nodeMap.at("Parent Relationship").GetStringSafe(),
+                    "InitPlan");
+                UNIT_ASSERT(nodeMap.contains("StageGuid"));
+                UNIT_ASSERT(nodeMap.contains("Operators"));
+            }
+            if (const auto reference = nodeMap.find("CTE Name");
+                reference != nodeMap.end()) {
+                cteReferences.insert(TStringBuilder()
+                    << "CTE " << reference->second.GetStringSafe());
+                UNIT_ASSERT(!nodeMap.contains("StageGuid"));
+                UNIT_ASSERT(!nodeMap.contains("Operators"));
+                UNIT_ASSERT(!nodeMap.contains("Plans"));
+            }
+            if (const auto plans = nodeMap.find("Plans"); plans != nodeMap.end()) {
+                for (const auto& child : plans->second.GetArraySafe()) {
+                    pending.push_back(&child);
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(operatorIds.size(), 3 * depth + 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            nodeCounter,
+            7 * depth + 2,
+            TStringBuilder() << "Stage DAG expanded non-linearly to " << nodeCounter << " nodes");
+        UNIT_ASSERT_VALUES_EQUAL(renderedPlanNodes, nodeCounter);
+        UNIT_ASSERT_VALUES_EQUAL(stageGuids.size(), 3 * depth + 1);
+        UNIT_ASSERT_VALUES_EQUAL(cteDefinitions.size(), depth);
+        UNIT_ASSERT_VALUES_EQUAL(cteReferences.size(), depth);
+        UNIT_ASSERT(cteDefinitions == cteReferences);
+
+        NJson::TJsonValue queryPlan(NJson::EJsonValueType::JSON_MAP);
+        NJson::TJsonValue queryPlans(NJson::EJsonValueType::JSON_ARRAY);
+        queryPlans.AppendValue(executionJson);
+        queryPlan["Plans"] = std::move(queryPlans);
+        TPlanVisualizer visualizer;
+        visualizer.LoadPlans(queryPlan);
+        UNIT_ASSERT(!visualizer.PrintSvg().empty());
+    }
+
+    Y_UNIT_TEST(ExecutionJsonPreservesGroupedConnectionOrderAndCteReferences) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        const auto limitValue = MakeConstant("Uint64", "1", pos, &exprCtx);
+
+        auto leftEmpty = MakeIntrusive<TOpEmptySource>(pos);
+        auto rightEmpty = MakeIntrusive<TOpEmptySource>(pos);
+        auto left = MakeIntrusive<TOpLimit>(
+            leftEmpty,
+            pos,
+            limitValue,
+            EOpPhase::Undefined);
+        auto right = MakeIntrusive<TOpLimit>(
+            rightEmpty,
+            pos,
+            limitValue,
+            EOpPhase::Undefined);
+        auto join = MakeIntrusive<TOpJoin>(
+            left,
+            right,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+
+        for (const auto& op : TVector<TIntrusivePtr<IOperator>>{
+                 leftEmpty,
+                 rightEmpty,
+                 left,
+                 right,
+                 join,
+             })
+        {
+            op->Props.Statistics = TRBOStatistics{};
+            op->Props.Cost = 0.0;
+        }
+        join->Props.JoinAlgo = NKqp::EJoinAlgoType::MapJoin;
+        join->Props.UseBlockHashJoin = false;
+
+        TOpRoot root(join, pos, TVector<TString>{});
+        auto& stageGraph = root.PlanProps.StageGraph;
+        const ui32 leftStage = stageGraph.AddStage();
+        const ui32 rightStage = stageGraph.AddStage();
+        const ui32 joinStage = stageGraph.AddStage();
+        leftEmpty->Props.StageId = leftStage;
+        left->Props.StageId = leftStage;
+        rightEmpty->Props.StageId = rightStage;
+        right->Props.StageId = rightStage;
+        join->Props.StageId = joinStage;
+
+        stageGraph.Connect(
+            leftStage,
+            joinStage,
+            MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(leftStage)));
+        stageGraph.Connect(
+            rightStage,
+            joinStage,
+            MakeIntrusive<TBroadcastConnection>(stageGraph.GetOutputIndex(rightStage)));
+        stageGraph.Connect(
+            leftStage,
+            joinStage,
+            MakeIntrusive<TUnionAllConnection>(stageGraph.GetOutputIndex(leftStage)));
+
+        ui64 nodeCounter = 0;
+        THashMap<IOperator*, ui32> operatorIds;
+        auto executionJson = root.GetExecutionJson(nodeCounter, operatorIds);
+        auto& finalStage = executionJson.GetMapSafe()
+            .at("Plans").GetArraySafe().at(0);
+        auto& connections = finalStage.GetMapSafe()
+            .at("Plans").GetArraySafe();
+
+        UNIT_ASSERT_VALUES_EQUAL(connections.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            connections[0].GetMapSafe().at("Node Type").GetStringSafe(),
+            "Map");
+        UNIT_ASSERT_VALUES_EQUAL(
+            connections[1].GetMapSafe().at("Node Type").GetStringSafe(),
+            "UnionAll");
+        UNIT_ASSERT_VALUES_EQUAL(
+            connections[2].GetMapSafe().at("Node Type").GetStringSafe(),
+            "Broadcast");
+
+        const auto& definition = connections[0].GetMapSafe()
+            .at("Plans").GetArraySafe().at(0).GetMapSafe();
+        const auto& reference = connections[1].GetMapSafe();
+        const TString sharedName = TStringBuilder()
+            << "RBO Shared Stage " << leftStage;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            definition.at("Subplan Name").GetStringSafe(),
+            TStringBuilder() << "CTE " << sharedName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            definition.at("Parent Relationship").GetStringSafe(),
+            "InitPlan");
+        UNIT_ASSERT(definition.contains("StageGuid"));
+        UNIT_ASSERT(definition.contains("Operators"));
+        UNIT_ASSERT(!definition.contains("CTE Name"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            reference.at("PlanNodeType").GetStringSafe(),
+            "Connection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            reference.at("Node Type").GetStringSafe(),
+            "UnionAll");
+        UNIT_ASSERT_VALUES_EQUAL(
+            reference.at("CTE Name").GetStringSafe(),
+            sharedName);
+        UNIT_ASSERT(!reference.contains("StageGuid"));
+        UNIT_ASSERT(!reference.contains("Operators"));
+        UNIT_ASSERT(!reference.contains("Plans"));
+
+        // A CTE reference deliberately has no StageGuid: it must not claim
+        // ownership of the producer's execution statistics.  Analyze-plan
+        // correlation must skip that reference while looking for a later
+        // canonical stage.
+        auto& rightDefinition = connections[2].GetMapSafe()
+            .at("Plans").GetArraySafe().at(0);
+        NJson::TJsonValue stats(NJson::EJsonValueType::JSON_MAP);
+        stats["OutputRows"] = 1;
+        stats["OutputBytes"] = 1.0;
+        stats["CpuTimeUs"] = 1.0;
+        rightDefinition["Stats"] = std::move(stats);
+        NJson::TJsonValue sharedStats(NJson::EJsonValueType::JSON_MAP);
+        sharedStats["OutputRows"] = 100;
+        sharedStats["OutputBytes"] = 100.0;
+        sharedStats["CpuTimeUs"] = 2.0;
+        connections[0].GetMapSafe()
+            .at("Plans").GetArraySafe().at(0)["Stats"] =
+                std::move(sharedStats);
+
+        auto simplifiedJson = root.GetExplainJson(nodeCounter, operatorIds);
+        NJson::TJsonValue txPlan(NJson::EJsonValueType::JSON_MAP);
+        NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
+        plans.AppendValue(std::move(executionJson));
+        txPlan["Plans"] = std::move(plans);
+        txPlan["SimplifiedPlan"] = std::move(simplifiedJson);
+
+        NJsonWriter::TBuf writer;
+        writer.WriteJsonValue(&txPlan);
+        const TString serializedTxPlan = writer.Str();
+        const TString analyzed = SerializeRBOAnalyzePlan(
+            TVector<const TString>{serializedTxPlan},
+            NKqpProto::TKqpStatsQuery{});
+        NJson::TJsonValue analyzedJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(analyzed, &analyzedJson, true));
+        const auto& simplified =
+            analyzedJson.GetMapSafe().at("SimplifiedPlan");
+        const auto* sharedOp = FindOperatorByIntegerField(
+            simplified,
+            "OperatorId",
+            operatorIds.at(left.Get()));
+        const auto* ordinaryOp = FindOperatorByIntegerField(
+            simplified,
+            "OperatorId",
+            operatorIds.at(right.Get()));
+        UNIT_ASSERT(sharedOp);
+        UNIT_ASSERT(ordinaryOp);
+        UNIT_ASSERT(!sharedOp->GetMapSafe().contains("A-Rows"));
+        UNIT_ASSERT(!sharedOp->GetMapSafe().contains("A-Size"));
+        UNIT_ASSERT(sharedOp->GetMapSafe().contains("A-SelfCpu"));
+        UNIT_ASSERT(ordinaryOp->GetMapSafe().contains("A-Rows"));
+        UNIT_ASSERT(ordinaryOp->GetMapSafe().contains("A-Size"));
+    }
+
+    Y_UNIT_TEST(ExplainJsonExpandsSharedDagLinearly) {
+        const auto pos = NYql::TPositionHandle();
+        constexpr size_t depth = 16;
+
+        TIntrusivePtr<IOperator> op = MakeIntrusive<TOpEmptySource>(pos);
+        op->Props.Statistics = TRBOStatistics{};
+        op->Props.Cost = 0.0;
+        for (size_t i = 0; i < depth; ++i) {
+            op = MakeIntrusive<TOpJoin>(
+                op,
+                op,
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            op->Props.JoinAlgo = NKqp::EJoinAlgoType::MapJoin;
+            op->Props.UseBlockHashJoin = false;
+            op->Props.Statistics = TRBOStatistics{};
+            op->Props.Cost = 0.0;
+        }
+        TOpRoot root(op, pos, TVector<TString>{});
+
+        ui64 nodeCounter = 0;
+        const THashMap<IOperator*, ui32> operatorIds;
+        const auto json = root.GetExplainJson(nodeCounter, operatorIds);
+
+        THashSet<TString> cteDefinitions;
+        THashSet<TString> cteReferences;
+        TVector<const NJson::TJsonValue*> pending{&json};
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            const auto& nodeMap = node->GetMapSafe();
+            if (const auto definition = nodeMap.find("Subplan Name");
+                definition != nodeMap.end()) {
+                cteDefinitions.insert(definition->second.GetStringSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    nodeMap.at("Parent Relationship").GetStringSafe(),
+                    "InitPlan");
+                UNIT_ASSERT(nodeMap.contains("Operators"));
+            }
+            if (const auto reference = nodeMap.find("CTE Name");
+                reference != nodeMap.end()) {
+                cteReferences.insert(TStringBuilder()
+                    << "CTE " << reference->second.GetStringSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    nodeMap.at("PlanNodeType").GetStringSafe(),
+                    "Connection");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    nodeMap.at("Node Type").GetStringSafe(),
+                    "Implicit");
+                UNIT_ASSERT(!nodeMap.contains("Operators"));
+                UNIT_ASSERT(!nodeMap.contains("Plans"));
+            }
+            if (const auto plans = nodeMap.find("Plans"); plans != nodeMap.end()) {
+                for (const auto& child : plans->second.GetArraySafe()) {
+                    pending.push_back(&child);
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            nodeCounter,
+            2 * depth + 3,
+            TStringBuilder() << "Shared DAG was expanded as a tree: "
+                             << nodeCounter << " plan nodes\n"
+                             << json.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(cteDefinitions.size(), depth);
+        UNIT_ASSERT_VALUES_EQUAL(cteReferences.size(), depth);
+        UNIT_ASSERT(cteDefinitions == cteReferences);
+
+        TPlanVisualizer visualizer;
+        visualizer.LoadPlans(json);
+        UNIT_ASSERT(!visualizer.PrintSvg().empty());
+    }
+
+    Y_UNIT_TEST(ExplainJsonPromotesSharedStageReferenceToConnection) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        const auto limitValue = MakeConstant("Uint64", "1", pos, &exprCtx);
+
+        auto empty = MakeIntrusive<TOpEmptySource>(pos);
+        auto shared = MakeIntrusive<TOpLimit>(
+            empty,
+            pos,
+            limitValue,
+            EOpPhase::Undefined);
+        auto join = MakeIntrusive<TOpJoin>(
+            shared,
+            shared,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        for (const auto& op : TVector<TIntrusivePtr<IOperator>>{
+                 empty,
+                 shared,
+                 join,
+             })
+        {
+            op->Props.Statistics = TRBOStatistics{};
+            op->Props.Cost = 0.0;
+        }
+        join->Props.JoinAlgo = NKqp::EJoinAlgoType::MapJoin;
+        join->Props.UseBlockHashJoin = false;
+
+        TOpRoot root(join, pos, TVector<TString>{});
+        auto& stageGraph = root.PlanProps.StageGraph;
+        const ui32 sharedStage = stageGraph.AddStage();
+        const ui32 joinStage = stageGraph.AddStage();
+        empty->Props.StageId = sharedStage;
+        shared->Props.StageId = sharedStage;
+        join->Props.StageId = joinStage;
+        stageGraph.Connect(
+            sharedStage,
+            joinStage,
+            MakeIntrusive<TMapConnection>(stageGraph.GetOutputIndex(sharedStage)));
+        stageGraph.Connect(
+            sharedStage,
+            joinStage,
+            MakeIntrusive<TBroadcastConnection>(stageGraph.GetOutputIndex(sharedStage)));
+
+        ui64 nodeCounter = 0;
+        const THashMap<IOperator*, ui32> operatorIds;
+        const auto json = root.GetExplainJson(nodeCounter, operatorIds);
+        const auto& joinPlan = json.GetMapSafe()
+            .at("Plans").GetArraySafe().at(0).GetMapSafe()
+            .at("Plans").GetArraySafe().at(0).GetMapSafe();
+        const auto& children = joinPlan.at("Plans").GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+
+        const auto& definition = children[0].GetMapSafe();
+        const auto& reference = children[1].GetMapSafe();
+        const TString definitionName =
+            definition.at("Subplan Name").GetStringSafe();
+        UNIT_ASSERT_VALUES_EQUAL(
+            definition.at("Parent Relationship").GetStringSafe(),
+            "InitPlan");
+        UNIT_ASSERT(definition.contains("Operators"));
+        UNIT_ASSERT(!definition.contains("PlanNodeType"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            reference.at("PlanNodeType").GetStringSafe(),
+            "Connection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            reference.at("Node Type").GetStringSafe(),
+            "Broadcast");
+        UNIT_ASSERT_VALUES_EQUAL(
+            TStringBuilder() << "CTE " << reference.at("CTE Name").GetStringSafe(),
+            definitionName);
+        UNIT_ASSERT(!reference.contains("Plans"));
+        UNIT_ASSERT(!reference.contains("Operators"));
+
+        TPlanVisualizer visualizer;
+        visualizer.LoadPlans(json);
+        UNIT_ASSERT(!visualizer.PrintSvg().empty());
     }
 
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
@@ -6234,7 +6775,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
         RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
-                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+                            // The preserved scalar-evaluation barrier in q22 leaves no reorderable CBO tree.
+                            /*queriesWithoutCboCheck=*/{22});
     }
 
     Y_UNIT_TEST(TPCH_YQL_Q21_NewRBO) {
@@ -6248,8 +6791,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                                                       84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
                            /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
-                           // in the query or until the known gaps are fixed.
-                           /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
+                           // in the query, a preserved scalar-evaluation barrier leaves no reorderable tree, or until the known
+                           // gaps are fixed.
+                           /*queriesWithoutCboCheck=*/{4, 9, 15, 31, 58, 64, 66, 72, 78, 85});
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

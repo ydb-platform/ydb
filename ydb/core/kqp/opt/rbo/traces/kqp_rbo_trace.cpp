@@ -789,12 +789,18 @@ optimizer_trace::Node BuildPlanNode(
     TPlanProps& planProps,
     ui32 opts,
     const std::string& id,
-    TTraceBuildState* state)
+    TTraceBuildState* state,
+    absl::flat_hash_set<const IOperator*>& expanded)
 {
     optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx)));
     AttachStageTarget(state, *op, id);
     AttachOperatorTarget(state, *op, id);
     AttachPlanOverview(state, op);
+
+    if (!expanded.insert(op.Get()).second) {
+        node.field("Shared", "true");
+        return node;
+    }
 
     const auto outputIUs = op->GetOutputIUs();
     AddInfoUnitField(node, "OutputColumns", "Output columns", outputIUs, op.Get());
@@ -927,15 +933,24 @@ optimizer_trace::Node BuildPlanNode(
     }
 
     for (size_t i = 0; i < op->Children.size(); ++i) {
-        node.child(BuildPlanNode(op->Children[i], ctx, planProps, opts, id + "-" + std::to_string(i), state));
+        node.child(BuildPlanNode(
+            op->Children[i],
+            ctx,
+            planProps,
+            opts,
+            id + "-" + std::to_string(i),
+            state,
+            expanded));
     }
     return node;
 }
 
 optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts, TTraceBuildState* state) {
+    absl::flat_hash_set<const IOperator*> expanded;
+    expanded.reserve(96);
     const auto& subplans = root.PlanProps.Subplans.PlanMap;
     if (subplans.empty()) {
-        return BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-0", state);
+        return BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-0", state, expanded);
     }
     optimizer_trace::Node container("n", "Plan", "Plan");
     size_t index = 0;
@@ -949,10 +964,24 @@ optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui
         if (!subplan.DependentIUs.empty()) {
             AddInfoUnitField(sub, "SubplanDependentIUs", "Subplan dependent IUs", subplan.DependentIUs);
         }
-        sub.child(BuildPlanNode(CastOperator<IOperator>(subplan.Plan), ctx, root.PlanProps, opts, subplanId + "-0", state));
+        sub.child(BuildPlanNode(
+            CastOperator<IOperator>(subplan.Plan),
+            ctx,
+            root.PlanProps,
+            opts,
+            subplanId + "-0",
+            state,
+            expanded));
         container.child(sub);
     }
-    container.child(BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-" + std::to_string(index), state));
+    container.child(BuildPlanNode(
+        root.GetInput(),
+        ctx,
+        root.PlanProps,
+        opts,
+        "n-" + std::to_string(index),
+        state,
+        expanded));
     return container;
 }
 
@@ -970,6 +999,7 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"RightShuffleBy", "Right shuffle"},
         {"OrderEnforcer", "Order"},
         {"EnsureAtMostOne", "At most one"},
+        {"Shared", "Shared"},
         {"Storage", "Storage"},
         {"KeyColumns", "Key columns"},
         {"SortBy", "Sort by"},

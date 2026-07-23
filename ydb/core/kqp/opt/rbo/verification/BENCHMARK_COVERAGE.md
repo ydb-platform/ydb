@@ -28,6 +28,9 @@ disables fallback to the YQL optimizer, permits OLAP data queries, uses the
 maximum language version and all backports, and clears the result-row limit.
 The query is prepared by the real KQP host; the verifier compares the initial
 new-RBO snapshot with the final pre-physical StageGraph snapshot.
+Both the dashboard host and benchmark-mode prefix-capture command link the
+production PostgreSQL translator and runtime. The dummy PostgreSQL provider is
+reserved for isolated tests and is not a faithful corpus-preparation host.
 
 Every obligation has two symbolic row slots per referenced base table and a
 fixed task bound of two. These bounds are part of every verdict. They do not
@@ -40,19 +43,19 @@ snapshots, and construct the SMT obligation without invoking a solver:
 
 ```bash
 set -o pipefail
-RBO_COVERAGE_USE_SOLVER=0 \
-RBO_COVERAGE_QUERIES= \
-RBO_COVERAGE_TIMEOUT_MS=10000 \
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*::TPCH' 2>&1 | tail -n 100
+  -F '*::TPCH' \
+  --test-env=RBO_COVERAGE_USE_SOLVER=0 \
+  --test-env=RBO_COVERAGE_TIMEOUT_MS=10000 \
+  2>&1 | tail -n 100
 
-RBO_COVERAGE_USE_SOLVER=0 \
-RBO_COVERAGE_QUERIES= \
-RBO_COVERAGE_TIMEOUT_MS=10000 \
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*::TPCDS' 2>&1 | tail -n 100
+  -F '*::TPCDS' \
+  --test-env=RBO_COVERAGE_USE_SOLVER=0 \
+  --test-env=RBO_COVERAGE_TIMEOUT_MS=10000 \
+  2>&1 | tail -n 100
 ```
 
 The checked-in proof floor runs the eighteen curated obligations with the
@@ -73,12 +76,13 @@ choose any focused query set:
 
 ```bash
 set -o pipefail
-RBO_COVERAGE_USE_SOLVER=1 \
-RBO_COVERAGE_TIMEOUT_MS=60000 \
-RBO_COVERAGE_QUERIES=19 \
 ./ya make --build relwithdebinfo -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
-  -F '*::TPCH' 2>&1 | tail -n 100
+  -F '*::TPCH' \
+  --test-env=RBO_COVERAGE_USE_SOLVER=1 \
+  --test-env=RBO_COVERAGE_TIMEOUT_MS=60000 \
+  --test-env=RBO_COVERAGE_QUERIES=19 \
+  2>&1 | tail -n 100
 ```
 
 `RBO_COVERAGE_QUERIES` accepts comma-separated IDs and inclusive ranges, for
@@ -87,6 +91,8 @@ example `1,4-7,96`; omitted or empty selects the whole suite.
 to 10000. Solver use is deliberately explicit: absent, empty, or zero
 `RBO_COVERAGE_USE_SOLVER` selects formula-only mode. The value `1` selects the
 hermetic `contrib/tools/z3/z3` build output; every other value fails closed.
+Bare ambient shell variables are not inherited by the `ya` test sandbox; pass
+each experimental setting with `--test-env=NAME=value` as above.
 
 Each dashboard suite writes the stable report names `tpch_coverage.json` or
 `tpcds_coverage.json`; proof-floor tests write `tpch_proof_floor.json` or
@@ -177,8 +183,9 @@ execution divergence can coexist.
 ## Latest measured formula coverage
 
 The latest complete formula-only dashboards were rerun on 2026-07-23 after the
-correlated-COUNT repair and exact `DistinctAll` support. Together they emit the
-46-query floor below and record an outcome for every workload entry. The
+correlated-COUNT repair, exact `DistinctAll` support, and restoration of the
+production PostgreSQL parser/runtime in the benchmark host. Together they emit
+the 46-query floor below and record an outcome for every workload entry. The
 eighteen-query proof floor is unchanged as policy: TPCH and TPC-DS still each
 require 9/9 `VERIFIED_BOUNDED` obligations. `FORMULA_EMITTED` is not a solver
 proof. Both measured suites meet the checked-in verifier-entry floors: TPCH q1
@@ -189,38 +196,39 @@ repair intentionally moves TPCH q17 and TPC-DS q1, q30, q32, q81, and q92 from
 formula construction to optimizer-side fail-closed results. Each requires
 general computed post-aggregate empty-row reconstruction, which is not yet
 implemented safely. None of those six formulas belonged to the solver proof
-floor.
+floor. With production PostgreSQL support restored, TPCH q20 now reaches the
+same fail-closed reconstruction gate instead of stopping in host preparation.
 
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
-| TPCH_YQL | 12 (q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, q22) | 6 | 4 | 22 |
-| TPCDS_YQL | 34 (q3, q5, q6, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, q99) | 32 | 33 | 99 |
+| TPCH_YQL | 12 (q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, q22) | 8 | 2 | 22 |
+| TPCDS_YQL | 34 (q3, q5, q6, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, q99) | 39 | 26 | 99 |
 
-The TPCH run spent 2,497/8,023 ms in preparation/verifier work and produced
+The TPCH run spent 2,781/7,810 ms in preparation/verifier work and produced
 report SHA-256
-`6389617cbc9833f218f104ee7c67e7b46dbd995eb668ee9c04259fb420313a49`.
-TPC-DS spent 54,698/186,809 ms and produced
-`842a745905a7b86d2c4a50d0cff998ff810a78cf311144ea9942d19dc3fc763e`.
+`dcc802b3dbd51ef04fdd179dbd90db6690b38892ead687d5849962ddd87cf0d1`.
+TPC-DS spent 64,206/189,264 ms and produced
+`d8c88141b6e6dccc3bf7596024b6033a297c267e8a1d05511206ea930fd7d763`.
 TPC-DS q6 emitted its formula after 347/11,882 ms. Its canonical direct render
 is 32,055,251 bytes after the exact already-alternative Sort ordinal
 representation; a 60-second solver experiment remains `UNKNOWN`.
 
-The supported formula slice is 46/121 queries (38.0%), with 38 unsupported
-queries and 37 optimizer-preparation failures. This is a useful end-to-end
+The supported formula slice is 46/121 queries (38.0%), with 47 unsupported
+queries and 28 optimizer-preparation failures. This is a useful end-to-end
 pre-physical optimizer sample, not a claim about the remaining 75 workload
 entries or larger inputs. Formula construction is not a bounded proof.
 
 ### TPCH inventory
 
-Optimizer preparation fails for q16, q18, and q20 on unsupported PG semantics.
-q17 now fails closed in correlated scalar inlining because its computed
-aggregate result requires general empty-row reconstruction. Six other queries
-fail closed at a snapshot boundary as follows; a query can have both an initial
-and final reason.
+Optimizer preparation fails closed for q17 and q20 in correlated scalar
+inlining because their computed aggregate results require general empty-row
+reconstruction. Eight other queries fail closed at a snapshot boundary as
+follows; a query can have both an initial and final reason.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | `EXISTS` does not have exactly one outer dependency | q21 | - |
+| Dynamic `IN` subplan | q16, q18 | - |
 | `Apply` | q13 | - |
 | `StringContains` | q9 | - |
 | Scalar callable `EndsWith` | q2 | - |
@@ -291,14 +299,13 @@ as described above.
 
 ### TPC-DS inventory
 
-The 33 optimizer-preparation failures are q1, q12, q14, q17, q20, q23, q27,
-q30, q32, q33, q36, q39, q41, q44, q45, q47, q49, q51, q53, q56, q57, q58,
-q60, q63, q67, q70, q81, q83, q86, q89, q92, q95, and q98. q1, q30, q32,
-q81, and q92 are the computed correlated aggregate shapes rejected by the
-general empty-row reconstruction gate.
+The 26 optimizer-preparation failures are q1, q12, q14, q17, q20, q23, q27,
+q30, q32, q36, q39, q41, q44, q47, q49, q51, q53, q57, q63, q67, q70, q81,
+q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
+aggregate shapes rejected by the general empty-row reconstruction gate.
 
-The exporter matrix below covers the recorded boundary failures among 27 of
-the 32 unsupported queries in the current complete run. IDs can appear in both
+The exporter matrix below covers the recorded boundary failures among 34 of
+the 39 unsupported queries in the current complete run. IDs can appear in both
 exporter columns or under more than one reason because both snapshots are
 audited independently. The five queries that pass export and fail closed inside
 the verifier are listed after the matrix.
@@ -306,12 +313,14 @@ the verifier are listed after the matrix.
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | `EXISTS` does not have exactly one outer dependency | q16, q94 | - |
+| Dynamic `IN` subplan | q33, q45, q56, q58, q60, q83, q95 | - |
 | Scalar callable `Map` | q24 | q24 |
 | Invalid Map rename source `_yql_source_5.segment` | q54 | - |
-| Read has range or ordering semantics | - | q9 |
+| Read has range or ordering semantics | - | q9, q45 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_149` | - | q2 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_152` | - | q59 |
 | Unavailable physical column `__kqp_rbo_ignore_arg_100` | - | q97 |
+| Unavailable physical column `__kqp_rbo_ignore_arg_8` | - | q58 |
 | Unavailable physical column `year` | - | q66 |
 | Restricted `Concat` has no storage-bounded String member | q66 | - |
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
@@ -321,7 +330,7 @@ the verifier are listed after the matrix.
 | Restricted `Concat` exceeds its allocation-totality bound | q84 | q84 |
 | Type `Double` | q7, q13, q21, q22, q26, q34, q35, q75, q85 | q7, q13, q21, q22, q26, q34, q35, q75, q85 |
 | Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
-| Join inputs share an IU | - | q16, q94 |
+| Join inputs share an IU | - | q16, q33, q56, q60, q94, q95 |
 
 After both snapshots export, q4 rejects a 20,736-pair join match above the
 16,384-pair construction bound after 2,173/426 ms of
@@ -529,7 +538,7 @@ tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
 The current dashboards emit 12/22 TPCH and 34/99 TPC-DS formulas, for 46/121
-(38.0%). They record 38 unsupported and 37 optimizer-failure queries. Exact
+(38.0%). They record 47 unsupported and 28 optimizer-failure queries. Exact
 `DistinctAll` adds TPC-DS q6; the correlated-COUNT correctness repair moves
 TPCH q17 and TPC-DS q1/q30/q32/q81/q92 to intentional optimizer-side
 fail-closed results. The preceding relational `EXISTS` milestone added TPCH

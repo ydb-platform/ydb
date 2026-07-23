@@ -44,15 +44,16 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-23
-after the correlated-COUNT repair and exact `DistinctAll` support. They
+after the correlated-COUNT repair, exact `DistinctAll` support, and restoration
+of the production PostgreSQL parser/runtime in the benchmark host. They
 establish formula construction for TPCH q1, q3, q4, q5, q6, q10, q11, q12,
 q14, q15, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19, q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
 q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 46/121 workload
-queries (38.0%). TPCH has twelve formulas, six unsupported queries, and four
-optimizer failures; TPC-DS has thirty-four formulas, thirty-two unsupported
-queries, and thirty-three optimizer failures. Across both suites that is 38
-unsupported queries and 37 optimizer failures.
+queries (38.0%). TPCH has twelve formulas, eight unsupported queries, and two
+optimizer failures; TPC-DS has thirty-four formulas, thirty-nine unsupported
+queries, and twenty-six optimizer failures. Across both suites that is 47
+unsupported queries and 28 optimizer failures.
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -62,11 +63,11 @@ empty-row reconstruction, which is not yet implemented safely. This is a
 reduction in the formula floor, but not a loss of an established proof; none of
 those six formulas belonged to the solver proof floor.
 
-The complete TPCH run spent 2,497/8,023 ms in preparation/verifier work and
+The complete TPCH run spent 2,781/7,810 ms in preparation/verifier work and
 produced report SHA-256
-`6389617cbc9833f218f104ee7c67e7b46dbd995eb668ee9c04259fb420313a49`;
-TPC-DS spent 54,698/186,809 ms and produced
-`842a745905a7b86d2c4a50d0cff998ff810a78cf311144ea9942d19dc3fc763e`.
+`dcc802b3dbd51ef04fdd179dbd90db6690b38892ead687d5849962ddd87cf0d1`;
+TPC-DS spent 64,206/189,264 ms and produced
+`d8c88141b6e6dccc3bf7596024b6033a297c267e8a1d05511206ea930fd7d763`.
 TPC-DS q6 itself emitted its formula after 347/11,882 ms. The preceding
 milestone reports and their timings/hashes remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).

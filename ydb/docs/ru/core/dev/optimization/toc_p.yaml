@@ -1,0 +1,11 @@
+items:
+- name: План выполнения запроса
+  href: plans.md
+- name: Расположение информации в плане запроса
+  href: layout.md
+- name: Структура фактического плана запроса
+  href: structure.md
+- name: Визуализация метрик запроса
+  href: metrics.md
+- name: Подсказки оптимизатора
+  href: hints.md

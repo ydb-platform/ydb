@@ -8,6 +8,7 @@
 #include "kqp_rbo_physical_source_builder.h"
 #include "kqp_rbo_physical_query_builder.h"
 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -16,6 +17,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;
@@ -23,6 +25,41 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+TExprNode::TPtr EnsureAtMostOneRow(TExprNode::TPtr input, TExprContext& ctx, TPositionHandle pos) {
+    // Condense1 emits nothing for empty input, preserves the first row as its
+    // state, and calls UpdateHandler only when a second row is observed.
+    return Build<TCoCondense1>(ctx, pos)
+        .Input(input)
+        .InitHandler()
+            .Args({"item"})
+            .Body("item")
+        .Build()
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TKqpEnsure>()
+                .Value("state")
+                .Predicate<TCoBool>()
+                    .Literal().Build("false")
+                .Build()
+                .IssueCode().Build(ToString((ui32)NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED))
+                .Message<TCoUtf8>()
+                    .Literal().Build("More than one row returned by a subquery used as an expression")
+                .Build()
+            .Build()
+        .Build()
+    .Done().Ptr();
+}
+
+} // anonymous namespace
 
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
@@ -134,6 +171,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 .Count(limit->LimitCond.GetExpressionBody())
             .Done().Ptr();
             // clang-format on
+
+            if (limit->Props.EnsureAtMostOne) {
+                currentStageBody = EnsureAtMostOneRow(std::move(currentStageBody), ctx, op->Pos);
+            }
 
             if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
                 currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());

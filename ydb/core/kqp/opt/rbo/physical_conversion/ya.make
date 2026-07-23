@@ -13,8 +13,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/peephole
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

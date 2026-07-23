@@ -127,10 +127,16 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
         auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements);
 
+        auto cardinalityCheck = MakeIntrusive<TOpLimit>(
+            subplan,
+            subplan->Pos,
+            MakeConstant("Uint64", "2", subplan->Pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        cardinalityCheck->Props.EnsureAtMostOne = true;
+
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements);
-        rename->Props.EnsureAtMostOne = true;
+        auto rename = MakeIntrusive<TOpMap>(cardinalityCheck, subplan->Pos, renameElements);
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(
             rename,

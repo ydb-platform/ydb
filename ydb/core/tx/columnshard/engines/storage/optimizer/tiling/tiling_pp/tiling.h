@@ -25,6 +25,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         , Settings(std::move(settings))
         , Accumulator(Settings.AccumulatorSettings, counters)
         , LastLevel(Settings.LastLevelSettings, counters)
+        , TasksSkippedByPriorityGap(counters.TasksSkippedByPriorityGap)
+        , GeneratedTasksPriorityLevel(counters.GeneratedTasksPriorityLevel)
     {
         for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
             MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, counters));
@@ -35,6 +37,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     Accumulator<TKey, TPortion> Accumulator;
     LastLevel<TKey, TPortion> LastLevel;
     THashMap<ui64, MiddleLevel<TKey, TPortion>> MiddleLevels;
+    const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
+    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
 
     struct TPortionPlacement {
         ui8 Level = 0;
@@ -327,8 +331,13 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             consider(middleLevel.DoGetNextOptimizationTask(isLocked));
         }
 
-        if (result && result->Priority.IsZeroLevel() && this->Counters.Portions->GetNotBoredCount() > 0) {
-            return std::nullopt;
+        if (result) {
+            const i64 maxOverloadLevel = this->Counters.Portions->GetMaxOverloadLevel();
+            if (result->Priority.GetLevel() < maxOverloadLevel - Settings.MaxPriorityGap) {
+                TasksSkippedByPriorityGap->Inc();
+                return std::nullopt;
+            }
+            GeneratedTasksPriorityLevel->Collect(result->Priority.GetLevel());
         }
 
         return result;

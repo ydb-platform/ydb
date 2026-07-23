@@ -48,6 +48,9 @@ struct TTilingSettings {
     /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).
     ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
     bool EnableCompatibilityMode = true;
+    /// A compaction task is only allowed to run when its priority level is within this gap of the
+    /// current global maximum overload level across all nodes.
+    i64 MaxPriorityGap = 3;
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

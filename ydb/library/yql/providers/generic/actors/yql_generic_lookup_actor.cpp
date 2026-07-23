@@ -225,7 +225,6 @@ namespace NYql::NDq {
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
             CredentialsProvider->AsyncCredentials().Apply([
                     connector = Connector,
                     readRequest = std::move(readRequest),
@@ -248,7 +247,7 @@ namespace NYql::NDq {
                         SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                     }
                 } catch (std::exception& ex) {
-                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(retyState));
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(retryState));
                 }
             });
         }

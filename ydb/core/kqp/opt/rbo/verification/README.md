@@ -39,9 +39,9 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The latest complete formula-only measurements reran both suites on 2026-07-23,
-before the explicit general scalar-error commits described below. They
-establish formula construction for TPCH q1, q3, q5, q6,
+The latest complete formula-only measurements reran both suites on 2026-07-23
+after the general scalar-error and bounded-choice hardening described below.
+They establish formula construction for TPCH q1, q3, q5, q6,
 q10, q11, q12, q14, q15, and q19 plus TPC-DS q3, q5, q15, q19, q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q71, q76, q77,
 q79, q80, q82, q88, q90, q91, q93, q96, and q99: 41/121 workload queries
@@ -49,24 +49,21 @@ q79, q80, q82, q88, q90, q91, q93, q96, and q99: 41/121 workload queries
 failures; TPC-DS has thirty-one formulas, forty unsupported queries, and
 twenty-eight optimizer failures. Across both suites that is 49 unsupported
 queries and 31 optimizer failures. The complete TPCH dashboard spent
-2,754/6,017 ms and TPC-DS spent 54,058/178,875 ms in
-preparation/verification, or 56,812/184,892 ms together.
-No later complete dashboard is inferred from focused unit or host tests; the
-recorded counts remain the coverage baseline until both suites are rerun.
-Within TPC-DS, q9 is the only inventory-category change from the preceding
-complete run: optimizer preparation now succeeds and exposes unsupported final
-Read range/ordering semantics, so it moves from optimizer failure to
-unsupported without changing formula coverage.
+2,928/6,655 ms and TPC-DS spent 66,719/192,475 ms in
+preparation/verification, or 69,647/199,130 ms together. Status membership is
+unchanged from the preceding complete dashboard. The refreshed unsupported
+inventory records the post-general-scalar boundary reasons, including
+TPC-DS q54's initial `Invalid Map rename source _yql_source_5.segment`.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q11, q12, q14, q15, and q19 plus TPC-DS
 q3, q42, q48, q52, q55, q90, q93, and q96: fifteen obligations (12.4% of the
 workload). The latest TPCH proof-floor run prepared/verified q3 in
-116/3,168 ms, q6 in 61/775 ms, q11 in 158/6,585 ms, q12 in 88/2,085 ms,
-q14 in 91/34,457 ms, q15 in 199/2,750 ms, and q19 in 118/872 ms. The latest
+99/2,823 ms, q6 in 61/710 ms, q11 in 175/7,265 ms, q12 in 103/1,739 ms,
+q14 in 86/31,035 ms, q15 in 177/7,058 ms, and q19 in 117/913 ms. The latest
 TPC-DS proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90,
-q93, and q96 prepared/verified in 112/5,049, 101/4,726, 192/4,006, 99/4,599,
-116/4,194, 280/8,542, 102/2,319, and 117/508 ms, respectively.
+q93, and q96 prepared/verified in 126/4,589, 101/5,068, 194/4,051, 100/4,289,
+97/3,987, 280/8,201, 109/2,252, and 115/496 ms, respectively.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
@@ -530,7 +527,7 @@ The subsequent narrow scalar gates lower only a nullable direct comparison
 under exact `Coalesce(..., false)` and only an exact constant Decimal `Just`.
 They retain wrapper semantics and Optional schema with existing `IfPresent` and
 `If` nodes; broader shapes still fail closed to opaque modeling. The old q6 and
-q14 witnesses disappear, and the current policy-backed run returns
+q14 witnesses disappear, and the then-current policy-backed run returned
 `VERIFIED_BOUNDED` after 72/749 and 97/33,152 ms, respectively. Both obligations
 now enter the proof floor. A bounded UNSAT result has no witness to replay; q5
 and q10 remain unproved, and no optimizer correctness bug is confirmed.
@@ -540,9 +537,9 @@ The subsequent q12 gate admits only exact
 `Coalesce(And(member != literal, member != literal), false)` forms. Both leaves
 must compare the same direct `Optional<String>` member with a non-null `String`
 literal; broader Boolean trees remain opaque. The wrapper again
-lowers through schema-preserving `if_present`. The fresh complete dashboard
-records q12 as `FORMULA_EMITTED` after 109/5,343 ms of preparation/verifier
-work; an earlier focused formula run recorded 108/5,816 ms. Focused and
+lowers through schema-preserving `if_present`. At that milestone the complete
+dashboard recorded q12 as `FORMULA_EMITTED` after 109/5,343 ms of
+preparation/verification; an earlier focused formula run recorded 108/5,816 ms. Focused and
 policy-backed proofs returned `VERIFIED_BOUNDED`: the focused run recorded
 108/38,880 ms and the then-current policy-floor run 106/40,602 ms. This raises
 TPCH formula coverage to 7/22, total formula coverage to 28/121 (23.1%), TPCH
@@ -662,10 +659,10 @@ That exact static slice moved TPCH q11 and q15 through formula construction and
 into the checked-in proof floor. In the complete formula dashboard they spent
 176/558 and 152/462 ms in preparation/verification. The post-hardening proof
 floor returned `VERIFIED_BOUNDED` after 158/6,585 and 199/2,750 ms,
-respectively. The recorded dashboard remains 41/121 formulas (33.9%) and the
-proof floor remains 15/121 (12.4%). These are preserved historical
-measurements from before the general scalar-error implementation; no fresh
-dashboard metric is inferred from the unit coverage below.
+respectively. At that historical checkpoint the dashboard had 41/121 formulas
+(33.9%) and the proof floor had 15/121 obligations (12.4%). These preserved
+measurements predate the general scalar-error implementation; the fresh current
+measurements are reported at the top of this document.
 
 Commit `b2cd6e3c5bb` adds the explicit outcome algebra, and `f930f1352e7`
 introduces general uncorrelated scalar subplans within the modeled relational
@@ -707,12 +704,11 @@ observes the exact post-Skip/post-Take relation independently in each stage
 task.
 
 TPC-DS q24 still has the independent `Unsupported scalar callable Map` blocker.
-The recorded q54 reasons—an initially non-statically-single-row binding and an
-unrepresentable final Limit—describe the preceding complete dashboard. A full
-dashboard has not yet been rerun on general scalar errors, so this document
-does not claim new q54 formula coverage. Restricted relational `EXISTS`,
-dynamic `IN`, and correlated subplans follow separately; solver/formula-size
-work then promotes supported `UNKNOWN` obligations.
+In the fresh complete dashboard, q54 fails initial export with
+`Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
+Restricted relational `EXISTS`, dynamic `IN`, and correlated subplans follow
+separately; solver/formula-size work then promotes supported `UNKNOWN`
+obligations.
 
 The audit has found seven production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix

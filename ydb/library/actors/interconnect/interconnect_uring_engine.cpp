@@ -358,7 +358,7 @@ namespace NActors {
 
         public:
             static NMonitoring::IHistogramCollectorPtr TimeCollector() {
-                return NMonitoring::ExponentialHistogram(22, 2);
+                return NMonitoring::ExponentialHistogram(22, 2, 1000);
             }
 
             TShard(const NMonitoring::TDynamicCounterPtr& shardCounters, bool sqpoll)

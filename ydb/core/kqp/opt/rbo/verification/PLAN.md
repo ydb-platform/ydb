@@ -2,7 +2,7 @@
 
 ## Objective
 
-Build a small, auditable correctness checker for the new RBO. For a bounded
+Build a focused, auditable correctness checker for the new RBO. For a bounded
 symbolic database, it searches for an input on which the initial RBO operator
 tree and the final pre-physical StageGraph program return different results.
 
@@ -79,7 +79,7 @@ Costs, estimates, trace strings, and pointer identities are excluded.
 
 ## Trusted kernel
 
-The trusted Python code is deliberately split into small semantic modules:
+The trusted Python code is deliberately split into explicit semantic modules:
 
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
@@ -91,6 +91,12 @@ rbo_verifier/relation.py    bounded bag/sequence operator semantics
 rbo_verifier/stages.py      two-task StageGraph and connection semantics
 rbo_verifier/verify.py      one counterexample formula and verdict decoding
 ```
+
+The current proof-producing boundary, external assumptions, audited physical
+size, and vertical-slice review procedure are maintained in
+[TRUSTED_CORE.md](TRUSTED_CORE.md). The subsystem is audited by semantic slice;
+the compact top-level obligation builder is not used as a proxy for total
+trusted-code size.
 
 The kernel has no YDB client, optimizer tracing, benchmark discovery, or
 transformation-prefix localization logic. The kernel emits inspectable SMT-LIB and invokes an
@@ -555,9 +561,10 @@ Implementation sequence:
     uncorrelated scalar subplans with consumer-demanded local cardinality
     errors and eager inherited errors;
 27. M4: exact uncorrelated and one-equality-correlated relational `EXISTS`;
-28. next: auditability consolidation and independent C++/Python contract review;
-29. later: equality-correlated scalar, dynamic `IN`, and broader `EXISTS`;
-30. later: proof scaling, distinct expansion, range reads, and other OLAP
+28. M4: trusted-core map and independent C++/Python auditability review;
+29. next: mechanical C++ subplan-exporter phase separation;
+30. later: equality-correlated scalar, dynamic `IN`, and broader `EXISTS`;
+31. later: proof scaling, distinct expansion, range reads, and other OLAP
     pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -1438,7 +1445,7 @@ side remains the normal StageGraph, with no `EXISTS`-specific equivalence
 shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
-through the real host. Current full suites pass 430/430 verifier, 167/167 C++,
+through the real host. Current full suites pass 431/431 verifier, 167/167 C++,
 43/43 inspector, and 26/26 real-host integration tests. The complete dashboards
 move TPCH q4/q22 and TPC-DS q10/q69 to formula construction; q35 instead exposes
 `Unsupported scalar type Double`. None of these rows extends the fifteen-query

@@ -264,10 +264,14 @@ def symbol(name: str, sort: str) -> Term:
 
 
 def bool_value(value: bool) -> Term:
+    if type(value) is not bool:
+        raise SmtError(f"Boolean literal must be bool, got {type(value).__name__}")
     return Term(BOOL, "bool", atom=value)
 
 
 def int_value(value: int) -> Term:
+    if type(value) is not int:
+        raise SmtError(f"integer literal must be int, got {type(value).__name__}")
     return Term(INT, "int", atom=value)
 
 

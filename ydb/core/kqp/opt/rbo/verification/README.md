@@ -4,7 +4,9 @@ This directory contains the standalone bounded-equivalence checker described in
 [PLAN.md](PLAN.md). It compares two versioned semantic snapshots and asks Z3 for
 a bounded input database on which their result bags or ordered sequences differ.
 The reproducible 121-query dashboard contract and current unsupported inventory
-are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
+are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md). The current
+proof-producing trust boundary, assumptions, size, and slice-by-slice review
+procedure are indexed in [TRUSTED_CORE.md](TRUSTED_CORE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
@@ -732,7 +734,7 @@ optimized side remains the ordinary final StageGraph, with no subplan-specific
 equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
-through the real host. The current complete suites pass 430/430 verifier tests,
+through the real host. The current complete suites pass 431/431 verifier tests,
 167/167 C++ exporter tests, 43/43 inspector tests, and 26/26 real-host
 integration tests. Dynamic `IN`, correlated scalar subplans, multiple
 dependencies, and broader correlations remain separate extensions.
@@ -1320,7 +1322,10 @@ fails closed above 100,000 unique terms. Enabling the read-only observers
 without aliases is regression-tested to leave the normal SMT-LIB obligation
 byte-for-byte unchanged. Every trace carries SHA-256 digests of the complete
 normalized before/after snapshots; supplying `--query` also binds the exact
-query bytes and is mandatory for real replay.
+query bytes and is mandatory for real replay. The semantic digest is defined by
+the complete renderer in the producing revision. If renderer coverage changes,
+older artifacts whose digest no longer matches fail closed during replay; the
+trace protocol version alone does not claim cross-revision digest stability.
 When tracing a saved verifier candidate, `--verifier-verdict verdict.json`
 constrains the rebuilt obligation to that verdict's decoded base-table rows.
 The inspector may resolve routing decisions, bounded plan choices, and

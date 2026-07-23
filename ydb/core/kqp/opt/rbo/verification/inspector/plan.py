@@ -169,6 +169,17 @@ def _order(item: ir.SortOrder) -> str:
     return f"{{column={_quote(item.column)}, direction={direction}, nulls={nulls}}}"
 
 
+def _average_state(state: ir.AverageStateType | None) -> str:
+    return _optional(
+        state,
+        lambda item: (
+            f"{{sum_type={_quote(item.sum_type)}, "
+            f"count_type={_quote(item.count_type)}, "
+            f"nullable={_boolean(item.nullable)}}}"
+        ),
+    )
+
+
 def render_node(node: ir.PlanNode) -> str:
     """Render one plan operator, including all fields specific to its variant."""
 
@@ -220,7 +231,7 @@ def render_node(node: ir.PlanNode) -> str:
                 f"{{input={_quote(item.input)}, function={_quote(item.function)}, "
                 f"output={_quote(item.output)}, type={_quote(item.output_type)}, "
                 f"nullable={_boolean(item.output_nullable)}, distinct={_boolean(item.distinct)}, "
-                f"unwrap={_boolean(item.unwrap)}}}"
+                f"unwrap={_boolean(item.unwrap)}, state={_average_state(item.state)}}}"
             ),
         )
         return (

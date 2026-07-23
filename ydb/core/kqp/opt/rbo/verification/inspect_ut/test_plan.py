@@ -267,8 +267,40 @@ class OperatorRendererTest(unittest.TestCase):
                 ),
                 'node "aggregate" aggregate input="scan" keys=["a.k"] '
                 'aggregates=[{input="a.k", function="count", output="count", '
-                'type="Uint64", nullable=false, distinct=false, unwrap=true}] '
+                'type="Uint64", nullable=false, distinct=false, unwrap=true, '
+                'state=none}] '
                 'phase=undefined distinct_all=false',
+            ),
+            (
+                ir.Aggregate(
+                    "average",
+                    "scan",
+                    (),
+                    (
+                        ir.AggregateTrait(
+                            "a.k",
+                            "avg",
+                            "average",
+                            "Decimal(7,2)",
+                            True,
+                            False,
+                            False,
+                            ir.AverageStateType(
+                                "Decimal(35,2)",
+                                "Uint64",
+                                True,
+                            ),
+                        ),
+                    ),
+                    "intermediate",
+                    False,
+                ),
+                'node "average" aggregate input="scan" keys=[] '
+                'aggregates=[{input="a.k", function="avg", output="average", '
+                'type="Decimal(7,2)", nullable=true, distinct=false, '
+                'unwrap=false, state={sum_type="Decimal(35,2)", '
+                'count_type="Uint64", nullable=true}}] '
+                'phase=intermediate distinct_all=false',
             ),
             (
                 ir.Join("join", "left", "right", "inner", predicate),

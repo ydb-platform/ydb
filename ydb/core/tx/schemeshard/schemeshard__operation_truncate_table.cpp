@@ -228,11 +228,6 @@ public:
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 
-        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
-            return result;
-        }
-
         const auto& truncateTableOp = Transaction.GetTruncateTable();
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), truncateTableOp.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);

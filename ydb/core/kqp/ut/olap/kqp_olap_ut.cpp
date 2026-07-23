@@ -5194,7 +5194,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(TruncateColumnTableFails) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();

@@ -40,6 +40,7 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_actualizer.cpp
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_scan_snapshot_guard.cpp

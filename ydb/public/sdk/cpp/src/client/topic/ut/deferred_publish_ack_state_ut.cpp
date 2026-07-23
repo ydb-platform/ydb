@@ -130,10 +130,13 @@ Y_UNIT_TEST(CopySharesAckState) {
 }
 
 Y_UNIT_TEST(MoveTransfersAckState) {
-    TDeferredPublication a(42);
+    TDeferredPublication a(42, "ext-42");
     UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->TryOnWrite());
 
     TDeferredPublication b = std::move(a);
+    UNIT_ASSERT_VALUES_EQUAL(b.IntPublicationId, 42u);
+    UNIT_ASSERT(b.ExtPublicationId.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(*b.ExtPublicationId, "ext-42");
     UNIT_ASSERT(NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a).get()
         != NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b).get());
 
@@ -142,7 +145,9 @@ Y_UNIT_TEST(MoveTransfersAckState) {
     NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(b)->OnAck();
     UNIT_ASSERT(waitB.Wait(TDuration::Seconds(1)));
 
-    // Moved-from handle has a fresh empty state.
+    // Moved-from handle is unusable for finalize: ids cleared, fresh empty state.
+    UNIT_ASSERT_VALUES_EQUAL(a.IntPublicationId, 0u);
+    UNIT_ASSERT(!a.ExtPublicationId.has_value());
     auto waitA = NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(a)->WaitAllAcks();
     UNIT_ASSERT(waitA.HasValue());
     UNIT_ASSERT(waitA.GetValue().IsSuccess());

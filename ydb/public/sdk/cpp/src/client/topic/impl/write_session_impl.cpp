@@ -124,6 +124,9 @@ NYdb::NIssue::TIssues ValidateDeferredPublicationMessage(const TWriteMessage& me
     if (message.DeferredPublication_->IntPublicationId == 0) {
         issues.AddIssue("int_publication_id must be greater than zero");
     }
+    // On Write, ext_publication_id is informational for the server (omit, "" or any string).
+    // Only enforce MaxExtPublicationIdLength so a huge value cannot DoS the request path.
+    // BeginPublication separately requires a non-empty ext id as the client-chosen key.
     if (message.DeferredPublication_->ExtPublicationId
         && message.DeferredPublication_->ExtPublicationId->size()
             > TDeferredPublication::MaxExtPublicationIdLength)

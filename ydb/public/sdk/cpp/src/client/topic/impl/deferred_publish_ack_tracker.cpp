@@ -51,6 +51,8 @@ TDeferredPublication::TDeferredPublication(TDeferredPublication&& other) noexcep
     , ExtPublicationId(std::move(other.ExtPublicationId))
     , AckState_(std::move(other.AckState_))
 {
+    other.IntPublicationId = 0;
+    other.ExtPublicationId.reset();
     other.AckState_ = MakeAckState();
 }
 
@@ -68,6 +70,8 @@ TDeferredPublication& TDeferredPublication::operator=(TDeferredPublication&& oth
         IntPublicationId = other.IntPublicationId;
         ExtPublicationId = std::move(other.ExtPublicationId);
         AckState_ = std::move(other.AckState_);
+        other.IntPublicationId = 0;
+        other.ExtPublicationId.reset();
         other.AckState_ = MakeAckState();
     }
     return *this;

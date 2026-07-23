@@ -1309,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterV2) {
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
-        conf.KeepBTreeIndexV1Shadow = false;
+        conf.BTreeIndexV2KeepV1Shadow = false;
         return conf;
     }
 
@@ -1462,7 +1462,7 @@ namespace {
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
-        conf.KeepBTreeIndexV1Shadow = false;
+        conf.BTreeIndexV2KeepV1Shadow = false;
         switch (params.Levels) {
         case 0:
             conf.Group(0).PageRows = 999;

@@ -571,7 +571,9 @@ namespace NTable {
                     auto finishBTree = [&](TGroupState& g) -> NPage::TBtreeIndexMeta {
                         auto meta = g.BTreeIndex.Finish(Pager);
                         if (g.BTreeIndexV1Shadow) {
-                            meta.RootV1 = g.BTreeIndexV1Shadow->Finish(Pager).RootV1PageId();
+                            auto v1ShadowMeta = g.BTreeIndexV1Shadow->Finish(Pager);
+                            meta.RootV1 = v1ShadowMeta.RootV1PageId();
+                            meta.IndexSize += v1ShadowMeta.IndexSize;
                         }
                         return meta;
                     };
@@ -1228,7 +1230,7 @@ namespace NTable {
                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, conf.WriteBTreeIndexV2)
             {
-                if (conf.KeepBTreeIndexV1Shadow && conf.WriteBTreeIndexV2) {
+                if (conf.BTreeIndexV2KeepV1Shadow && conf.WriteBTreeIndexV2) {
                     BTreeIndexV1Shadow.emplace(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
                                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
                                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, /*writeV2=*/false);

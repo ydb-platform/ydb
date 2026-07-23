@@ -20,10 +20,8 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    namespace {
-        bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
-        }
+    inline bool IsIndexPage(EPage type) noexcept {
+        return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
     }
 
     using TPageOffset = NPage::TPageOffset;

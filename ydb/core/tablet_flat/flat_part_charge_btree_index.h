@@ -137,7 +137,7 @@ public:
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isDataBelow);
+                        key1Ref = node.GetChild( pos, isDataBelow);
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetChildRowCount(pos - 1)); // move beginRowId to the first key >= key1
                         }
@@ -145,7 +145,7 @@ public:
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         TRowId key2ChildRowCount = node.GetChildRowCount(pos);
-                        key2Ref = BuildPageRef(node, pos, isDataBelow);
+                        key2Ref = node.GetChild( pos, isDataBelow);
                         endRowId = Min(endRowId, key2ChildRowCount + 1); // move endRowId - 1 to the first key > key2
                         if (key2ChildRowCount <= sliceBeginRowId) {
                             hasValidRowsRange = false; // key2 is before current slice
@@ -307,12 +307,12 @@ public:
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isDataBelow);
+                        key1Ref = node.GetChild( pos, isDataBelow);
                         endRowId = Min(endRowId, node.GetChildRowCount(pos)); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2Ref = BuildPageRef(node, pos, isDataBelow);
+                        key2Ref = node.GetChild( pos, isDataBelow);
                         if (pos) {
                             auto prevKey2ChildRowCount = node.GetChildRowCount(pos - 1);
                             beginRowId = Max(beginRowId, prevKey2ChildRowCount - 1); // move beginRowId to the last key < key2
@@ -669,7 +669,7 @@ private:
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, scheme.ColsKeyIdx, keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isDataBelow);
+                        key1Ref = node.GetChild( pos, isDataBelow);
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetChildRowCount(pos - 1)); // move beginRowId to the first key >= key1
                         }
@@ -677,7 +677,7 @@ private:
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, scheme.ColsKeyIdx, keyDefaults);
                         TRowId key2ChildRowCount = node.GetChildRowCount(pos);
-                        key2Ref = BuildPageRef(node, pos, isDataBelow);
+                        key2Ref = node.GetChild( pos, isDataBelow);
                         endRowId = Min(endRowId, key2ChildRowCount); // move endRowId to the first key > key2
                     }
                     return true;
@@ -764,7 +764,7 @@ private:
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isDataPage), isDataPage ? groupId : TGroupId{});
+            location = ResolvePageLocation(Part, node.GetChild( pos, isDataPage), isDataPage ? groupId : TGroupId{});
             if (pos) {
                 result = node.GetChildDataSize(pos - 1);
             }
@@ -787,7 +787,7 @@ private:
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isDataPage), isDataPage ? groupId : TGroupId{});
+            location = ResolvePageLocation(Part, node.GetChild( pos, isDataPage), isDataPage ? groupId : TGroupId{});
             result = node.GetChildDataSize(pos);
         }
 
@@ -844,15 +844,6 @@ private:
             0, meta.GetDataSize());
     }
 
-    /// V2 nodes produce byte-offset TPageLocation; V1 nodes produce TPageId
-    static TPageRef BuildPageRef(const TBtreeIndexNode& node, TRecIdx pos, bool isDataPage) {
-        if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-            auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildV2Location(pos, type);
-        }
-        return node.GetChildV1PageId(pos);
-    }
-
     // Version-aware child state builder
     TChildState BuildChildState(const TNodeState& parent, TRecIdx curPos, bool isDataPage) const {
         auto prevPos = curPos - 1;
@@ -863,7 +854,7 @@ private:
         TRowId items = parent.GetChildNonErasedRowCount(curPos);
         ui64 prevBytes = hasPrev ? parent.GetChildDataSize(prevPos) : parent.PrevBytes;
         ui64 bytes = parent.GetChildDataSize(curPos);
-        return TChildState(BuildPageRef(parent, curPos, isDataPage), beginRowId, endRowId, prevItems, items, prevBytes, bytes);
+        return TChildState(parent.GetChild(curPos, isDataPage), beginRowId, endRowId, prevItems, items, prevBytes, bytes);
     }
 
     bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const {

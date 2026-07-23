@@ -95,7 +95,7 @@ namespace {
         NPage::TConf conf{ fin, page };
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
-        conf.KeepBTreeIndexV1Shadow = false;
+        conf.BTreeIndexV2KeepV1Shadow = false;
         return conf;
     }
 
@@ -158,13 +158,13 @@ namespace {
         }
 
         auto dumpChild = [&] (TBtreeIndexNode node, TRecIdx pos) {
-            TChild child;
-            if (node.IsShortChildFormat()) {
-                auto shortChild = node.GetShortChild(pos);
-                child = {shortChild.GetPageId(), shortChild.GetRowCount(), shortChild.GetDataSize(), 0, 0};
-            } else {
-                child = node.GetChild(pos);
-            }
+            auto ref = node.GetChild(pos, /* isDataPage */ false);
+            TChild child{
+                std::holds_alternative<TPageId>(ref) ? std::get<TPageId>(ref) : Max<TPageId>(),
+                node.GetChildRowCount(pos),
+                node.GetChildDataSize(pos),
+                0, 0
+            };
             if (child.GetPageId() < 1000) {
                 Dump(child, groupInfo, store, level + 1);
             } else {
@@ -247,16 +247,26 @@ namespace {
     void CheckChildren(const NPage::TBtreeIndexNode& node, const TVector<TChild>& children) {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount() + 1, children.size());
         for (TRecIdx i : xrange(node.GetKeysCount() + 1)) {
-            UNIT_ASSERT_EQUAL(node.GetChild(i), children[i]);
-            TShortChild shortChild{children[i].GetPageId(), children[i].GetRowCount(), children[i].GetDataSize()};
-            UNIT_ASSERT_EQUAL(node.GetShortChild(i), shortChild);
+            auto ref = node.GetChild(i, false);
+            TPageId pageId = std::holds_alternative<TPageId>(ref)
+                ? std::get<TPageId>(ref) : Max<TPageId>();
+            UNIT_ASSERT_EQUAL(pageId, children[i].GetPageId());
+            UNIT_ASSERT_EQUAL(node.GetChildRowCount(i), children[i].GetRowCount());
+            UNIT_ASSERT_EQUAL(node.GetChildDataSize(i), children[i].GetDataSize());
+            UNIT_ASSERT_EQUAL(node.GetChildTotalDataSize(i) - node.GetChildDataSize(i), children[i].GetGroupDataSize());
+            UNIT_ASSERT_EQUAL(node.GetChildRowCount(i) - node.GetChildNonErasedRowCount(i), children[i].GetErasedRowCount());
         }
     }
 
     void CheckShortChildren(const NPage::TBtreeIndexNode& node, const TVector<TShortChild>& children) {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount() + 1, children.size());
         for (TRecIdx i : xrange(node.GetKeysCount() + 1)) {
-            UNIT_ASSERT_EQUAL(node.GetShortChild(i), children[i]);
+            auto ref = node.GetChild(i, false);
+            TPageId pageId = std::holds_alternative<TPageId>(ref)
+                ? std::get<TPageId>(ref) : Max<TPageId>();
+            UNIT_ASSERT_EQUAL(pageId, children[i].GetPageId());
+            UNIT_ASSERT_EQUAL(node.GetChildRowCount(i), children[i].GetRowCount());
+            UNIT_ASSERT_EQUAL(node.GetChildDataSize(i), children[i].GetDataSize());
         }
     }
 }
@@ -1651,7 +1661,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // All children in the root node must have byte-offset locations
         for (TRecIdx i : xrange(rootNode.GetChildrenCount())) {
-            auto childLoc = rootNode.GetChildV2Location(i, EPage::BTreeIndex);
+            auto ref = rootNode.GetChild(i, false);
+            UNIT_ASSERT_C(std::holds_alternative<TPageLocation>(ref),
+                "Child " + ToString(i) + " must be a V2 byte-offset location");
+            auto& childLoc = std::get<TPageLocation>(ref);
             UNIT_ASSERT_C(childLoc.Offset.IsByteOffset(),
                 "Child " + ToString(i) + " location must be byte offset");
             UNIT_ASSERT_C(childLoc.Size > 0,
@@ -1816,7 +1829,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.KeepBTreeIndexV1Shadow = true;
+        conf.BTreeIndexV2KeepV1Shadow = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1881,7 +1894,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.KeepBTreeIndexV1Shadow = true;
+        conf.BTreeIndexV2KeepV1Shadow = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1894,18 +1907,47 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         UNIT_ASSERT_C(part->IndexPages.BTreeGroups[0].HasRootV1() &&
                       part->IndexPages.BTreeGroups[0].HasRootV2(), "expected dual-root part");
 
-        // Simulate EnableLocalDBBtreeIndexV2 off: copy the metadata, strip V2 root
-        // from every dual-root entry (TTablePart::IndexPages is const, so we work on copies).
-        auto strippedMeta = part->IndexPages.BTreeGroups[0];
-        strippedMeta.RootV2 = NPage::TPageLocation::Max();
+        // Simulate EnableLocalDBBtreeIndexV2 off: build a modified IndexPages
+        // with V2 root stripped from BTreeGroups[0].
+        auto btreeGroups = part->IndexPages.BTreeGroups; // non-const copy
+        btreeGroups[0].RootV2 = NPage::TPageLocation::Max();
+
+        TPart::TIndexPages strippedPages{
+            part->IndexPages.FlatGroups,
+            part->IndexPages.FlatHistoric,
+            std::move(btreeGroups),
+            part->IndexPages.BTreeHistoric,
+        };
 
         // After strip: only V1 root remains, reader falls back to V1
-        AssertV1Root(strippedMeta, "dual-root part after V2 strip");
+        AssertV1Root(strippedPages.BTreeGroups[0], "dual-root part after V2 strip");
 
         // Verify that GetBTreeRootLocation resolves through the V1 root
-        auto rootLocV1 = NTable::GetBTreeRootLocation(strippedMeta,
+        auto rootLocV1 = NTable::GetBTreeRootLocation(strippedPages.BTreeGroups[0],
             part->GetPageCollection(0), part->GetPageCollection(0));
         UNIT_ASSERT_C(rootLocV1, "stripped meta must resolve to a valid V1 root location");
+
+        // Build a modified part sharing the same underlying page data but with
+        // stripped V2 metadata, so iteration truly exercises the V1 fallback path.
+        auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+            part->Store,
+            part->Label,
+            TPart::TParams{
+                part->Epoch,
+                part->Scheme,
+                std::move(strippedPages),
+                part->Blobs,
+                part->ByKeyPrefixes,
+                part->Large,
+                part->Small,
+                part->IndexesRawSize,
+                part->MinRowVersion,
+                part->MaxRowVersion,
+                part->GarbageStats,
+                part->TxIdStats,
+            },
+            part->Stat,
+            part->Slices));
 
         // Create a V2-only reference part with the same data to compare iteration
         NPage::TConf refConf = MakeV2Conf();
@@ -1919,11 +1961,11 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         const auto refPart = refEggs.Lone();
 
         // Verify the V1 fallback (after V2 strip) still produces all rows
-        auto dualRows = CountAllRows(*part);
+        auto v1Rows = CountAllRows(*strippedPart);
         auto refRows = CountAllRows(*refPart);
-        UNIT_ASSERT_VALUES_EQUAL_C(dualRows, refRows,
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Rows, refRows,
             "V1 fallback must have the same row count as V2-only part");
-        UNIT_ASSERT_VALUES_EQUAL_C(dualRows, 700,
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Rows, 700,
             "V1 fallback must produce exactly 700 rows");
     }
 }
@@ -2225,7 +2267,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
             NPage::TConf conf{ true, 7 * 1024 };
             conf.WriteBTreeIndex = true;
             conf.WriteBTreeIndexV2 = true;
-            conf.KeepBTreeIndexV1Shadow = false;
+            conf.BTreeIndexV2KeepV1Shadow = false;
 
             TPartCook cook(lay, conf);
             for (ui32 i : xrange(25)) {
@@ -2250,7 +2292,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
             NPage::TConf conf{ true, 7 * 1024 };
             conf.WriteBTreeIndex = true;
             conf.WriteBTreeIndexV2 = true;
-            conf.KeepBTreeIndexV1Shadow = true;
+            conf.BTreeIndexV2KeepV1Shadow = true;
 
             TPartCook cook(lay, conf);
             for (ui32 i : xrange(25)) {
@@ -2286,7 +2328,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
         NPage::TConf conf{ true, 7 * 1024 };
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
-        conf.KeepBTreeIndexV1Shadow = true;
+        conf.BTreeIndexV2KeepV1Shadow = true;
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
 

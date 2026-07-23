@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             conf.WriteBTreeIndex = true;
             conf.WriteBTreeIndexV2 = v2;
             if (v2) {
-                conf.KeepBTreeIndexV1Shadow = false; // true V2-only: no V1 shadow root
+                conf.BTreeIndexV2KeepV1Shadow = false; // true V2-only: no V1 shadow root
             }
             conf.WriteFlatIndex = false; // b-tree only -> selects the btree group iter
             return conf;

@@ -32,7 +32,7 @@ namespace NWriter {
             const auto none = NTable::NPage::ECache::None;
             const auto regular = NTable::NPage::ECacheMode::Regular;
 
-            bool V2OnlyMode = conf.WriteBTreeIndexV2 && !conf.KeepBTreeIndexV1Shadow;
+            bool V2OnlyMode = conf.WriteBTreeIndexV2 && !conf.BTreeIndexV2KeepV1Shadow;
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache,

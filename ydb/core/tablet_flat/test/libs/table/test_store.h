@@ -67,11 +67,6 @@ namespace NTest {
 
             if (page == Max<TPageId>()) return nullptr;
 
-            if (page >= PageCollections.at(room).size()) {
-                Cerr << "GetPage OOB: room=" << room << " page=" << page
-                     << " size=" << PageCollections.at(room).size() << Endl;
-                PrintBackTrace();
-            }
             return &PageCollections.at(room).at(page);
         }
 
@@ -90,7 +85,7 @@ namespace NTest {
             if (pageId >= PageCollections.at(room).size()) {
                 Cerr << "GetPage(offset) OOB: room=" << room << " pageId=" << pageId
                      << " size=" << PageCollections.at(room).size()
-                     << " offset=" << offset.AsPageIndex()
+                     << " offset=" << (offset.IsPageIndex() ? offset.AsPageIndex() : offset.AsByteOffset())
                      << " isByteOffset=" << offset.IsByteOffset() << Endl;
                 PrintBackTrace();
             }

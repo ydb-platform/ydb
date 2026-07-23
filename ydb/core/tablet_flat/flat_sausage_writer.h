@@ -73,6 +73,7 @@ namespace NPageCollection {
 
         TSharedData Finish(bool empty)
         {
+            Y_ENSURE(SkippedBytes == 0, "PushSkipEntry not called before Finish");
             Flush();
 
             TSharedData meta;

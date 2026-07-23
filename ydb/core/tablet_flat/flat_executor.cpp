@@ -76,7 +76,6 @@ struct TCompactionChangesCtx {
 namespace {
 
 /// IPages env driving a V2 B-tree sticky preload through TBTreePartWalker.
-/// Mirrors TLoaderEnv / TPageCollectionReadEnv.
 class TStickyPreloadEnv : public NTable::IPages {
 public:
     TStickyPreloadEnv(TPrivatePageCache& cache, const NTable::TPartStore& partStore)
@@ -93,8 +92,8 @@ public:
         if (shared) {
             // Keep the ref alive so the returned body pointer stays valid for
             // the remainder of this Step pass (children get parsed from it).
-            PinnedBodies.emplace_back(std::move(shared));
-            return &NSharedCache::TPinnedPageRef(PinnedBodies.back()).GetData();
+            PinnedBodies.push_back(NSharedCache::TPinnedPageRef(std::move(shared)));
+            return &PinnedBodies.back().GetData();
         }
 
         Misses[pageCollection->Id].push_back(location);
@@ -115,7 +114,7 @@ private:
 
     TPrivatePageCache& Cache;
     const NTable::TPartStore& PartStore;
-    TVector<NSharedCache::TSharedPageRef> PinnedBodies;
+    TVector<NSharedCache::TPinnedPageRef> PinnedBodies;
 };
 
 } // namespace
@@ -1625,6 +1624,9 @@ void TExecutor::StartStickyBTreePreload(const NTable::TPartStore& partStore,
 {
     // One composite state per part, pre-built with all V2 sticky groups.
     auto indexCollectionId = partStore.PageCollections[0]->Id;
+    if (StickyPreloadsByIndex.contains(indexCollectionId)) {
+        return;  // preload already in flight
+    }
     auto* state = new TStickyPreloadState;
     state->PartStore = TIntrusiveConstPtr<NTable::TPartStore>(
         const_cast<NTable::TPartStore*>(&partStore));
@@ -1680,6 +1682,7 @@ void TExecutor::DriveStickyBTreePreload(TStickyPreloadState* state) {
     // Some pages are still missing — request them. The StickyPages result
     // handler will re-drive this state when the pages arrive.
     for (auto& [pageCollectionId, locations] : env.Misses) {
+        // no duplicates within a single pass in b-tree per group
         std::sort(locations.begin(), locations.end());
         auto* pageCollection = PrivatePageCache->FindPageCollection(pageCollectionId);
         Y_DEBUG_ABORT_UNLESS(pageCollection, "Sticky preload references unknown page collection");
@@ -5098,10 +5101,10 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Layout.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    comp->Layout.KeepBTreeIndexV1Shadow = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV1Shadow();
+    comp->Layout.BTreeIndexV2KeepV1Shadow = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2ShadowV1Write();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Writer.WriteBTreeIndexV2 = comp->Layout.WriteBTreeIndexV2;
-    comp->Writer.KeepBTreeIndexV1Shadow = comp->Layout.KeepBTreeIndexV1Shadow;
+    comp->Writer.BTreeIndexV2KeepV1Shadow = comp->Layout.BTreeIndexV2KeepV1Shadow;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});

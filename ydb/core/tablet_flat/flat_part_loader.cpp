@@ -137,14 +137,8 @@ void TLoader::StageParseMeta()
             }
 
             /* Without a V1 b-tree the part has no usable index — this is the documented V2-only risk.
-               So don't remove V2-only indexes.
+               Don't remove V2-only indexes.
              */
-
-            //auto isV2OnlyRoot = [](const NPage::TBtreeIndexMeta& m) { return m.HasRootV2() && !m.HasRootV1(); };
-            //BTreeGroupIndexes.erase(std::remove_if(BTreeGroupIndexes.begin(), BTreeGroupIndexes.end(), isV2OnlyRoot),
-            //                        BTreeGroupIndexes.end());
-            //BTreeHistoricIndexes.erase(std::remove_if(BTreeHistoricIndexes.begin(), BTreeHistoricIndexes.end(),
-            //                                          isV2OnlyRoot), BTreeHistoricIndexes.end());
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

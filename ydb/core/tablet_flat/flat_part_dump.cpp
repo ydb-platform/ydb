@@ -310,7 +310,7 @@ namespace {
         bool isLeafLevel = (totalLevels <= 1);
 
         auto dumpChild = [&](const NPage::TBtreeIndexNode &node, NPage::TRecIdx pos) {
-            auto childRef = NTable::BuildPageRef(node, pos, isLeafLevel);
+            auto childRef = node.GetChild(pos, isLeafLevel);
             auto childLoc = NTable::ResolvePageLocation(&part, childRef, {});
             if (childLoc.Type == NPage::EPage::BTreeIndexV2 ||
                 childLoc.Type == NPage::EPage::BTreeIndex) {

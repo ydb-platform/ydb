@@ -6532,15 +6532,22 @@ private:
                 const auto inputNames = OutputNames(*aggregate.GetInput());
                 const auto outputNames = OutputNames(aggregate);
                 const auto traits = aggregate.GetAggregationTraits();
+                const auto& keyColumns = aggregate.GetKeyColumns();
                 if (traits.empty()) {
                     Unsupported("Aggregate has no traits");
+                }
+                if (aggregate.IsDistinctAll() &&
+                    (keyColumns.empty() || traits.size() != keyColumns.size()))
+                {
+                    Unsupported(
+                        "DistinctAll requires one distinct trait for each ordered key");
                 }
 
                 auto keys = JsonArray();
                 THashSet<TString> expectedOutputs;
                 TVector<TString> expectedOutputOrder;
                 THashSet<TString> seenKeys;
-                for (const auto& key : aggregate.GetKeyColumns()) {
+                for (const auto& key : keyColumns) {
                     const TString name = key.GetFullName();
                     if (name.empty() || !inputNames.contains(name) || !seenKeys.insert(name).second) {
                         Unsupported(TStringBuilder() << "Invalid Aggregate key " << name);
@@ -6565,7 +6572,8 @@ private:
                 }
 
                 auto aggregates = JsonArray();
-                for (const auto& trait : traits) {
+                for (size_t index = 0; index < traits.size(); ++index) {
+                    const auto& trait = traits[index];
                     const TString input = trait.OriginalColName.GetFullName();
                     const TString output = trait.ResultColName.GetFullName();
                     if (input.empty() || !inputNames.contains(input) || output.empty() ||
@@ -6578,6 +6586,32 @@ private:
                     const TString outputType = TypeName(
                         OutputType(aggregate, output),
                         &outputNullable);
+                    if (aggregate.IsDistinctAll()) {
+                        const TString key = keyColumns[index].GetFullName();
+                        if (trait.AggFunction != "distinct" ||
+                            input != key ||
+                            trait.Distinct ||
+                            trait.Unwrap)
+                        {
+                            Unsupported(
+                                "DistinctAll traits must be plain distinct "
+                                "aliases of their corresponding ordered keys");
+                        }
+                        bool inputNullable = false;
+                        const TString inputType = TypeName(
+                            OutputType(*aggregate.GetInput(), input),
+                            &inputNullable);
+                        if (inputType != outputType ||
+                            inputNullable != outputNullable)
+                        {
+                            Unsupported(
+                                "DistinctAll output type and nullability must "
+                                "match its input key");
+                        }
+                    } else if (trait.AggFunction == "distinct") {
+                        Unsupported(
+                            "The distinct aggregate requires DistinctAll");
+                    }
                     auto item = JsonMap();
                     item["input"] = input;
                     item["function"] = trait.AggFunction;

@@ -1119,6 +1119,115 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported aggregate phase"):
             parse_snapshot(bad_phase)
 
+    def test_distinct_all_contract_is_exact_and_positional(self):
+        value = minimal_snapshot()
+        value["plan"]["nodes"] = [
+            value["plan"]["nodes"][0],
+            {
+                "id": "distinct",
+                "op": "aggregate",
+                "input": "scan",
+                "keys": ["a.k"],
+                "aggregates": [
+                    {
+                        "input": "a.k",
+                        "function": "distinct",
+                        "output": "result",
+                        "type": "Int64",
+                        "nullable": False,
+                        "distinct": False,
+                        "unwrap": False,
+                    }
+                ],
+                "phase": "undefined",
+                "distinct_all": True,
+            },
+        ]
+        value["plan"]["root"] = "distinct"
+        value["plan"]["output"] = ["result"]
+        for phase in ("undefined", "intermediate", "final"):
+            with self.subTest(phase=phase):
+                candidate = copy.deepcopy(value)
+                candidate["plan"]["nodes"][-1]["phase"] = phase
+                snapshot = parse_snapshot(candidate)
+                self.assertEqual(
+                    [
+                        (column.name, column.type, column.nullable)
+                        for column in snapshot.output_schema()
+                    ],
+                    [("result", "Int64", False)],
+                )
+
+        composite = copy.deepcopy(value)
+        composite["plan"]["nodes"][-1]["keys"].append("a.flag")
+        composite["plan"]["nodes"][-1]["aggregates"].append(
+            {
+                "input": "a.flag",
+                "function": "distinct",
+                "output": "flag_result",
+                "type": "Bool",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+            }
+        )
+        composite["plan"]["output"] = ["result", "flag_result"]
+        snapshot = parse_snapshot(composite)
+        self.assertEqual(
+            [
+                (column.name, column.type, column.nullable)
+                for column in snapshot.output_schema()
+            ],
+            [("result", "Int64", False), ("flag_result", "Bool", True)],
+        )
+
+        reordered = copy.deepcopy(composite)
+        reordered["plan"]["nodes"][-1]["keys"].reverse()
+        with self.assertRaisesRegex(SnapshotError, "plain distinct aliases"):
+            parse_snapshot(reordered)
+
+        mutations = []
+        missing_key = copy.deepcopy(value)
+        missing_key["plan"]["nodes"][-1]["keys"] = []
+        mutations.append(
+            ("one distinct trait", missing_key)
+        )
+
+        wrong_source = copy.deepcopy(value)
+        wrong_source["plan"]["nodes"][-1]["aggregates"][0]["input"] = "a.flag"
+        mutations.append(
+            ("plain distinct aliases", wrong_source)
+        )
+
+        wrong_function = copy.deepcopy(value)
+        wrong_function["plan"]["nodes"][-1]["aggregates"][0]["function"] = "count"
+        mutations.append(
+            ("must use distinct", wrong_function)
+        )
+
+        flagged = copy.deepcopy(value)
+        flagged["plan"]["nodes"][-1]["aggregates"][0]["distinct"] = True
+        mutations.append(
+            ("plain distinct aliases", flagged)
+        )
+
+        wrong_type = copy.deepcopy(value)
+        wrong_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Uint64"
+        mutations.append(
+            ("type and nullability", wrong_type)
+        )
+
+        ordinary = copy.deepcopy(value)
+        ordinary["plan"]["nodes"][-1]["distinct_all"] = False
+        mutations.append(
+            ("distinct aggregate requires DistinctAll", ordinary)
+        )
+
+        for message, malformed in mutations:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(malformed)
+
     def test_decimal_sum_widens_to_max_precision_and_preserves_scale(self):
         value = minimal_snapshot()
         value["schema"]["tables"][0]["columns"][0]["type"] = "Decimal(7,2)"

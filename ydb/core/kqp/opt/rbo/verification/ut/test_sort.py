@@ -765,6 +765,85 @@ class SortIrTest(unittest.TestCase):
 
 
 class SortConcreteDifferentialTest(unittest.TestCase):
+    @staticmethod
+    def _alternative_source():
+        parsed = parse_snapshot(snapshot([scan()], "scan"))
+        script = smt.Script()
+        database = Database(parsed, 2, script)
+        source = RelationEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+        family = RelationFamily(tuple(
+            Outcome(
+                smt.TRUE,
+                source,
+                smt.FALSE,
+                (("branch", branch),),
+            )
+            for branch in range(2)
+        ))
+        return script, database, family
+
+    def test_existing_outcomes_use_ordinals_without_multiplication(self):
+        slot_states = tuple(
+            (ABSENT,) + tuple((key, 0, slot) for key in (None, 0))
+            for slot in range(2)
+        )
+        for ascending, nulls_first in product((False, True), repeat=2):
+            script, database, source = self._alternative_source()
+            order = (SortOrder("a.k1", ascending, nulls_first),)
+            family = relation.sort_family(source, order, script, "sort")
+
+            self.assertEqual(len(family.outcomes), len(source.outcomes))
+            for branch, outcome in enumerate(family.outcomes):
+                self.assertEqual(outcome.decisions, (("branch", branch),))
+                self.assertEqual(len(outcome.choices), 2)
+                self.assertIsNotNone(outcome.relation.ordinals)
+
+            reference_order = [order_item("a.k1", ascending, nulls_first)]
+            for rows in product(*slot_states):
+                self.assertEqual(
+                    _sequences(family, _database_constants(database, rows)),
+                    _reference_sequences(rows, reference_order),
+                    (ascending, nulls_first, rows),
+                )
+
+    def test_alternative_symbolic_sort_keeps_direction_mutation_observable(self):
+        script, database, source = self._alternative_source()
+        ascending = relation.sort_family(
+            source,
+            (SortOrder("a.k1", True, False),),
+            script,
+            "ascending",
+        )
+        descending = relation.sort_family(
+            source,
+            (SortOrder("a.k1", False, False),),
+            script,
+            "descending",
+        )
+        constants = _database_constants(
+            database,
+            ((0, 0, 0), (1, 0, 1)),
+        )
+
+        self.assertNotEqual(
+            _sequences(ascending, constants),
+            _sequences(descending, constants),
+        )
+        self.assertTrue(
+            _satisfiable(
+                relation.family_mismatch(
+                    ascending,
+                    descending,
+                    ScalarEncoder(script),
+                ).counterexample,
+                constants,
+            )
+        )
+
     def test_date_ordering_matches_reference_at_bounds_and_with_nulls(self):
         for ascending, nulls_first in product((False, True), repeat=2):
             order = [order_item("a.k1", ascending, nulls_first)]

@@ -477,6 +477,120 @@ def aggregate_stage_snapshot(
     )
 
 
+def distinct_all_stage_snapshot(staged, connection_kind="hash_shuffle"):
+    trait = {
+        "input": "a.k",
+        "function": "distinct",
+        "output": "result",
+        "type": "Int64",
+        "nullable": True,
+        "distinct": False,
+        "unwrap": False,
+    }
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": ["a.k"],
+        "aggregates": [trait],
+        "phase": "undefined",
+        "distinct_all": True,
+    }
+    nodes = [copy.deepcopy(SCAN_A), aggregate]
+    root = "aggregate"
+    stages = None
+    edges = None
+    if staged:
+        partial = copy.deepcopy(aggregate)
+        partial.update(id="partial", phase="intermediate")
+        partial["aggregates"][0]["output"] = "_distinct"
+        final = copy.deepcopy(aggregate)
+        final.update(
+            id="final",
+            input="partial",
+            keys=["_distinct"],
+            phase="final",
+        )
+        final["aggregates"][0].update(
+            input="_distinct",
+            output="result",
+        )
+        nodes = [copy.deepcopy(SCAN_A), partial, final]
+        root = "final"
+        stages = [
+            _stage("source", ["a", "partial"], [], ["partial"], "column"),
+            _stage("root", ["final"], ["partial"], ["final"]),
+        ]
+        connection = (
+            {
+                "kind": "hash_shuffle",
+                "keys": ["_distinct"],
+                "hash_function": "HashV1",
+                "use_spilling": False,
+            }
+            if connection_kind == "hash_shuffle"
+            else {"kind": connection_kind}
+        )
+        edges = [
+            _edge(
+                "distinct_edge",
+                "source",
+                "root",
+                0,
+                0,
+                **connection,
+            )
+        ]
+
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][0]["nullable"] = True
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            root,
+            ["result"],
+            stages,
+            edges,
+        )
+    )
+
+
+def composite_distinct_all_snapshot():
+    columns = (("a.k", "first"), ("a.x", "second"))
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [source for source, _ in columns],
+        "aggregates": [
+            {
+                "input": source,
+                "function": "distinct",
+                "output": output,
+                "type": "Int64",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+            }
+            for source, output in columns
+        ],
+        "phase": "undefined",
+        "distinct_all": True,
+    }
+    schema_value = _stage_schema("A")
+    for column in schema_value["tables"][0]["columns"]:
+        column["nullable"] = True
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [copy.deepcopy(SCAN_A), aggregate],
+            "aggregate",
+            [output for _, output in columns],
+        )
+    )
+
+
 def duplicated_grouped_aggregate_snapshot(function, nullable_key=False):
     def project(node_id, prefix):
         return {
@@ -1973,6 +2087,28 @@ class ConstructionAuditBoundTest(unittest.TestCase):
 
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_composite_distinct_all_matches_nullable_tuple_set_reference(self):
+        snapshot = composite_distinct_all_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        states = (None,) + tuple(product((None, 0, 1), repeat=2))
+        for rows in product(states, repeat=2):
+            with self.subTest(rows=rows):
+                actual = self._symbolic_bag(
+                    relation,
+                    self._constants(database, rows),
+                )
+                expected = Counter(
+                    row for row in set(rows) if row is not None
+                )
+                self.assertEqual(actual, expected)
+
     def test_structural_key_classes_are_exact_and_nonrecursive(self):
         left = smt.symbol("same_key", smt.INT)
         right = smt.symbol("same_key", smt.INT)
@@ -2462,6 +2598,41 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                         placements,
                     )
                     self.assertEqual(actual, expected, (rows, placements))
+
+    def test_split_distinct_all_matches_independent_task_reference(self):
+        snapshot = distinct_all_stage_snapshot(True)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        router = Router(script)
+        relation = StageEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+            router,
+        ).root().certain()
+
+        states = (None,) + tuple((key, 0) for key in (None, 0, 1))
+        for rows, placements in product(
+            product(states, repeat=2),
+            product((False, True), repeat=2),
+        ):
+            constants = self._constants(database, rows)
+            for slot, placement in enumerate(placements):
+                constants[router.source_task("A", slot).atom] = placement
+            actual = self._symbolic_bag(
+                relation,
+                constants,
+                self._hash_choice,
+            )
+            expected = Counter(
+                (key,)
+                for key in {
+                    row[0]
+                    for row in rows
+                    if row is not None
+                }
+            )
+            self.assertEqual(actual, expected, (rows, placements))
 
     def test_decimal_aggregates_match_independent_special_null_and_group_reference(self):
         self.assertEqual(decimal.INF, REFERENCE_DECIMAL_INF)
@@ -3336,6 +3507,25 @@ class RestrictedModelSmokeTest(unittest.TestCase):
 
 
 class StageGraphRestrictedModelTest(unittest.TestCase):
+    def test_split_distinct_all_matches_logical_deduplication(self):
+        logical = distinct_all_stage_snapshot(False)
+        staged = distinct_all_stage_snapshot(True)
+        self.assertEqual(stage_task_counts(staged), {"source": 2, "root": 2})
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_problem(logical, staged, 2).script
+            )
+        )
+
+    def test_nonshuffled_partial_distinct_all_has_a_duplicate_witness(self):
+        logical = distinct_all_stage_snapshot(False)
+        corrupted = distinct_all_stage_snapshot(True, connection_kind="map")
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_problem(logical, corrupted, 2).script
+            )
+        )
+
     def test_split_aggregates_match_logical_aggregation(self):
         cases = (
             ("count", "Int64"),
@@ -3734,6 +3924,34 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_split_distinct_all_is_bounded_equivalent(self):
+        result = solve(
+            build_problem(
+                distinct_all_stage_snapshot(False),
+                distinct_all_stage_snapshot(True),
+                2,
+                30_000,
+            ),
+            SOLVER,
+            2,
+            30_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_nonshuffled_partial_distinct_all_has_a_solver_counterexample(self):
+        result = solve(
+            build_problem(
+                distinct_all_stage_snapshot(False),
+                distinct_all_stage_snapshot(True, connection_kind="map"),
+                2,
+                10_000,
+            ),
+            SOLVER,
+            2,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+
     def test_choice_dependent_opaque_domains_prove_self_equivalence(self):
         for result_type in (
             "String",

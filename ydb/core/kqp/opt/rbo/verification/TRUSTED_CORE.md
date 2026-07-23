@@ -107,16 +107,28 @@ to existing exact `if`/`if_present` IR. Type, nullability, direct-member,
 literal, visibility, metadata, depth, and construction-budget checks all fail
 closed; near-miss shapes remain opaque.
 
-The post-correlated-COUNT-repair 2026-07-23 physical-line audit recorded:
+The `DistinctAll` slice crosses only `semantic_snapshot.cpp`, `ir.py`, and
+`relation.py`. Both validation boundaries require nonempty ordered keys and
+one positional, unflagged `distinct` alias per key with identical type and
+nullability. Evaluation reuses the existing exact null-safe grouped-row
+construction and returns only each representative key tuple under those
+aliases; empty input therefore stays empty. Intermediate and final evaluation
+remain ordinary task-local aggregation, so HashShuffle correctness is checked
+by the normal StageGraph model rather than a special equivalence rule.
+Independent nullable composite-key enumeration, malformed exporter/IR shapes,
+staged routing, a non-shuffled duplicate witness, solver checks, and a
+real-host transformation cover the vertical path.
+
+The post-`DistinctAll` 2026-07-23 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,340 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,016 |
-| **Proof-producing code total** | **18,356** |
-| Tests, outside the TCB | 42,193 |
+| Nine trusted Python semantic modules | 10,393 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,050 |
+| **Proof-producing code total** | **18,443** |
+| Tests, outside the TCB | 42,695 |
 | Diagnostic/orchestration tools, outside the TCB | 5,119 |
-| Documentation, outside the TCB | 4,697 |
+| Documentation, outside the TCB | 4,777 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by
@@ -204,7 +216,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/exporter mutations; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, and real-host Decimal-AVG cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/DistinctAll exporter and IR mutations; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, and real-host Decimal-AVG cases |
 | StageGraph and routing | `semantic_snapshot.cpp`; `ir.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

@@ -745,15 +745,18 @@ class Evaluator:
         raise AssertionError(f"unknown plan node {type(node).__name__}")
 
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
-        if node.distinct_all:
-            raise RelationError("DistinctAll aggregate semantics are not modeled")
         if any(trait.distinct for trait in node.aggregates):
             raise RelationError("distinct aggregate semantics are not modeled")
         if any(trait.unwrap for trait in node.aggregates):
             raise RelationError("unwrapped aggregate semantics are not modeled")
+        modeled_functions = (
+            {"distinct"}
+            if node.distinct_all
+            else {"avg", "count", "max", "sum"}
+        )
         unsupported = sorted(
             {trait.function for trait in node.aggregates}
-            - {"avg", "count", "max", "sum"}
+            - modeled_functions
         )
         if unsupported:
             raise RelationError(
@@ -761,7 +764,13 @@ class Evaluator:
             )
 
         rows: list[Row] = []
-        if not node.keys:
+        if node.distinct_all:
+            if not node.keys or len(node.keys) != len(node.aggregates):
+                raise RelationError(
+                    "DistinctAll requires one distinct trait for each ordered key"
+                )
+            rows.extend(self._grouped_aggregate_rows(node, source))
+        elif not node.keys:
             matches = tuple(row.present for row in source.rows)
             present = smt.or_(*matches) if node.phase == "intermediate" else smt.TRUE
             rows.append(
@@ -954,6 +963,13 @@ class Evaluator:
         matches: tuple[smt.Term, ...],
         candidate: Row | None,
     ) -> dict[str, Value]:
+        if node.distinct_all:
+            if candidate is None:
+                raise RelationError("DistinctAll requires a group representative")
+            return {
+                trait.output: candidate.values[key]
+                for key, trait in zip(node.keys, node.aggregates)
+            }
         values = (
             {}
             if candidate is None
@@ -1995,10 +2011,10 @@ def sort_family(
 ) -> RelationFamily:
     """Represent every tie-respecting Sort sequence exactly.
 
-    Families with at most three candidate rows stay quantifier-free for solver
-    performance.  Larger inputs, or small families whose combined permutations
-    exceed the outcome audit cap, use bounded ordinal choices for the same
-    sequence language with quadratic construction.
+    A single-outcome family with at most three candidate rows stays
+    quantifier-free for solver performance.  Once the input already has
+    alternatives, bounded ordinal choices preserve the same sequence language
+    without multiplying those outcomes.
     """
 
     if not order:
@@ -2035,7 +2051,7 @@ def sort_family(
         ),
         "sort construction",
     )
-    if _use_enumerated_sequences(source):
+    if len(source.outcomes) == 1 and _use_enumerated_sequences(source):
         return _enumerated_sort_family(source, order, decision)
     outcomes: list[Outcome] = []
     for source_outcome in source.outcomes:
@@ -2471,7 +2487,13 @@ def limit_family(
         _live_row_count(outcome.relation) <= 1
         for outcome in source.outcomes
     )
-    if count == 0 or (
+    within_limit = all(
+        _live_row_count(outcome.relation) <= count
+        for outcome in source.outcomes
+    )
+    if offset == 0 and within_limit:
+        result = source
+    elif count == 0 or (
         offset > 0
         and at_most_one
     ):

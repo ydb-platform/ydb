@@ -9877,24 +9877,121 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["nullable"].GetBooleanSafe(), true);
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["distinct"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["unwrap"].GetBooleanSafe(), true);
+    }
 
+    Y_UNIT_TEST(DistinctAllContractIsExactAndPositional) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"x", "Int64", false},
+            {"y", "Int64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x", "y"});
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+            {"a.y", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
         auto distinctAll = MakeIntrusive<TOpAggregate>(
             read,
-            TVector<TOpAggregationTraits>{TOpAggregationTraits(
-                TInfoUnit("a.x"), "distinct", TInfoUnit("a.x"))},
-            TVector<TInfoUnit>{TInfoUnit("a.x")},
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"), "distinct", TInfoUnit("distinct_x")),
+                TOpAggregationTraits(
+                    TInfoUnit("a.y"), "distinct", TInfoUnit("distinct_y")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("a.x"), TInfoUnit("a.y")},
             EOpPhase::Undefined,
             true,
             pos);
         SetOutputType(ctx, *distinctAll, {
-            {"a.x", NUdf::EDataSlot::Int64, true},
+            {"distinct_x", NUdf::EDataSlot::Int64, true},
+            {"distinct_y", NUdf::EDataSlot::Int64, true},
         });
-        TOpRoot distinctRoot(distinctAll, pos, {"a.x"});
+        TOpRoot distinctRoot(
+            distinctAll,
+            pos,
+            {"distinct_x", "distinct_y"});
         const auto distinctSnapshot = ParseSupported(
             ExportSemanticSnapshotV1(distinctRoot, ctx.RboCtx));
+        const auto& distinctNode = FindNode(distinctSnapshot, "aggregate");
         UNIT_ASSERT_VALUES_EQUAL(
-            FindNode(distinctSnapshot, "aggregate")["distinct_all"].GetBooleanSafe(),
+            distinctNode["distinct_all"].GetBooleanSafe(),
             true);
+        const auto& distinctKeys = distinctNode["keys"].GetArraySafe();
+        const auto& distinctTraits =
+            distinctNode["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(distinctKeys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(distinctTraits.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctKeys[0].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctTraits[0]["input"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctTraits[0]["output"].GetStringSafe(),
+            "distinct_x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctKeys[1].GetStringSafe(),
+            "a.y");
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctTraits[1]["input"].GetStringSafe(),
+            "a.y");
+        UNIT_ASSERT_VALUES_EQUAL(
+            distinctTraits[1]["output"].GetStringSafe(),
+            "distinct_y");
+
+        const auto assertDistinctUnsupported = [&](
+            TStringBuf expectedReason)
+        {
+            const auto result =
+                ExportSemanticSnapshotV1(distinctRoot, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReason);
+        };
+
+        distinctAll->KeyColumns.clear();
+        assertDistinctUnsupported("one distinct trait for each ordered key");
+        distinctAll->KeyColumns = {
+            TInfoUnit("a.x"),
+            TInfoUnit("a.y"),
+        };
+
+        distinctAll->KeyColumns = {
+            TInfoUnit("a.y"),
+            TInfoUnit("a.x"),
+        };
+        assertDistinctUnsupported("plain distinct aliases");
+        distinctAll->KeyColumns = {
+            TInfoUnit("a.x"),
+            TInfoUnit("a.y"),
+        };
+
+        distinctAll->AggregationTraitsList.front().OriginalColName =
+            TInfoUnit("a.y");
+        assertDistinctUnsupported("plain distinct aliases");
+        distinctAll->AggregationTraitsList.front().OriginalColName =
+            TInfoUnit("a.x");
+
+        distinctAll->AggregationTraitsList.front().AggFunction = "count";
+        assertDistinctUnsupported("plain distinct aliases");
+        distinctAll->AggregationTraitsList.front().AggFunction = "distinct";
+
+        distinctAll->AggregationTraitsList.front().Distinct = true;
+        assertDistinctUnsupported("plain distinct aliases");
+        distinctAll->AggregationTraitsList.front().Distinct = false;
+
+        distinctAll->AggregationTraitsList.front().Unwrap = true;
+        assertDistinctUnsupported("plain distinct aliases");
+        distinctAll->AggregationTraitsList.front().Unwrap = false;
+
+        SetOutputType(ctx, *distinctAll, {
+            {"distinct_x", NUdf::EDataSlot::Uint64, true},
+            {"distinct_y", NUdf::EDataSlot::Int64, true},
+        });
+        assertDistinctUnsupported("type and nullability");
     }
 
     Y_UNIT_TEST(AggregateTypeAnnotationMismatchFailsClosed) {

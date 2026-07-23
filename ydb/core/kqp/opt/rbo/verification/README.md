@@ -24,7 +24,8 @@ explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
 and eager inherited errors, exact one-equality-correlated scalar aggregate
 subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
-plus the benchmark-dashboard parts of M4. The reviewed exact wrapper forms
+exact row-level `DistinctAll` aggregation, plus the benchmark-dashboard parts
+of M4. The reviewed exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
 being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -43,21 +44,37 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-23
-after equality-correlated scalar support. They establish formula construction
-for TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q17, q19, and q22 plus
-TPC-DS q1, q3, q5, q10, q15, q19, q25, q29, q30, q32, q37, q40, q42, q43,
-q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80,
-q81, q82, q88, q90, q91, q92, q93, q96, and q99: 51/121 workload queries
-(42.1%). TPCH has thirteen formulas, six unsupported queries, and three
-optimizer failures; TPC-DS has thirty-eight formulas, thirty-three unsupported
-queries, and twenty-eight optimizer failures. Across both suites that is 39
-unsupported queries and 31 optimizer failures. The new formulas are TPCH q17
-and TPC-DS q1, q30, q32, q81, and q92. TPC-DS q6 passes the correlation gate
-and now fails closed on `DistinctAll`. Formula construction for q30 and q81
-took about 174,386 ms and 218,726 ms, respectively; those long runs are not
-solver proofs. The preceding relational-`EXISTS` complete reports and their
-timings/hashes remain historical records in
+after the correlated-COUNT repair and exact `DistinctAll` support. They
+establish formula construction for TPCH q1, q3, q4, q5, q6, q10, q11, q12,
+q14, q15, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19, q25, q29, q37,
+q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
+q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 46/121 workload
+queries (38.0%). TPCH has twelve formulas, six unsupported queries, and four
+optimizer failures; TPC-DS has thirty-four formulas, thirty-two unsupported
+queries, and thirty-three optimizer failures. Across both suites that is 38
+unsupported queries and 37 optimizer failures.
+
+`DistinctAll` moves TPC-DS q6 through formula construction. The earlier
+correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
+q1, q30, q32, q81, and q92 from formula construction to an optimizer-side
+fail-closed result: those computed correlated aggregate shapes require general
+empty-row reconstruction, which is not yet implemented safely. This is a
+reduction in the formula floor, but not a loss of an established proof; none of
+those six formulas belonged to the solver proof floor.
+
+The complete TPCH run spent 2,497/8,023 ms in preparation/verifier work and
+produced report SHA-256
+`6389617cbc9833f218f104ee7c67e7b46dbd995eb668ee9c04259fb420313a49`;
+TPC-DS spent 54,698/186,809 ms and produced
+`842a745905a7b86d2c4a50d0cff998ff810a78cf311144ea9942d19dc3fc763e`.
+TPC-DS q6 itself emitted its formula after 347/11,882 ms. The preceding
+milestone reports and their timings/hashes remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
+The canonical q6 formula is 32,055,251 bytes after the exact
+already-alternative Sort ordinal representation, down from 627,951,195 bytes
+with explicit permutation multiplication. A 60-second solver experiment
+returned `UNKNOWN` after 327/72,599 ms, with the global deadline exhausted
+before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy still
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and
@@ -109,8 +126,8 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The eighteen-obligation proof floor is confirmed after the correlation slice;
-formula coverage is 51/121 (42.1%).
+The eighteen-obligation proof floor is confirmed after the correlation and
+`DistinctAll` slices; formula coverage is 46/121 (38.0%).
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -780,14 +797,14 @@ optimized side remains the ordinary final StageGraph, with no subplan-specific
 equivalence shortcut.
 
 Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
-through the real host. Current full validation passes 463/463 verifier,
-176/176 C++ exporter/rule tests, 45/45 inspector, 37/37 replay, and 28/28
-real-host integration tests. Dynamic `IN`, multiple dependencies, and broader
-correlations remain separate extensions.
+through the real host. Current full validation passes 472/472 verifier,
+177/177 C++ exporter/rule tests, 45/45 inspector, 37/37 replay, and 29/29
+real-host integration tests. Dynamic `IN`, multiple dependencies, broader
+correlations, range reads, and other OLAP pushdowns remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The next semantic milestone is exact
-`DistinctAll` aggregation, exposed as TPC-DS q6's next blocker. The
-post-correlation eighteen-query proof-floor gate is green.
+dynamic `IN` and broader correlation support. The post-correlation
+eighteen-query proof-floor gate remains unchanged.
 
 The audit has found eight production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -1029,8 +1046,9 @@ outside the exact integral-`SafeCast` and constant normalization gates, and
 aggregate functions outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
-`sum`, Decimal-only `max`, and phase-aware same-type Decimal `avg`, including
-NULL grouping and inputs and optimizer-generated intermediate/final phases.
+`sum`, Decimal-only `max`, phase-aware same-type Decimal `avg`, and row-level
+`DistinctAll`, including NULL grouping and inputs and optimizer-generated
+intermediate/final phases.
 Signed inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both
 integer sums use the runtime's exact 64-bit modular overflow.
 `sum(Decimal(p,s))` widens every input, partial state, and result to
@@ -1068,14 +1086,25 @@ it may pass through routing and relational operators, but every path must
 terminate in a non-distinct, non-unwrapped `count`. Inspecting, dropping, or
 exposing that unit fails closed. `Void` is not a catalog, literal, NULL, or
 opaque-result type.
-`distinct`, `DistinctAll`, `unwrap`, min, non-Decimal max, non-Decimal or
-distinct average, and variance currently return `UNSUPPORTED` rather than use
-an approximation.
+`DistinctAll` accepts a nonempty ordered key list with exactly one positional
+plain `distinct` alias per key. Each alias must preserve the key's exact type
+and nullability; trait-level `distinct`/`unwrap` flags fail closed. Evaluation
+emits one representative renamed key tuple per null-safe composite group, so
+empty input remains empty and duplicate NULL-containing tuples collapse.
+Undefined, intermediate, and final phases use the same local deduplication
+semantics. StageGraph routing remains observable: partial per-task
+deduplication followed by HashShuffle on every intermediate key and final
+deduplication is equivalent, while a non-shuffled split can expose duplicate
+rows normally. Ordinary aggregate `distinct`, `unwrap`, min, non-Decimal max,
+non-Decimal or distinct average, and variance remain `UNSUPPORTED`.
 Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.
 
-An unordered `Limit` is not modeled as an arbitrary fixed vector prefix. For a
+Any literal zero-offset Limit whose count is at least the syntactically live
+candidate-row bound is an exact identity, including statically dead shaped
+rows. Otherwise, an unordered `Limit` is not modeled as an arbitrary fixed
+vector prefix. For a
 nontrivial `Take(1)`, each source outcome has at most one bounded selector and
 one conditional output row; empty and single-candidate cases require no
 selector. The row is present exactly when the input's present-row count exceeds
@@ -1148,14 +1177,17 @@ UnionAll, and grouped aggregation are checked before construction; Sort, Merge,
 and latent-sequence pair preflights may charge at most 16384 audited pairs of
 syntactically live slots before permutations or ordinals are allocated.
 Representation selection and small explicit permutations/interleavings remain
-based on the full shaped row vector. Every explicit outcome family is
-separately capped at 256 alternatives, including non-singleton unordered-Limit
-masks, canonical checked-error outcomes, at-most-three-row sequence choices,
-Cartesian products, and gathers. Nontrivial unordered `Take(1)` instead uses at
-most one bounded choice per source outcome. Other ordered families use bounded
-symbolic ordinals, and cross-plan bag or sequence equality is capped at 4096
-explicit outcome pairs. Exceeding any audit bound returns `UNSUPPORTED` rather
-than allocating an unbounded intermediate or approximating semantics.
+based on the full shaped row vector. A small Sort is enumerated only when its
+input family has one outcome; an already-alternative family uses exact bounded
+ordinals so Sort does not multiply those alternatives. Every explicit outcome
+family is separately capped at 256 alternatives, including non-singleton
+unordered-Limit masks, canonical checked-error outcomes, at-most-three-row
+sequence choices, Cartesian products, and gathers. Nontrivial unordered
+`Take(1)` instead uses at most one bounded choice per source outcome. Other
+ordered families use bounded symbolic ordinals, and cross-plan bag or sequence
+equality is capped at 4096 explicit outcome pairs. Exceeding any audit bound
+returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
+approximating semantics.
 
 Grouped aggregation first gives every complete ordered group-key value an exact
 nonrecursive structural signature. For `N` input rows and `K` distinct

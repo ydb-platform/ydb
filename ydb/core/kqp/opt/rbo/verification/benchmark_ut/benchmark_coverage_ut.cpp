@@ -302,6 +302,19 @@ std::set<ui32> OutcomeIds(const TMap<ui32, TString>& statuses) {
     return result;
 }
 
+TMap<ui32, TString> FormulaFloorStatuses(
+    const TCoveragePolicy& policy,
+    const TSuite& suite)
+{
+    TMap<ui32, TString> result;
+    for (const ui32 queryId :
+         policy.Suites.at(suite.Name).RequiredFormulaQueries)
+    {
+        result[queryId] = "FORMULA_EMITTED";
+    }
+    return result;
+}
+
 TPolicyEvaluation EvaluateCoveragePolicy(
     const TCoveragePolicy& policy,
     const TSuite& suite,
@@ -1253,7 +1266,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({5, 65, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 5, 10, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 65, 68, 69, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
+            std::set<ui32>({3, 5, 6, 10, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 65, 68, 69, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 42, 48, 52, 55, 69, 90, 93, 96}));
@@ -1367,42 +1380,18 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const TMap<ui32, TString> statuses = {
-            {1, "FORMULA_EMITTED"},
-            {3, "FORMULA_EMITTED"},
-            {5, "FORMULA_EMITTED"},
-            {10, "FORMULA_EMITTED"},
-            {15, "FORMULA_EMITTED"},
-            {19, "FORMULA_EMITTED"},
-            {25, "FORMULA_EMITTED"},
-            {29, "FORMULA_EMITTED"},
-            {37, "FORMULA_EMITTED"},
-            {40, "FORMULA_EMITTED"},
-            {42, "FORMULA_EMITTED"},
-            {43, "FORMULA_EMITTED"},
-            {46, "FORMULA_EMITTED"},
-            {48, "FORMULA_EMITTED"},
-            {50, "FORMULA_EMITTED"},
-            {52, "FORMULA_EMITTED"},
-            {55, "FORMULA_EMITTED"},
-            {61, "FORMULA_EMITTED"},
-            {62, "FORMULA_EMITTED"},
-            {65, "FORMULA_EMITTED"},
-            {68, "FORMULA_EMITTED"},
-            {69, "FORMULA_EMITTED"},
-            {71, "FORMULA_EMITTED"},
-            {76, "FORMULA_EMITTED"},
-            {77, "FORMULA_EMITTED"},
-            {79, "FORMULA_EMITTED"},
-            {80, "FORMULA_EMITTED"},
-            {82, "FORMULA_EMITTED"},
-            {88, "FORMULA_EMITTED"},
-            {90, "FORMULA_EMITTED"},
-            {91, "FORMULA_EMITTED"},
-            {93, "FORMULA_EMITTED"},
-            {96, "FORMULA_EMITTED"},
-            {99, "FORMULA_EMITTED"},
-        };
+        auto statuses = FormulaFloorStatuses(policy, Tpcds);
+        ui32 improvementQuery = 0;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            if (!policy.Suites.at(Tpcds.Name)
+                     .RequiredFormulaQueries.contains(queryId))
+            {
+                improvementQuery = queryId;
+                break;
+            }
+        }
+        UNIT_ASSERT(improvementQuery);
+        statuses[improvementQuery] = "FORMULA_EMITTED";
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
@@ -1422,7 +1411,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(80));
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 5, 10, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 65, 68, 69, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
+            OutcomeIds(statuses));
+        UNIT_ASSERT(
+            evaluation.FormulaEmittedQueries.contains(improvementQuery));
 
         const auto report = PolicyEvaluationJson(evaluation);
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
@@ -1448,20 +1439,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const TMap<ui32, TString> statuses = {
-            {1, "FORMULA_EMITTED"},
-            {3, "FORMULA_EMITTED"},
-            {4, "FORMULA_EMITTED"},
-            {5, "FORMULA_EMITTED"},
-            {6, "FORMULA_EMITTED"},
-            {10, "FORMULA_EMITTED"},
-            {11, "FORMULA_EMITTED"},
-            {12, "FORMULA_EMITTED"},
-            {14, "FORMULA_EMITTED"},
-            {15, "FORMULA_EMITTED"},
-            {19, "FORMULA_EMITTED"},
-            {22, "FORMULA_EMITTED"},
-        };
+        const auto statuses = FormulaFloorStatuses(policy, Tpch);
 
         auto verifierEntries = OutcomeIds(statuses);
         const auto current = EvaluateCoveragePolicy(
@@ -1497,20 +1475,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const TMap<ui32, TString> statuses = {
-            {1, "FORMULA_EMITTED"},
-            {3, "FORMULA_EMITTED"},
-            {4, "FORMULA_EMITTED"},
-            {5, "FORMULA_EMITTED"},
-            {6, "FORMULA_EMITTED"},
-            {10, "FORMULA_EMITTED"},
-            {11, "FORMULA_EMITTED"},
-            {12, "FORMULA_EMITTED"},
-            {14, "FORMULA_EMITTED"},
-            {15, "FORMULA_EMITTED"},
-            {19, "FORMULA_EMITTED"},
-            {22, "FORMULA_EMITTED"},
-        };
+        const auto statuses = FormulaFloorStatuses(policy, Tpch);
         const auto current = EvaluateCoveragePolicy(
             policy,
             Tpch,
@@ -1523,9 +1488,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(current.Violations.empty());
         UNIT_ASSERT(
             current.FormulaEmittedQueries ==
-            std::set<ui32>({1, 3, 4, 5, 6, 10, 11, 12, 14, 15, 19, 22}));
+            policy.Suites.at(Tpch.Name).RequiredFormulaQueries);
 
-        for (const ui32 queryId : {1, 4, 5, 6, 10, 11, 12, 14, 15, 22}) {
+        for (const ui32 queryId :
+             policy.Suites.at(Tpch.Name).RequiredFormulaQueries)
+        {
             auto regressedStatuses = statuses;
             regressedStatuses[queryId] = "UNSUPPORTED";
             const auto regressed = EvaluateCoveragePolicy(
@@ -1649,40 +1616,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const TMap<ui32, TString> statuses = {
-            {3, "FORMULA_EMITTED"},
-            {5, "FORMULA_EMITTED"},
-            {10, "FORMULA_EMITTED"},
-            {15, "FORMULA_EMITTED"},
-            {19, "FORMULA_EMITTED"},
-            {25, "FORMULA_EMITTED"},
-            {29, "FORMULA_EMITTED"},
-            {37, "FORMULA_EMITTED"},
-            {40, "FORMULA_EMITTED"},
-            {42, "FORMULA_EMITTED"},
-            {43, "FORMULA_EMITTED"},
-            {46, "FORMULA_EMITTED"},
-            {48, "FORMULA_EMITTED"},
-            {50, "FORMULA_EMITTED"},
-            {52, "FORMULA_EMITTED"},
-            {55, "FORMULA_EMITTED"},
-            {61, "FORMULA_EMITTED"},
-            {62, "FORMULA_EMITTED"},
-            {65, "FORMULA_EMITTED"},
-            {68, "FORMULA_EMITTED"},
-            {69, "FORMULA_EMITTED"},
-            {71, "FORMULA_EMITTED"},
-            {76, "FORMULA_EMITTED"},
-            {77, "FORMULA_EMITTED"},
-            {79, "FORMULA_EMITTED"},
-            {80, "FORMULA_EMITTED"},
-            {82, "FORMULA_EMITTED"},
-            {88, "UNSUPPORTED"},
-            {90, "FORMULA_EMITTED"},
-            {91, "FORMULA_EMITTED"},
-            {93, "FORMULA_EMITTED"},
-            {99, "FORMULA_EMITTED"},
-        };
+        auto statuses = FormulaFloorStatuses(policy, Tpcds);
+        statuses[88] = "UNSUPPORTED";
+        statuses.erase(96);
         auto verifierEntries = OutcomeIds(statuses);
         verifierEntries.erase(88);
         const auto evaluation = EvaluateCoveragePolicy(

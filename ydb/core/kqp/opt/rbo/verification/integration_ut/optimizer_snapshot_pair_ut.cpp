@@ -641,6 +641,65 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesDistinctAllAcrossHashShuffle) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT DISTINCT MatchKey
+            FROM `/Root/RboExistsInner`;
+        )");
+
+        const auto initialAggregates = PlanNodes(pair.Initial, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(initialAggregates.size(), 1);
+        UNIT_ASSERT((*initialAggregates[0])["distinct_all"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*initialAggregates[0])["phase"].GetStringSafe(),
+            "undefined");
+
+        const auto finalAggregates = PlanNodes(pair.Final, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(finalAggregates.size(), 2);
+        THashSet<TString> phases;
+        TString intermediateOutput;
+        for (const auto* aggregate : finalAggregates) {
+            UNIT_ASSERT((*aggregate)["distinct_all"].GetBooleanSafe());
+            const TString phase = (*aggregate)["phase"].GetStringSafe();
+            phases.insert(phase);
+            const auto& keys = (*aggregate)["keys"].GetArraySafe();
+            const auto& traits = (*aggregate)["aggregates"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(traits.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["input"].GetStringSafe(),
+                keys[0].GetStringSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["function"].GetStringSafe(),
+                "distinct");
+            if (phase == "intermediate") {
+                intermediateOutput = traits[0]["output"].GetStringSafe();
+            }
+        }
+        UNIT_ASSERT(
+            phases == THashSet<TString>({"intermediate", "final"}));
+        UNIT_ASSERT(!intermediateOutput.empty());
+
+        bool foundShuffle = false;
+        for (const auto& edge :
+             pair.Final["stage_graph"]["edges"].GetArraySafe())
+        {
+            if (edge["kind"].GetStringSafe() != "hash_shuffle") {
+                continue;
+            }
+            const auto& keys = edge["keys"].GetArraySafe();
+            if (keys.size() == 1 &&
+                keys[0].GetStringSafe() == intermediateOutput)
+            {
+                foundShuffle = true;
+            }
+        }
+        UNIT_ASSERT(foundShuffle);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesUncorrelatedExists) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);

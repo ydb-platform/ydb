@@ -313,11 +313,10 @@ NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters>
     std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
     const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings);
 
-// Creates a resource manager instance to be passed into CreateKqpResourceManagerActor().
-// If `counters` is null - the default ones are created when the owning actor is registered.
+// Creates a fully initialized resource manager to be passed into CreateKqpResourceManagerActor().
 std::shared_ptr<IKqpResourceManager> CreateKqpResourceManager(
     const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters = nullptr);
+    TIntrusivePtr<TKqpCounters> counters);
 
 } // namespace NResourceManager
 

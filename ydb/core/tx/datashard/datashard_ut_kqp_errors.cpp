@@ -57,9 +57,8 @@ public:
         TDispatchOptions rmReady;
         rmReady.CustomFinalCondition = [this] {
             for (ui32 i = 0; i < Runtime->GetNodeCount(); ++i) {
-                ui32 nodeId = Runtime->GetNodeId(i);
-                if (TryGetKqpResourceManager(nodeId) == nullptr) {
-                    Cerr << "... wait for RM on node " << nodeId << Endl;
+                if (Runtime->GetAppData(i).KqpResourceManager == nullptr) {
+                    Cerr << "... wait for RM on node " << Runtime->GetNodeId(i) << Endl;
                     return false;
                 }
             }

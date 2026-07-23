@@ -15,7 +15,7 @@ NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
     const NYdb::TDriver& ydbDriver,
     const TString& userSID = "");
 
-void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
+void WaitResourcesPublish(NActors::TTestActorRuntime& runtime, ui32 nodeIdx, ui32 expectedNodeCount);
 void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
 
 struct TKikimrRunnerOptions {

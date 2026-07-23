@@ -100,7 +100,7 @@ void TQueryReplayApp::Start() {
     const NKikimrConfig::TTableServiceConfig::TResourceManager rmConfig;
     auto resourceManager = NKikimr::NKqp::NResourceManager::CreateKqpResourceManager(
         rmConfig, MakeIntrusive<NKikimr::NKqp::TKqpCounters>(AppData->Counters));
-    NKikimr::NKqp::NResourceManager::PublishKqpResourceManager(resourceManager);
+    AppData->KqpResourceManager = resourceManager;
     ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor(
         rmConfig, std::move(resourceManager)));
 

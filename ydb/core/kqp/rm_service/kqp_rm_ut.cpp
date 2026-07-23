@@ -155,6 +155,8 @@ public:
         auto kqpCounters = MakeIntrusive<TKqpCounters>(Counters);
         auto rm = NResourceManager::CreateKqpResourceManager(config, kqpCounters);
         Instances.push_back(rm);
+        // every node of the runtime has its own resource manager
+        Runtime->GetAppData(nodeInd).KqpResourceManager = rm;
         auto resman = CreateKqpResourceManagerActor(config, std::move(rm), ResourceBrokers[nodeInd], nullptr);
         // RM creates children during its registration, we need to enable schedule for them
         auto prevObserver = Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId& /*parentId*/, const TActorId& actorId) {

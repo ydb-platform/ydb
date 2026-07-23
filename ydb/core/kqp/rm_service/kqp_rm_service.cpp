@@ -179,33 +179,35 @@ class TKqpResourceManager : public IKqpResourceManager {
 public:
 
     TKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters)
-        : Counters(counters)
+        : Counters(std::move(counters))
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
+        Y_ABORT_UNLESS(Counters);
         PublishAfterBootstrap.clear();
         SetConfigValues(config);
-    }
-
-    void Registered(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
-        ActorSystem = actorSystem;
-        SelfId = selfId;
-        if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData(ActorSystem)->Counters);
-        }
         UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
+    }
 
-        CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
+    // Binds the (already initialized) manager to the actor owning it.
+    // Is called during the owner registration - before it can handle any event.
+    void AttachToActor(TActorSystem* actorSystem, TActorId selfId) {
+        ActorSystem = actorSystem;
+        SelfId = selfId;
 
         if (PublishAfterBootstrap.test()) {
             FireResourcesPublishing();
             PublishAfterBootstrap.clear();
         }
+    }
+
+    const std::shared_ptr<TResourceSnapshotState>& GetResourceSnapshotState() const {
+        return ResourceSnapshotState;
     }
 
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
@@ -219,13 +221,6 @@ public:
             .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
             .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
         };
-    }
-
-    void CreateResourceInfoExchanger(
-            const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        auto exchanger = CreateKqpResourceInfoExchangerActor(
-            Counters, ResourceSnapshotState, settings);
-        ResourceInfoExchanger = ActorSystem->Register(exchanger);
     }
 
     bool AllocateExecutionUnits(ui32 cnt) {
@@ -589,13 +584,9 @@ public:
 
     // state for resource info exchanger
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
-    TActorId ResourceInfoExchanger;
 
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
-
-TMutex ResourceManagerLock;
-std::weak_ptr<TKqpResourceManager> ResourceManagerSingleton;
 
 } // namespace
 
@@ -621,18 +612,15 @@ public:
         Y_ABORT_UNLESS(ResourceManager, "KqpResourceManagerActor requires an instance made by CreateKqpResourceManager()");
     }
 
-    // Is called right after service registration
-    // and before any usual actor can try to get ResourceManager
+    // Is called right after service registration and before any event is handled
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         TActorBootstrapped::Registered(sys, owner);
 
-        ResourceManager->Registered(Config, sys, SelfId());
+        ResourceInfoExchanger = sys->Register(CreateKqpResourceInfoExchangerActor(
+            ResourceManager->GetCounters(), ResourceManager->GetResourceSnapshotState(),
+            Config.GetInfoExchangerSettings()));
 
-        with_lock (ResourceManagerLock) {
-            if (ResourceManagerSingleton.expired()) { // There can be several managers in tests
-                ResourceManagerSingleton = ResourceManager;
-            }
-        }
+        ResourceManager->AttachToActor(sys, SelfId());
     }
 
     void Bootstrap() {
@@ -654,7 +642,7 @@ public:
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_resource_manager", "KQP Resource Manager", false,
-                ResourceManager->ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
@@ -910,11 +898,10 @@ private:
 private:
     void PassAway() override {
         ToBroker(new TEvResourceBroker::TEvNotifyActorDied);
-        if (ResourceManager->ResourceInfoExchanger) {
-            Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
-            ResourceManager->ResourceInfoExchanger = TActorId();
+        if (ResourceInfoExchanger) {
+            Send(ResourceInfoExchanger, new TEvents::TEvPoison);
+            ResourceInfoExchanger = TActorId();
         }
-        ResourceManager->ResourceSnapshotState.reset();
         TActor::PassAway();
     }
 
@@ -1005,8 +992,8 @@ private:
             << (WarmupInProgress ? " (warmup: zero resources)" : "")
             << ", payload: " << payload.ShortDebugString());
         WbState.LastPublishTime = now;
-        if (ResourceManager->ResourceInfoExchanger) {
-            Send(ResourceManager->ResourceInfoExchanger,
+        if (ResourceInfoExchanger) {
+            Send(ResourceInfoExchanger,
                 new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
         }
     }
@@ -1029,6 +1016,7 @@ private:
     NKikimrKqp::TKqpProxyNodeResources ProxyNodeResources;
 
     TActorId WhiteBoardService;
+    TActorId ResourceInfoExchanger;
 
     std::shared_ptr<TKqpResourceManager> ResourceManager;
 
@@ -1055,8 +1043,7 @@ NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServic
 }
 
 std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager() {
-    TGuard lock(NResourceManager::ResourceManagerLock);
-    return NResourceManager::ResourceManagerSingleton.lock();
+    return AppData()->KqpResourceManager;
 }
 
 } // namespace NKikimr::NKqp

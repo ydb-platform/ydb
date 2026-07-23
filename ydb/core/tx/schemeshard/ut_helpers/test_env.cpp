@@ -577,7 +577,7 @@ void SetupKqpResourceManager(TTestActorRuntime& runtime,
     const auto& rmConfig = tableServiceConfig.GetResourceManager();
     auto resourceManager = NKqp::NResourceManager::CreateKqpResourceManager(
         rmConfig, MakeIntrusive<NKqp::TKqpCounters>(runtime.GetAppData(nodeIdx).Counters));
-    NKqp::NResourceManager::PublishKqpResourceManager(resourceManager);
+    runtime.GetAppData(nodeIdx).KqpResourceManager = resourceManager;
 
     IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
         rmConfig, std::move(resourceManager), {}, kqpProxySharedResources

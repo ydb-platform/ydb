@@ -43,12 +43,14 @@ NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb:
     }
 }
 
-void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
+void WaitResourcesPublish(NActors::TTestActorRuntime& runtime, ui32 nodeIdx, ui32 expectedNodeCount) {
+    const ui32 nodeId = runtime.GetNodeId(nodeIdx);
     const auto timeout = TInstant::Now() + TDuration::Seconds(10);
     std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> resourceManager;
     while (true) {
         if (!resourceManager) {
-            resourceManager = NKikimr::NKqp::TryGetKqpResourceManager(nodeId);
+            // every node of the runtime has its own resource manager
+            resourceManager = runtime.GetAppData(nodeIdx).KqpResourceManager;
         }
 
         if (resourceManager && resourceManager->GetClusterResources().size() == expectedNodeCount) {
@@ -66,8 +68,8 @@ void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
 void WaitResourcesPublish(const TKikimrRunner& kikimrRunner) {
     const auto& testServer = kikimrRunner.GetTestServer();
     const auto nodeCount = testServer.StaticNodes();
-    for (ui32 nodeId = 0; nodeId < nodeCount; ++nodeId) {
-        WaitResourcesPublish(testServer.GetRuntime()->GetNodeId(nodeId), nodeCount);
+    for (ui32 nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+        WaitResourcesPublish(*testServer.GetRuntime(), nodeIdx, nodeCount);
     }
 }
 

@@ -188,6 +188,10 @@ namespace NKqp::NScheduler {
     using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>; // TODO: duplicates forward declaration
 }
 
+namespace NKqp::NResourceManager {
+    class IKqpResourceManager;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -345,6 +349,8 @@ struct TAppData {
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;
 
     NKqp::NScheduler::TComputeSchedulerPtr KqpComputeScheduler;
+
+    std::shared_ptr<NKqp::NResourceManager::IKqpResourceManager> KqpResourceManager;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

@@ -210,7 +210,7 @@ public:
 private:
     void CheckResourcesPublish() {
         if (!ResourceManager_) {
-            ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
+            ResourceManager_ = NKikimr::NKqp::GetKqpResourceManager();
         }
 
         if (!ResourceManager_) {

@@ -463,6 +463,180 @@ def aggregate_stage_snapshot(
     )
 
 
+def duplicated_grouped_aggregate_snapshot(function, nullable_key=False):
+    def project(node_id, prefix):
+        return {
+            "id": node_id,
+            "op": "project",
+            "input": "a",
+            "ordered": False,
+            "columns": [
+                {
+                    "output": f"{prefix}.k",
+                    "expression": {
+                        "kind": "add",
+                        "left": {"kind": "column", "column": "a.k"},
+                        "right": {
+                            "kind": "literal",
+                            "type": "Int64",
+                            "value": 0,
+                        },
+                        "type": "Int64",
+                        "nullable": nullable_key,
+                    },
+                },
+                {
+                    "output": f"{prefix}.x",
+                    "expression": {"kind": "column", "column": "a.x"},
+                },
+            ],
+        }
+
+    union = {
+        "id": "union",
+        "op": "union_all",
+        "inputs": [
+            {"node": "left", "columns": ["left.k", "left.x"]},
+            {"node": "right", "columns": ["right.k", "right.x"]},
+        ],
+        "output": ["u.k", "u.x"],
+    }
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "union",
+        "keys": ["u.k"],
+        "aggregates": [
+            {
+                "input": "u.x",
+                "function": function,
+                "output": "result",
+                "type": "Uint64" if function == "count" else "Int64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][0]["nullable"] = nullable_key
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [
+                copy.deepcopy(SCAN_A),
+                project("left", "left"),
+                project("right", "right"),
+                union,
+                aggregate,
+            ],
+            "aggregate",
+            ["u.k", "result"],
+        )
+    )
+
+
+def constant_grouped_stage_snapshot(connection_kind):
+    project = {
+        "id": "project",
+        "op": "project",
+        "input": "a",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "g",
+                "expression": {
+                    "kind": "literal",
+                    "type": "Int64",
+                    "value": 0,
+                },
+            },
+            {
+                "output": "x",
+                "expression": {"kind": "column", "column": "a.x"},
+            },
+        ],
+    }
+    partial = {
+        "id": "partial",
+        "op": "aggregate",
+        "input": "project",
+        "keys": ["g"],
+        "aggregates": [
+            {
+                "input": "x",
+                "function": "count",
+                "output": "_state",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    final = {
+        "id": "final",
+        "op": "aggregate",
+        "input": "partial",
+        "keys": ["g"],
+        "aggregates": [
+            {
+                "input": "_state",
+                "function": "sum",
+                "output": "result",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "final",
+        "distinct_all": False,
+    }
+    connection = (
+        {
+            "kind": "hash_shuffle",
+            "keys": ["g"],
+            "hash_function": "HashV1",
+            "use_spilling": False,
+        }
+        if connection_kind == "hash_shuffle"
+        else {"kind": "broadcast"}
+    )
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            [copy.deepcopy(SCAN_A), project, partial, final],
+            "final",
+            ["g", "result"],
+            [
+                _stage(
+                    "source",
+                    ["a", "project", "partial"],
+                    [],
+                    ["partial"],
+                    "column",
+                ),
+                _stage("root", ["final"], ["partial"], ["final"]),
+            ],
+            [
+                _edge(
+                    "aggregate_edge",
+                    "source",
+                    "root",
+                    0,
+                    0,
+                    **connection,
+                )
+            ],
+        )
+    )
+
+
 def projected_decimal_sum_snapshot(expression, input_type="Int64"):
     schema_value = _stage_schema("A")
     schema_value["tables"][0]["columns"][1]["type"] = input_type
@@ -1370,8 +1544,270 @@ class ConstructionAuditBoundTest(unittest.TestCase):
         with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
             build_logical_kernel_problem_for_tests(aggregate, aggregate, 2)
 
+        compactable = duplicated_grouped_aggregate_snapshot("count")
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 7):
+            with self.assertRaisesRegex(
+                VerificationError,
+                "grouped aggregate requires 10 candidate-row pairs.*"
+                "7 pair construction",
+            ):
+                build_logical_kernel_problem_for_tests(
+                    compactable,
+                    compactable,
+                    2,
+                )
+
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_structural_key_classes_are_exact_and_nonrecursive(self):
+        left = smt.symbol("same_key", smt.INT)
+        right = smt.symbol("same_key", smt.INT)
+        for _ in range(2000):
+            left = smt.Term(smt.INT, "deep_key", (left,))
+            right = smt.Term(smt.INT, "deep_key", (right,))
+
+        same_null_left = smt.symbol("same_null", smt.BOOL)
+        same_null_right = smt.symbol("same_null", smt.BOOL)
+        rows = (
+            relation_model.Row(
+                smt.TRUE,
+                {"k": Value("Int64", same_null_left, left)},
+            ),
+            relation_model.Row(
+                smt.TRUE,
+                {"k": Value("Int64", same_null_right, right)},
+            ),
+            relation_model.Row(
+                smt.TRUE,
+                {"k": Value("Int64", same_null_left, smt.symbol("other", smt.INT))},
+            ),
+            relation_model.Row(
+                smt.TRUE,
+                {"k": Value("Uint64", same_null_left, left)},
+            ),
+        )
+
+        self.assertEqual(
+            relation_model._aggregate_key_classes(("k",), rows),
+            ((0, 1), (2,), (3,)),
+        )
+
+    def test_structural_key_classes_preserve_multiplicity_and_dynamic_equality(self):
+        for function in ("count", "sum"):
+            with self.subTest(function=function):
+                snapshot = duplicated_grouped_aggregate_snapshot(
+                    function,
+                    nullable_key=True,
+                )
+                script = smt.Script()
+                database = Database(snapshot, 2, script)
+                evaluator = RelationEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                )
+                source = evaluator.node("union").certain()
+                self.assertIsNot(
+                    source.rows[0].values["u.k"].value,
+                    source.rows[2].values["u.k"].value,
+                )
+                self.assertEqual(
+                    relation_model._aggregate_key_classes(("u.k",), source.rows),
+                    ((0, 2), (1, 3)),
+                )
+                with (
+                    mock.patch.object(
+                        relation_model,
+                        "MAX_RELATION_ROW_PAIRS",
+                        8,
+                    ),
+                    mock.patch.object(
+                        evaluator,
+                        "_same_group",
+                        wraps=evaluator._same_group,
+                    ) as same_group,
+                    mock.patch.object(
+                        relation_model,
+                        "_require_relation_row_pairs",
+                        wraps=relation_model._require_relation_row_pairs,
+                    ) as require_pairs,
+                ):
+                    result = evaluator.root().certain()
+
+                self.assertEqual(len(result.rows), 2)
+                self.assertEqual(same_group.call_count, 3)
+                self.assertIn(
+                    mock.call(8, "grouped aggregate class membership"),
+                    require_pairs.call_args_list,
+                )
+                self.assertIn(
+                    mock.call(3, "grouped aggregate class comparison"),
+                    require_pairs.call_args_list,
+                )
+                self.assertTrue(all(row.occurrence is None for row in result.rows))
+                states = (None,) + tuple(product((None, 0, 1), (-2, 3)))
+                for rows in product(states, repeat=2):
+                    expanded = tuple(
+                        row
+                        for row in rows
+                        for _ in range(2)
+                    )
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            result,
+                            self._constants(database, rows),
+                        ),
+                        self._reference_bag(
+                            function,
+                            True,
+                            expanded,
+                            False,
+                        ),
+                        rows,
+                    )
+
+    def test_structural_key_class_metadata_keeps_only_common_facts(self):
+        snapshot = duplicated_grouped_aggregate_snapshot("count")
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, script),
+            ScalarEncoder(script),
+        )
+        shared = relation_model.PartitionFact(
+            smt.symbol("shared_fact", smt.BOOL),
+            True,
+        )
+        left_only = relation_model.PartitionFact(
+            smt.symbol("left_fact", smt.BOOL),
+            True,
+        )
+        right_only = relation_model.PartitionFact(
+            smt.symbol("right_fact", smt.BOOL),
+            False,
+        )
+
+        def row(
+            ordinal,
+            key,
+            facts,
+        ):
+            return relation_model.Row(
+                smt.symbol(f"present_{ordinal}", smt.BOOL),
+                {
+                    "u.k": Value("Int64", smt.FALSE, key),
+                    "u.x": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.symbol(f"value_{ordinal}", smt.INT),
+                    ),
+                },
+                relation_model.Occurrence("input", "source", ordinal),
+                frozenset(facts),
+            )
+
+        source = relation_model.Relation(
+            evaluator._columns("union"),
+            (
+                row(
+                    0,
+                    smt.symbol("same_key", smt.INT),
+                    (shared, left_only),
+                ),
+                row(
+                    1,
+                    smt.symbol("same_key", smt.INT),
+                    (shared, right_only),
+                ),
+                row(
+                    2,
+                    smt.symbol("other_key", smt.INT),
+                    (shared, left_only),
+                ),
+            ),
+        )
+        classes = relation_model._aggregate_key_classes(("u.k",), source.rows)
+        self.assertEqual(classes, ((0, 1), (2,)))
+        result = evaluator._shared_grouped_aggregate_rows(
+            evaluator.nodes["aggregate"],
+            source,
+            classes,
+        )
+
+        self.assertIsNone(result[0].occurrence)
+        self.assertEqual(result[0].partition_facts, frozenset({shared}))
+        self.assertEqual(
+            result[1].occurrence,
+            relation_model.Occurrence(
+                "aggregate",
+                "aggregate",
+                inputs=(source.rows[2].occurrence,),
+            ),
+        )
+        self.assertEqual(
+            result[1].partition_facts,
+            frozenset({shared, left_only}),
+        )
+
+    def test_compacted_partial_states_survive_hash_and_broadcast(self):
+        for connection_kind in ("hash_shuffle", "broadcast"):
+            with self.subTest(connection_kind=connection_kind):
+                snapshot = constant_grouped_stage_snapshot(connection_kind)
+                script = smt.Script()
+                database = Database(snapshot, 2, script)
+                router = Router(script)
+                edge_inputs = []
+
+                def observe(_edge, task, family):
+                    edge_inputs.append((task, family.certain()))
+
+                with mock.patch.object(
+                    relation_model,
+                    "MAX_RELATION_ROW_PAIRS",
+                    2,
+                ):
+                    result = StageEvaluator(
+                        snapshot,
+                        database,
+                        ScalarEncoder(script),
+                        router,
+                        edge_observer=observe,
+                    ).root().certain()
+
+                self.assertEqual(
+                    len(edge_inputs),
+                    2 if connection_kind == "hash_shuffle" else 1,
+                )
+                for _, edge_input in edge_inputs:
+                    self.assertEqual(len(edge_input.rows), 2)
+                    self.assertTrue(
+                        all(row.occurrence is None for row in edge_input.rows)
+                    )
+
+                states = (None, (0, 7))
+                for rows, placements in product(
+                    product(states, repeat=2),
+                    product((False, True), repeat=2),
+                ):
+                    constants = self._constants(database, rows)
+                    for slot, placement in enumerate(placements):
+                        constants[router.source_task("A", slot).atom] = placement
+                    present = sum(row is not None for row in rows)
+                    expected = (
+                        Counter()
+                        if present == 0
+                        else Counter({(0, present): 1})
+                    )
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            result,
+                            constants,
+                            self._hash_choice,
+                        ),
+                        expected,
+                        (rows, placements),
+                    )
+
     def test_group_comparisons_share_one_symmetric_triangle(self):
         snapshot = aggregate_stage_snapshot("count", True, False)
         script = smt.Script()

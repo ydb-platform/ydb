@@ -544,72 +544,37 @@ class Evaluator:
                 )
             )
         else:
-            row_count = len(source.rows)
-            directional_pair_count = row_count * row_count
-            share_group_comparisons = (
-                directional_pair_count > MAX_RELATION_ROW_PAIRS
+            rows.extend(self._grouped_aggregate_rows(node, source))
+        return Relation(self._columns(node.id), tuple(rows))
+
+    def _grouped_aggregate_rows(
+        self,
+        node: Aggregate,
+        source: Relation,
+    ) -> tuple[Row, ...]:
+        row_count = len(source.rows)
+        directional_pair_count = row_count * row_count
+        if directional_pair_count <= MAX_RELATION_ROW_PAIRS:
+            _require_relation_row_pairs(
+                directional_pair_count,
+                "grouped aggregate",
             )
-            if share_group_comparisons:
-                _require_relation_row_pairs(
-                    row_count * (row_count + 1) // 2,
-                    "grouped aggregate",
-                )
-                # Null-safe equality is symmetric, but row presence is not.
-                # Share one composite group-key comparison per unordered pair
-                # and retain the member row's directional presence guard below.
-                # The triangular preflight also keeps those N^2 guards strictly
-                # below twice the generic pair bound.
-                same_groups = {
-                    (left_index, right_index): self._same_group(
-                        node,
-                        source.rows[left_index],
-                        source.rows[right_index],
-                    )
-                    for left_index in range(row_count)
-                    for right_index in range(left_index, row_count)
-                }
-
-                def same_group(left_index: int, right_index: int) -> smt.Term:
-                    pair = (
-                        (left_index, right_index)
-                        if left_index <= right_index
-                        else (right_index, left_index)
-                    )
-                    return same_groups[pair]
-
-            else:
-                _require_relation_row_pairs(
-                    directional_pair_count,
-                    "grouped aggregate",
-                )
-
-                def same_group(left_index: int, right_index: int) -> smt.Term:
-                    return self._same_group(
-                        node,
-                        source.rows[left_index],
-                        source.rows[right_index],
-                    )
-
+            rows: list[Row] = []
             for index, candidate in enumerate(source.rows):
                 matches = tuple(
-                    smt.and_(row.present, same_group(index, row_index))
-                    for row_index, row in enumerate(source.rows)
+                    smt.and_(row.present, self._same_group(node, candidate, row))
+                    for row in source.rows
                 )
-                earlier = (
-                    matches[:index]
-                    if share_group_comparisons
-                    else tuple(
-                        smt.and_(row.present, same_group(index, row_index))
-                        for row_index, row in enumerate(source.rows[:index])
-                    )
-                )
-                present = smt.and_(
-                    candidate.present,
-                    smt.not_(smt.or_(*earlier)),
+                earlier = tuple(
+                    smt.and_(row.present, self._same_group(node, candidate, row))
+                    for row in source.rows[:index]
                 )
                 rows.append(
                     Row(
-                        present,
+                        smt.and_(
+                            candidate.present,
+                            smt.not_(smt.or_(*earlier)),
+                        ),
                         self._aggregate_values(node, source, matches, candidate),
                         _derived_occurrence(
                             "aggregate",
@@ -619,7 +584,119 @@ class Evaluator:
                         candidate.partition_facts,
                     )
                 )
-        return Relation(self._columns(node.id), tuple(rows))
+            return tuple(rows)
+
+        classes = _aggregate_key_classes(node.keys, source.rows)
+        class_count = len(classes)
+        class_memberships = class_count * row_count
+        class_comparisons = class_count * (class_count + 1) // 2
+        use_classes = (
+            class_count < row_count
+            and class_memberships <= MAX_RELATION_ROW_PAIRS
+            and class_comparisons <= MAX_RELATION_ROW_PAIRS
+        )
+        if use_classes:
+            _require_relation_row_pairs(
+                class_memberships,
+                "grouped aggregate class membership",
+            )
+            _require_relation_row_pairs(
+                class_comparisons,
+                "grouped aggregate class comparison",
+            )
+        else:
+            _require_relation_row_pairs(
+                row_count * (row_count + 1) // 2,
+                "grouped aggregate",
+            )
+            classes = tuple((index,) for index in range(row_count))
+        return self._shared_grouped_aggregate_rows(node, source, classes)
+
+    def _shared_grouped_aggregate_rows(
+        self,
+        node: Aggregate,
+        source: Relation,
+        classes: tuple[tuple[int, ...], ...],
+    ) -> tuple[Row, ...]:
+        representatives = tuple(
+            source.rows[members[0]]
+            for members in classes
+        )
+        # The classes partition all source indices.  Aggregate membership still
+        # ranges over the original rows so duplicate bag occurrences survive.
+        source_classes = [0] * len(source.rows)
+        for class_index, members in enumerate(classes):
+            for source_index in members:
+                source_classes[source_index] = class_index
+
+        # Null-safe equality is symmetric, but row presence is not. Share one
+        # composite group-key comparison per unordered candidate-class pair.
+        same_groups = {
+            (left_index, right_index): self._same_group(
+                node,
+                representatives[left_index],
+                representatives[right_index],
+            )
+            for left_index in range(len(classes))
+            for right_index in range(left_index, len(classes))
+        }
+
+        def same_group(left_index: int, right_index: int) -> smt.Term:
+            pair = (
+                (left_index, right_index)
+                if left_index <= right_index
+                else (right_index, left_index)
+            )
+            return same_groups[pair]
+
+        class_presence = tuple(
+            smt.or_(*(source.rows[index].present for index in members))
+            for members in classes
+        )
+        rows: list[Row] = []
+        for class_index, members in enumerate(classes):
+            candidate = representatives[class_index]
+            matches = tuple(
+                smt.and_(
+                    row.present,
+                    same_group(class_index, source_classes[source_index]),
+                )
+                for source_index, row in enumerate(source.rows)
+            )
+            earlier = tuple(
+                (
+                    matches[earlier_members[0]]
+                    if len(earlier_members) == 1
+                    else smt.and_(
+                        class_presence[earlier_index],
+                        same_group(class_index, earlier_index),
+                    )
+                )
+                for earlier_index, earlier_members in enumerate(
+                    classes[:class_index]
+                )
+            )
+            member_rows = tuple(source.rows[index] for index in members)
+            rows.append(
+                Row(
+                    smt.and_(
+                        class_presence[class_index],
+                        smt.not_(smt.or_(*earlier)),
+                    ),
+                    self._aggregate_values(node, source, matches, candidate),
+                    (
+                        _derived_occurrence(
+                            "aggregate",
+                            node.id,
+                            candidate.occurrence,
+                        )
+                        if len(members) == 1
+                        else None
+                    ),
+                    _common_partition_facts(member_rows),
+                )
+            )
+        return tuple(rows)
 
     def _aggregate_values(
         self,
@@ -936,6 +1013,73 @@ def _common_partition_facts(rows: tuple[Row, ...]) -> frozenset[PartitionFact]:
     for row in rows[1:]:
         common.intersection_update(row.partition_facts)
     return frozenset(common)
+
+
+def _term_structural_ids(roots: tuple[smt.Term, ...]) -> tuple[int, ...]:
+    """Intern exact SMT structure without recursively hashing a deep term DAG."""
+
+    by_identity: dict[int, int] = {}
+    by_structure: dict[tuple[object, ...], int] = {}
+    for root in roots:
+        pending = [(root, False)]
+        while pending:
+            term, expanded = pending.pop()
+            identity = id(term)
+            if identity in by_identity:
+                continue
+            if not expanded:
+                pending.append((term, True))
+                pending.extend(
+                    (argument, False)
+                    for argument in reversed(term.arguments)
+                    if id(argument) not in by_identity
+                )
+                continue
+            structure = (
+                term.sort,
+                term.operation,
+                term.atom,
+                tuple(by_identity[id(argument)] for argument in term.arguments),
+            )
+            by_identity[identity] = by_structure.setdefault(
+                structure,
+                len(by_structure),
+            )
+    return tuple(by_identity[id(root)] for root in roots)
+
+
+def _aggregate_key_classes(
+    keys: tuple[str, ...],
+    rows: tuple[Row, ...],
+) -> tuple[tuple[int, ...], ...]:
+    """Partition candidates whose complete group-key terms are identical."""
+
+    key_values = tuple(
+        tuple(row.values[key] for key in keys)
+        for row in rows
+    )
+    term_ids = iter(_term_structural_ids(
+        tuple(
+            term
+            for values in key_values
+            for value in values
+            for term in (value.is_null, value.value)
+        )
+    ))
+    class_by_signature: dict[tuple[tuple[str, int, int], ...], int] = {}
+    classes: list[list[int]] = []
+    for row_index, values in enumerate(key_values):
+        signature = tuple(
+            (value.type, next(term_ids), next(term_ids))
+            for value in values
+        )
+        class_index = class_by_signature.get(signature)
+        if class_index is None:
+            class_index = len(classes)
+            class_by_signature[signature] = class_index
+            classes.append([])
+        classes[class_index].append(row_index)
+    return tuple(tuple(members) for members in classes)
 
 
 def _retained_order(

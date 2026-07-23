@@ -2340,7 +2340,10 @@ def _as_sequence_family(
         "latent sequence construction",
     )
     if _use_enumerated_sequences(family):
-        return _enumerated_as_sequence_family(family)
+        return _enumerated_as_sequence_family(
+            family,
+            f"{scope}:latent_sequence",
+        )
     outcomes: list[Outcome] = []
     for index, source_outcome in enumerate(family.outcomes):
         relation = source_outcome.relation
@@ -2371,10 +2374,16 @@ def _as_sequence_family(
     return RelationFamily(tuple(outcomes))
 
 
-def _enumerated_as_sequence_family(family: RelationFamily) -> RelationFamily:
+def _enumerated_as_sequence_family(
+    family: RelationFamily,
+    decision: str,
+) -> RelationFamily:
     outcomes: list[Outcome] = []
+    alternative = 0
     for source_outcome in family.outcomes:
         relation = source_outcome.relation
+        if decision in dict(source_outcome.decisions):
+            raise RelationError(f"duplicate latent-sequence decision {decision!r}")
         for permutation in permutations(range(len(relation.rows))):
             outcomes.append(
                 Outcome(
@@ -2385,10 +2394,13 @@ def _enumerated_as_sequence_family(family: RelationFamily) -> RelationFamily:
                         sequence=True,
                     ),
                     source_outcome.error,
-                    source_outcome.decisions,
+                    tuple(sorted(
+                        source_outcome.decisions + ((decision, alternative),)
+                    )),
                     source_outcome.choices,
                 )
             )
+            alternative += 1
     if not outcomes:
         raise RelationError("latent unordered sequence family has no outcomes")
     return RelationFamily(tuple(outcomes))

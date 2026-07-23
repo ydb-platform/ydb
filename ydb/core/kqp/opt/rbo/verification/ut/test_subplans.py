@@ -495,6 +495,104 @@ class ScalarSubplanEvaluationTest(unittest.TestCase):
                 )
             )
 
+    def test_enumerated_sequence_binding_is_shared_across_consumers(self):
+        raw = _scan_scalar_snapshot()
+        raw["plan"]["nodes"][1]["columns"] = [
+            {
+                "output": "first",
+                "expression": {"kind": "column", "column": BINDING},
+            }
+        ]
+        raw["plan"]["nodes"].extend(
+            [
+                {"id": "sub_empty_source", "op": "empty_source"},
+                {
+                    "id": "sub_empty",
+                    "op": "filter",
+                    "input": "sub_empty_source",
+                    "predicate": _literal("Bool", False),
+                },
+                {
+                    "id": "sub_empty_value",
+                    "op": "project",
+                    "input": "sub_empty",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "sub.value",
+                            "expression": _literal("Int64", 0),
+                        }
+                    ],
+                },
+                {
+                    "id": "sub_ordered",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "sub_scan", "columns": ["sub.value"]},
+                        {"node": "sub_empty_value", "columns": ["sub.value"]},
+                    ],
+                    "output": ["sub.value"],
+                    "ordered": True,
+                },
+                {
+                    "id": "sub_one",
+                    "op": "limit",
+                    "input": "sub_ordered",
+                    "count": _literal("Uint64", 1),
+                    "offset": None,
+                    "phase": "undefined",
+                },
+                {
+                    "id": "main_second",
+                    "op": "project",
+                    "input": "main_project",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "result",
+                            "expression": {
+                                "kind": "eq",
+                                "left": {"kind": "column", "column": "first"},
+                                "right": {"kind": "column", "column": BINDING},
+                            },
+                        }
+                    ],
+                },
+            ]
+        )
+        raw["plan"]["root"] = "main_second"
+        raw["plan"]["output"] = ["result"]
+        raw["plan"]["subplans"][0]["root"] = "sub_one"
+        raw["plan"]["subplans"][0]["consumers"] = [
+            "main_project",
+            "main_second",
+        ]
+
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        family = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        constants = _database_constants(database, (True, True))
+        enabled = [
+            outcome
+            for outcome in family.outcomes
+            if _ground(outcome.enabled, constants)
+        ]
+
+        self.assertEqual(len(enabled), 2)
+        for outcome in enabled:
+            self.assertFalse(_ground(outcome.error, constants))
+            self.assertTrue(
+                _ground(
+                    outcome.relation.rows[0].values["result"].value,
+                    constants,
+                )
+            )
+
     def test_global_aggregate_preserves_null_and_decimal_proof_metadata(self):
         raw = _global_decimal_sum_snapshot()
         evaluator, relation = _evaluate(raw, row_bound=2)

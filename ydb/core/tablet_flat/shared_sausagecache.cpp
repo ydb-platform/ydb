@@ -1359,6 +1359,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto* page = EnsurePage(*collection, *locationIt, ECacheMode::TryKeepInMemory);
                 if (page->State == PageStateNo) {
                     if (TPageTraits::GetSize(page) > remainBytes) {
+                        RemoveAlivePage(page);
                         collection->PageSet.ErasePage(page->Offset);
                         break;
                     }

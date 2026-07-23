@@ -1,4 +1,5 @@
 #include "query_base.h"
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 using namespace NKikimrServices;
@@ -251,12 +252,16 @@ namespace NKikimr {
                                 Success = false;
                             }
                             void operator()(TRcBuf&& buffer) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(std::move(buffer)), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep);
+                                TRope data(std::move(buffer));
+                                const ui64 checksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
                             void operator()(const TRope& data) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(data), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep);
+                                TRope resultData(data);
+                                const ui64 checksum = CalculateXxh3Hash(resultData.Begin(), resultData.GetSize()).second;
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(resultData), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
                         } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep, doNotKeep};
                         rit.GetData(processor);

@@ -4,6 +4,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
+#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
@@ -465,6 +466,112 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
         auto it = vDiskIds.find(vDiskId.ConvertToTuple());
         UNIT_ASSERT(it != vDiskIds.end());
     }
+}
+
+static void SetPutTabletLogChecksumming(const TIntrusivePtr<TGroupQueues>& groupQueues, bool enabled) {
+    for (TGroupQueues::TFailDomain& domain : groupQueues->FailDomains) {
+        for (TGroupQueues::TVDisk& vDisk : domain.VDisks) {
+            auto& queue = vDisk.Queues.GetQueue(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+            queue.Checksumming.store(enabled);
+        }
+    }
+}
+
+static void CheckVPutChecksumFields(const TEvBlobStorage::TEvVPut& ev, bool checksummingEnabled) {
+    if (checksummingEnabled) {
+        UNIT_ASSERT(ev.Record.HasChecksum());
+        UNIT_ASSERT(ev.Record.HasChecksumType());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev.Record.GetChecksumType()),
+            static_cast<ui32>(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob));
+        const TRope buffer = ev.GetBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetChecksum(), CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second);
+    } else {
+        UNIT_ASSERT(!ev.Record.HasChecksum());
+        UNIT_ASSERT(!ev.Record.HasChecksumType());
+    }
+}
+
+static void CheckVMultiPutItemChecksumFields(const TEvBlobStorage::TEvVMultiPut& ev, ui64 itemIdx,
+        bool checksummingEnabled) {
+    const auto& item = ev.Record.GetItems(itemIdx);
+    if (checksummingEnabled) {
+        UNIT_ASSERT(item.HasChecksum());
+        UNIT_ASSERT(item.HasChecksumType());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(item.GetChecksumType()),
+            static_cast<ui32>(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob));
+        const TRope buffer = ev.GetItemBuffer(itemIdx);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetChecksum(), CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second);
+    } else {
+        UNIT_ASSERT(!item.HasChecksum());
+        UNIT_ASSERT(!item.HasChecksumType());
+    }
+}
+
+static void TestVPutChecksumFieldsImpl(bool checksummingEnabled) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::Erasure4Plus2Block, 0, 0);
+    TTestState testState(runtime, env.Info);
+    SetPutTabletLogChecksumming(env.GroupQueues, checksummingEnabled);
+
+    TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    TBlobTestSet::TBlob blob(blobId, TString(blobId.BlobSize(), 'a'));
+
+    TEvBlobStorage::TEvPut::TPtr ev = testState.CreatePutRequest(blob,
+        TEvBlobStorage::TEvPut::TacticDefault, NKikimrBlobStorage::TabletLog);
+    runtime.Register(env.CreatePutRequestActor(ev).release());
+
+    for (ui32 idx = 0; idx < env.Info->Type.TotalPartCount(); ++idx) {
+        TEvBlobStorage::TEvVPut::TPtr vPut = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+        CheckVPutChecksumFields(*vPut->Get(), checksummingEnabled);
+    }
+}
+
+Y_UNIT_TEST(TestVPutChecksumFields) {
+    TestVPutChecksumFieldsImpl(true);
+    TestVPutChecksumFieldsImpl(false);
+}
+
+static void TestVMultiPutChecksumFieldsImpl(bool checksummingEnabled) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::Erasure4Plus2Block, 0, 0);
+    TTestState testState(runtime, env.Info);
+    SetPutTabletLogChecksumming(env.GroupQueues, checksummingEnabled);
+
+    TVector<TLogoBlobID> blobIds = {
+        TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
+        TLogoBlobID(72075186224047637, 1, 863, 1, 142, 24576),
+    };
+    UNIT_ASSERT_VALUES_EQUAL(blobIds[0].Hash(), blobIds[1].Hash());
+
+    TVector<TBlobTestSet::TBlob> blobs;
+    for (const TLogoBlobID& blobId : blobIds) {
+        blobs.emplace_back(blobId, TString(blobId.BlobSize(), 'a'));
+    }
+
+    TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
+    NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
+    TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
+    testState.CreatePutRequests(blobs, std::back_inserter(batched), tactic, handleClass);
+    runtime.Register(env.CreatePutRequestActor(batched, tactic, handleClass).release());
+
+    for (ui32 idx = 0; idx < env.Info->Type.TotalPartCount(); ++idx) {
+        TEvBlobStorage::TEvVMultiPut::TPtr vMultiPut = testState.GrabEventPtr<TEvBlobStorage::TEvVMultiPut>();
+        UNIT_ASSERT_VALUES_EQUAL(vMultiPut->Get()->Record.ItemsSize(), blobs.size());
+        for (ui64 itemIdx = 0; itemIdx < blobs.size(); ++itemIdx) {
+            CheckVMultiPutItemChecksumFields(*vMultiPut->Get(), itemIdx, checksummingEnabled);
+        }
+    }
+}
+
+Y_UNIT_TEST(TestVMultiPutChecksumFields) {
+    TestVMultiPutChecksumFieldsImpl(true);
+    TestVMultiPutChecksumFieldsImpl(false);
 }
 
 void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses, uint expectedVdiskRequests, NKikimrProto::EReplyStatus resultStatus) {

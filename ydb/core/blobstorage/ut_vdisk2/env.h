@@ -113,6 +113,20 @@ namespace NKikimr {
                 VDiskId, false, nullptr, TInstant::Max(), prio, false), GetQueueId(prio));
         }
 
+        const TVDiskID& GetVDiskId() const {
+            return VDiskId;
+        }
+
+        NKikimrBlobStorage::TEvVPutResult SendVPut(std::unique_ptr<TEvBlobStorage::TEvVPut> query) {
+            const auto queueId = GetQueueId(query->Record.GetHandleClass());
+            return ExecuteQuery<TEvBlobStorage::TEvVPutResult>(std::move(query), queueId);
+        }
+
+        NKikimrBlobStorage::TEvVMultiPutResult SendVMultiPut(std::unique_ptr<TEvBlobStorage::TEvVMultiPut> query) {
+            const auto queueId = GetQueueId(query->Record.GetHandleClass());
+            return ExecuteQuery<TEvBlobStorage::TEvVMultiPutResult>(std::move(query), queueId);
+        }
+
         NKikimrBlobStorage::TEvVGetResult Get(const TLogoBlobID& id,
                 NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
             auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskId, TInstant::Max(), prio,

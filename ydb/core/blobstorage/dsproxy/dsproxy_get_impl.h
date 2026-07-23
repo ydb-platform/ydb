@@ -9,6 +9,13 @@
 
 namespace NKikimr {
 
+namespace NDsProxyGetImpl {
+
+bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus, const NKikimrBlobStorage::TQueryResult& result,
+        const TRope& resultBuffer);
+
+} // namespace NDsProxyGetImpl
+
 class TStrategyBase;
 
 class TGetImpl {
@@ -197,17 +204,20 @@ public:
         for (ui32 i = 0, e = (ui32)record.ResultSize(); i != e; ++i) {
             const NKikimrBlobStorage::TQueryResult &result = record.GetResult(i);
             Y_ABORT_UNLESS(result.HasStatus());
-            const NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
+            NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
             Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
 
             TRope resultBuffer = ev.GetBlobData(result);
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
 
-            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
-
-            if (ReportDetailedPartMap) {
-                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
+            if (!NDsProxyGetImpl::ValidateVDiskGetResponseChecksum(replyStatus, result, resultBuffer)) {
+                DSP_LOG_ERROR_SX(logCtx, "BPG68", "Error in ValidateVDiskGetResponseChecksum on TEvVGetResult, blobId# " << blobId
+                        << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size()
+                        << " checksumType# " << static_cast<ui32>(result.GetChecksumType()));
+                NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
+                replyStatus = NKikimrProto::ERROR;
+                mutableResult->SetStatus(NKikimrProto::ERROR);
             }
 
             // Currently CRC can be checked only if blob part is fully read
@@ -217,8 +227,15 @@ public:
                     DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
+                    replyStatus = NKikimrProto::ERROR;
                     mutableResult->SetStatus(NKikimrProto::ERROR);
                 }
+            }
+
+            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
+
+            if (ReportDetailedPartMap) {
+                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
             }
 
             if (result.HasKeep() || result.HasDoNotKeep()) {

@@ -274,7 +274,8 @@ namespace NKikimr {
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
                         TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,
                         const TActorIDPtr &skeletonFrontIDPtr, const TVDiskID &vdiskID,
-                        const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, ui64 vdiskIncarnationGuid,
+                        const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
+                        const TBatchedVec<TString> &errorReasons, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
         {
             NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
@@ -291,6 +292,7 @@ namespace NKikimr {
                 ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes,
                 vdiskIncarnationGuid, errorReason);
             Y_VERIFY_S(record.ItemsSize() == statuses.size(), vctx->VDiskLogPrefix);
+            Y_VERIFY_S(record.ItemsSize() == errorReasons.size(), vctx->VDiskLogPrefix);
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = record.GetItems(itemIdx);
                 ui64 cookieValue = 0;
@@ -300,10 +302,23 @@ namespace NKikimr {
                     cookiePtr = &cookieValue;
                 }
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                result->AddVPutResult(statuses[itemIdx], errorReason, blobId, cookiePtr);
+                result->AddVPutResult(statuses[itemIdx], errorReasons[itemIdx], blobId, cookiePtr);
             }
             SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo);
             return result;
+        }
+
+        static inline std::unique_ptr<IEventBase>
+        ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
+                        TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,
+                        const TActorIDPtr &skeletonFrontIDPtr, const TVDiskID &vdiskID,
+                        const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, ui64 vdiskIncarnationGuid,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
+        {
+            NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
+            TBatchedVec<TString> errorReasons(record.ItemsSize(), errorReason);
+            return ErroneousResult(vctx, status, errorReason, ev, now, skeletonFrontIDPtr, vdiskID, statuses,
+                errorReasons, vdiskIncarnationGuid, groupInfo);
         }
 
         static inline std::unique_ptr<IEventBase>

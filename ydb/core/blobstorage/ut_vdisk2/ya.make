@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     defs.h
     env.h
+    checksum.cpp
     huge.cpp
     compaction.cpp
 )
@@ -21,6 +22,7 @@ PEERDIR(
     ydb/apps/version
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk/mock
     ydb/core/blobstorage/vdisk

@@ -30,6 +30,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
+        negated = false;
         auto maybeSubplan = conjuncts[conjunctIdx].GetExpressionBody();
 
         if (TCoNot::Match(maybeSubplan.Get())) {

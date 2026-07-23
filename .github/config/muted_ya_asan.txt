@@ -240,7 +240,6 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
-ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.ANALYZE_TPCН_11
 ydb/core/kqp/ut/rbo KqpRboYql.AggregateKeyColumnsNotLeakedToInputMap
@@ -248,7 +247,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.AliasesRenames
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
-ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
@@ -290,7 +288,6 @@ ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_TwoPartition
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
-ydb/core/persqueue/ut/ut_with_sdk CommitOffset.Commit_WithSession_ToPastParentPartition
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
@@ -397,7 +394,6 @@ ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large py3test.[test_tpch_spilling.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[49]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[50]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
@@ -554,7 +550,6 @@ ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestToolsOpenAI.test_doc
 ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestToolsOpenAI.test_docs_search_tool_schema_in_request
 ydb/tests/olap data_read_correctness.py.TestDataReadPerformanceNoIntersections.test
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
-ydb/tests/olap/large test_log_scenario.py.TestLogScenario.test_log_deviation[180]
 ydb/tests/olap/s3_import py3test.[*/*] chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export

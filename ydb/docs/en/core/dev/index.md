@@ -12,6 +12,7 @@ Main resources:
   - [Row-oriented tables](primary-key/row-oriented.md)
   - [Column-oriented tables](primary-key/column-oriented.md)
 
+- [{#T}](tables/index.md)
 - [{#T}](secondary-indexes.md)
 - [{#T}](batch-upload.md)
 - [{#T}](paging.md)

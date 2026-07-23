@@ -1,0 +1,12 @@
+items:
+- name: How partitioning works
+  href: index.md
+- name: Automatic partitioning
+  href: auto/index.md
+  include:
+    mode: link
+    path: auto/toc_p.yaml
+- name: Choosing the number of partitions
+  href: choosing-partition-count.md
+- name: Anti-patterns
+  href: anti-patterns.md

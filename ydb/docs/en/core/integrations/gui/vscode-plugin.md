@@ -11,7 +11,7 @@
 - System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/glossary.md#resource-pool).
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting, autocompletion of tables and columns.
 - Query execution and result visualization: table, JSON, diagram.
-- Visualization of the [query execution plan](../../dev/query-execution-optimization/query-plans-optimization.md) (`EXPLAIN`).
+- Visualization of the [query execution plan](../../dev/query-plans-optimization.md) (`EXPLAIN`).
 - Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
 - Cluster dashboard based on [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): CPU load, memory usage, network traffic (updates every 10 seconds).
 - Management of [access rights (ACL)](../../security/authorization.md#right): viewing permissions on database objects.
@@ -184,7 +184,7 @@ Execution results are displayed in the **Results** panel as a table, JSON, or di
 
 ### EXPLAIN and execution plan {#explain}
 
-Select **Explain YQL Query** in the editor context menu or in the command palette (`Ctrl+Shift+P`) to get the [query execution plan](../../dev/query-execution-optimization/query-plans-optimization.md). The plugin displays the plan's operation tree in text form.
+Select **Explain YQL Query** in the editor context menu or in the command palette (`Ctrl+Shift+P`) to get the [query execution plan](../../dev/query-plans-optimization.md). The plugin displays the plan's operation tree in text form.
 
 ### Session manager {#session-manager}
 

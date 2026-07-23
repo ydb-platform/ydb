@@ -199,6 +199,12 @@ namespace {
     private:
         void Handle(TEvCGroupOomTrend::TPtr& ev) {
             Y_ABORT_UNLESS(ev->Cookie == RequestCookie);
+            Y_ABORT_UNLESS(
+                ev->Get()->State ==
+                    (ev->Get()->Trend
+                        ? ECGroupOomTrendState::Active
+                        : ECGroupOomTrendState::Stopped));
+            Y_ABORT_UNLESS(!ev->Get()->TimeToOomThreshold);
             Result.Set(std::move(ev->Get()->Trend));
             PassAway();
         }
@@ -250,10 +256,12 @@ namespace {
         TTrendSubscriberActor(
                 TResultWaiter<std::optional<TCGroupOomTrend>>& activeResult,
                 TResultWaiter<std::optional<TCGroupOomTrend>>& stoppedResult,
+                TDuration timeToOomThreshold,
                 std::atomic<ui32>& activeNotifications,
                 std::atomic<ui32>& stoppedNotifications)
             : ActiveResult(activeResult)
             , StoppedResult(stoppedResult)
+            , TimeToOomThreshold(timeToOomThreshold)
             , ActiveNotifications(activeNotifications)
             , StoppedNotifications(stoppedNotifications)
         {
@@ -269,6 +277,8 @@ namespace {
 
     private:
         void Handle(TEvCGroupOomTrend::TPtr& ev) {
+            Y_ABORT_UNLESS(
+                ev->Get()->TimeToOomThreshold == TimeToOomThreshold);
             if (ev->Get()->State == ECGroupOomTrendState::Active) {
                 ActiveNotifications.fetch_add(1, std::memory_order_relaxed);
                 if (!HasActiveResult) {
@@ -285,6 +295,7 @@ namespace {
     private:
         TResultWaiter<std::optional<TCGroupOomTrend>>& ActiveResult;
         TResultWaiter<std::optional<TCGroupOomTrend>>& StoppedResult;
+        const TDuration TimeToOomThreshold;
         std::atomic<ui32>& ActiveNotifications;
         std::atomic<ui32>& StoppedNotifications;
         bool HasActiveResult = false;
@@ -534,10 +545,12 @@ Y_UNIT_TEST_SUITE(TCGroupStatsSubSystemTest) {
         TResultWaiter<std::optional<TCGroupOomTrend>> stoppedResult;
         std::atomic<ui32> activeNotifications = 0;
         std::atomic<ui32> stoppedNotifications = 0;
+        const TDuration timeToOomThreshold = TDuration::Seconds(10);
         const TActorId subscriber = actorSystem->Register(
             new TTrendSubscriberActor(
                 activeResult,
                 stoppedResult,
+                timeToOomThreshold,
                 activeNotifications,
                 stoppedNotifications),
             TMailboxType::Simple,
@@ -547,7 +560,7 @@ Y_UNIT_TEST_SUITE(TCGroupStatsSubSystemTest) {
         oom.SubscribeToTrend(
             subscriber,
             trendWindow,
-            TDuration::Seconds(10));
+            timeToOomThreshold);
 
         TResultWaiter<std::optional<TCGroupOomTrend>> noTrendResult;
         RequestOomTrend(*actorSystem, oom, trendWindow, noTrendResult);

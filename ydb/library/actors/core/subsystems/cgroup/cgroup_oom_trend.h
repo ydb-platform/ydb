@@ -73,8 +73,6 @@ namespace NActors::NDetail {
         TDeque<TSample> Samples;
         TDuration MaxWindow;
         std::optional<TMonotonic> HistoryStartedAt;
-        std::optional<ECGroupVersion> Version;
-        TString CGroupPath;
     };
 
 } // namespace NActors::NDetail

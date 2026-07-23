@@ -39,11 +39,7 @@ namespace NActors::NDetail {
             return recalculated;
         }
 
-        if (!Version || *Version != stats->Version || CGroupPath != stats->CGroupPath) {
-            Reset();
-            Version = stats->Version;
-            CGroupPath = stats->CGroupPath;
-        } else if (!Samples.empty() && timestamp <= Samples.back().Timestamp) {
+        if (!Samples.empty() && timestamp <= Samples.back().Timestamp) {
             Reset();
         }
 

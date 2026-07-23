@@ -68,8 +68,9 @@ namespace NActors {
     struct TEvCGroupOomTrend
         : TEventLocal<TEvCGroupOomTrend, static_cast<ui32>(ECGroupEvent::OomTrend)>
     {
-        // ReadTrend responses are always Active. Subscriptions additionally
-        // receive Stopped when their forecast condition ceases to hold.
+        // ReadTrend responses are Active when a trend was found and Stopped
+        // otherwise. Subscriptions additionally receive Stopped when their
+        // forecast condition ceases to hold.
         ECGroupOomTrendState State;
 
         // Empty when the calculation completed without finding a trend. A
@@ -77,11 +78,17 @@ namespace NActors {
         // trend when it exists but no longer meets the subscription threshold.
         std::optional<TCGroupOomTrend> Trend;
 
+        // Set only for subscription notifications so an actor can distinguish
+        // multiple subscriptions for the same window.
+        std::optional<TDuration> TimeToOomThreshold;
+
         explicit TEvCGroupOomTrend(
                 std::optional<TCGroupOomTrend> trend,
-                ECGroupOomTrendState state = ECGroupOomTrendState::Active)
+                ECGroupOomTrendState state = ECGroupOomTrendState::Active,
+                std::optional<TDuration> timeToOomThreshold = std::nullopt)
             : State(state)
             , Trend(std::move(trend))
+            , TimeToOomThreshold(timeToOomThreshold)
         {
         }
 

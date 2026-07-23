@@ -14,6 +14,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/output.h>
 
 #include <algorithm>
 #include <array>
@@ -179,7 +180,9 @@ namespace NActors {
                 const size_t providerIndex = ev->Cookie;
 
                 if (ev->Get()->Stats) {
-                    Evaluate(std::move(ev->Get()->Stats));
+                    if (!Evaluate(std::move(ev->Get()->Stats))) {
+                        return;
+                    }
                     Schedule(Config.PollPeriod, new TEvPoll());
                 } else if (providerIndex + 1 < Providers.size()) {
                     RequestProvider(providerIndex + 1);
@@ -205,6 +208,7 @@ namespace NActors {
                             ? ECGroupOomTrendState::Active
                             : ECGroupOomTrendState::Stopped,
                         trend,
+                        std::nullopt,
                         ev->Get()->Cookie);
                 } else {
                     PendingTrendRequests[CGroupOomTrendWindowIndex(
@@ -254,18 +258,28 @@ namespace NActors {
                 }
             }
 
-            void Evaluate(TCGroupMemoryStatsPtr stats) {
+            bool Evaluate(TCGroupMemoryStatsPtr stats) {
+                if (!CGroupVersion) {
+                    CGroupVersion = stats->Version;
+                    CGroupPath = stats->CGroupPath;
+                } else if (*CGroupVersion != stats->Version ||
+                        CGroupPath != stats->CGroupPath) {
+                    Cerr
+                        << "ERROR: cgroup memory stats source changed from version "
+                        << static_cast<ui32>(*CGroupVersion)
+                        << " path " << CGroupPath
+                        << " to version " << static_cast<ui32>(stats->Version)
+                        << " path " << stats->CGroupPath << Endl;
+                    Cerr
+                        << "Stopping cgroup OOM monitoring; restart the process "
+                        << "in the target cgroup" << Endl;
+                    PassAway();
+                    return false;
+                }
+
                 const auto recalculated = TrendCalculator.AddSample(
                     TActivationContext::Monotonic(),
                     stats);
-
-                if (!PreviousVersion || *PreviousVersion != stats->Version ||
-                        PreviousCGroupPath != stats->CGroupPath) {
-                    PreviousVersion = stats->Version;
-                    PreviousCGroupPath = stats->CGroupPath;
-                    HasPreviousMemory = false;
-                    ActiveLevelReasons = 0;
-                }
 
                 TCGroupOomAlert alert;
                 alert.Stats = std::move(stats);
@@ -317,6 +331,7 @@ namespace NActors {
                         UpdateTrendSubscriptions(window);
                     }
                 }
+                return true;
             }
 
             void Notify(const TCGroupOomAlert& alert) {
@@ -349,7 +364,8 @@ namespace NActors {
                     active
                         ? ECGroupOomTrendState::Active
                         : ECGroupOomTrendState::Stopped,
-                    trend);
+                    trend,
+                    subscription.TimeToOomThreshold);
                 subscription.Active = active;
             }
 
@@ -365,10 +381,11 @@ namespace NActors {
                     const TActorId& recipient,
                     ECGroupOomTrendState state,
                     const std::optional<TCGroupOomTrend>& trend,
+                    std::optional<TDuration> timeToOomThreshold = std::nullopt,
                     ui64 cookie = 0) {
                 Send(
                     recipient,
-                    new TEvCGroupOomTrend(trend, state),
+                    new TEvCGroupOomTrend(trend, state, timeToOomThreshold),
                     0,
                     cookie);
             }
@@ -388,6 +405,7 @@ namespace NActors {
                         request.Recipient,
                         state,
                         trend,
+                        std::nullopt,
                         request.Cookie);
                 }
                 requests.clear();
@@ -406,8 +424,8 @@ namespace NActors {
                 TVector<TPendingTrendRequest>,
                 CGroupOomTrendWindows.size()> PendingTrendRequests;
 
-            std::optional<ECGroupVersion> PreviousVersion;
-            TString PreviousCGroupPath;
+            std::optional<ECGroupVersion> CGroupVersion;
+            TString CGroupPath;
             TCGroupMemoryStats PreviousMemory;
             ui32 ActiveLevelReasons = 0;
             bool HasPreviousMemory = false;

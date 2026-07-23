@@ -105,6 +105,10 @@ namespace NActors {
         ui32 ExecutorPoolId = 0;
         TDuration PollPeriod = TDuration::Seconds(1);
 
+        // The cgroup version and path are fixed by the first memory snapshot.
+        // Moving a running process between cgroups stops OOM monitoring; restart
+        // the process in the target cgroup instead.
+
         // An empty optional disables the corresponding threshold.
         std::optional<double> MemoryUsageThreshold = 0.9;
         std::optional<ui64> AvailableBytesThreshold;

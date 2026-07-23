@@ -1015,39 +1015,6 @@ def _common_partition_facts(rows: tuple[Row, ...]) -> frozenset[PartitionFact]:
     return frozenset(common)
 
 
-def _term_structural_ids(roots: tuple[smt.Term, ...]) -> tuple[int, ...]:
-    """Intern exact SMT structure without recursively hashing a deep term DAG."""
-
-    by_identity: dict[int, int] = {}
-    by_structure: dict[tuple[object, ...], int] = {}
-    for root in roots:
-        pending = [(root, False)]
-        while pending:
-            term, expanded = pending.pop()
-            identity = id(term)
-            if identity in by_identity:
-                continue
-            if not expanded:
-                pending.append((term, True))
-                pending.extend(
-                    (argument, False)
-                    for argument in reversed(term.arguments)
-                    if id(argument) not in by_identity
-                )
-                continue
-            structure = (
-                term.sort,
-                term.operation,
-                term.atom,
-                tuple(by_identity[id(argument)] for argument in term.arguments),
-            )
-            by_identity[identity] = by_structure.setdefault(
-                structure,
-                len(by_structure),
-            )
-    return tuple(by_identity[id(root)] for root in roots)
-
-
 def _aggregate_key_classes(
     keys: tuple[str, ...],
     rows: tuple[Row, ...],
@@ -1058,7 +1025,7 @@ def _aggregate_key_classes(
         tuple(row.values[key] for key in keys)
         for row in rows
     )
-    term_ids = iter(_term_structural_ids(
+    term_ids = iter(smt.structural_ids(
         tuple(
             term
             for values in key_values

@@ -1,6 +1,7 @@
 import os
 import subprocess
 import unittest
+from unittest import mock
 
 try:
     import yatest.common as yatest_common
@@ -15,6 +16,13 @@ SOLVER = (
     if yatest_common is not None
     else os.environ.get("RBO_Z3")
 )
+
+
+def _deep_shared_term(leaf, depth=2000):
+    term = leaf
+    for _ in range(depth):
+        term = smt.Term(leaf.sort, "deep", (term, term))
+    return term
 
 
 class SmtTest(unittest.TestCase):
@@ -117,6 +125,83 @@ class SmtTest(unittest.TestCase):
         reverse.assert_global(smt.lt(later_function(later_choice), smt.int_value(10)))
         with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
             reverse.register_quantified_choice(later_choice)
+
+    def test_dependency_audit_is_iterative_and_matches_copied_symbols(self):
+        script = smt.Script()
+        choice = script.fresh_constant("ordinal", smt.INT)
+        script.register_quantified_choice(choice)
+        independent = _deep_shared_term(smt.symbol("independent", smt.INT))
+        script.assert_global(smt.Term(smt.BOOL, "predicate", (independent,)))
+
+        assert isinstance(choice.atom, str)
+        copied_choice = smt.symbol(choice.atom, choice.sort)
+        dependent = _deep_shared_term(copied_choice)
+        with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
+            script.assert_global(smt.Term(smt.BOOL, "predicate", (dependent,)))
+
+        self.assertFalse(
+            smt._depends_on(
+                smt.symbol(choice.atom, smt.BOOL),
+                {smt._symbol_key(choice)},
+            )
+        )
+
+        reverse = smt.Script()
+        later_choice = reverse.fresh_constant("ordinal", smt.INT)
+        assert isinstance(later_choice.atom, str)
+        copied_later = smt.symbol(later_choice.atom, later_choice.sort)
+        reverse.assert_global(
+            smt.Term(
+                smt.BOOL,
+                "predicate",
+                (_deep_shared_term(copied_later),),
+            )
+        )
+        with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
+            reverse.register_quantified_choice(later_choice)
+
+    def test_deep_string_terms_use_identity_storage_and_exact_choice_audit(self):
+        independent = smt.Script()
+        choice = independent.fresh_constant("ordinal", smt.INT)
+        value = _deep_shared_term(smt.symbol("independent_string", smt.INT))
+        independent.register_string_term(value)
+        independent.register_string_term(value)
+        self.assertEqual(len(independent._string_terms), 1)
+        independent.register_quantified_choice(choice)
+
+        deduplicated = smt.Script()
+        left = _deep_shared_term(smt.symbol("same_string", smt.INT))
+        right = _deep_shared_term(smt.symbol("same_string", smt.INT))
+        deduplicated.register_string_term(left)
+        deduplicated.register_string_term(right)
+        self.assertEqual(len(deduplicated._string_terms), 2)
+        deduplicated.seal_string_order()
+        self.assertEqual(len(deduplicated._string_terms), 1)
+        self.assertEqual(len(deduplicated.string_literals), 1)
+
+        forward = smt.Script()
+        forward_choice = forward.fresh_constant("ordinal", smt.INT)
+        forward.register_quantified_choice(forward_choice)
+        assert isinstance(forward_choice.atom, str)
+        forward_copy = smt.symbol(forward_choice.atom, forward_choice.sort)
+        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
+            forward.register_string_term(_deep_shared_term(forward_copy))
+
+        reverse = smt.Script()
+        reverse_choice = reverse.fresh_constant("ordinal", smt.INT)
+        assert isinstance(reverse_choice.atom, str)
+        reverse_copy = smt.symbol(reverse_choice.atom, reverse_choice.sort)
+        reverse.register_string_term(_deep_shared_term(reverse_copy))
+        with self.assertRaisesRegex(smt.SmtError, "quantified sequence choice"):
+            reverse.register_quantified_choice(reverse_choice)
+
+        bounded = smt.Script()
+        with mock.patch.object(smt, "MAX_REPRESENTATIVES", 1):
+            bounded.register_string_term(smt.symbol("first_string", smt.INT))
+            with self.assertRaisesRegex(smt.SmtError, "at least 2 ranks.*limit is 1"):
+                bounded.register_string_term(
+                    smt.symbol("second_string", smt.INT)
+                )
 
     def test_global_invariants_render_before_ordinary_obligations(self):
         script = smt.Script()

@@ -2,9 +2,9 @@
 
 #include "context.h"
 #include "node.h"
+#include "sql_translation.h"
 
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/sql/v1/sql_translation.h>
 
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 

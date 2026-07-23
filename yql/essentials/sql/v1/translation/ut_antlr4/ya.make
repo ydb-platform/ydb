@@ -1,4 +1,4 @@
-UNITTEST_FOR(yql/essentials/sql/v1)
+UNITTEST_FOR(yql/essentials/sql/v1/translation)
 
 SRCS(
     sql_ut_antlr4.cpp

@@ -237,6 +237,11 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             return;
 
         case EOperator::AddDependencies:
+            if (children != 1) {
+                Unsupported("AddDependencies must have one input");
+            }
+            return;
+
         case EOperator::CBOTree:
             Unsupported(TStringBuilder()
                 << "Unsupported operator " << op.GetExplainName());
@@ -311,6 +316,16 @@ TVector<TIntrusivePtr<IOperator>> OrderedSubplanRoots(const TSubplans& subplans)
 
 void ValidateSnapshotTopology(TOpRoot& root) {
     ValidateOperatorTopology(root, true);
+    THashSet<const IOperator*> mainNodes;
+    VisitOperators(
+        root.GetInput(),
+        mainNodes,
+        [](IOperator& op) {
+            if (op.GetKind() == EOperator::AddDependencies) {
+                Unsupported(
+                    "AddDependencies is only admissible inside a normalized correlated EXISTS subplan");
+            }
+        });
     for (const auto& subplanRoot :
         OrderedSubplanRoots(root.PlanProps.Subplans))
     {
@@ -4568,12 +4583,24 @@ TString Phase(EOpPhase phase) {
 
 class TPlanExporter {
 private:
-    struct TScalarSubplanDescriptor {
+    enum class ESubplanKind {
+        Scalar,
+        Exists,
+    };
+
+    struct TSubplanDescriptor {
+        ESubplanKind Kind = ESubplanKind::Scalar;
         TString Binding;
-        TIntrusivePtr<IOperator> Plan;
+        // RegistryRoot retains optimizer topology for nesting audits.
+        // ExportedRoot is the closed relation actually serialized.
+        TIntrusivePtr<IOperator> RegistryRoot;
+        TIntrusivePtr<IOperator> ExportedRoot;
         TString OutputColumn;
         TString Type;
         bool OutputNullable = false;
+        std::optional<NJson::TJsonValue> Predicate;
+        TVector<TString> Dependencies;
+        const TTypeAnnotationNode* DependencyType = nullptr;
         TVector<IOperator*> Consumers;
     };
 
@@ -4604,8 +4631,8 @@ public:
 
         // Subplan roots precede the main root so descriptors and consumer IDs
         // share one deterministic post-order node namespace.
-        for (const auto& subplan : ScalarSubplans) {
-            ExportNode(subplan.Plan);
+        for (const auto& subplan : Subplans) {
+            ExportNode(subplan.ExportedRoot);
         }
         RootId = ExportNode(Root.GetInput());
         const auto rootNames = OutputNames(*Root.GetInput());
@@ -4648,14 +4675,73 @@ public:
     }
 
 private:
+    struct TExactType {
+        TString Name;
+        bool Nullable = false;
+    };
+
+    static TString KindName(ESubplanKind kind) {
+        return kind == ESubplanKind::Scalar ? TString("Scalar") : TString("EXISTS");
+    }
+
+    static TExactType ExactType(const TTypeAnnotationNode* type) {
+        TExactType result;
+        result.Name = TypeName(type, &result.Nullable);
+        return result;
+    }
+
+    static bool SameType(const TExactType& left, const TExactType& right) {
+        return left.Name == right.Name && left.Nullable == right.Nullable;
+    }
+
+    static THashSet<TString> ExpressionColumns(const TExpression& expression) {
+        if (!expression.Node) {
+            Unsupported("Subplan predicate is empty");
+        }
+        THashSet<TString> result;
+        THashSet<const TExprNode*> visited;
+        std::function<void(const TExprNode&)> visit =
+            [&](const TExprNode& node) {
+                if (!visited.insert(&node).second) {
+                    return;
+                }
+                if (node.IsCallable("Member")) {
+                    if (node.ChildrenSize() != 2 || !node.Child(1)->IsAtom()) {
+                        Unsupported("Subplan predicate contains a malformed Member");
+                    }
+                    const TString name(node.Child(1)->Content());
+                    if (name.empty()) {
+                        Unsupported("Subplan predicate contains an empty column name");
+                    }
+                    result.insert(name);
+                }
+                for (const auto& child : node.Children()) {
+                    visit(*child);
+                }
+            };
+        visit(*expression.Node);
+        return result;
+    }
+
+    static std::optional<TString> DirectMemberName(const TExprNode& node) {
+        if (!node.IsCallable("Member") ||
+            node.ChildrenSize() != 2 ||
+            !node.Child(1)->IsAtom())
+        {
+            return std::nullopt;
+        }
+        const TString name(node.Child(1)->Content());
+        return name.empty() ? std::nullopt : std::optional<TString>(name);
+    }
+
     TVector<TString> ReferencedSubplanBindings(IOperator& op) {
         THashSet<TString> referenced;
         for (const auto& iu : op.GetSubplanIUs(Root.PlanProps)) {
             const TString name = iu.GetFullName();
-            if (!ScalarSubplanIndices.contains(name)) {
+            if (!SubplanIndices.contains(name)) {
                 Unsupported(TStringBuilder()
                     << op.GetExplainName()
-                    << " references an undeclared scalar subplan binding "
+                    << " references an undeclared subplan binding "
                     << name);
             }
             referenced.insert(name);
@@ -4663,12 +4749,370 @@ private:
 
         TVector<TString> result;
         result.reserve(referenced.size());
-        for (const auto& subplan : ScalarSubplans) {
+        for (const auto& subplan : Subplans) {
             if (referenced.contains(subplan.Binding)) {
                 result.push_back(subplan.Binding);
             }
         }
         return result;
+    }
+
+    TSubplanDescriptor PrepareScalarSubplan(
+        const TString& binding,
+        const TSubplanEntry& entry,
+        const TIntrusivePtr<IOperator>& plan)
+    {
+        if (!entry.Tuple.empty()) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " has tuple inputs");
+        }
+        if (!entry.DependentIUs.empty()) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " is correlated");
+        }
+        THashSet<const IOperator*> nodes;
+        VisitOperators(plan, nodes, [&](IOperator& op) {
+            if (op.GetKind() == EOperator::AddDependencies) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " has residual AddDependencies");
+            }
+        });
+        const auto resultIUs = GetSubplanResultIUs(plan);
+        if (resultIUs.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " must have exactly one result column");
+        }
+        const TString output = resultIUs.front().GetFullName();
+        const auto outputNames = OutputNames(*plan);
+        if (output.empty() || !outputNames.contains(output)) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " has an invalid result column " << output);
+        }
+
+        bool outputNullable = false;
+        const TString type = TypeName(
+            OutputType(*plan, output),
+            &outputNullable);
+        return {
+            .Kind = ESubplanKind::Scalar,
+            .Binding = binding,
+            .RegistryRoot = plan,
+            .ExportedRoot = plan,
+            .OutputColumn = output,
+            .Type = type,
+            .OutputNullable = outputNullable,
+        };
+    }
+
+    void ValidatePeeledExistsMap(TOpMap& map, const TString& binding) {
+        CheckSnapshotProperties(map, false);
+        const auto inputNames = OutputNames(*map.GetInput());
+        const auto outputNames = OutputNames(map);
+        if (outputNames.empty()) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " has a peeled Map with no output");
+        }
+        THashSet<TString> produced;
+        for (const auto& element : map.MapElements) {
+            if (!element.IsColumnAccess()) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has a Map wrapper that is not a plain column projection");
+            }
+            const TString source = element.GetColumnAccess().GetFullName();
+            const TString output = element.GetElementName().GetFullName();
+            if (source.empty() || !inputNames.contains(source) ||
+                output.empty() || !produced.insert(output).second)
+            {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has an invalid Map wrapper");
+            }
+            bool expressionNullable = false;
+            const TExactType expressionType{
+                ScalarTypeName(
+                    *element.GetExpression().GetExpressionBody(),
+                    &expressionNullable),
+                expressionNullable,
+            };
+            if (!SameType(
+                    ExactType(OutputType(*map.GetInput(), source)),
+                    expressionType) ||
+                !SameType(
+                    ExactType(OutputType(map, output)),
+                    expressionType))
+            {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has a Map wrapper with inconsistent column types");
+            }
+            Y_UNUSED(ExportExpr(element.GetExpression(), inputNames));
+        }
+    }
+
+    void ValidateExistsCorrelationTypes(
+        const TSubplanDescriptor& subplan,
+        const TExpression& correlation,
+        TStringBuf innerColumn)
+    {
+        const auto body = correlation.GetExpressionBody();
+        const auto leftName = DirectMemberName(*body->Child(0));
+        const auto rightName = DirectMemberName(*body->Child(1));
+        Y_ENSURE(leftName && rightName);
+
+        const TExprNode* dependencyMember =
+            *leftName == subplan.Dependencies.front()
+                ? body->Child(0)
+                : body->Child(1);
+        const TExprNode* innerMember =
+            *leftName == subplan.Dependencies.front()
+                ? body->Child(1)
+                : body->Child(0);
+
+        const auto declaredDependency = ExactType(subplan.DependencyType);
+        bool memberNullable = false;
+        const TExactType dependencyMemberType{
+            ScalarTypeName(*dependencyMember, &memberNullable),
+            memberNullable,
+        };
+        if (!SameType(declaredDependency, dependencyMemberType)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " dependency Member type disagrees with AddDependencies");
+        }
+
+        const auto innerOutput = ExactType(
+            OutputType(*subplan.ExportedRoot, innerColumn));
+        memberNullable = false;
+        const TExactType innerMemberType{
+            ScalarTypeName(*innerMember, &memberNullable),
+            memberNullable,
+        };
+        if (!SameType(innerOutput, innerMemberType)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " inner equality Member type disagrees with its root");
+        }
+        if (declaredDependency.Name != innerOutput.Name) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " equality column types do not match");
+        }
+
+        bool predicateNullable = false;
+        const TString predicateType =
+            ScalarTypeName(*body, &predicateNullable);
+        if (predicateType != "Bool" ||
+            predicateNullable !=
+                (declaredDependency.Nullable || innerOutput.Nullable))
+        {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " has an invalid equality result type or nullability");
+        }
+    }
+
+    void ValidateClosedExistsRoot(
+        const TIntrusivePtr<IOperator>& plan,
+        const TString& binding,
+        bool correlated)
+    {
+        THashSet<const IOperator*> nodes;
+        VisitOperators(plan, nodes, [&](IOperator& op) {
+            if (op.GetKind() == EOperator::AddDependencies) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has residual AddDependencies below its exported root");
+            }
+            if (op.Props.EnsureAtMostOne) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has an error-bearing cardinality check");
+            }
+            if (correlated &&
+                (op.GetKind() == EOperator::Limit ||
+                 (op.GetKind() == EOperator::Sort &&
+                  static_cast<TOpSort&>(op).IsTopSort())))
+            {
+                Unsupported(TStringBuilder()
+                    << "Correlated EXISTS subplan binding " << binding
+                    << " has per-invocation row-selection semantics");
+            }
+        });
+    }
+
+    TSubplanDescriptor PrepareExistsSubplan(
+        const TString& binding,
+        const TSubplanEntry& entry,
+        const TIntrusivePtr<IOperator>& originalPlan)
+    {
+        if (!entry.Tuple.empty()) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " has tuple inputs");
+        }
+        if (entry.DependentIUs.empty()) {
+            TSubplanDescriptor result{
+                .Kind = ESubplanKind::Exists,
+                .Binding = binding,
+                .RegistryRoot = originalPlan,
+                .ExportedRoot = originalPlan,
+                .Type = "Bool",
+            };
+            ValidateClosedExistsRoot(result.ExportedRoot, binding, false);
+            return result;
+        }
+        if (entry.DependentIUs.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " must have exactly one outer dependency");
+        }
+        const TString dependency =
+            entry.DependentIUs.front().GetFullName();
+        if (dependency.empty()) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " has an empty outer dependency");
+        }
+
+        auto shape = originalPlan;
+        while (shape->GetKind() == EOperator::Map) {
+            auto map = CastOperator<TOpMap>(shape);
+            ValidatePeeledExistsMap(*map, binding);
+            shape = map->GetInput();
+        }
+        if (shape->GetKind() != EOperator::Filter) {
+            Unsupported(TStringBuilder()
+                << "Correlated EXISTS subplan binding " << binding
+                << " must contain one Filter directly above AddDependencies");
+        }
+        auto filter = CastOperator<TOpFilter>(shape);
+        CheckSnapshotProperties(*filter, false);
+        if (filter->GetInput()->GetKind() != EOperator::AddDependencies) {
+            Unsupported(TStringBuilder()
+                << "Correlated EXISTS subplan binding " << binding
+                << " Filter is not directly above AddDependencies");
+        }
+        auto addDependencies =
+            CastOperator<TOpAddDependencies>(filter->GetInput());
+        CheckSnapshotProperties(*addDependencies, false);
+        if (addDependencies->Dependencies.size() != 1 ||
+            addDependencies->Types.size() != 1 ||
+            !addDependencies->Types.front() ||
+            addDependencies->Dependencies.front() !=
+                entry.DependentIUs.front())
+        {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " dependency registry disagrees with AddDependencies");
+        }
+
+        auto innerPlan = addDependencies->GetInput();
+        const auto innerNames = OutputNames(*innerPlan);
+        if (innerNames.contains(dependency)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " outer dependency collides with an inner column");
+        }
+        auto predicateJson = ExportExpr(
+            filter->FilterExpr,
+            [&]() {
+                auto visible = innerNames;
+                visible.insert(dependency);
+                return visible;
+            }());
+
+        std::optional<TExpression> correlation;
+        TString innerColumn;
+        for (const auto& conjunct : filter->FilterExpr.SplitConjunct()) {
+            const auto columns = ExpressionColumns(conjunct);
+            if (!columns.contains(dependency)) {
+                for (const auto& column : columns) {
+                    if (!innerNames.contains(column)) {
+                        Unsupported(TStringBuilder()
+                            << "EXISTS subplan binding " << binding
+                            << " residual predicate references unavailable column "
+                            << column);
+                    }
+                }
+                continue;
+            }
+            if (correlation) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " references its outer dependency in multiple conjuncts");
+            }
+            const auto body = conjunct.GetExpressionBody();
+            if (!body->IsCallable("==") || body->ChildrenSize() != 2) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " correlation must be one strict column equality");
+            }
+            const auto left = DirectMemberName(*body->Child(0));
+            const auto right = DirectMemberName(*body->Child(1));
+            if (!left || !right ||
+                ((*left == dependency) == (*right == dependency)))
+            {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " correlation must compare its dependency to one inner column");
+            }
+            innerColumn = *left == dependency ? *right : *left;
+            if (!innerNames.contains(innerColumn) || columns.size() != 2) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " correlation does not reference exactly one inner column");
+            }
+            correlation = conjunct;
+        }
+        if (!correlation) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " has no equality for its outer dependency");
+        }
+
+        TSubplanDescriptor result{
+            .Kind = ESubplanKind::Exists,
+            .Binding = binding,
+            .RegistryRoot = originalPlan,
+            .ExportedRoot = innerPlan,
+            .Type = "Bool",
+            .Predicate = std::move(predicateJson),
+            .Dependencies = {dependency},
+            .DependencyType = addDependencies->Types.front(),
+        };
+        ValidateClosedExistsRoot(result.ExportedRoot, binding, true);
+        ValidateExistsCorrelationTypes(result, *correlation, innerColumn);
+        return result;
+    }
+
+    void ValidateExistsConsumer(TSubplanDescriptor& subplan) {
+        if (subplan.Dependencies.empty()) {
+            return;
+        }
+        Y_ENSURE(subplan.Consumers.size() == 1);
+        auto* consumer = subplan.Consumers.front();
+        const TString& dependency = subplan.Dependencies.front();
+        const auto inputNames = OutputNames(*consumer->GetChildren().front());
+        if (!inputNames.contains(dependency)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " dependency is absent from its Filter input");
+        }
+        const auto outerType = ExactType(
+            OutputType(*consumer->GetChildren().front(), dependency));
+        const auto declaredType = ExactType(subplan.DependencyType);
+        if (!SameType(outerType, declaredType)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << subplan.Binding
+                << " dependency type or nullability disagrees with its consumer input");
+        }
     }
 
     void PrepareSubplans() {
@@ -4677,14 +5121,11 @@ private:
             Unsupported(
                 "A staged logical snapshot cannot contain residual subplans");
         }
-        for (const auto& root : roots) {
-            ValidateOperatorTopology(*root);
-        }
         if (roots.empty()) {
             return;
         }
 
-        ScalarSubplans.reserve(roots.size());
+        Subplans.reserve(roots.size());
         for (size_t index = 0; index < roots.size(); ++index) {
             const auto& bindingIU = Root.PlanProps.Subplans.OrderedList[index];
             const TString binding = bindingIU.GetFullName();
@@ -4694,55 +5135,30 @@ private:
                     << "Subplan registry order references missing binding "
                     << binding);
             }
-            const auto& entry = entryIt->second;
-            if (entry.Type != ESubplanType::EXPR) {
+            if (!SubplanIndices.emplace(binding, Subplans.size()).second) {
                 Unsupported(TStringBuilder()
-                    << "Subplan binding " << binding
-                    << " is not a scalar expression subplan");
-            }
-            if (!entry.Tuple.empty()) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " has tuple inputs");
-            }
-            if (!entry.DependentIUs.empty()) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " is correlated");
-            }
-            const auto resultIUs = GetSubplanResultIUs(roots[index]);
-            if (resultIUs.size() != 1) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " must have exactly one result column");
-            }
-            const TString output = resultIUs.front().GetFullName();
-            const auto outputNames = OutputNames(*roots[index]);
-            if (output.empty() || !outputNames.contains(output)) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " has an invalid result column " << output);
+                    << "Duplicate subplan binding " << binding);
             }
 
-            bool outputNullable = false;
-            const TString type = TypeName(
-                OutputType(*roots[index], output),
-                &outputNullable);
-            if (!ScalarSubplanIndices.emplace(
-                    binding,
-                    ScalarSubplans.size()).second)
-            {
-                Unsupported(TStringBuilder()
-                    << "Duplicate scalar subplan binding " << binding);
+            const auto& entry = entryIt->second;
+            switch (entry.Type) {
+                case ESubplanType::EXPR:
+                    Subplans.push_back(
+                        PrepareScalarSubplan(binding, entry, roots[index]));
+                    break;
+                case ESubplanType::EXISTS:
+                    Subplans.push_back(
+                        PrepareExistsSubplan(binding, entry, roots[index]));
+                    break;
+                case ESubplanType::IN_SUBPLAN:
+                    Unsupported(TStringBuilder()
+                        << "Subplan binding " << binding
+                        << " has unsupported IN_SUBPLAN semantics");
+                default:
+                    Unsupported(TStringBuilder()
+                        << "Subplan binding " << binding
+                        << " has an unknown subplan type");
             }
-            ScalarSubplans.push_back({
-                binding,
-                roots[index],
-                output,
-                type,
-                outputNullable,
-                {},
-            });
         }
 
         THashSet<const IOperator*> mainReachable;
@@ -4750,55 +5166,87 @@ private:
             Root.GetInput(),
             mainReachable,
             [](IOperator&) {});
-        for (const auto& subplan : ScalarSubplans) {
-            if (mainReachable.contains(subplan.Plan.Get())) {
+        for (const auto& subplan : Subplans) {
+            if (mainReachable.contains(subplan.RegistryRoot.Get()) ||
+                mainReachable.contains(subplan.ExportedRoot.Get()))
+            {
                 Unsupported(TStringBuilder()
-                    << "Scalar subplan root for binding "
+                    << KindName(subplan.Kind)
+                    << " subplan root for binding "
                     << subplan.Binding
                     << " is reachable from the main plan");
             }
         }
 
-        TVector<THashSet<const IOperator*>> subplanReachable(
-            ScalarSubplans.size());
-        for (size_t index = 0; index < ScalarSubplans.size(); ++index) {
+        TVector<THashSet<const IOperator*>> subplanReachable(Subplans.size());
+        for (size_t index = 0; index < Subplans.size(); ++index) {
             VisitOperators(
-                ScalarSubplans[index].Plan,
+                Subplans[index].RegistryRoot,
                 subplanReachable[index],
                 [](IOperator&) {});
         }
-        for (size_t outer = 0; outer < ScalarSubplans.size(); ++outer) {
-            for (size_t inner = 0; inner < ScalarSubplans.size(); ++inner) {
+        for (size_t outer = 0; outer < Subplans.size(); ++outer) {
+            for (size_t inner = 0; inner < Subplans.size(); ++inner) {
                 if (outer == inner ||
-                    ScalarSubplans[outer].Plan.Get() ==
-                        ScalarSubplans[inner].Plan.Get())
+                    Subplans[outer].RegistryRoot.Get() ==
+                        Subplans[inner].RegistryRoot.Get())
                 {
                     continue;
                 }
                 if (subplanReachable[outer].contains(
-                        ScalarSubplans[inner].Plan.Get()))
+                        Subplans[inner].RegistryRoot.Get()))
                 {
                     Unsupported(TStringBuilder()
-                        << "Scalar subplan root for binding "
-                        << ScalarSubplans[inner].Binding
+                        << KindName(Subplans[inner].Kind)
+                        << " subplan root for binding "
+                        << Subplans[inner].Binding
                         << " is reachable below distinct subplan binding "
-                        << ScalarSubplans[outer].Binding);
+                        << Subplans[outer].Binding);
                 }
             }
         }
 
-        // A subplan is a closed relation in this first slice. References from
-        // one captured subplan into any registry binding would be nesting or
-        // correlation and must not be silently evaluated as a free column.
-        for (const auto& subplan : ScalarSubplans) {
+        TVector<THashSet<const IOperator*>> exportedSubplanReachable(
+            Subplans.size());
+        for (size_t index = 0; index < Subplans.size(); ++index) {
+            VisitOperators(
+                Subplans[index].ExportedRoot,
+                exportedSubplanReachable[index],
+                [](IOperator&) {});
+        }
+        for (size_t outer = 0; outer < Subplans.size(); ++outer) {
+            for (size_t inner = 0; inner < Subplans.size(); ++inner) {
+                if (outer == inner ||
+                    Subplans[outer].ExportedRoot.Get() ==
+                        Subplans[inner].ExportedRoot.Get())
+                {
+                    continue;
+                }
+                if (exportedSubplanReachable[outer].contains(
+                        Subplans[inner].ExportedRoot.Get()))
+                {
+                    Unsupported(TStringBuilder()
+                        << KindName(Subplans[inner].Kind)
+                        << " exported subplan root for binding "
+                        << Subplans[inner].Binding
+                        << " is reachable below distinct subplan binding "
+                        << Subplans[outer].Binding);
+                }
+            }
+        }
+
+        // Registry roots may contain the one explicit outer dependency, but
+        // never another virtual subplan binding.
+        for (const auto& subplan : Subplans) {
             THashSet<const IOperator*> subplanNodes;
             VisitOperators(
-                subplan.Plan,
+                subplan.RegistryRoot,
                 subplanNodes,
                 [&](IOperator& op) {
                     if (!ReferencedSubplanBindings(op).empty()) {
                         Unsupported(TStringBuilder()
-                            << "Scalar subplan binding " << subplan.Binding
+                            << KindName(subplan.Kind)
+                            << " subplan binding " << subplan.Binding
                             << " contains a nested subplan reference");
                     }
                 });
@@ -4810,51 +5258,69 @@ private:
             mainNodes,
             [&](IOperator& op) {
                 const auto outputNames = OutputNames(op);
-                for (const auto& subplan : ScalarSubplans) {
+                for (const auto& subplan : Subplans) {
                     if (outputNames.contains(subplan.Binding)) {
                         Unsupported(TStringBuilder()
                             << op.GetExplainName()
-                            << " output collides with scalar subplan binding "
-                            << subplan.Binding);
+                            << " output collides with "
+                            << (subplan.Kind == ESubplanKind::Scalar
+                                ? "scalar"
+                                : "EXISTS")
+                            << " subplan binding " << subplan.Binding);
                     }
                 }
                 auto bindings = ReferencedSubplanBindings(op);
                 if (bindings.empty()) {
                     return;
                 }
-                if (op.GetKind() != EOperator::Map &&
-                    op.GetKind() != EOperator::Filter)
-                {
-                    Unsupported(TStringBuilder()
-                        << op.GetExplainName()
-                        << " cannot consume a scalar subplan binding");
-                }
                 if (op.GetChildren().size() != 1) {
                     Unsupported(TStringBuilder()
                         << op.GetExplainName()
-                        << " scalar subplan consumer is not unary");
+                        << " subplan consumer is not unary");
                 }
                 const auto inputNames = OutputNames(*op.GetChildren().front());
                 for (const auto& binding : bindings) {
+                    auto& subplan = Subplans[SubplanIndices.at(binding)];
+                    const bool allowed =
+                        subplan.Kind == ESubplanKind::Scalar
+                            ? op.GetKind() == EOperator::Map ||
+                                op.GetKind() == EOperator::Filter
+                            : op.GetKind() == EOperator::Filter;
+                    if (!allowed) {
+                        Unsupported(TStringBuilder()
+                            << op.GetExplainName() << " cannot consume "
+                            << (subplan.Kind == ESubplanKind::Scalar
+                                ? "a scalar"
+                                : "an EXISTS")
+                            << " subplan binding");
+                    }
                     if (inputNames.contains(binding)) {
                         Unsupported(TStringBuilder()
                             << op.GetExplainName()
-                            << " scalar subplan binding collides with input column "
+                            << " subplan binding collides with input column "
                             << binding);
                     }
-                    ScalarSubplans[ScalarSubplanIndices.at(binding)]
-                        .Consumers.push_back(&op);
+                    subplan.Consumers.push_back(&op);
                 }
                 if (!ConsumerBindings.emplace(&op, std::move(bindings)).second) {
-                    Unsupported("Scalar subplan consumer was indexed twice");
+                    Unsupported("Subplan consumer was indexed twice");
                 }
             });
 
-        for (const auto& subplan : ScalarSubplans) {
+        for (auto& subplan : Subplans) {
             if (subplan.Consumers.empty()) {
                 Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << subplan.Binding
+                    << KindName(subplan.Kind)
+                    << " subplan binding " << subplan.Binding
                     << " has no consumer");
+            }
+            if (subplan.Kind == ESubplanKind::Exists) {
+                if (subplan.Consumers.size() != 1) {
+                    Unsupported(TStringBuilder()
+                        << "EXISTS subplan binding " << subplan.Binding
+                        << " must have exactly one Filter consumer");
+                }
+                ValidateExistsConsumer(subplan);
             }
         }
     }
@@ -4874,7 +5340,7 @@ private:
             if (!result.insert(binding).second) {
                 Unsupported(TStringBuilder()
                     << consumer.GetExplainName()
-                    << " scalar subplan binding collides with input column "
+                    << " subplan binding collides with input column "
                     << binding);
             }
         }
@@ -4905,12 +5371,19 @@ private:
                         bool nullable = false;
                         const TString type = ScalarTypeName(node, &nullable);
                         const auto& subplan =
-                            ScalarSubplans[ScalarSubplanIndices.at(name)];
-                        if (type != subplan.Type || !nullable) {
+                            Subplans[SubplanIndices.at(name)];
+                        const bool expectedNullable =
+                            subplan.Kind == ESubplanKind::Scalar;
+                        if (type != subplan.Type ||
+                            nullable != expectedNullable)
+                        {
                             Unsupported(TStringBuilder()
                                 << consumer.GetExplainName()
-                                << " scalar subplan Member " << name
-                                << " must be Optional<" << subplan.Type << ">");
+                                << " subplan Member " << name
+                                << " must be "
+                                << (expectedNullable ? "Optional<" : "")
+                                << subplan.Type
+                                << (expectedNullable ? ">" : ""));
                         }
                     }
                 }
@@ -4921,33 +5394,33 @@ private:
         if (!expression.Node) {
             Unsupported(TStringBuilder()
                 << consumer.GetExplainName()
-                << " has an empty scalar subplan expression");
+                << " has an empty subplan expression");
         }
         visit(*expression.Node);
     }
 
     NJson::TJsonValue ExportSubplans() const {
         auto result = JsonArray();
-        for (const auto& subplan : ScalarSubplans) {
-            const auto* rootId = Ids.FindPtr(subplan.Plan.Get());
+        for (const auto& subplan : Subplans) {
+            const auto* rootId = Ids.FindPtr(subplan.ExportedRoot.Get());
             if (!rootId) {
                 Unsupported(TStringBuilder()
-                    << "Scalar subplan root was not exported for binding "
+                    << KindName(subplan.Kind)
+                    << " subplan root was not exported for binding "
                     << subplan.Binding);
             }
 
-            auto output = JsonMap();
-            output["column"] = subplan.OutputColumn;
-            output["type"] = subplan.Type;
-            output["nullable"] = subplan.OutputNullable;
-
             auto dependencies = JsonArray();
+            for (const auto& dependency : subplan.Dependencies) {
+                dependencies.AppendValue(dependency);
+            }
             auto consumers = JsonArray();
             for (const auto* consumer : subplan.Consumers) {
                 const auto* consumerId = Ids.FindPtr(consumer);
                 if (!consumerId) {
                     Unsupported(TStringBuilder()
-                        << "Scalar subplan consumer was not exported for binding "
+                        << KindName(subplan.Kind)
+                        << " subplan consumer was not exported for binding "
                         << subplan.Binding);
                 }
                 consumers.AppendValue(*consumerId);
@@ -4955,13 +5428,25 @@ private:
 
             auto descriptor = JsonMap();
             descriptor["binding"] = subplan.Binding;
-            descriptor["kind"] = "scalar";
             descriptor["root"] = *rootId;
-            descriptor["output"] = std::move(output);
             descriptor["type"] = subplan.Type;
-            descriptor["nullable"] = true;
             descriptor["dependencies"] = std::move(dependencies);
             descriptor["consumers"] = std::move(consumers);
+            if (subplan.Kind == ESubplanKind::Scalar) {
+                auto output = JsonMap();
+                output["column"] = subplan.OutputColumn;
+                output["type"] = subplan.Type;
+                output["nullable"] = subplan.OutputNullable;
+                descriptor["kind"] = "scalar";
+                descriptor["output"] = std::move(output);
+                descriptor["nullable"] = true;
+            } else {
+                descriptor["kind"] = "exists";
+                descriptor["predicate"] = subplan.Predicate
+                    ? *subplan.Predicate
+                    : NJson::TJsonValue(NJson::JSON_NULL);
+                descriptor["nullable"] = false;
+            }
             result.AppendValue(std::move(descriptor));
         }
         return result;
@@ -5663,8 +6148,8 @@ private:
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     TVector<IOperator*> NodeOrder;
-    TVector<TScalarSubplanDescriptor> ScalarSubplans;
-    THashMap<TString, size_t> ScalarSubplanIndices;
+    TVector<TSubplanDescriptor> Subplans;
+    THashMap<TString, size_t> SubplanIndices;
     THashMap<const IOperator*, TVector<TString>> ConsumerBindings;
     TString RootId;
     NJson::TJsonValue Nodes = JsonArray();

@@ -279,18 +279,34 @@ def _column(column: ir.Column) -> str:
     return f"{{name={_quote(column.name)}, type={_quote(column.type)}, {nullability}}}"
 
 
-def _subplan(subplan: ir.ScalarSubplan) -> str:
-    output = (
-        f"{{column={_quote(subplan.output.column)}, "
-        f"type={_quote(subplan.output.type)}, "
-        f"nullable={_boolean(subplan.output.nullable)}}}"
-    )
-    return (
-        f"subplan binding={_quote(subplan.binding)} kind={subplan.kind} "
-        f"root={_quote(subplan.root)} output={output} "
-        f"type={_quote(subplan.type)} nullable={_boolean(subplan.nullable)} "
-        f"dependencies={_list(subplan.dependencies, _quote)} "
-        f"consumers={_list(subplan.consumers, _quote)}"
+def _subplan(subplan: ir.Subplan) -> str:
+    if isinstance(subplan, ir.ScalarSubplan):
+        output = (
+            f"{{column={_quote(subplan.output.column)}, "
+            f"type={_quote(subplan.output.type)}, "
+            f"nullable={_boolean(subplan.output.nullable)}}}"
+        )
+        return (
+            f"subplan binding={_quote(subplan.binding)} kind=scalar "
+            f"root={_quote(subplan.root)} output={output} "
+            f"type={_quote(subplan.output.type)} nullable=true "
+            f"dependencies=[] "
+            f"consumers={_list(subplan.consumers, _quote)}"
+        )
+    if isinstance(subplan, ir.ExistsSubplan):
+        dependencies = (
+            () if subplan.dependency is None else (subplan.dependency,)
+        )
+        return (
+            f"subplan binding={_quote(subplan.binding)} kind=exists "
+            f"root={_quote(subplan.root)} "
+            f"predicate={_optional(subplan.predicate, render_expression)} "
+            f"type={_quote(ir.BOOL)} nullable=false "
+            f"dependencies={_list(dependencies, _quote)} "
+            f"consumers={_list(subplan.consumers, _quote)}"
+        )
+    raise InspectionError(
+        f"unknown subplan class {type(subplan).__name__!r}"
     )
 
 

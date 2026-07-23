@@ -493,6 +493,27 @@ TExprNode::TPtr TypedCallable(
     return result;
 }
 
+void AnnotateExpression(
+    TExpression& expression,
+    const TTypeAnnotationNode* type)
+{
+    expression.GetExpressionBody()->SetTypeAnn(type);
+    expression.Node->SetTypeAnn(type);
+}
+
+void AnnotateBinaryExpression(
+    TExpression& expression,
+    const TTypeAnnotationNode* leftType,
+    const TTypeAnnotationNode* rightType,
+    const TTypeAnnotationNode* resultType)
+{
+    auto body = expression.GetExpressionBody();
+    UNIT_ASSERT_VALUES_EQUAL(body->ChildrenSize(), 2);
+    body->Child(0)->SetTypeAnn(leftType);
+    body->Child(1)->SetTypeAnn(rightType);
+    AnnotateExpression(expression, resultType);
+}
+
 TExprNode::TPtr TypedUnaryLambda(
     TExportTestContext& ctx,
     const TExprNode::TPtr& argument,
@@ -11136,6 +11157,640 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "Exact scalar expression exceeds the node audit limit");
     }
 
+    Y_UNIT_TEST(ExportsExactUncorrelatedAndEqualityCorrelatedExists) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {
+                {"k", "Int32", false},
+                {"flag", "Bool", true},
+                {"flag2", "Bool", true},
+            });
+        const auto pos = TPositionHandle();
+        const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt32 =
+            ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+        const auto* optionalBool =
+            ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto uncorrelatedRead = MakeRead(
+            ctx,
+            innerTable,
+            "uncorrelated",
+            {"k", "flag", "flag2"});
+        auto correlatedRead = MakeRead(
+            ctx,
+            innerTable,
+            "inner",
+            {"k", "flag", "flag2"});
+        SetOutputType(ctx, *outerRead, {
+            {"outer.k", NUdf::EDataSlot::Int32},
+        });
+        SetOutputType(ctx, *uncorrelatedRead, {
+            {"uncorrelated.k", NUdf::EDataSlot::Int32, true},
+            {"uncorrelated.flag", NUdf::EDataSlot::Bool},
+            {"uncorrelated.flag2", NUdf::EDataSlot::Bool},
+        });
+        SetOutputType(ctx, *correlatedRead, {
+            {"inner.k", NUdf::EDataSlot::Int32, true},
+            {"inner.flag", NUdf::EDataSlot::Bool},
+            {"inner.flag2", NUdf::EDataSlot::Bool},
+        });
+
+        TOpRoot root(outerRead, pos, {"outer.k"});
+        auto one = MakeConstant(
+            "Uint64",
+            "1",
+            pos,
+            &ctx.ExprCtx);
+        auto uncorrelatedLimit = MakeIntrusive<TOpLimit>(
+            uncorrelatedRead,
+            pos,
+            one,
+            EOpPhase::Undefined);
+        SetExactOutputType(ctx, *uncorrelatedLimit, {
+            {"uncorrelated.k", optionalInt32},
+            {"uncorrelated.flag", boolType},
+            {"uncorrelated.flag2", boolType},
+        });
+        auto uncorrelatedTopSort = MakeIntrusive<TOpSort>(
+            uncorrelatedLimit,
+            pos,
+            TVector<TSortElement>{TSortElement(
+                TInfoUnit("uncorrelated.k"),
+                true,
+                false)},
+            one);
+        SetExactOutputType(ctx, *uncorrelatedTopSort, {
+            {"uncorrelated.k", optionalInt32},
+            {"uncorrelated.flag", boolType},
+            {"uncorrelated.flag2", boolType},
+        });
+        const TInfoUnit uncorrelatedBinding(
+            "_rbo_exists_uncorrelated",
+            true);
+        const TInfoUnit correlatedBinding(
+            "_rbo_exists_correlated",
+            true);
+        const TInfoUnit dependency("outer.k");
+
+        auto addDependencies = MakeIntrusive<TOpAddDependencies>(
+            correlatedRead,
+            pos,
+            TVector<std::pair<
+                TInfoUnit,
+                const TTypeAnnotationNode*>>{{dependency, int32}});
+        SetExactOutputType(ctx, *addDependencies, {
+            {"inner.k", optionalInt32},
+            {"inner.flag", boolType},
+            {"inner.flag2", boolType},
+            {"outer.k", int32},
+        });
+
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps),
+            MakeColumnAccess(
+                dependency,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps));
+        AnnotateBinaryExpression(
+            equality,
+            optionalInt32,
+            int32,
+            optionalBool);
+        auto localPredicate = MakeColumnAccess(
+            TInfoUnit("inner.flag"),
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(localPredicate, boolType);
+        auto secondLocalPredicate = MakeColumnAccess(
+            TInfoUnit("inner.flag2"),
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(secondLocalPredicate, boolType);
+        auto correlatedPredicate =
+            MakeConjunction({
+                localPredicate,
+                equality,
+                secondLocalPredicate,
+            });
+        AnnotateExpression(correlatedPredicate, optionalBool);
+        auto correlatedFilter = MakeIntrusive<TOpFilter>(
+            addDependencies,
+            pos,
+            correlatedPredicate);
+        SetExactOutputType(ctx, *correlatedFilter, {
+            {"inner.k", optionalInt32},
+            {"inner.flag", boolType},
+            {"inner.flag2", boolType},
+            {"outer.k", int32},
+        });
+
+        auto projectedColumn = MakeColumnAccess(
+            TInfoUnit("inner.k"),
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(projectedColumn, optionalInt32);
+        auto cardinalityPreservingMap = MakeIntrusive<TOpMap>(
+            correlatedFilter,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("projected.k"),
+                projectedColumn)});
+        SetExactOutputType(ctx, *cardinalityPreservingMap, {
+            {"inner.k", optionalInt32},
+            {"inner.flag", boolType},
+            {"inner.flag2", boolType},
+            {"outer.k", int32},
+            {"projected.k", optionalInt32},
+        });
+
+        root.PlanProps.Subplans.Add(
+            uncorrelatedBinding,
+            TSubplanEntry{
+                uncorrelatedTopSort,
+                {},
+                ESubplanType::EXISTS,
+                uncorrelatedBinding,
+                {}});
+        root.PlanProps.Subplans.Add(
+            correlatedBinding,
+            TSubplanEntry{
+                cardinalityPreservingMap,
+                {},
+                ESubplanType::EXISTS,
+                correlatedBinding,
+                {dependency}});
+
+        auto uncorrelatedValue = MakeColumnAccess(
+            uncorrelatedBinding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        auto correlatedValue = MakeColumnAccess(
+            correlatedBinding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(uncorrelatedValue, boolType);
+        AnnotateExpression(correlatedValue, boolType);
+        auto negatedCorrelatedValue = MakeNegation(correlatedValue);
+        AnnotateExpression(negatedCorrelatedValue, boolType);
+        auto consumerPredicate =
+            MakeConjunction({
+                uncorrelatedValue,
+                negatedCorrelatedValue,
+            });
+        AnnotateExpression(consumerPredicate, boolType);
+        auto consumer = MakeIntrusive<TOpFilter>(
+            outerRead,
+            pos,
+            consumerPredicate);
+        SetExactOutputType(ctx, *consumer, {{"outer.k", int32}});
+        root.SetInput(consumer);
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& descriptors =
+            snapshot["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(descriptors.size(), 2);
+
+        const auto& uncorrelated = descriptors[0];
+        UNIT_ASSERT_VALUES_EQUAL(uncorrelated.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(
+            uncorrelated["binding"].GetStringSafe(),
+            "_rbo_exists_uncorrelated");
+        UNIT_ASSERT_VALUES_EQUAL(
+            uncorrelated["kind"].GetStringSafe(),
+            "exists");
+        UNIT_ASSERT_VALUES_EQUAL(
+            uncorrelated["type"].GetStringSafe(),
+            "Bool");
+        UNIT_ASSERT_VALUES_EQUAL(
+            uncorrelated["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT(uncorrelated["predicate"].IsNull());
+        UNIT_ASSERT(uncorrelated["dependencies"].GetArraySafe().empty());
+        UNIT_ASSERT(!uncorrelated.Has("output"));
+
+        const auto& correlated = descriptors[1];
+        UNIT_ASSERT_VALUES_EQUAL(correlated.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlated["binding"].GetStringSafe(),
+            "_rbo_exists_correlated");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(correlated["dependencies"]),
+            TVector<TString>{"outer.k"});
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlated["predicate"]["kind"].GetStringSafe(),
+            "and");
+        const auto& correlatedConjuncts =
+            correlated["predicate"]["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(correlatedConjuncts.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlatedConjuncts[0]["column"].GetStringSafe(),
+            "inner.flag");
+        UNIT_ASSERT_VALUES_EQUAL(
+            EqualityColumns(correlatedConjuncts[1]),
+            std::make_pair(TString("inner.k"), TString("outer.k")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlatedConjuncts[2]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlatedConjuncts[2]["column"].GetStringSafe(),
+            "inner.flag2");
+        UNIT_ASSERT(!correlated.Has("output"));
+
+        const auto& nodes = snapshot["plan"]["nodes"].GetArraySafe();
+        const NJson::TJsonValue* normalizedRoot = nullptr;
+        const NJson::TJsonValue* consumerNode = nullptr;
+        for (const auto& node : nodes) {
+            UNIT_ASSERT_UNEQUAL(
+                node["op"].GetStringSafe(),
+                "add_dependencies");
+            if (node["id"].GetStringSafe() ==
+                correlated["root"].GetStringSafe())
+            {
+                normalizedRoot = &node;
+            }
+            if (node["id"].GetStringSafe() ==
+                correlated["consumers"][0].GetStringSafe())
+            {
+                consumerNode = &node;
+            }
+        }
+        UNIT_ASSERT(normalizedRoot);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*normalizedRoot)["op"].GetStringSafe(),
+            "scan");
+        UNIT_ASSERT(consumerNode);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*consumerNode)["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlated["consumers"][0].GetStringSafe(),
+            uncorrelated["consumers"][0].GetStringSafe());
+
+        uncorrelatedLimit->Props.EnsureAtMostOne = true;
+        const auto checkedExists =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!checkedExists.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            checkedExists.UnsupportedReason,
+            "error-bearing cardinality check");
+        uncorrelatedLimit->Props.EnsureAtMostOne = false;
+
+        uncorrelatedTopSort->SetInput(correlatedRead);
+        const auto normalizedNesting =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!normalizedNesting.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            normalizedNesting.UnsupportedReason,
+            "exported subplan root");
+        uncorrelatedTopSort->SetInput(uncorrelatedLimit);
+
+        root.SetInput(correlatedRead);
+        const auto normalizedMainRoot =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!normalizedMainRoot.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            normalizedMainRoot.UnsupportedReason,
+            "reachable from the main plan");
+        root.SetInput(consumer);
+    }
+
+    Y_UNIT_TEST(CorrelatedExistsContractsFailClosed) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/Outer",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/Inner",
+            {{"k", "Int32", true}});
+        const auto pos = TPositionHandle();
+        const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* optionalInt32 =
+            ScalarType(ctx, NUdf::EDataSlot::Int32, true);
+        const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+        const auto* optionalBool =
+            ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"k"});
+        SetExactOutputType(ctx, *outerRead, {{"outer.k", int32}});
+        SetExactOutputType(ctx, *innerRead, {{"inner.k", int32}});
+
+        TOpRoot root(outerRead, pos, {"outer.k"});
+        const TInfoUnit binding("_rbo_exists", true);
+        const TInfoUnit dependency("outer.k");
+        auto addDependencies = MakeIntrusive<TOpAddDependencies>(
+            innerRead,
+            pos,
+            TVector<std::pair<
+                TInfoUnit,
+                const TTypeAnnotationNode*>>{{dependency, int32}});
+        SetExactOutputType(ctx, *addDependencies, {
+            {"inner.k", int32},
+            {"outer.k", int32},
+        });
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps),
+            MakeColumnAccess(
+                dependency,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps));
+        AnnotateBinaryExpression(
+            equality,
+            int32,
+            int32,
+            boolType);
+        auto subplanFilter = MakeIntrusive<TOpFilter>(
+            addDependencies,
+            pos,
+            equality);
+        SetExactOutputType(ctx, *subplanFilter, {
+            {"inner.k", int32},
+            {"outer.k", int32},
+        });
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                subplanFilter,
+                {},
+                ESubplanType::EXISTS,
+                binding,
+                {dependency}});
+
+        auto bindingValue = MakeColumnAccess(
+            binding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(bindingValue, boolType);
+        auto consumer = MakeIntrusive<TOpFilter>(
+            outerRead,
+            pos,
+            bindingValue);
+        SetExactOutputType(ctx, *consumer, {{"outer.k", int32}});
+        root.SetInput(consumer);
+
+        const auto catalog =
+            CaptureSemanticSnapshotCatalogV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog)
+                .IsSupported(),
+            "baseline correlated EXISTS must be supported");
+
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                root,
+                ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+        auto& entry = root.PlanProps.Subplans.PlanMap.at(binding);
+
+        entry.Type = ESubplanType::IN_SUBPLAN;
+        reject("unsupported IN_SUBPLAN semantics");
+        entry.Type = static_cast<ESubplanType>(-1);
+        reject("unknown subplan type");
+        entry.Type = ESubplanType::EXISTS;
+
+        entry.Tuple.push_back(dependency);
+        reject("has tuple inputs");
+        entry.Tuple.clear();
+
+        entry.DependentIUs.push_back(TInfoUnit("outer.other"));
+        reject("exactly one outer dependency");
+        entry.DependentIUs.pop_back();
+
+        addDependencies->Dependencies.front() =
+            TInfoUnit("outer.other");
+        reject("registry disagrees with AddDependencies");
+        addDependencies->Dependencies.front() = dependency;
+
+        auto notEqual = MakeBinaryPredicate(
+            "!=",
+            MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps),
+            MakeColumnAccess(
+                dependency,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps));
+        AnnotateBinaryExpression(
+            notEqual,
+            int32,
+            int32,
+            boolType);
+        subplanFilter->FilterExpr = notEqual;
+        reject("strict column equality");
+        subplanFilter->FilterExpr = equality;
+
+        auto duplicateEquality =
+            MakeConjunction({equality, equality});
+        AnnotateExpression(duplicateEquality, boolType);
+        subplanFilter->FilterExpr = duplicateEquality;
+        reject("multiple conjuncts");
+        subplanFilter->FilterExpr = equality;
+
+        auto computedMap = MakeIntrusive<TOpMap>(
+            subplanFilter,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("computed"),
+                MakeConstant(
+                    "Int32",
+                    "1",
+                    pos,
+                    &ctx.ExprCtx))});
+        SetExactOutputType(ctx, *computedMap, {
+            {"inner.k", int32},
+            {"outer.k", int32},
+            {"computed", int32},
+        });
+        entry.Plan = computedMap;
+        reject("not a plain column projection");
+        entry.Plan = subplanFilter;
+
+        auto residualAddDependencies =
+            MakeIntrusive<TOpAddDependencies>(
+                innerRead,
+                pos,
+                TVector<std::pair<
+                    TInfoUnit,
+                    const TTypeAnnotationNode*>>{{
+                    TInfoUnit("outer.residual"),
+                    int32,
+                }});
+        SetExactOutputType(ctx, *residualAddDependencies, {
+            {"inner.k", int32},
+            {"outer.residual", int32},
+        });
+        addDependencies->SetInput(residualAddDependencies);
+        reject("residual AddDependencies");
+        addDependencies->SetInput(innerRead);
+
+        innerRead->Props.EnsureAtMostOne = true;
+        reject("error-bearing cardinality check");
+        innerRead->Props.EnsureAtMostOne = false;
+
+        auto one = MakeConstant(
+            "Uint64",
+            "1",
+            pos,
+            &ctx.ExprCtx);
+        auto correlatedLimit = MakeIntrusive<TOpLimit>(
+            innerRead,
+            pos,
+            one,
+            EOpPhase::Undefined);
+        SetExactOutputType(ctx, *correlatedLimit, {{"inner.k", int32}});
+        addDependencies->SetInput(correlatedLimit);
+        reject("per-invocation row-selection semantics");
+        addDependencies->SetInput(innerRead);
+
+        const TVector<TSortElement> innerOrder{
+            TSortElement(TInfoUnit("inner.k"), true, false),
+        };
+        auto correlatedTopSort = MakeIntrusive<TOpSort>(
+            innerRead,
+            pos,
+            innerOrder,
+            one);
+        SetExactOutputType(ctx, *correlatedTopSort, {{"inner.k", int32}});
+        addDependencies->SetInput(correlatedTopSort);
+        reject("per-invocation row-selection semantics");
+        addDependencies->SetInput(innerRead);
+
+        auto correlatedPlainSort = MakeIntrusive<TOpSort>(
+            innerRead,
+            pos,
+            innerOrder);
+        SetExactOutputType(ctx, *correlatedPlainSort, {{"inner.k", int32}});
+        addDependencies->SetInput(correlatedPlainSort);
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog)
+                .IsSupported(),
+            "plain Sort preserves every row and must remain supported");
+        addDependencies->SetInput(innerRead);
+
+        auto oversizedPredicate = equality.GetExpressionBody();
+        for (size_t level = 0; level < 32; ++level) {
+            oversizedPredicate = TypedCallable(
+                ctx,
+                "And",
+                {oversizedPredicate, oversizedPredicate},
+                boolType);
+        }
+        auto oversizedLambda = ctx.ExprCtx.NewLambda(
+            pos,
+            equality.Node->ChildPtr(0),
+            std::move(oversizedPredicate));
+        oversizedLambda->SetTypeAnn(boolType);
+        subplanFilter->FilterExpr = TExpression(
+            std::move(oversizedLambda),
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        reject("Exact scalar expression exceeds the node audit limit");
+        subplanFilter->FilterExpr = equality;
+
+        addDependencies->Types.front() = optionalInt32;
+        reject("dependency Member type disagrees");
+        addDependencies->Types.front() = int32;
+
+        AnnotateBinaryExpression(
+            equality,
+            optionalInt32,
+            int32,
+            optionalBool);
+        reject("inner equality Member type disagrees");
+        AnnotateBinaryExpression(
+            equality,
+            int32,
+            int32,
+            boolType);
+
+        AnnotateExpression(bindingValue, optionalBool);
+        reject("subplan Member _rbo_exists must be Bool");
+        AnnotateExpression(bindingValue, boolType);
+
+        auto mapBindingValue = MakeColumnAccess(
+            binding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(mapBindingValue, boolType);
+        auto mapConsumer = MakeIntrusive<TOpMap>(
+            outerRead,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("exists.value"),
+                mapBindingValue)});
+        SetExactOutputType(ctx, *mapConsumer, {
+            {"outer.k", int32},
+            {"exists.value", boolType},
+        });
+        root.SetInput(mapConsumer);
+        reject("cannot consume an EXISTS subplan binding");
+        root.SetInput(consumer);
+
+        auto secondBindingValue = MakeColumnAccess(
+            binding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(secondBindingValue, boolType);
+        auto secondConsumer = MakeIntrusive<TOpFilter>(
+            consumer,
+            pos,
+            secondBindingValue);
+        SetExactOutputType(ctx, *secondConsumer, {{"outer.k", int32}});
+        root.SetInput(secondConsumer);
+        reject("exactly one Filter consumer");
+        root.SetInput(consumer);
+
+        root.SetInput(addDependencies);
+        reject("only admissible inside a normalized correlated EXISTS subplan");
+        root.SetInput(consumer);
+
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog)
+                .IsSupported(),
+            "restored correlated EXISTS must remain supported");
+    }
+
     Y_UNIT_TEST(ExportsScalarSubplanMapRenameConsumer) {
         TExportTestContext ctx;
         const auto& outerTable = AddTable(
@@ -11340,7 +11995,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "not a scalar expression subplan");
+            "EXISTS subplan binding _rbo_arg_0 has no consumer");
         entry.Type = ESubplanType::EXPR;
 
         entry.Plan = innerRead;

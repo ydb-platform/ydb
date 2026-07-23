@@ -451,12 +451,8 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
         )
         descriptor = ir.ScalarSubplan(
             binding="$scalar",
-            kind="scalar",
             root="sub_value",
             output=ir.SubplanOutput("sub.value", "Int64", False),
-            type="Int64",
-            nullable=True,
-            dependencies=(),
             consumers=("main_project",),
         )
         snapshot = ir.Snapshot(
@@ -502,6 +498,106 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             None,
         )
         self.assertNotEqual(snapshot_digest(snapshot), snapshot_digest(renamed))
+
+    def test_exists_subplan_descriptor_is_explicit(self):
+        nodes = (
+            ir.EmptySource("main_source"),
+            ir.Filter("main_filter", "main_source", _column("$exists")),
+            ir.Project(
+                "main_project",
+                "main_filter",
+                (ir.Projection("result", _literal(1)),),
+                False,
+            ),
+            ir.EmptySource("sub_source"),
+        )
+        descriptor = ir.ExistsSubplan(
+            binding="$exists",
+            root="sub_source",
+            predicate=None,
+            dependency=None,
+            consumers=("main_filter",),
+        )
+        snapshot = ir.Snapshot(
+            (),
+            ir.Plan(nodes, "main_project", ("result",), (descriptor,)),
+            None,
+        )
+
+        rendered = render_snapshot(snapshot)
+
+        self.assertIn(
+            'subplan binding="$exists" kind=exists root="sub_source" '
+            'predicate=none type="Bool" nullable=false dependencies=[] '
+            'consumers=["main_filter"]',
+            rendered,
+        )
+
+        correlated_nodes = (
+            ir.EmptySource("main_unit"),
+            ir.Project(
+                "outer",
+                "main_unit",
+                (ir.Projection("outer.x", _literal()),),
+                False,
+            ),
+            ir.Filter("main_filter", "outer", _column("$exists")),
+            ir.EmptySource("sub_unit"),
+            ir.Project(
+                "inner",
+                "sub_unit",
+                (ir.Projection("inner.x", _literal()),),
+                False,
+            ),
+        )
+        correlation = ir.Expr(
+            kind="eq",
+            args=(_column("outer.x"), _column("inner.x")),
+            null_safe=False,
+        )
+        correlated_descriptor = ir.ExistsSubplan(
+            binding="$exists",
+            root="inner",
+            predicate=correlation,
+            dependency="outer.x",
+            consumers=("main_filter",),
+        )
+        correlated = ir.Snapshot(
+            (),
+            ir.Plan(
+                correlated_nodes,
+                "main_filter",
+                ("outer.x",),
+                (correlated_descriptor,),
+            ),
+            None,
+        )
+        correlated_rendering = render_snapshot(correlated)
+        self.assertIn(
+            'predicate=eq(left=column("outer.x"), right=column("inner.x"), '
+            'null_safe=false) type="Bool" nullable=false '
+            'dependencies=["outer.x"]',
+            correlated_rendering,
+        )
+        reversed_correlation = replace(
+            correlated_descriptor,
+            predicate=replace(
+                correlation,
+                args=tuple(reversed(correlation.args)),
+            ),
+        )
+        self.assertNotEqual(
+            snapshot_digest(correlated),
+            snapshot_digest(
+                replace(
+                    correlated,
+                    plan=replace(
+                        correlated.plan,
+                        subplans=(reversed_correlation,),
+                    ),
+                )
+            ),
+        )
 
     def test_semantic_digest_is_stable_and_field_sensitive(self):
         snapshot = _stage_snapshot()

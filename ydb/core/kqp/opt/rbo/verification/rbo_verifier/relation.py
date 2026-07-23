@@ -14,6 +14,7 @@ from .ir import (
     Column,
     EmptySource,
     Expr,
+    ExistsSubplan,
     Filter,
     Join,
     Limit,
@@ -24,6 +25,7 @@ from .ir import (
     Snapshot,
     Sort,
     SortOrder,
+    Subplan,
     UnionAll,
     plan_node_inputs,
     validate_snapshot,
@@ -150,22 +152,22 @@ class RelationFamily:
 
 
 @dataclass(frozen=True, slots=True)
-class ScalarSubplanOutcome:
-    """One scalar value plus its inherited and local-cardinality errors."""
+class SubplanOutcome:
+    """One subplan relation plus any local cardinality error."""
 
     outcome: Outcome
     cardinality_error: smt.Term
 
     def __post_init__(self) -> None:
         if self.cardinality_error.sort != smt.BOOL:
-            raise ValueError("scalar cardinality error condition must be Boolean")
+            raise ValueError("subplan cardinality error condition must be Boolean")
 
 
 @dataclass(frozen=True, slots=True)
-class ScalarSubplanFamily:
-    """Scalar outcomes whose local cardinality error is demand-gated later."""
+class SubplanFamily:
+    """Subplan outcomes whose local cardinality error is demand-gated later."""
 
-    outcomes: tuple[ScalarSubplanOutcome, ...]
+    outcomes: tuple[SubplanOutcome, ...]
 
 
 NodeObserver: TypeAlias = Callable[[str, str, RelationFamily], None]
@@ -356,7 +358,7 @@ class Evaluator:
                 for consumer in subplan.consumers
             }
         }
-        self.scalar_subplan_families: dict[str, ScalarSubplanFamily] = {}
+        self.subplan_families: dict[str, SubplanFamily] = {}
 
     def root(self) -> RelationFamily:
         family = self.node(self.snapshot.plan.root)
@@ -450,7 +452,7 @@ class Evaluator:
                             {
                                 projection.output: self.scalar.evaluate(
                                     projection.expression,
-                                    dict(row.values) | bindings,
+                                    dict(row.values) | bindings(row),
                                 )
                                 for projection in node.columns
                             },
@@ -479,7 +481,7 @@ class Evaluator:
                                 self.scalar.is_true(
                                     self.scalar.evaluate(
                                         node.predicate,
-                                        dict(row.values) | bindings,
+                                        dict(row.values) | bindings(row),
                                     )
                                 ),
                             ),
@@ -1018,18 +1020,24 @@ class Evaluator:
         self,
         node_id: str,
         source: RelationFamily,
-        transform: Callable[[Relation, Mapping[str, Value]], Relation],
+        transform: Callable[
+            [Relation, Callable[[Row], Mapping[str, Value]]],
+            Relation,
+        ],
     ) -> RelationFamily:
         subplans = self.subplans_by_consumer.get(node_id, ())
         if not subplans:
-            return map_family(source, lambda relation: transform(relation, {}))
+            return map_family(
+                source,
+                lambda relation: transform(relation, lambda _row: {}),
+            )
 
-        binding_families: list[ScalarSubplanFamily] = []
+        binding_families: list[SubplanFamily] = []
         for subplan in subplans:
-            family = self.scalar_subplan_families.get(subplan.binding)
+            family = self.subplan_families.get(subplan.binding)
             if family is None:
-                family = self._evaluate_scalar_subplan(subplan)
-                self.scalar_subplan_families[subplan.binding] = family
+                family = self._evaluate_subplan(subplan)
+                self.subplan_families[subplan.binding] = family
             binding_families.append(family)
 
         partials: list[
@@ -1062,8 +1070,8 @@ class Evaluator:
                 decisions,
                 choices,
             ) in partials:
-                for scalar_outcome in binding_family.outcomes:
-                    outcome = scalar_outcome.outcome
+                for subplan_outcome in binding_family.outcomes:
+                    outcome = subplan_outcome.outcome
                     merged = _merge_decisions(decisions, outcome.decisions)
                     if merged is None:
                         continue
@@ -1073,19 +1081,19 @@ class Evaluator:
                             relations + (outcome.relation,),
                             inherited_errors + (outcome.error,),
                             cardinality_errors
-                            + (scalar_outcome.cardinality_error,),
+                            + (subplan_outcome.cardinality_error,),
                             merged,
                             _merge_choices(choices, outcome.choices),
                         )
                     )
                     if len(expanded) > MAX_OUTCOME_ALTERNATIVES:
                         raise RelationError(
-                            "scalar outcome product exceeds "
+                            "subplan outcome product exceeds "
                             f"the {MAX_OUTCOME_ALTERNATIVES} alternative audit bound"
                         )
             partials = expanded
         if not partials:
-            raise RelationError("scalar binding family has no compatible outcomes")
+            raise RelationError("subplan binding family has no compatible outcomes")
 
         outcomes: list[Outcome] = []
         for (
@@ -1096,10 +1104,23 @@ class Evaluator:
             decisions,
             choices,
         ) in partials:
-            bindings = {
-                subplan.binding: relations[index].rows[0].values[subplan.binding]
+            exists_pairs = sum(
+                len(relations[0].rows) * len(relations[index].rows)
                 for index, subplan in enumerate(subplans, start=1)
-            }
+                if isinstance(subplan, ExistsSubplan)
+            )
+            _require_relation_row_pairs(exists_pairs, "EXISTS evaluation")
+
+            def bindings(row: Row) -> Mapping[str, Value]:
+                return {
+                    subplan.binding: self._subplan_value(
+                        subplan,
+                        row,
+                        relations[index],
+                    )
+                    for index, subplan in enumerate(subplans, start=1)
+                }
+
             # A consumer row demands this binding's own cardinality check,
             # including through a dead scalar-expression branch. Errors already
             # produced inside the subplan remain observable without that row.
@@ -1123,16 +1144,58 @@ class Evaluator:
             tuple(outcomes),
         )
 
+    def _evaluate_subplan(
+        self,
+        subplan: Subplan,
+    ) -> SubplanFamily:
+        if isinstance(subplan, ScalarSubplan):
+            return self._evaluate_scalar_subplan(subplan)
+        assert isinstance(subplan, ExistsSubplan)
+        return SubplanFamily(
+            tuple(
+                SubplanOutcome(outcome, smt.FALSE)
+                for outcome in self.node(subplan.root).outcomes
+            )
+        )
+
+    def _subplan_value(
+        self,
+        subplan: Subplan,
+        outer_row: Row,
+        relation: Relation,
+    ) -> Value:
+        if isinstance(subplan, ScalarSubplan):
+            return relation.rows[0].values[subplan.binding]
+        assert isinstance(subplan, ExistsSubplan)
+        matches = []
+        for inner_row in relation.rows:
+            match = inner_row.present
+            if subplan.predicate is not None:
+                assert subplan.dependency is not None
+                dependency = subplan.dependency
+                match = smt.and_(
+                    match,
+                    self.scalar.is_true(
+                        self.scalar.evaluate(
+                            subplan.predicate,
+                            {dependency: outer_row.values[dependency]}
+                            | dict(inner_row.values),
+                        )
+                    ),
+                )
+            matches.append(match)
+        return Value("Bool", smt.FALSE, smt.or_(*matches))
+
     def _evaluate_scalar_subplan(
         self,
         subplan: ScalarSubplan,
-    ) -> ScalarSubplanFamily:
+    ) -> SubplanFamily:
         binding = subplan.binding
         family = self.node(subplan.root)
-        column = Column(binding, subplan.type, True)
-        outcomes: list[ScalarSubplanOutcome] = []
+        column = Column(binding, subplan.output.type, True)
+        outcomes: list[SubplanOutcome] = []
         for outcome in family.outcomes:
-            selected = self.scalar.null(subplan.type)
+            selected = self.scalar.null(subplan.output.type)
             for row in outcome.relation.rows:
                 candidate = row.values[subplan.output.column]
                 if candidate.decimal_average_state is not None:
@@ -1147,7 +1210,7 @@ class Evaluator:
                 )
             )
             outcomes.append(
-                ScalarSubplanOutcome(
+                SubplanOutcome(
                     Outcome(
                         outcome.enabled,
                         Relation(
@@ -1167,7 +1230,7 @@ class Evaluator:
                     smt.lt(smt.ONE, present_count),
                 )
             )
-        return ScalarSubplanFamily(tuple(outcomes))
+        return SubplanFamily(tuple(outcomes))
 
     @staticmethod
     def _select_value(

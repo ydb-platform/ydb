@@ -282,7 +282,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 - **Interconnect** — при включении TLS в секции [interconnect_config](../reference/configuration/tls.md) [Interconnect](../concepts/glossary.md#actor-system-interconnect) требует клиентский сертификат.
 
-- **gRPC** — можно включить запрос сертификата клиента для аутентификации устройств, а так же отдельно включить его обязательную проверку (недоверенный сертификат отклоняется всегда). Настройка сервера описана в секциях [grpc_config](../reference/configuration/tls.md#grpc) и [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md), а подключение клиента — в разделе [Параметры TLS-соединения](../reference/ydb-cli/connect.md#tls).
+- **gRPC** — можно включить запрос сертификата клиента для аутентификации устройств, а также отдельно включить его обязательную проверку (недоверенный сертификат отклоняется всегда). Настройка сервера описана в секциях [grpc_config](../reference/configuration/tls.md#grpc) и [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md), а подключение клиента — в разделе [Параметры TLS-соединения](../reference/ydb-cli/connect.md#tls).
 
 - **Kafka API** — при включении mTLS требует клиентский сертификат; проверяется только цепочка доверия к CA, соединение без сертификата или с недоверенным сертификатом не устанавливается. Настройка сервера описана в секции [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md), а подключение клиента — в разделе [Аутентификация устройств по mTLS](../reference/kafka-api/auth.md#device-auth).
 

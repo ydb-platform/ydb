@@ -265,23 +265,14 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
             PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         } else {
-<<<<<<< HEAD
             KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
-=======
-            YDB_LOG_ERROR("Describe topic location finishied with error",
-                {LogPrefix()},
-                {"topicName", topic.Name},
-                {"code", locationResponse->Status},
-                {"issues", locationResponse->Issues.ToOneLineString()});
             // Transient location failures (pipe retries exhausted / locations backoff) → retriable timeout.
             const EKafkaErrors kafkaError =
                 (status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::INTERNAL_ERROR)
                     ? EKafkaErrors::REQUEST_TIMED_OUT
                     : ConvertErrorCode(status);
             AddTopicError(topic, kafkaError);
->>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
         }
     }
     if (InflyCreateTopics == 0) {
@@ -353,9 +344,7 @@ void TKafkaMetadataActor::ApplyPendingTopicResponses() {
             auto topicNodes = CheckTopicNodes(ev.Get());
             if (topicNodes.empty()) {
                 // Already tried YDB discovery. Throw error
-                YDB_LOG_ERROR("Could not discovery kafka port for topic",
-                    {LogPrefix()},
-                    {"topicName", topic.Name});
+                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
                 AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             } else {
                 AddTopicResponse(topic, ev.Get(), topicNodes);
@@ -386,27 +375,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-<<<<<<< HEAD
-    while (!PendingTopicResponses.empty()) {
-        auto& [index, ev] = *PendingTopicResponses.begin();
-        auto& topic = Response->Topics[index];
-        if (!WithProxy) {
-            auto topicNodes = CheckTopicNodes(ev.Get());
-            if (topicNodes.empty()) {
-                    // Already tried YDB discovery. Throw error
-                    KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
-                    AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            } else {
-                AddTopicResponse(topic, ev.Get(), topicNodes);
-            }
-        } else {
-            AddTopicResponse(topic, ev.Get(), {});
-        }
-        PendingTopicResponses.erase(PendingTopicResponses.begin());
-    }
-=======
     ApplyPendingTopicResponses();
->>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
 
     if (NeedAllNodes) {
         for (const auto& [id, nodeInfo] : Nodes)
@@ -416,16 +385,10 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     Respond();
 }
 
-<<<<<<< HEAD
-TString TKafkaMetadataActor::LogPrefix() const {
-    return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
-=======
 void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     TimeoutTimerActorId = {};
-    YDB_LOG_ERROR("Metadata request timed out",
-        {LogPrefix()},
-        {"correlationId", CorrelationId},
-        {"pendingResponses", PendingResponses});
+    KAFKA_LOG_ERROR("Metadata request timed out, correlationId=" << CorrelationId
+        << ", pendingResponses=" << PendingResponses);
     RespondWithTimeout(ctx);
 }
 
@@ -452,11 +415,8 @@ void TKafkaMetadataActor::CancelRequestTimeout() {
     }
 }
 
-NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {
-    return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "TKafkaMetadataActor"},
-        {"selfId", SelfId()});
->>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
+TString TKafkaMetadataActor::LogPrefix() const {
+    return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
 }
 
 } // namespace NKafka

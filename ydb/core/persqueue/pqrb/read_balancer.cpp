@@ -416,30 +416,17 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-<<<<<<< HEAD
-        PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
-    }
-    else
-        PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
-=======
         if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
             it->second.Ready = true;
             ++ReadyPartitionTablets;
         }
 
-        YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"nodeId", ev->Get()->ServerId.NodeId()},
-            {"generation", ev->Get()->Generation});
+        PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
     } else {
-        YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId});
+        PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
     }
 
     ProcessPartitionsLocationQueue(ctx);
->>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
@@ -635,75 +622,6 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
         Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));
     }
 }
-
-<<<<<<< HEAD
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
-    evResponse->Record.SetStatus(false);
-    ctx.Send(ev->Sender, evResponse);
-}
-
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    const auto& request = ev->Get()->Record;
-    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-
-    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
-        if (PipesRequested.contains(tabletId)) {
-            return false;
-        }
-        auto iter = TabletPipes.find(tabletId);
-        if (iter == TabletPipes.end()) {
-            GetPipeClient(tabletId, ctx);
-            return false;
-        }
-
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
-
-        PQ_LOG_D("The partition location was added to response: TabletId " << tabletId << ", PartitionId " << partitionId
-                << ", NodeId " << pResponse->GetNodeId() << ", Generation " << pResponse->GetGeneration());
-
-        return true;
-    };
-
-    auto sendError = [&]() {
-        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-        response->Record.SetStatus(false);
-        ctx.Send(ev->Sender, response.release());
-    };
-
-    if (request.PartitionsSize() == 0) {
-        if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
-            // Do not have all pipes connected.
-            return sendError();
-        }
-        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
-                return sendError();
-            }
-        }
-    } else {
-        for (const auto& partitionInRequest : request.GetPartitions()) {
-            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
-            if (partitionInfoIter == PartitionsInfo.end()) {
-                return sendError();
-            }
-            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
-                return sendError();
-            }
-        }
-    }
-
-    evResponse->Record.SetStatus(true);
-    ctx.Send(ev->Sender, evResponse.release());
-}
-
-
-=======
->>>>>>> f889867ba19 (Fixed kafka not present in metadata (#47348))
-
 
 //
 // Watching PQConfig

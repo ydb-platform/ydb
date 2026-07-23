@@ -20,10 +20,8 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
-    namespace {
-        bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
-        }
+    inline bool IsIndexPage(EPage type) noexcept {
+        return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
     }
 
     using TPageOffset = NPage::TPageOffset;
@@ -131,7 +129,7 @@ namespace NFwd {
             return Pending == 0;
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto type = location.Type;
 
@@ -176,9 +174,9 @@ namespace NFwd {
             Pending -= pages.size();
 
             for (auto& page : pages) {
-                auto type = page.Location.Type;
+                auto type = page.Page.GetType();
                 auto data = NSharedCache::TPinnedPageRef(page.Page).GetData();
-                NPageCollection::TLoadedPage loadedPage{ page.Location, std::move(data) };
+                NPageCollection::TLoadedPage loadedPage{ TPageLocation(page.Offset, data.size(), type), std::move(data) };
                 if (IsIndexPage(type)) {
                     Y_ENSURE(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
                     queue->Fill(loadedPage, std::move(page.Page), type);

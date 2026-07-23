@@ -78,7 +78,7 @@ namespace NTable {
         }
 
     protected:
-        bool LoadPage(TPageLocation location, TRowId baseRow)
+        bool LoadPage(const TPageLocation& location, TRowId baseRow)
         {
             if (Offset != location.Offset) {
                 Data = { };

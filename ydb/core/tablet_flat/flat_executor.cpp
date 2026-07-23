@@ -73,6 +73,60 @@ struct TCompactionChangesCtx {
     { }
 };
 
+namespace {
+
+/// IPages env driving a V2 B-tree sticky preload through TBTreePartWalker.
+class TStickyPreloadEnv : public NTable::IPages {
+public:
+    TStickyPreloadEnv(TPrivatePageCache& cache, const NTable::TPartStore& partStore)
+        : Cache(cache)
+        , PartStore(partStore)
+    { }
+
+    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+        Y_ENSURE(part == &PartStore, "Unexpected part in sticky preload");
+        Y_ENSURE(groupId.Index < PartStore.PageCollections.size(), "Group out of range");
+
+        auto* pageCollection = PartStore.PageCollections[groupId.Index].Get();
+        auto shared = Cache.TryGetPage(location.Offset, pageCollection);
+        if (shared) {
+            // Keep the ref alive so the returned body pointer stays valid for
+            // the remainder of this Step pass (children get parsed from it).
+            PinnedBodies.push_back(NSharedCache::TPinnedPageRef(std::move(shared)));
+            return &PinnedBodies.back().GetData();
+        }
+
+        Misses[pageCollection->Id].push_back(location);
+        return nullptr;
+    }
+
+    using TLocationVector = TVector<TPageLocation>;
+
+    THashMap<TLogoBlobID, TLocationVector> Misses;
+
+private:
+    NTable::IPages::TResult Locate(const TMemTable*, ui64, ui32) override {
+        Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+    }
+    NTable::IPages::TResult Locate(const TPart*, ui64, ELargeObj) override {
+        Y_TABLET_ERROR("IPages::Locate(TPart*, ...) shouldn't be used here");
+    }
+
+    TPrivatePageCache& Cache;
+    const NTable::TPartStore& PartStore;
+    TVector<NSharedCache::TPinnedPageRef> PinnedBodies;
+};
+
+} // namespace
+
+/// Resumable state for a part's V2 B-tree sticky preload
+struct TStickyPreloadState {
+    TIntrusiveConstPtr<NTable::TPartStore> PartStore;
+    TVector<THolder<NTable::TBTreePartWalker>> Walkers;
+    TVector<NTable::NPage::TGroupId> DataGroupIds;
+    TLogoBlobID IndexCollectionId;
+};
+
 class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
     TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
@@ -150,6 +204,10 @@ TExecutor::TExecutor(
 {}
 
 TExecutor::~TExecutor() {
+    while (!StickyPreloadsByIndex.empty()) {
+        DropStickyBTreePreloadState(StickyPreloadsByIndex.begin()->second);
+    }
+    StickyPreloadsByIndex.clear();
 }
 
 bool TExecutor::OnUnhandledException(const std::exception& e) {
@@ -691,7 +749,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     if (pageCollection) {
         auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
-            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Location.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
+            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
             Y_ENSURE(inserted.second);
         }
     }
@@ -795,6 +853,10 @@ void TExecutor::DropPageCollection(const TLogoBlobID &pageCollectionId)
 {
     auto pageCollection = PrivatePageCache->GetPageCollection(pageCollectionId);
 
+    if (auto* ctx = pageCollection->PreloadByIndex) {
+        DropStickyBTreePreloadState(ctx);
+    }
+
     PrivatePageCache->DropPageCollection(pageCollection);
 
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
@@ -831,6 +893,11 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
 }
 
 TExecutorCaches TExecutor::CleanupState() {
+    while (!StickyPreloadsByIndex.empty()) {
+        DropStickyBTreePreloadState(StickyPreloadsByIndex.begin()->second);
+    }
+    StickyPreloadsByIndex.clear();
+
     TExecutorCaches caches;
 
     if (BootLogic) {
@@ -1515,6 +1582,10 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
 void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
+    auto partStore = partView.As<NTable::TPartStore>();
+    TVector<std::pair<NTable::NPage::TGroupId, const NTable::NPage::TBtreeIndexMeta*>> v2Groups;
+    TVector<size_t> stickyGroupIndices;
+
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         bool stickyGroup = false;
         for (const auto &column : partView->Scheme->Groups[groupIndex].Columns) {
@@ -1525,12 +1596,118 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
         }
 
         if (stickyGroup) {
-            auto partStore = partView.As<NTable::TPartStore>();
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
-                0, ui64(ERequestTypeCookie::StickyPages));
+            stickyGroupIndices.push_back(groupIndex);
+
+            auto groupId = NTable::NPage::TGroupId(groupIndex);
+            const NTable::NPage::TBtreeIndexMeta* meta =
+                partStore->IndexPages.HasBTree() ? &partStore->IndexPages.GetBTree(groupId) : nullptr;
+            if (meta && meta->HasRootV2()) {
+                v2Groups.emplace_back(groupId, meta);
+            }
         }
     }
+
+    // Start V2 BTree preload first
+    if (!v2Groups.empty()) {
+        StartStickyBTreePreload(*partStore, v2Groups);
+    }
+
+    for (size_t groupIndex : stickyGroupIndices) {
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
+            0, ui64(ERequestTypeCookie::StickyPages));
+    }
+}
+
+void TExecutor::StartStickyBTreePreload(const NTable::TPartStore& partStore,
+    const TVector<std::pair<NTable::NPage::TGroupId, const NTable::NPage::TBtreeIndexMeta*>>& groups)
+{
+    // One composite state per part, pre-built with all V2 sticky groups.
+    auto indexCollectionId = partStore.PageCollections[0]->Id;
+    if (StickyPreloadsByIndex.contains(indexCollectionId)) {
+        return;  // preload already in flight
+    }
+    auto* state = new TStickyPreloadState;
+    state->PartStore = TIntrusiveConstPtr<NTable::TPartStore>(
+        const_cast<NTable::TPartStore*>(&partStore));
+    state->IndexCollectionId = indexCollectionId;
+
+    state->Walkers.reserve(groups.size());
+    state->DataGroupIds.reserve(groups.size());
+    for (auto& [groupId, meta] : groups) {
+        auto walker = MakeHolder<NTable::TBTreePartWalker>();
+        walker->Start(*meta);
+        state->Walkers.emplace_back(std::move(walker));
+        state->DataGroupIds.emplace_back(groupId);
+
+        // For non-main groups, replies on the data collection must re-drive this state
+        if (groupId.Index != 0) {
+            partStore.PageCollections[groupId.Index]->PreloadByIndex = state;
+        }
+    }
+
+    StickyPreloadsByIndex[indexCollectionId] = state;
+    partStore.PageCollections[0]->PreloadByIndex = state;
+
+    // Drive the first round now (steps every walker).
+    DriveStickyBTreePreload(state);
+}
+
+void TExecutor::DriveStickyBTreePreload(TStickyPreloadState* state) {
+    Y_ENSURE(state && state->PartStore, "Sticky preload state has no part");
+    Y_ENSURE(!state->Walkers.empty(), "Sticky preload state has no walkers");
+
+    TStickyPreloadEnv env(*PrivatePageCache, *state->PartStore);
+    bool anyMissed = false;
+
+    for (size_t i = 0; i < state->Walkers.size(); i++) {
+        auto& walker = state->Walkers[i];
+        if (!walker) {
+            continue;  // this group's walk already completed
+        }
+        bool done = walker->Step(state->PartStore.Get(), &env, state->DataGroupIds[i]);
+        if (done) {
+            walker.Reset();  // group fully resident — free its walker
+        } else {
+            anyMissed = true;
+        }
+    }
+
+    if (!anyMissed) {
+        // Every group's tree is resident — drop the whole state right here.
+        DropStickyBTreePreloadState(state);
+        return;
+    }
+
+    // Some pages are still missing — request them. The StickyPages result
+    // handler will re-drive this state when the pages arrive.
+    for (auto& [pageCollectionId, locations] : env.Misses) {
+        // no duplicates within a single pass in b-tree per group
+        std::sort(locations.begin(), locations.end());
+        auto* pageCollection = PrivatePageCache->FindPageCollection(pageCollectionId);
+        Y_DEBUG_ABORT_UNLESS(pageCollection, "Sticky preload references unknown page collection");
+        if (!pageCollection) {
+            continue;
+        }
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, std::move(locations)),
+            0, ui64(ERequestTypeCookie::StickyPages));
+    }
+}
+
+void TExecutor::DropStickyBTreePreloadState(TStickyPreloadState* state) {
+    if (!state) return;
+
+    StickyPreloadsByIndex.erase(state->IndexCollectionId);
+
+    state->PartStore->PageCollections[0]->PreloadByIndex = nullptr;
+    for (const auto& dataGroupId : state->DataGroupIds) {
+        if (dataGroupId.Index != 0) {
+            state->PartStore->PageCollections[dataGroupId.Index]->PreloadByIndex = nullptr;
+        }
+    }
+
+    delete state;
 }
 
 THashMap<NTable::TTag, ECacheMode> TExecutor::GetCacheModes(ui32 tableId) {
@@ -3064,11 +3241,16 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.Location, std::move(loaded.Page), pageCollection);
+                    PrivatePageCache->AddStickyPage(loaded.Offset, std::move(loaded.Page), pageCollection);
+                }
+
+                // Re-drive any V2 B-tree sticky preload
+                if (auto* ctx = pageCollection->PreloadByIndex) {
+                    DriveStickyBTreePreload(ctx);
                 }
             } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.Location, loaded.Page, pageCollection);
+                    PrivatePageCache->AddPage(loaded.Offset, loaded.Page, pageCollection);
                 }
                 if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
@@ -4918,7 +5100,11 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    comp->Layout.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    comp->Layout.BTreeIndexV2KeepV1Shadow = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2ShadowV1Write();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
+    comp->Writer.WriteBTreeIndexV2 = comp->Layout.WriteBTreeIndexV2;
+    comp->Writer.BTreeIndexV2KeepV1Shadow = comp->Layout.BTreeIndexV2KeepV1Shadow;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});

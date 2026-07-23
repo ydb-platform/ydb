@@ -137,12 +137,12 @@ namespace NKikimr::NSharedCache {
         }
 
         struct TLoaded {
-            TLoaded(NTable::NPage::TPageLocation location, TSharedPageRef page)
-                : Location(location)
+            TLoaded(NTable::NPage::TPageOffset offset, TSharedPageRef page)
+                : Offset(offset)
                 , Page(std::move(page))
             { }
 
-            NTable::NPage::TPageLocation Location;
+            NTable::NPage::TPageOffset Offset;
             TSharedPageRef Page;
         };
 

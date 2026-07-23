@@ -452,6 +452,9 @@ class TExecutor
     ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
+
+    // In-flight resumable V2 B-tree sticky preloads, keyed by index-collection
+    THashMap<TLogoBlobID, struct TStickyPreloadState*> StickyPreloadsByIndex;
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;
@@ -570,6 +573,12 @@ class TExecutor
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
+
+    void StartStickyBTreePreload(const NTable::TPartStore& partStore,
+        const TVector<std::pair<NTable::NPage::TGroupId, const NTable::NPage::TBtreeIndexMeta*>>& groups);
+    void DriveStickyBTreePreload(struct TStickyPreloadState* state);
+    void DropStickyBTreePreloadState(struct TStickyPreloadState* state);
+
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);

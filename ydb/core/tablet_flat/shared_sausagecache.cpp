@@ -467,9 +467,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     page->IncrementFrequency();
                 }
                 if (doTraceLog) {
-                    pagesFromCacheTraceLog.push_back(location.Offset);
+                    pagesFromCacheTraceLog.push_back(page->Offset);
                 }
-                readyPages.emplace_back(location, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                readyPages.emplace_back(page->Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -483,8 +483,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Counters.CacheMissInMemoryPages->Inc();
                     Counters.CacheMissInMemoryBytes->Add(page->Size);
                 }
-                readyPages.emplace_back(location, TSharedPageRef());
-                pendingPages.emplace_back(location.Offset, reqIdx);
+                readyPages.emplace_back(page->Offset, TSharedPageRef());
+                pendingPages.emplace_back(page->Offset, reqIdx);
                 break;
             case PageStateEvicted:
                 Y_TABLET_ERROR("must not happens");
@@ -848,7 +848,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             bool needNotifyOwners = fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload && collection->InMemoryOwners;
             auto loadedPages = needNotifyOwners ? TVector<TPage*>(::Reserve(msg->Pages.size())) : TVector<TPage*>();
             for (auto &paged : msg->Pages) {
-                auto* page = collection->PageSet.FindPage(paged.Location.Offset);
+                auto* page = collection->PageSet.FindPage(paged.Offset);
                 if (!page || !page->HasMissingBody()) {
                     continue;
                 }
@@ -875,7 +875,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     TPage* EnsurePage(TCollection& collection,
-        TPageLocation location, ECacheMode initialMode) {
+        const TPageLocation& location, ECacheMode initialMode) {
         TPage* page = collection.PageSet.FindPage(location.Offset);
 
         if (!page) {
@@ -1052,8 +1052,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             auto &readyPage = request->ReadyPages[index];
-            Y_ENSURE(readyPage.Location.Offset == page->Offset);
-            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
+            Y_ENSURE(readyPage.Offset == page->Offset);
+            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type);
 
             if (--request->PendingBlocks == 0) {
                 SendResult(*request);
@@ -1114,8 +1114,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto* page : readyPages) {
             if (page->State == PageStateLoaded) { // page may be evicted before NotifyInMemOwner call
                 readyLoadedPages.emplace_back(
-                    TPageLocation(page->Offset, page->Size, page->Type, page->Crc32),
-                    TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                    page->Offset,
+                    TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type));
             }
         }
 
@@ -1286,7 +1286,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
-        for (const auto& pageId : xrange(pageCollection->Total())) {
+        /* Walk the structural pages addressable by TPageId (MetaPages). The
+           collection may hold more pages than TMeta declares in v2: data/btree
+           pages absorbed into EPage::Skip entries are not TPageId-addressable
+           and are skipped here (they are already in PageSet when compaction
+           pre-saved them). Skip entries themselves have no GetLocation. */
+        for (const auto& pageId : xrange(pageCollection->MetaPages())) {
+            if (pageCollection->Page(pageId).Type == ui32(NTable::NPage::EPage::Skip))
+                continue;
+
             auto location = pageCollection->GetLocation(pageId);
             auto* page = collection.PageSet.FindPage(location.Offset);
             if (!page) {
@@ -1663,7 +1671,7 @@ template<> inline
 void Out<TVector<NKikimr::NSharedCache::TEvResult::TLoaded>>(IOutputStream& o, const TVector<NKikimr::NSharedCache::TEvResult::TLoaded> &vec) {
     o << "[ ";
     for (const auto &x : vec)
-        o << x.Location << ' ';
+        o << x.Offset << ' ';
     o << "]";
 }
 
@@ -1671,7 +1679,15 @@ template<> inline
 void Out<TVector<NKikimr::NPageCollection::TLoadedPage>>(IOutputStream& o, const TVector<NKikimr::NPageCollection::TLoadedPage> &vec) {
     o << "[ ";
     for (const auto &x : vec)
-        o << x.Location.Offset << ' ';
+        o << x.Location << ' ';
+    o << "]";
+}
+
+template<> inline
+void Out<TVector<NKikimr::NPageCollection::TLoadedPageData>>(IOutputStream& o, const TVector<NKikimr::NPageCollection::TLoadedPageData> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x.Offset << ' ';
     o << "]";
 }
 

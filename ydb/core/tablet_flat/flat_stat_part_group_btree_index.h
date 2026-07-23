@@ -18,15 +18,15 @@ class TStatsPartGroupBtreeIndexIter : public IStatsPartGroupIter {
     using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 
     struct TNodeState {
-        TPageId PageId;
+        TPageRef Ref;
         TRowId BeginRowId;
         TRowId EndRowId;
         TCellsIterable BeginKey;
         ui64 BeginDataSize;
         ui64 EndDataSize;
 
-        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, ui64 beginDataSize, ui64 endDataSize)
-            : PageId(pageId)
+        TNodeState(TPageRef ref, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, ui64 beginDataSize, ui64 endDataSize)
+            : Ref(std::move(ref))
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginKey(beginKey)
@@ -58,7 +58,10 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        Nodes.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
+        auto rootLoc = GetBTreeRootLocation(Meta,
+            Part->GetPageCollection(0),               // btree index pages always room 0
+            Part->GetPageCollection(GroupId.Index));  // data pages in the group's room
+        Nodes.emplace_back(TPageRef(rootLoc), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
             bool hasChanges = false;
@@ -76,24 +79,26 @@ public:
                     continue; // don't go deeper
                 }
 
-                auto page = Env->TryGetPage(Part, Part->GetPageLocation(nodeState.PageId, {}), {});
+                auto location = ResolvePageLocation(Part, nodeState.Ref, {});
+                auto page = Env->TryGetPage(Part, location, {});
                 if (!page) {
                     ready = false;
                     continue; // continue requesting other nodes
                 }
                 TBtreeIndexNode node(*page);
 
+                bool isLeafLevel = (height + 1 == Meta.LevelCount);
+
                 for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
-                    auto& child = node.GetShortChild(pos);
+                    TPageRef ref = node.GetChild(pos, isLeafLevel);
 
-                    TPageId pageId = child.GetPageId();
-                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).GetRowCount() : nodeState.BeginRowId;
-                    TRowId endRowId = child.GetRowCount();
+                    TRowId beginRowId = pos ? node.GetChildRowCount(pos - 1) : nodeState.BeginRowId;
+                    TRowId endRowId = node.GetChildRowCount(pos);
                     TCellsIterable beginKey = pos ? node.GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : nodeState.BeginKey;
-                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).GetDataSize() : nodeState.BeginDataSize;
-                    ui64 endDataSize = child.GetDataSize();
+                    ui64 beginDataSize = pos ? node.GetPrevChildDataSize(pos) : nodeState.BeginDataSize;
+                    ui64 endDataSize = node.GetChildDataSize(pos);
 
-                    nextNodes.emplace_back(pageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
+                    nextNodes.emplace_back(std::move(ref), beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
                     hasChanges = true;
                 }
             }
@@ -139,10 +144,6 @@ public:
 
     TRowId GetEndRowId() const override {
         return Meta.GetRowCount();
-    }
-
-    TPageLocation GetLocation() const override {
-        return Part->GetPageLocation(GetCurrentNode().PageId, GroupId);
     }
 
     TRowId GetRowId() const override {

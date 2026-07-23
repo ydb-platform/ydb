@@ -53,9 +53,9 @@ namespace {
             , Sticky(std::move(sticky))
             { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
+            auto pageId = ResolvePageId(part, location, groupId);
             Touched[groupId].insert(pageId);
 
             if (!Fail || Sticky.contains({groupId, pageId})) {
@@ -427,10 +427,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
 
             return result;
@@ -452,7 +452,10 @@ namespace {
                         Y_ENSURE(ready != EReady::Page);
                         break;
                     }
-                    absoluteId[absoluteId.size()] = static_cast<ui64>(groupIndex->GetLocation().Offset);
+                    auto location = groupIndex->GetLocation();
+                    absoluteId[absoluteId.size()] = location.Offset.IsByteOffset()
+                        ? Eggs.Lone()->Store->ResolveByteOffset(groupId.Index, location.Offset.AsByteOffset())
+                        : location.Offset.AsPageIndex();
                 }
 
                 TSet<TPageId> actualValue;

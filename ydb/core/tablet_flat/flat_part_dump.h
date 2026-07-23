@@ -25,7 +25,7 @@ namespace NTable {
         void DataPage(const TPart&, NPage::TPageLocation location);
         void TName(ui32 num);
         void Key(TCellsRef cells, const TPartScheme&);
-        void BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level = 0);
+        void BTreeIndexNode(const TPart &part, NPage::TPageLocation loc, const TString &parent, ui32 level, ui32 totalLevels);
 
         IOutputStream &Out;
         IPages * const Env = nullptr;

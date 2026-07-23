@@ -17,7 +17,7 @@ namespace NTest {
 
     namespace {
         bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
+            return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
         }
     }
 
@@ -46,7 +46,7 @@ namespace NTest {
                 pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             return Pages ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
         }
@@ -107,11 +107,11 @@ namespace NTest {
             }
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto pass = ShouldPass((const void*)part,
                 static_cast<ui64>(THash<TPageOffset>()(location.Offset)) ^ (ui64(groupId.Raw()) << 48),
-                location.Type == EPage::FlatIndex || location.Type == EPage::BTreeIndex);
+                location.Type == EPage::FlatIndex || location.Type == EPage::BTreeIndex || location.Type == EPage::BTreeIndexV2);
 
             return pass ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
         }
@@ -164,58 +164,6 @@ namespace NTest {
         TVector<TSeen> Trace;
         TMap<TSeen, ui64> IndexTraceTtl;
         ui32 Offset = Max<ui32>();
-    };
-
-    class TStorePageCollection : public NPageCollection::IPageCollection {
-        TIntrusiveConstPtr<TStore> Store;
-        ui32 Room;
-    public:
-        TStorePageCollection(TIntrusiveConstPtr<TStore> store, ui32 room)
-            : Store(std::move(store)), Room(room)
-        {}
-
-        const TLogoBlobID& Label() const noexcept override {
-            static TLogoBlobID dummy(0, 0, 0, 0, 0, 0);
-            return dummy;
-        }
-
-        ui32 Total() const noexcept override {
-            return Store->PageCollectionPagesCount(Room);
-        }
-
-        NPageCollection::TInfo Page(ui32 page) const override {
-            return {Store->GetPageSize(Room, page), 0};
-        }
-
-        NPageCollection::TBorder Bounds(ui32 page) const override {
-            ui32 size = Store->GetPageSize(Room, page);
-            return { size, { page, 0 }, { page, size } };
-        }
-
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
-            return Bounds(location.Offset.AsPageIndex());
-        }
-
-        NPageCollection::TGlobId Glob(ui32) const override {
-            Y_TABLET_ERROR("Not implemented");
-        }
-
-        bool Verify(ui32, TArrayRef<const char>) const override {
-            return true;
-        }
-
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
-            return data.size() == location.Size;
-        }
-
-        size_t BackingSize() const noexcept override {
-            return Store->PageCollectionBytes(Room);
-        }
-
-        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
-            auto* data = Store->GetPage(Room, pageId);
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size(), NTable::NPage::EPage::Undef, Store->GetPageChecksum(Room, pageId));
-        }
     };
 
     class TForwardEnv : public IPages {
@@ -336,7 +284,7 @@ namespace NTest {
             return Get(part, room).DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             InitPart(part);
 

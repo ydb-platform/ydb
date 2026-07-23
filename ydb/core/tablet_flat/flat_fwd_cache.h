@@ -308,16 +308,9 @@ namespace NFwd {
     public:
         using TGroupId = NPage::TGroupId;
 
-        static TPageLocation GetRootLocation(const NPage::TBtreeIndexMeta& meta,
-            const IPageCollection* indexPageCollection, const IPageCollection* groupPageCollection)
-        {
-            return meta.LevelCount
-                ? indexPageCollection->GetLocation(meta.PageId_)
-                : groupPageCollection->GetLocation(meta.PageId_);
-        }
-
         TBTreeIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection)
             : Meta(part->IndexPages.GetBTree(groupId))
+            , Part(part)
             , GroupId(groupId)
             , GroupPageCollection(std::move(groupPageCollection))
             , IndexPageCollection(std::move(indexPageCollection))
@@ -331,7 +324,7 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            auto rootLoc = GetRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
+            auto rootLoc = GetBTreeRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
             Levels.resize(Meta.LevelCount + 1);
             Levels[0].Queue.push_back({rootLoc.Offset, rootLoc.Size, Meta.GetDataSize(), rootLoc.Crc32});
             Levels[0].BeginOffset = rootLoc.Offset;
@@ -403,9 +396,8 @@ namespace NFwd {
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    auto& child = node.GetShortChild(pos);
-                    auto childOffset = IndexPageCollection->GetLocation(child.GetPageId()).Offset;
-                    IndexPageLocator.Add(childOffset, GroupId, levelId + 1);
+                    auto childLoc = GetChildLocation(node, pos, /* isLeafLevel */ false);
+                    IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
                 }
             }
 
@@ -425,12 +417,18 @@ namespace NFwd {
         ui32 GetLevel(TPageOffset offset, EPage type) {
             switch (type) {
                 case EPage::BTreeIndex:
+                case EPage::BTreeIndexV2:
                     return IndexPageLocator.GetLevel(offset);
                 case EPage::DataPage:
                     return Levels.size() - 1;
                 default:
                     Y_TABLET_ERROR("Unknown page type");
             }
+        }
+
+        NPage::TPageLocation GetChildLocation(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) const {
+            auto ref = node.GetChild(pos, isLeafLevel);
+            return ResolvePageLocation(Part, ref, isLeafLevel ?  GroupId : TGroupId{0});
         }
 
         void DropPagesBefore(TLevel& level, TPageOffset offset)
@@ -472,17 +470,19 @@ namespace NFwd {
                 if (levelId + 1 < Levels.size() && page) {
                     NPage::TBtreeIndexNode node(page.Data);
                     auto& nextLevel = Levels[levelId + 1];
+                    bool isLeaf = (levelId + 1) == Levels.size() - 1;
                     for (auto pos : xrange(node.GetChildrenCount())) {
-                        auto& child = node.GetShortChild(pos);
-                        if (child.GetRowCount() <= BeginRowId) {
+                        if (node.GetChildRowCount(pos) <= BeginRowId) {
                             continue;
                         }
-                        auto childLoc = PageCollectionForLevel(levelId + 1)->GetLocation(child.GetPageId());
+                        auto childLoc = GetChildLocation(node, pos, isLeaf);
                         Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().Offset < childLoc.Offset);
-                        nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, child.GetDataSize(), childLoc.Crc32});
-                        nextLevel.BeginOffset = Min(nextLevel.BeginOffset, childLoc.Offset);
-                        nextLevel.EndOffset = Max(nextLevel.EndOffset, childLoc.Offset);
-                        if (child.GetRowCount() >= EndRowId) {
+                        nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, node.GetChildDataSize(pos), childLoc.Crc32});
+                        if (nextLevel.BeginOffset == TPageOffset::Max()) {
+                            nextLevel.BeginOffset = childLoc.Offset;
+                        }
+                        nextLevel.EndOffset = childLoc.Offset;
+                        if (node.GetChildRowCount(pos) >= EndRowId) {
                             break;
                         }
                     }
@@ -539,7 +539,8 @@ namespace NFwd {
             Y_ENSURE(!level.Queue.empty());
             auto& front = level.Queue.front();
 
-            auto type = &level == &Levels.back() ? EPage::DataPage : EPage::BTreeIndex;
+            auto type = &level == &Levels.back() ? EPage::DataPage
+                : (Meta.HasRootV2() ? EPage::BTreeIndexV2 : EPage::BTreeIndex);
             head->AddToQueue(front.Offset, type, front.PageSize, front.Crc32);
 
             Stat.Fetch += front.PageSize;
@@ -553,6 +554,7 @@ namespace NFwd {
 
     private:
         const NPage::TBtreeIndexMeta& Meta;
+        const TPart* Part;
         const TGroupId GroupId;
         TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         TIntrusiveConstPtr<IPageCollection> IndexPageCollection;

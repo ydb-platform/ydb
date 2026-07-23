@@ -54,6 +54,14 @@ public:
     }
 
     /**
+     * Returns the size of page data stored in the currently active buffer
+     */
+    size_t DataSize() const noexcept {
+        auto flags = Flags.load(std::memory_order_relaxed);
+        return Data[flags & DataIndexMask].size();
+    }
+
+    /**
      * Returns the number of currently active pins (no synchronization)
      */
     size_t PinCount() const noexcept {
@@ -326,10 +334,12 @@ public:
 
     TSharedPageRef(
             TIntrusivePtr<TSharedPageHandle> handle,
-            TIntrusivePtr<TSharedPageGCList> gcList) noexcept
+            TIntrusivePtr<TSharedPageGCList> gcList,
+            NTable::NPage::EPage type = NTable::NPage::EPage::Undef) noexcept
         : Handle(std::move(handle))
         , GCList(std::move(gcList))
         , Used(false)
+        , Type(type)
     { }
 
     ~TSharedPageRef() {
@@ -340,6 +350,7 @@ public:
         : Handle(ref.Handle)
         , GCList(ref.GCList)
         , Used(false)
+        , Type(ref.Type)
     {
         if (ref.Used) {
             Y_ENSURE(Use());
@@ -350,6 +361,7 @@ public:
         : Handle(std::move(ref.Handle))
         , GCList(std::move(ref.GCList))
         , Used(std::exchange(ref.Used, false))
+        , Type(ref.Type)
     { }
 
     TSharedPageRef& operator=(const TSharedPageRef& ref) {
@@ -357,6 +369,7 @@ public:
             Drop();
             Handle = ref.Handle;
             GCList = ref.GCList;
+            Type = ref.Type;
             if (ref.Used) {
                 Y_ENSURE(Use());
             }
@@ -371,6 +384,7 @@ public:
             Handle = std::move(ref.Handle);
             GCList = std::move(ref.GCList);
             Used = std::exchange(ref.Used, false);
+            Type = ref.Type;
         }
 
         return *this;
@@ -378,9 +392,10 @@ public:
 
     static TSharedPageRef MakeUsed(
         TIntrusivePtr<TSharedPageHandle> handle,
-        TIntrusivePtr<TSharedPageGCList> gcList) noexcept
+        TIntrusivePtr<TSharedPageGCList> gcList,
+        NTable::NPage::EPage type = NTable::NPage::EPage::Undef) noexcept
     {
-        TSharedPageRef ref(std::move(handle), std::move(gcList));
+        TSharedPageRef ref(std::move(handle), std::move(gcList), type);
         ref.Use();
         return ref;
     }
@@ -399,6 +414,24 @@ public:
 
     bool IsUsed() const {
         return Used;
+    }
+
+    NTable::NPage::EPage GetType() const noexcept {
+        return Type;
+    }
+
+    void SetType(NTable::NPage::EPage type) noexcept {
+        Type = type;
+    }
+
+    /**
+     * Returns the size of page data without pinning the page
+     */
+    size_t GetBodySize() const noexcept {
+        if (Handle) {
+            return Handle->DataSize();
+        }
+        return 0;
     }
 
     bool Use() noexcept {
@@ -457,6 +490,7 @@ private:
     TIntrusivePtr<TSharedPageHandle> Handle;
     TIntrusivePtr<TSharedPageGCList> GCList;
     bool Used;
+    NTable::NPage::EPage Type = NTable::NPage::EPage::Undef;
 };
 
 /**

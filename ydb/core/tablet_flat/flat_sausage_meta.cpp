@@ -81,6 +81,8 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
 NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
 {
     Y_ENSURE(pageId < Header->Pages);
+    Y_ENSURE(Extra[pageId].Type != ui32(NTable::NPage::EPage::Skip),
+        "Cannot get location for skip page entry by pageId");
 
     const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
     const ui64 size = Index[pageId].Page - offset;
@@ -88,7 +90,7 @@ NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
     return NTable::NPage::TPageLocation::FromByteOffset(offset, size, static_cast<NTable::NPage::EPage>(Extra[pageId].Type), Extra[pageId].Crc32);
 }
 
-TBorder TMeta::Bounds(NTable::NPage::TPageLocation location) const
+TBorder TMeta::Bounds(const NTable::NPage::TPageLocation& location) const
 {
     Y_ENSURE(!location.Offset.IsMax());
     if (!location.Offset.IsByteOffset()) {
@@ -109,6 +111,22 @@ TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Inplace;
 
     return TStringBuf(InboundData + begin, InboundData + end);
+}
+
+ui32 TMeta::SkippedPages() const noexcept
+{
+    if (!Extra || !Header->Pages)
+        return 0;
+
+    ui32 skipped = 0;
+    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip); the off-by-one
+       is deliberate — each skip entry itself is counted in MetaPages(), so
+       Total = MetaPages + SkippedPages gives the correct full page count. */
+    for (ui32 i = 0; i < Header->Pages; i++) {
+        if (Extra[i].Type == ui32(NTable::NPage::EPage::Skip))
+            skipped += Extra[i].Crc32;
+    }
+    return skipped;
 }
 
 ui32 Checksum(TArrayRef<const char> body) noexcept

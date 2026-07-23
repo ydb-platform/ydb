@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "flat_part_store.h"
+#include "flat_part_walker.h"
 #include "flat_sausagecache.h"
 #include "shared_cache_events.h"
 #include "util_fmt_abort.h"
@@ -57,7 +58,7 @@ namespace NTable {
                 Part = part;
             }
 
-            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
                 Y_ENSURE(part == Part, "Unsupported part");
                 Y_ENSURE(groupId.IsMain(), "Unsupported column group");
@@ -77,7 +78,7 @@ namespace NTable {
                 if (savedPage != SavedPages.end()) {
                     return &savedPage->second;
                 } else {
-                    NeedPages.insert(location);
+                    NeedPages.emplace(location.Offset, location);
                     return nullptr;
                 }
             }
@@ -90,7 +91,9 @@ namespace NTable {
             TFetch GetFetch()
             {
                 if (NeedPages) {
-                    TVector<TPageLocation> pages(NeedPages.begin(), NeedPages.end());
+                    TVector<TPageLocation> pages(Reserve(NeedPages.size()));
+                    for (auto& [_, location] : NeedPages)
+                        pages.push_back(location);
                     std::sort(pages.begin(), pages.end());
                     return {
                         .PageCollection = PageCollection->PageCollection,
@@ -103,17 +106,17 @@ namespace NTable {
 
             void Save(NSharedCache::TEvResult::TLoaded&& loaded)
             {
-                EPage pageType = loaded.Location.Type;
-
-                auto needed = NeedPages.erase(loaded.Location);
-                Y_ENSURE(needed, "Got unknown " << (ui16)pageType << " page at " << loaded.Location.Offset);
+                auto it = NeedPages.find(loaded.Offset);
+                Y_ENSURE(it != NeedPages.end(), "Got unknown page at " << loaded.Offset);
+                EPage pageType = EPage(it->second.Type);
+                NeedPages.erase(it);
 
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
-                AddSavedPage(loaded.Location.Offset, loaded.Page);
+                AddSavedPage(loaded.Offset, loaded.Page);
                 if (sticky) {
-                    PageCollection->AddStickyPage(loaded.Location, std::move(loaded.Page));
+                    PageCollection->AddStickyPage(loaded.Offset, std::move(loaded.Page));
                 } else {
-                    PageCollection->AddPage(loaded.Location, std::move(loaded.Page));
+                    PageCollection->AddPage(loaded.Offset, std::move(loaded.Page));
                 }
             }
 
@@ -128,7 +131,7 @@ namespace NTable {
             TIntrusivePtr<TPageCollection> PageCollection;
             THashMap<TPageOffset, TSharedData> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
-            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash> NeedPages;
+            THashMap<TPageOffset, TPageLocation> NeedPages;
         };
 
         struct TRunOptions {
@@ -315,5 +318,6 @@ namespace NTable {
         NProto::TRoot Root;
         TPartView PartView;
         THolder<TLoaderEnv> LoaderEnv;
+        TVector<THolder<TBTreePartWalker>> PreloadBTreeWalkers;
     };
 }}

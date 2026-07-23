@@ -44,7 +44,7 @@ namespace NTabletFlatExecutor {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
             auto *info = partStore->Locate(lob, ref);
-            const TSharedData* page = TryGetPage(info->PageCollection->GetLocation(ref), info);
+            const TSharedData* page = TryGetPage(info->GetLocation(ref), info);
 
             if (!page && ReadMissingReferences) {
                 MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
@@ -53,7 +53,7 @@ namespace NTabletFlatExecutor {
             return { !ReadMissingReferences, page };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
@@ -70,20 +70,23 @@ namespace NTabletFlatExecutor {
         }
 
         ui64 MissingReferencesSize() const
-        { 
+        {
             return MissingReferencesSize_;
         }
 
     private:
-        void ToLoadPage(TPageLocation location, TPageCollection *pageCollection) {
-            if (ToLoad[pageCollection->Id].insert(location).second) {
+        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash, NTable::NPage::TPageLocationByOffsetEq>;
+
+        void ToLoadPage(const TPageLocation& location, TPageCollection *pageCollection) {
+            auto res = ToLoad[pageCollection->Id].insert(location);
+            if (res.second) {
                 Stats.ToLoadPages++;
                 Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
                 Stats.ToLoadBytes += location.Size;
             }
         }
 
-        const TSharedData* TryGetPage(TPageLocation location, TPageCollection *pageCollection)
+        const TSharedData* TryGetPage(const TPageLocation& location, TPageCollection *pageCollection)
         {
             auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
             auto* pinnedPage = pinnedCollection.FindPtr(location.Offset);
@@ -125,13 +128,11 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
-
         TPrivatePageCache& Cache;
         TSeat& Seat;
 
         THashMap<TLogoBlobID, THashSetOfLocation> ToLoad;
-    
+
         bool ReadMissingReferences = false;
         ui64 MissingReferencesSize_ = 0;
 

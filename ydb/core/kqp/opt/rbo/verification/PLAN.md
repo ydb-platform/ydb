@@ -562,10 +562,13 @@ Implementation sequence:
     errors and eager inherited errors;
 27. M4: exact uncorrelated and one-equality-correlated relational `EXISTS`;
 28. M4: trusted-core map and independent C++/Python auditability review;
-29. next: mechanical C++ subplan-exporter phase separation;
-30. later: equality-correlated scalar, dynamic `IN`, and broader `EXISTS`;
-31. later: proof scaling, distinct expansion, range reads, and other OLAP
-    pushdowns.
+29. M4: mechanical C++ subplan-exporter phase separation;
+30. M4: typed C++ subplan-descriptor variant with explicit kind states;
+31. M4: repeatable proof-depth sweep over the newly admitted formulas;
+32. next: exact proof scaling and decomposition driven by `UNKNOWN` formulas;
+33. then: equality-correlated scalar semantics;
+34. later: dynamic `IN`, broader `EXISTS`, distinct expansion, range reads, and
+    other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -1261,26 +1264,31 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
   the verifier, the 45-query formula floor must keep constructing SMT, and the
-  fifteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A verifier-side
-  `UNSUPPORTED` result satisfies only the first tier; later formulas and proofs
-  satisfy every weaker tier without pinning brittle blocker text.
+  eighteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A
+  verifier-side `UNSUPPORTED` result satisfies only the first tier; later
+  formulas and proofs satisfy every weaker tier without pinning brittle blocker
+  text.
 - Occurrence/routing compaction, scoped shared-term rendering, nonrecursive
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements reran on 2026-07-23 after relational `EXISTS` support. They emit
-  TPCH q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, and q22 (12/22) and
-  TPC-DS q3, q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50,
-  q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90,
-  q91, q93, q96, and q99 (33/99), for 45/121 workload queries (37.2%). TPCH
-  has seven unsupported and three optimizer-failure results; TPC-DS has 38
-  unsupported and 28 optimizer-failure results, for 45 unsupported and 31
-  optimizer failures across both suites. Complete preparation/verification
-  totals are 2,567/7,851 ms for TPCH and 55,244/175,820 ms for TPC-DS, or
-  57,811/183,671 ms together. The only status changes are the four new formulas
-  TPCH q4/q22 and TPC-DS q10/q69. TPC-DS q35 reaches the deeper `Double`
-  blocker. Fifty queries (41.3%) reach the verifier: the 45 formulas plus five
-  verifier-side resource preflight failures. Generic
+  measurements reran on 2026-07-23 after relational `EXISTS` support and the
+  auditability consolidation. They emit TPCH q1, q3, q4, q5, q6, q10, q11,
+  q12, q14, q15, q19, and q22 (12/22) and TPC-DS q3, q5, q10, q15, q19, q25,
+  q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69,
+  q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99 (33/99), for
+  45/121 workload queries (37.2%). TPCH has seven unsupported and three
+  optimizer-failure results; TPC-DS has 38 unsupported and 28 optimizer-failure
+  results, for 45 unsupported and 31 optimizer failures across both suites.
+  Complete preparation/verification totals are 2,811/7,940 ms for TPCH, report
+  SHA-256
+  `5d84a01f3aa2bba0be86415a176e7ba4f01f194c4d80c842d778a78fb5c93fe8`,
+  and 54,643/176,453 ms for TPC-DS, report SHA-256
+  `67d99fb092ef0d6686f2a9d838f9bb9a35e6b4935fad3459283461e0286e7198`,
+  or 57,454/184,393 ms together. The only status changes are the four new
+  formulas TPCH q4/q22 and TPC-DS q10/q69. TPC-DS q35 reaches the deeper
+  `Double` blocker. Fifty queries (41.3%) reach the verifier: the 45 formulas
+  plus five verifier-side resource preflight failures. Generic
   `Unsupported operator AddDependencies` is absent from the current inventory;
   remaining former cases are classified as correlated scalar,
   multi-dependency `EXISTS`, or q35 `Double`. Formula emission confirms
@@ -1302,12 +1310,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   64-live-`IfPresent` limits. Opaque fingerprints retain their independent
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
-  q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
-  q93, and q96 with a fixed 60-second per-query budget. The fresh TPCH run spent
-  854/49,986 ms and the TPC-DS run spent 1,124/31,796 ms in
-  preparation/verification. These are fifteen curated proofs (12.4% of the
-  workload); the four new `EXISTS` formulas do not extend this floor. q50 emits
-  a formula but its
+  q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3, q42, q48, q52,
+  q55, q69, q90, q93, and q96 with a fixed 60-second per-query budget. The
+  fresh TPCH run spent 1,080/57,062 ms in preparation/verification and produced
+  report SHA-256
+  `cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`;
+  the TPC-DS run spent 1,498/36,022 ms and produced
+  `bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`.
+  These are eighteen curated proofs (14.9% of the workload). Relational
+  `EXISTS` extends the proof floor through TPCH q4/q22 and TPC-DS q69.
+  Independent focused sweeps returned `VERIFIED_BOUNDED` for TPCH q4 after
+  85/924 ms and again after 98/949 ms, TPCH q22 after 200/5,645 ms and again
+  after 158/5,636 ms, and TPC-DS q69 after 374/3,781 ms and again after
+  359/3,758 ms. q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
   65.0-second deadline; it is not part of the proof floor. TPC-DS q15, q61, q62,
   q76, q79, and q88 return `UNKNOWN` at the 60-second solver budget. q43 likewise
@@ -1319,7 +1334,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   118,276,852-byte formula recorded 83,339 ms in the verifier/formula-emission
   phase before a focused solver attempt reached the external process deadline.
   The fresh q71 dashboard row records 329/1,437 ms; no new solver result is
-  inferred. q76 is formula-covered but is not one of the fifteen proofs. The
+  inferred. q76 is formula-covered but is not part of the proof floor. The
   Date additions q37 and q82 return `UNKNOWN`
   at the 60-second solver budget after 63,782 and 63,078 ms of verifier work; their
   retained formulas are 4,201,832 and 2,841,844 bytes. A separate non-gating
@@ -1328,7 +1343,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   processing before reporting `SOLVER_ERROR` because the external solver
   exceeded its 15.0-second process deadline. That focused `ya` experiment fails
   on `SOLVER_ERROR` as designed; q40 is formula-covered but neither proved nor
-  a counterexample. No optimizer correctness bug is confirmed by these runs.
+  a counterexample. Fresh focused TPC-DS experiments also return `UNKNOWN` for
+  q10 after 524/81,517 ms, q19 after 219/61,811 ms, q65 after 283/80,633 ms,
+  and q99 after 218/63,299 ms. These complete formulas are the immediate input
+  to proof scaling and decomposition work; no optimizer correctness bug is
+  confirmed by these runs.
 - [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md) records the exact setup,
   commands, complete formula-only baseline, proof-floor evidence, q6/q14 and
   q79/q88 investigations, and explicit unsupported/optimizer-failure inventory.
@@ -1448,15 +1467,18 @@ Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the exporter, and 4/4
 through the real host. Current full suites pass 431/431 verifier, 167/167 C++,
 43/43 inspector, and 26/26 real-host integration tests. The complete dashboards
 move TPCH q4/q22 and TPC-DS q10/q69 to formula construction; q35 instead exposes
-`Unsupported scalar type Double`. None of these rows extends the fifteen-query
-proof floor.
+`Unsupported scalar type Double`. TPCH q4/q22 and TPC-DS q69 now extend the
+eighteen-query proof floor; TPC-DS q10 remains formula-covered and `UNKNOWN`.
 
-The next slice is an auditability consolidation: independently review
-C++/Python agreement, keep the descriptor and evaluator minimal, remove stale
-current-versus-historical prose, and rerun every regression floor before adding
-semantics. Correlated scalar subplans, dynamic `IN`, multiple dependencies, and
-broader correlations remain later work. Solver/formula-size work promotes a
-query only after a reproducible `VERIFIED_BOUNDED` run.
+The auditability consolidation is complete in commits `7a3639d1c16`,
+`ebcfdbb1263`, and `4b7f27d492e`: the proof-producing boundary has a maintained
+trusted-core map, subplan export is separated into explicit phases, and the C++
+descriptor is a typed variant with explicit kind states. The completed
+proof-depth sweep promotes only repeatable `VERIFIED_BOUNDED` obligations. The
+next slice is exact proof scaling and formula decomposition driven by the
+current `UNKNOWN` obligations, followed by equality-correlated scalar
+semantics. Dynamic `IN`, multiple dependencies, and broader correlations remain
+later work.
 
 The milestone audit has independently found seven production optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
@@ -1546,7 +1568,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- Formula construction and the fifteen curated workload proofs have separate
+- Formula construction and the eighteen curated workload proofs have separate
   checked-in regression floors. Every future solver witness has a mandatory,
   automatic all-candidates confirmation command; the external target mutation
   remains outside recursive tests and the verifier kernel.

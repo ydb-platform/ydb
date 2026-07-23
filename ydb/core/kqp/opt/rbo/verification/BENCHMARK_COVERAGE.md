@@ -55,12 +55,11 @@ RBO_COVERAGE_TIMEOUT_MS=10000 \
   -F '*::TPCDS' 2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the fifteen curated obligations with the pinned
-Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH q3,
-q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93,
-and q96
-directly from the policy, accepts only `VERIFIED_BOUNDED`, and ignores every
-ambient `RBO_COVERAGE_*` variable:
+The checked-in proof floor runs the eighteen curated obligations with the
+pinned Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH
+q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3, q42, q48, q52,
+q55, q69, q90, q93, and q96 directly from the policy, accepts only
+`VERIFIED_BOUNDED`, and ignores every ambient `RBO_COVERAGE_*` variable:
 
 ```bash
 set -o pipefail
@@ -112,9 +111,9 @@ formula-construction floor requires TPCH q1, q3, q4, q5, q6, q10, q11, q12,
 q14, q15, q19, and q22 plus TPC-DS q3, q5, q10, q15, q19, q25, q29, q37, q40,
 q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77,
 q79, q80, q82, q88, q90, q91, q93, q96, and q99.
-Both floors are enforced only for a complete formula-only suite. The proof floor
-requires TPCH q3, q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48,
-q52, q55, q90, q93, and q96;
+Both floors are enforced only for a complete formula-only suite. The proof
+floor requires TPCH q3, q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS
+q3, q42, q48, q52, q55, q69, q90, q93, and q96;
 dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
@@ -178,9 +177,10 @@ execution divergence can coexist.
 ## Latest measured formula coverage
 
 The latest complete formula-only dashboards were rerun on 2026-07-23 after the
-restricted relational `EXISTS` milestone. Together they emitted the 45-query
-floor below and recorded an outcome for every workload entry. The fifteen-query
-proof floor remains green in the fresh run reported below.
+restricted relational `EXISTS` milestone and auditability consolidation.
+Together they emitted the 45-query floor below and recorded an outcome for
+every workload entry. The eighteen-query proof floor remains green in the fresh
+run reported below.
 `FORMULA_EMITTED` is not a solver proof. Both measured suites meet the updated
 checked-in floors: TPCH q1 and TPC-DS q5, q65, and q80 reach verifier entry and
 formula construction.
@@ -198,12 +198,12 @@ correlated-scalar, multi-dependency-`EXISTS`, or deeper scalar reasons.
 | TPCH_YQL | 12 (q1, q3, q4, q5, q6, q10, q11, q12, q14, q15, q19, q22) | 7 | 3 | 22 |
 | TPCDS_YQL | 33 (q3, q5, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, q99) | 38 | 28 | 99 |
 
-Complete preparation/verification totals were 2,567/7,851 ms for TPCH and
-55,244/175,820 ms for TPC-DS, or 57,811/183,671 ms together.
+Complete preparation/verification totals were 2,811/7,940 ms for TPCH and
+54,643/176,453 ms for TPC-DS, or 57,454/184,393 ms together.
 The retained formula-report SHA-256 values are
-`559ef0f69805a781ef4b6857f31c3a915e041aa4b22659fada3fe70f1c534251`
+`5d84a01f3aa2bba0be86415a176e7ba4f01f194c4d80c842d778a78fb5c93fe8`
 for TPCH and
-`8589f27221cccea931cb9f866d3d4d1892ef614dd379f5acba993fea09af6188`
+`67d99fb092ef0d6686f2a9d838f9bb9a35e6b4935fad3459283461e0286e7198`
 for TPC-DS.
 
 The supported formula slice is 45/121 queries (37.2%), with 45 unsupported
@@ -333,9 +333,10 @@ is neither a proof nor a counterexample.
 The subsequent exact Decimal AVG milestone moves q65 through formula
 construction after 687/30,318 ms in the focused run. That complete TPC-DS
 dashboard was 31/99 formulas, 39 unsupported queries, and 29 optimizer failures
-after 68,255/249,242 ms of preparation/verifier work. The current relational
-`EXISTS` rerun emits 33/99 formulas and records 38 unsupported queries and 28
-optimizer failures after 55,244/175,820 ms. q10 and q69 are the new formulas.
+after 68,255/249,242 ms of preparation/verifier work. The current post-audit
+rerun emits 33/99 formulas and records 38 unsupported queries and 28 optimizer
+failures after 54,643/176,453 ms. q10 and q69 are the relational-`EXISTS`
+formulas.
 q9 remains unsupported on final Read range/ordering semantics, q24 reaches
 `Unsupported scalar callable Map` at both boundaries, and q54 fails initial
 export with `Invalid Map rename source _yql_source_5.segment`.
@@ -511,26 +512,30 @@ Decimal-AVG milestone.
 
 The current dashboards emit 12/22 TPCH and 33/99 TPC-DS formulas, for 45/121
 (37.2%). They record 45 unsupported and 31 optimizer-failure queries. The
-relational `EXISTS` milestone adds TPCH q4/q22 and TPC-DS q10/q69; it changes no
-proof-floor membership.
+relational `EXISTS` milestone adds TPCH q4/q22 and TPC-DS q10/q69; TPCH q4/q22
+and TPC-DS q69 now also belong to the proof floor.
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
 159/63,937 ms. Focused q65 emits a formula after 687/30,318 ms. The proof floor
-contains the fifteen obligations described below.
+contains the eighteen obligations described below.
 
 ## Curated proof floor and focused results
 
 - The latest complete proof-floor run returns `VERIFIED_BOUNDED` for TPCH q3,
-  q6, q11, q12, q14, q15, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90,
-  q93, and q96, each at two rows per referenced table and two tasks. These are
-  fifteen bounded proofs (12.4% of the workload) for the modeled pre-physical
-  semantics, not unbounded SQL-equivalence claims. The fresh TPCH run spent
-  854/49,986 ms and the TPC-DS run spent 1,124/31,796 ms in
-  preparation/verification. Their retained SHA-256 values are
-  `49a92a3ac7c5051a307ca7bd1b51192bf113f75b075fada8f1e2b535ffde6cdd`
+  q4, q6, q11, q12, q14, q15, q19, and q22 plus TPC-DS q3, q42, q48, q52,
+  q55, q69, q90, q93, and q96, each at two rows per referenced table and two
+  tasks. These are eighteen bounded proofs (14.9% of the workload) for the
+  modeled pre-physical semantics, not unbounded SQL-equivalence claims. The
+  fresh TPCH run spent 1,080/57,062 ms and the TPC-DS run spent 1,498/36,022 ms
+  in preparation/verification. Their retained SHA-256 values are
+  `cb6c1e7eb6ddff1a0dc65bd3041b9ce87ab20d6cd61dc185afe7fef4e018bdb4`
   and
-  `f5a35f492643436442d19fb9ef41cbe1e0c7b21f045b35e2a16401cc63248bf1`,
+  `bafd9e6695c621eaf1e21b0634d91b24890739ddb1262f0d190498a77ce44c3e`,
   respectively.
+
+- Independent focused and repeat runs returned `VERIFIED_BOUNDED` for TPCH q4
+  after 85/924 and 98/949 ms, TPCH q22 after 200/5,645 and 158/5,636 ms, and
+  TPC-DS q69 after 374/3,781 and 359/3,758 ms of preparation/verification.
 
 - At the recorded static-proof milestone, exact uncorrelated scalar subplans
   known to be at most one row moved
@@ -580,8 +585,12 @@ contains the fifteen obligations described below.
 - Focused 60-second runs returned `UNKNOWN`, not proofs or candidates, for q25,
   q29, q46, q68, q80, and q91 after 302/86,108, 272/68,174, 313/64,717,
   293/64,427, 1,784/121,558, and 221/67,811 ms of
-  preparation/verification, respectively. None changes the fifteen-obligation
+  preparation/verification, respectively. None changes the eighteen-obligation
   proof floor above.
+
+- A fresh TPC-DS sweep returned `UNKNOWN` for q10 after 524/81,517 ms, q19
+  after 219/61,811 ms, q65 after 283/80,633 ms, and q99 after 218/63,299 ms of
+  preparation/verification. These formulas remain outside the proof floor.
 
 - TPCH q12's complete-dashboard row at that milestone spent 104/502 ms on
   preparation/verification; an earlier focused formula-only run spent
@@ -875,11 +884,11 @@ contains the fifteen obligations described below.
   item, not a bounded proof and not a known optimizer bug.
 
 No reported solver or proof-floor run has confirmed an optimizer correctness
-bug. The proof floor contains TPCH q3, q6, q11, q12, q14, q15, and q19 plus
-TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96. q5, q25, q29, q46, q68,
-q77, q80, and q91 construct formulas but return `UNKNOWN` in their latest
-solver runs. TPCH q1 also constructs a formula and is `UNKNOWN` in its focused
-60-second run; TPC-DS q65 constructs a formula but has no claimed solver proof.
+bug. The proof floor contains TPCH q3, q4, q6, q11, q12, q14, q15, q19, and
+q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96. q5, q10,
+q19, q25, q29, q46, q65, q68, q77, q80, q91, and q99 construct formulas but
+return `UNKNOWN` in their latest solver runs. TPCH q1 also constructs a formula
+and is `UNKNOWN` in its focused 60-second run.
 The former q6/q14, q5, q79, and q88 candidates were verifier-modeling false
 positives. q77's historical candidate is not rediscovered by the exact
 Date-cast model, but its regenerated and corrected fixed-witness results are
@@ -947,18 +956,17 @@ final side is still the ordinary StageGraph; no special equivalence path is
 introduced.
 
 Focused gates pass 11/11 in Python, 4/4 in C++, and 4/4 through the real host;
-the current full suites pass 430/430 verifier, 167/167 C++, 43/43 inspector,
+the current full suites pass 431/431 verifier, 167/167 C++, 43/43 inspector,
 and 26/26 integration tests. The complete dashboards add TPCH q4/q22 and
 TPC-DS q10/q69, producing the 45-query formula floor above. q35 reaches
-`Double`, q54 remains the invalid Map rename, and no new proof or
-counterexample is claimed.
+`Double`, q54 remains the invalid Map rename, and the proof floor now includes
+TPCH q4/q22 and TPC-DS q69. No new counterexample is claimed.
 
-The next milestone is an auditability consolidation before new semantics:
-independently review C++/Python agreement, keep the descriptor and evaluator
-minimal, distinguish historical measurements from the current baseline, and
-rerun every floor. Correlated scalar, dynamic `IN`, multiple dependencies, and
-broader `EXISTS` remain later work; solver/formula-size work promotes supported
-queries only after reproducible `VERIFIED_BOUNDED` results.
+The auditability consolidation is complete. The next milestone is exact proof
+scaling and decomposition before another semantic family. Correlated scalar,
+dynamic `IN`, multiple dependencies, and broader `EXISTS` remain later work;
+solver/formula-size work promotes supported queries only after reproducible
+`VERIFIED_BOUNDED` results.
 
 ### Confirmed subplan optimizer defects
 

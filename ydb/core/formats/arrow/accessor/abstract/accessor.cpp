@@ -187,13 +187,6 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }
 
-TChunkedArraySerialized::TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData)
-    : Array(array)
-    , SerializedData(serializedData) {
-    AFL_VERIFY(serializedData);
-    AFL_VERIFY(Array);
-    AFL_VERIFY(Array->GetRecordsCount());
-}
 
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {

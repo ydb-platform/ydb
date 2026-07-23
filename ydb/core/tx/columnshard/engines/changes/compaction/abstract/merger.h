@@ -369,9 +369,10 @@ public:
             AFL_VERIFY(cArray);
             AFL_VERIFY(cArray->GetRecordsCount());
             auto accContext = cmContext.GetLoader()->BuildAccessorContext(cArray->GetRecordsCount());
-            Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(Constructor.SerializeToString(cArray, accContext), cArray,
+            auto blobAndMeta = Constructor.SerializeToBlobAndMeta(cArray, accContext);
+            Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), cArray,
                 TChunkAddress(cmContext.GetColumnId(), Chunks.size()),
-                cmContext.GetIndexInfo().GetColumnFeaturesVerified(cmContext.GetColumnId())));
+                cmContext.GetIndexInfo().GetColumnFeaturesVerified(cmContext.GetColumnId()), std::move(blobAndMeta.Meta)));
         }
     };
 

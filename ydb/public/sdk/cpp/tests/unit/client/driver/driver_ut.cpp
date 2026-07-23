@@ -15,6 +15,7 @@
 #include <util/generic/mapfindptr.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include <google/protobuf/text_format.h>
@@ -79,6 +80,50 @@ namespace {
         return builder.BuildAndStart();
     }
 
+    class TDeferredAuthProvider final : public ICredentialsProvider {
+    public:
+        TDeferredAuthProvider()
+            : AuthInfo_(NThreading::NewPromise<std::string>())
+        {}
+
+        std::string GetAuthInfo() const override {
+            return AuthInfo_.GetFuture().GetValueSync();
+        }
+
+        NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+            return AuthInfo_.GetFuture();
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+
+        void SetReady() {
+            AuthInfo_.SetValue("token");
+        }
+
+    private:
+        NThreading::TPromise<std::string> AuthInfo_;
+    };
+
+    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    public:
+        TDeferredCredentialsFactory()
+            : Provider_(std::make_shared<TDeferredAuthProvider>())
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            return Provider_;
+        }
+
+        void SetReady() {
+            Provider_->SetReady();
+        }
+
+    private:
+        std::shared_ptr<TDeferredAuthProvider> Provider_;
+    };
+
     class TCountingCredentialsProvider final : public ICredentialsProvider {
     public:
         std::string GetAuthInfo() const override {
@@ -110,6 +155,44 @@ namespace {
     };
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
+    Y_UNIT_TEST(RequestWaitsForAuthInfo) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        UNIT_ASSERT(!result.Wait(TDuration::MilliSeconds(100)));
+        factory->SetReady();
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(RequestDeadlineWhileWaitingForCredentials) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession(
+            TCreateSessionSettings().ClientTimeout(TDuration::MilliSeconds(100))).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+    }
+
+    Y_UNIT_TEST(DriverStopCancelsCredentialsWait) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        driver.Stop(true);
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+}
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {

@@ -114,27 +114,28 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         self._sqs_api.send_message(queue_url, message_payload)
         self._read_while_not_empty(queue_url, 1)
 
-        sqs_counters = self._get_sqs_counters()
+        def assert_action_counters(sqs_counters):
+            successes = self._get_counter_value(sqs_counters, {
+                'queue': self.queue_name,
+                'sensor': 'ReceiveMessage_Success',
+            })
+            assert successes == 1
 
-        successes = self._get_counter_value(sqs_counters, {
-            'queue': self.queue_name,
-            'sensor': 'ReceiveMessage_Success',
-        })
-        assert successes == 1
+            durations = self._get_counter(sqs_counters, {
+                'queue': self.queue_name,
+                'sensor': 'ReceiveMessage_Duration',
+            })
+            duration_buckets = durations['hist']['buckets']
+            assert any(map(lambda x: x > 0, duration_buckets))
 
-        durations = self._get_counter(sqs_counters, {
-            'queue': self.queue_name,
-            'sensor': 'ReceiveMessage_Duration',
-        })
-        duration_buckets = durations['hist']['buckets']
-        assert any(map(lambda x: x > 0, duration_buckets))
+            working_durations = self._get_counter(sqs_counters, {
+                'queue': self.queue_name,
+                'sensor': 'ReceiveMessage_WorkingDuration',
+            })
+            working_duration_buckets = working_durations['hist']['buckets']
+            assert any(map(lambda x: x > 0, working_duration_buckets))
 
-        working_durations = self._get_counter(sqs_counters, {
-            'queue': self.queue_name,
-            'sensor': 'ReceiveMessage_WorkingDuration',
-        })
-        working_duration_buckets = working_durations['hist']['buckets']
-        assert any(map(lambda x: x > 0, working_duration_buckets))
+        self._wait_for_sqs_counters(assert_action_counters)
 
     def test_receive_message_immediate_duration_counter(self):
         if self._is_topic_migration_stage():

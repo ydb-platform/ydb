@@ -14,7 +14,7 @@ import pytest
 
 import ydb
 from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
-from hamcrest import raises, greater_than, not_, less_than
+from hamcrest import raises, greater_than
 from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 from ydb.tests.library.sqs.cloud_test_base import YandexCloudSqsTestBase
 from ydb.tests.library.sqs.test_base import get_test_with_sqs_tenant_installation
@@ -422,10 +422,12 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
 
         def get_messages_count(queue_url):
             attrs = self._sqs_api.get_queue_attributes(queue_url)
-            msg_count = int(attrs['ApproximateNumberOfMessages'])
-            infly_msg_count = int(attrs['ApproximateNumberOfMessagesNotVisible'])
-            assert_that(infly_msg_count, not_(greater_than(msg_count)))
-            return msg_count
+            msg_count = int(attrs.get('ApproximateNumberOfMessages', 0))
+            infly_msg_count = int(attrs.get('ApproximateNumberOfMessagesNotVisible', 0))
+            # Inflight and total can briefly diverge while attributes update asynchronously.
+            if infly_msg_count <= msg_count:
+                return msg_count
+            return None
 
         # check that messages are actually moved to dlq and this doesn't break both queues
         lst = [queue1_url, queue2_url]
@@ -437,16 +439,21 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
                 self._send_message_and_assert(q1, msg_body, seq_no=str(seq_no) if is_fifo else None, group_id='group' if is_fifo else None)
                 seq_no += 1
 
+                messages_count_before = None
                 messages_count_metric_update_attempts = 20
                 while messages_count_metric_update_attempts:
                     messages_count_metric_update_attempts -= 1
 
                     messages_count_before = get_messages_count(q1)
-                    assert_that(messages_count_before, not_(less_than(0)))
-                    if messages_count_before == 0:
-                        logging.debug('Wait for proper messages count metric and retry. Attempts left: {}'.format(messages_count_metric_update_attempts))
+                    if messages_count_before is None or messages_count_before == 0:
+                        logging.debug(
+                            'Wait for proper messages count metric and retry. Attempts left: {}'.format(
+                                messages_count_metric_update_attempts
+                            )
+                        )
                         time.sleep(1)
                         continue
+                    break
 
                 assert_that(messages_count_before, greater_than(0))
 
@@ -459,8 +466,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
                 if self._is_topic_migration_stage():
                     msg_from_dlq = self._wait_for_message_body_in_dlq(q2, msg_body)
                 else:
-                    messages_count_after = get_messages_count(q1)
-                    assert_that(messages_count_after, equal_to(messages_count_before - 1))
+                    self._wait_for_approximate_messages_count(q1, messages_count_before - 1)
                     msg_from_dlq = self._read_single_message_no_wait(q2)[0]
                 assert_that(msg_from_dlq['Body'], equal_to(msg_body))
 

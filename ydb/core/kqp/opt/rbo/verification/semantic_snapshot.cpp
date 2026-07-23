@@ -5115,16 +5115,9 @@ private:
         }
     }
 
-    void PrepareSubplans() {
-        const auto roots = OrderedSubplanRoots(Root.PlanProps.Subplans);
-        if (!roots.empty() && StageGraphPresent) {
-            Unsupported(
-                "A staged logical snapshot cannot contain residual subplans");
-        }
-        if (roots.empty()) {
-            return;
-        }
-
+    void RegisterSubplans(
+        const TVector<TIntrusivePtr<IOperator>>& roots)
+    {
         Subplans.reserve(roots.size());
         for (size_t index = 0; index < roots.size(); ++index) {
             const auto& bindingIU = Root.PlanProps.Subplans.OrderedList[index];
@@ -5160,7 +5153,9 @@ private:
                         << " has an unknown subplan type");
             }
         }
+    }
 
+    void ValidateSubplanRootTopology() {
         THashSet<const IOperator*> mainReachable;
         VisitOperators(
             Root.GetInput(),
@@ -5234,7 +5229,9 @@ private:
                 }
             }
         }
+    }
 
+    void ValidateNoNestedSubplanReferences() {
         // Registry roots may contain the one explicit outer dependency, but
         // never another virtual subplan binding.
         for (const auto& subplan : Subplans) {
@@ -5251,7 +5248,9 @@ private:
                     }
                 });
         }
+    }
 
+    void IndexSubplanConsumers() {
         THashSet<const IOperator*> mainNodes;
         VisitOperators(
             Root.GetInput(),
@@ -5306,7 +5305,9 @@ private:
                     Unsupported("Subplan consumer was indexed twice");
                 }
             });
+    }
 
+    void ValidateSubplanConsumerContracts() {
         for (auto& subplan : Subplans) {
             if (subplan.Consumers.empty()) {
                 Unsupported(TStringBuilder()
@@ -5323,6 +5324,23 @@ private:
                 ValidateExistsConsumer(subplan);
             }
         }
+    }
+
+    void PrepareSubplans() {
+        const auto roots = OrderedSubplanRoots(Root.PlanProps.Subplans);
+        if (!roots.empty() && StageGraphPresent) {
+            Unsupported(
+                "A staged logical snapshot cannot contain residual subplans");
+        }
+        if (roots.empty()) {
+            return;
+        }
+
+        RegisterSubplans(roots);
+        ValidateSubplanRootTopology();
+        ValidateNoNestedSubplanReferences();
+        IndexSubplanConsumers();
+        ValidateSubplanConsumerContracts();
     }
 
     const TVector<TString>& VirtualBindings(const IOperator& op) const {

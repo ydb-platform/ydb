@@ -2,11 +2,83 @@
 
 #include "transaction.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+
 namespace NYdb::inline Dev::NTopic {
 
-void TDeferredPublicationAckState::OnWrite() {
+namespace {
+
+std::shared_ptr<TDeferredPublicationAckState> MakeAckState() {
+    return std::make_shared<TDeferredPublicationAckState>();
+}
+
+} // namespace
+
+TDeferredPublication::TDeferredPublication()
+    : AckState_(MakeAckState())
+{
+}
+
+TDeferredPublication::TDeferredPublication(uint64_t intPublicationId)
+    : IntPublicationId(intPublicationId)
+    , AckState_(MakeAckState())
+{
+}
+
+TDeferredPublication::TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId)
+    : IntPublicationId(intPublicationId)
+    , ExtPublicationId(std::move(extPublicationId))
+    , AckState_(MakeAckState())
+{
+}
+
+TDeferredPublication::TDeferredPublication(const TDeferredPublication& other)
+    : IntPublicationId(other.IntPublicationId)
+    , ExtPublicationId(other.ExtPublicationId)
+    , AckState_(other.AckState_)
+{
+}
+
+TDeferredPublication::TDeferredPublication(TDeferredPublication&& other) noexcept
+    : IntPublicationId(other.IntPublicationId)
+    , ExtPublicationId(std::move(other.ExtPublicationId))
+    , AckState_(std::move(other.AckState_))
+{
+    other.AckState_ = MakeAckState();
+}
+
+TDeferredPublication& TDeferredPublication::operator=(const TDeferredPublication& other) {
+    if (this != &other) {
+        IntPublicationId = other.IntPublicationId;
+        ExtPublicationId = other.ExtPublicationId;
+        AckState_ = other.AckState_;
+    }
+    return *this;
+}
+
+TDeferredPublication& TDeferredPublication::operator=(TDeferredPublication&& other) noexcept {
+    if (this != &other) {
+        IntPublicationId = other.IntPublicationId;
+        ExtPublicationId = std::move(other.ExtPublicationId);
+        AckState_ = std::move(other.AckState_);
+        other.AckState_ = MakeAckState();
+    }
+    return *this;
+}
+
+const std::shared_ptr<TDeferredPublicationAckState>& NDeferredPublicationDetail::TDeferredPublicationAccess::AckState(
+    const TDeferredPublication& publication)
+{
+    return publication.AckState_;
+}
+
+bool TDeferredPublicationAckState::TryOnWrite() {
     with_lock (Lock_) {
+        if (Sealed_) {
+            return false;
+        }
         ++WriteCount_;
+        return true;
     }
 }
 
@@ -37,11 +109,11 @@ void TDeferredPublicationAckState::OnUnackedAbort(ui64 unackedCount) {
         Y_ABORT_UNLESS(WriteCount_ >= AckCount_ + unackedCount);
         if (WaitCalled_) {
             promiseToComplete = AllAcksReceived_;
+            // Failed finalize: allow subsequent Write + Publish/Cancel on this handle.
+            Sealed_ = false;
+            WaitCalled_ = false;
         }
         WriteCount_ -= unackedCount;
-        if (WriteCount_ == AckCount_ && WaitCalled_) {
-            // Wait already failed above; nothing else to complete.
-        }
     }
     if (promiseToComplete) {
         promiseToComplete->TrySetValue(statusToSet);
@@ -54,15 +126,20 @@ NThreading::TFuture<TStatus> TDeferredPublicationAckState::WaitAllAcks() {
     NThreading::TFuture<TStatus> future;
 
     with_lock (Lock_) {
+        if (WriteCount_ == 0) {
+            // No local writes on this handle: do not seal, do not wait.
+            return NThreading::MakeFuture(MakeCommitTransactionSuccess());
+        }
+
         if (WaitCalled_) {
             auto existing = AllAcksReceived_.GetFuture();
             if (!existing.HasValue()) {
-                // In-flight wait: Publish/Cancel callers share the same future.
                 return existing;
             }
-            // Previous wait finished (success or abort). Allow retry for the current backlog.
+            // Previous wait finished successfully; allow another finalize wait (e.g. repeat Publish).
         }
 
+        Sealed_ = true;
         WaitCalled_ = true;
         AllAcksReceived_ = NThreading::NewPromise<TStatus>();
         future = AllAcksReceived_.GetFuture();
@@ -75,6 +152,12 @@ NThreading::TFuture<TStatus> TDeferredPublicationAckState::WaitAllAcks() {
         promiseToComplete->SetValue(statusToSet);
     }
     return future;
+}
+
+bool TDeferredPublicationAckState::IsSealed() const {
+    with_lock (Lock_) {
+        return Sealed_;
+    }
 }
 
 } // namespace NYdb::NTopic

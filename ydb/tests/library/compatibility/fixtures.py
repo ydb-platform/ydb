@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 import copy
+import grpc
 import logging
 import os
 import pytest
 import time
 import yatest
+from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc
+from ydb.public.api.protos import ydb_discovery_pb2
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.fixtures import ydb_database_ctx
@@ -284,6 +287,21 @@ class RollingUpgradeAndDowngradeFixture:
         driver.wait(timeout=60)
         return driver
 
+    def _wait_for_endpoint(self, node) -> None:
+        channel = grpc.insecure_channel(f"{node.host}:{node.port}")
+        request = ydb_discovery_pb2.ListEndpointsRequest(database=self.database_path)
+        stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
+        try:
+            for _ in range(60):
+                try:
+                    stub.ListEndpoints(request, timeout=1)
+                    return
+                except grpc.RpcError:
+                    time.sleep(1)
+            stub.ListEndpoints(request, timeout=1)
+        finally:
+            channel.close()
+
     def _wait_for_readiness(self):
         if self.recreate_driver:
             self.driver = self.create_driver()
@@ -342,9 +360,7 @@ class RollingUpgradeAndDowngradeFixture:
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
-        self.endpoints = []
-        for i in range(1, len(self.cluster.nodes) + 1):
-            self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
+        self.endpoints = [f"grpc://{node.host}:{node.port}" for node in self.cluster.nodes.values()]
 
         self.endpoint = self.endpoints[0]
 
@@ -380,6 +396,7 @@ class RollingUpgradeAndDowngradeFixture:
             node.binary_path = self.all_binary_paths[1]
             node.set_log_file_prefix("logfile_upgraded_")
             node.start()
+            self._wait_for_endpoint(node)
             self._wait_for_readiness()
             yield
 
@@ -394,6 +411,7 @@ class RollingUpgradeAndDowngradeFixture:
             node.binary_path = self.all_binary_paths[0]
             node.set_log_file_prefix("logfile_downgraded_")
             node.start()
+            self._wait_for_endpoint(node)
             self._wait_for_readiness()
             yield
 

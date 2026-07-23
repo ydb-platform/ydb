@@ -38,18 +38,20 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
         tasks: int = 2,
         partitions_count: int | None = None,
+        idle_timeout_seconds: int | None = None,
         settings: dict[str, str] = {},
         input_parsing: bool = False,
         cascade_hopping: bool = False,
     ) -> str:
         query_name = entity_name(scenario)
         partitions_count = partitions_count or tasks
+        idle_timeout_seconds = idle_timeout_seconds or self.idle_timeout_seconds
         input_name, output_name, _ = self.get_io_names(
             kikimr, query_name, local_topics, entity_name, partitions_count=partitions_count, shared=shared_reading
         )
 
         settings_str = f"WITH ({', '.join(f'{k} = {v}' for k, v in settings.items())})" if settings else ""
-        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if partitions_count > 1 else ''
+        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{idle_timeout_seconds}S"' if partitions_count > 1 else ''
         input = (
             f'''
             $input = (
@@ -286,6 +288,10 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
 
+            # Advance the second partition too, so its event at 20 closes its window.
+            self._write_topic(ydb_client, [self._event(30, "snd-30", filter=True)], partition_id=1)
+            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
             expected = ["fst-0", "snd-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)
         finally:
@@ -304,7 +310,8 @@ class TestWatermarksInYdb(StreamingTestBase):
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_lt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(
-            kikimr, entity_name, query_name, local_topics, shared_reading, tasks=1, partitions_count=2,
+            kikimr, entity_name, query_name, local_topics, shared_reading,
+            tasks=1, partitions_count=2, idle_timeout_seconds=20,
         )
         self._wait_for_shared_reading_start(shared_reading)
 

@@ -4,16 +4,66 @@
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | ------ | ------------ | ------- | ----------------- |
-| v2.0.0 | 23.12.2025   | [ydb-ansible-2.0.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v2.0.0/ydb_platform-ydb-2.0.0.tar.gz) | |
+| v2.1.0 | 29.06.2026   | [ydb-ansible-2.1.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v2.1.0/ydb_platform-ydb-2.1.0.tar.gz) | [См. список](#2-1-0) |
+| v2.0.0 | 23.12.2025   | [ydb-ansible-2.0.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v2.0.0/ydb_platform-ydb-2.0.0.tar.gz) | [См. список](#2-0-0) |
 | v1.3.2 | 02.12.2025   | [ydb-ansible-1.3.2.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3.2/ydb_platform-ydb-1.3.2.tar.gz) | |
-| v1.3.1 | 01.12.2025   | [ydb-ansible-1.3.1.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3.1/ydb_platform-ydb-1.3.1.tar.gz) | |
-| v1.3.0 | 26.11.2025   | [ydb-ansible-1.3.0.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.3/ydb_platform-ydb-1.3.0.tar.gz) | |
-| v1.2   | 06.07.2025   | [ydb-ansible-1.2.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.2/ydb_platform-ydb-1.2.0.tar.gz) | |
-| v1.1   | 21.06.2025   | [ydb-ansible-1.1.tar.gz](https://github.com/ydb-platform/ydb-ansible/releases/download/v1.1/ydb_platform-ydb-1.1.0.tar.gz) | |
-| v1.0   | 05.03.2025   | [ydb-ansible-1.0.zip](https://github.com/ydb-platform/ydb-ansible/archive/refs/tags/v1.0.zip) | |
-| v0.15   | 13.12.2024   | [ydb-ansible-0.15.zip](https://github.com/ydb-platform/ydb-ansible/archive/refs/tags/v0.15.zip) | |
-| v0.14   | 30.11.2024   | [ydb-ansible-0.14.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.14.zip) |  |
-| v0.10   | 01.08.2024   | [ydb-ansible-0.10.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.10.zip) |  |
-| v0.9   | 20.07.2024   | [ydb-ansible-0.9.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.9.zip) |  |
-| v0.8   | 10.07.2024   | [ydb-ansible-0.8.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.8.zip) | |
-| v0.7   | 03.05.2024   | [ydb-ansible-0.7.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.7.zip) |  |
+| v0.15   | 13.12.2024   | [ydb-ansible-0.15.zip](https://github.com/ydb-platform/ydb-ansible/archive/refs/tags/v0.15.zip) | Минимальный набор скриптов и ролей для запуска (устарело) — [см. список](#0-15) |
+
+
+# Список изменений Ansible Playbooks
+
+## Версия 2.1.0 {#2-1-0}
+### Функциональность
+
+* Добавлена поддержка Ansible 2.19 и более новых версий.
+* Добавлены плейбуки для миграции кластеров между конфигурациями V1 и V2:
+    * `migrate_to_v1`
+    * `migrate_to_v2`
+* Добавлена поддержка новых минорных версий дистрибутивов Linux.
+* Отключён healthcheck для YDB 25.*.
+* Добавлены новые плейбуки:
+    * `generate_conf`
+    * `run_dstool`
+    * `run_ydbd`
+* Добавлена поддержка раздельной установки статических и динамических узлов.
+
+### Улучшения
+
+* Оптимизирована роль `ydbd_newdb`.
+* Дашборды Grafana синхронизированы с репозиторием YDB.
+
+## Версия 2.0.0 {#2-0-0}
+### Функциональность
+
+* Добавлена поддержка установки кластера с конфигурацией YDB V2 (Distconf).
+* Добавлена поддержка установки кластера в режиме 2DC.
+* Добавлены новые плейбуки для CI:
+    * `ydb_platform.ydb.run_ydbd`
+    * `ydb_platform.ydb.run_dstool`
+    * `ydb_platform.ydb.prepare_drives`
+
+### Улучшения
+
+* Обновлена документация.
+* Расширена валидация и внесены улучшения для упрощения процесса установки.
+* Поддержка YDB 25+
+
+## Версия 1.3.2 {#1-3-2}
+25+ желательно не использовать.
+
+### Функциональность
+
+* Коллекция переработана: вместо отдельных скриптов теперь используются Ansible-плейбуки.
+* Добавлен единый плейбук для установки всего кластера YDB.
+* Добавлена поддержка установки из файлов дистрибутивов YDB.
+* Расширена поддержка современных операционных систем.
+
+### Улучшения
+
+* Оптимизирован процесс установки кластера.
+* Улучшена диагностика ошибок установки.
+
+
+## Версия 0.15 {#0-15}
+Устаревшая версия.
+Коллекция отдельных скриптов и ролей. Была замещена плейбуками версий 1.x.x.

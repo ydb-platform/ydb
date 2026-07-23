@@ -46,18 +46,6 @@ namespace NYql::NDq {
             return resultTypeBuilder.Build();
         }
 
-<<<<<<< HEAD
-        template <typename T>
-        T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            // We want to avoid making a copy of data stored in a future.
-            // But there is no direct way to extract data from a const future
-            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            // It destructs the value in the original future, but this trick is legal and documented here:
-            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
-            return NThreading::TFuture<T>(f).ExtractValueSync();
-        }
-
-=======
         using ILookupRetryPolicy = IRetryPolicy<const NYdbGrpc::TGrpcStatus&>;
         using ILookupRetryState = ILookupRetryPolicy::IRetryState;
         struct TLookupState {
@@ -72,7 +60,6 @@ namespace NYql::NDq {
             size_t FullscanLimit = 0;
             size_t ResultRows = 0;
         };
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
     } // namespace
 
     class TGenericLookupActor
@@ -84,14 +71,6 @@ namespace NYql::NDq {
         using ILookupRetryState = ILookupRetryPolicy::IRetryState;
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
-<<<<<<< HEAD
-=======
-            explicit TEvLookupRetry(TLookupState::TPtr state)
-                : State(std::move(state))
-            {}
-
-            TLookupState::TPtr State;
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
         };
 
     public:
@@ -243,21 +222,10 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-<<<<<<< HEAD
-            auto error = CredentialsProvider->FillCredentials(*readRequest.mutable_data_source_instance());
-            if (error) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
-                return;
-            }
-
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
             Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
-=======
-            *readRequest.add_splits() = std::move(split);
-            readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
-            readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
             CredentialsProvider->AsyncCredentials().Apply([
                     connector = Connector,
                     readRequest = std::move(readRequest),
@@ -266,33 +234,21 @@ namespace NYql::NDq {
                 *readRequest.mutable_data_source_instance()->mutable_credentials() = ExtractFromConstFuture(future);
                 return connector->ReadSplits(readRequest, requestTimeout);
             }).Subscribe([
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     retryState = RetryState
             ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
-<<<<<<< HEAD
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
-                auto result = ExtractFromConstFuture(asyncResult);
-                if (result.Status.Ok()) {
-                    auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
-                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                } else {
-                    SendRetryOrError(actorSystem, selfId, result.Status, retryState);
-=======
                 try {
                     YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
                     auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
                         auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
-                        ev->State = std::move(state);
                         actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                     } else {
-                        SendRetryOrError(actorSystem, selfId, result.Status, state);
+                        SendRetryOrError(actorSystem, selfId, result.Status, retryState);
                     }
                 } catch (std::exception& ex) {
-                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(retyState));
                 }
             });
         }
@@ -367,36 +323,27 @@ namespace NYql::NDq {
             SendRequest();
         }
 
-<<<<<<< HEAD
         void SendRequest() {
-=======
-        void SendRequest(TLookupState::TPtr state) {
             CredentialsProvider->AsyncCredentials().Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
-                    state = std::move(state)
+                    retryState = RetryState
             ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
                 try {
                     actorSystem->Send(
                         selfId,
-                        new TEvGotCredentials(ExtractFromConstFuture(future), std::move(state)));
+                        new TEvGotCredentials(ExtractFromConstFuture(future)));
                 } catch (std::exception& ex) {
-                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(retryState));
                 }
             });
         }
 
         void Handle(TEvGotCredentials::TPtr ev) {
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
             auto startCycleCount = GetCycleCountFast();
-            auto state = std::move(ev->Get()->State);
             NConnector::NApi::TListSplitsRequest splitRequest;
 
-<<<<<<< HEAD
-            auto error = FillSelect(*splitRequest.add_selects());
-=======
-            auto error = FillSelect(*splitRequest.add_selects(), state, std::move(ev->Get()->Credentials));
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
+            auto error = FillSelect(*splitRequest.add_selects(), std::move(ev->Get()->Credentials));
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
@@ -522,12 +469,7 @@ namespace NYql::NDq {
             auto nextRetry = retryState->GetNextRetryDelay(status);
             if (nextRetry) {
                 YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-<<<<<<< HEAD
                 actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry()));
-=======
-                actorSystem->Schedule(*nextRetry,
-                        new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(state))));
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
                 return;
             }
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
@@ -582,11 +524,7 @@ namespace NYql::NDq {
             }
         }
 
-<<<<<<< HEAD
-        TString FillSelect(NConnector::NApi::TSelect& select) {
-=======
-        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state, TGenericCredentials&& credentials) {
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
+        TString FillSelect(NConnector::NApi::TSelect& select, TGenericCredentials&& credentials) {
             auto dsi = LookupSource.data_source_instance();
             *dsi.mutable_credentials() = std::move(credentials);
             *select.mutable_data_source_instance() = std::move(dsi);
@@ -600,17 +538,13 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
-<<<<<<< HEAD
-            for (const auto& [keys, _] : *Request) {
-=======
             auto guard = Guard(*Alloc);
-            auto request = state->Request.lock();
+            auto request = Request.lock();
             if (!request) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
                 return "Actor destroyed";
             }
             for (const auto& [keys, _] : *request) {
->>>>>>> 2a1005995d0 (generic provider: use GetAuthInfoAsync (#47426))
                 // TODO consider skipping already retrieved keys
                 // ... but careful, can we end up with zero? TODO
                 AddClause(disjunction, KeyType->GetMembersCount(), keys);

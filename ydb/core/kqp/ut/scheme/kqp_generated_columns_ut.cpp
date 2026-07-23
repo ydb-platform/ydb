@@ -1581,6 +1581,214 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 9;", "[]");
         fixture.Check("SELECT k, g1 FROM TestTable VIEW idx_g1 WHERE g1 = 15;", "[[3;[15]]]");
     }
+
+    Y_UNIT_TEST(UpsertReturningStar) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Partial UPSERT of an existing row: omitted b, c, d are read back. g1 = 100 + 2 = 102, g2 unchanged
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, a) VALUES (1, 100) RETURNING *;",
+            "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k = 1 ORDER BY k;",
+            "[[[100];[2];[3];[100];[102];[23];1]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[100];[2];[3];[100];[102];[23]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(UpsertReturningNewRow) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Brand-new row with every dependency supplied. g1 = 1 + 2 = 3, g2 = 2*10 + 3 = 23
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, a, b, c, d) VALUES (4, 1, 2, 3, 4) RETURNING *;",
+            "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k = 4 ORDER BY k;",
+            "[[[1];[2];[3];[4];[3];[23];4]]");
+
+        fixture.Check(MultiGeneratedSelect,
+            RowsYson({MultiGeneratedRow1, MultiGeneratedRow2, MultiGeneratedRow3, "[4;[1];[2];[3];[4];[3];[23]]"}));
+    }
+
+    Y_UNIT_TEST(UpsertReturningAllColumns) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // b feeds both: g1 = 1 + 50 = 51, g2 = 50*10 + 3 = 503 (a, c, d read back)
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, b) VALUES (1, 50) RETURNING k, a, b, c, d, g1, g2;",
+            "SELECT k, a, b, c, d, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[1];[50];[3];[100];[51];[503]]]");
+    }
+
+    Y_UNIT_TEST(UpsertReturningGeneratedWithDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // g1 = 100 + 2 = 102 (b read back)
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, a) VALUES (1, 100) RETURNING k, a, b, g1;",
+            "SELECT k, a, b, g1 FROM TestTable WHERE k = 1;",
+            "[[1;[100];[2];[102]]]");
+    }
+
+    Y_UNIT_TEST(UpsertReturningGeneratedWithoutDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Only the independent d changes, so both generated columns keep their seeded values
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, d) VALUES (1, 55) RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[3];[23]]]");
+    }
+
+    Y_UNIT_TEST(UpsertReturningIndependentColumn) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, d) VALUES (1, 55) RETURNING k, d;",
+            "SELECT k, d FROM TestTable WHERE k = 1;",
+            "[[1;[55]]]");
+    }
+
+    Y_UNIT_TEST(UpsertReturningMultipleRows) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // k=1: g1 = 100 + 2 = 102, k=2: g1 = 200 + 5 = 205 (each b read back)
+        fixture.CheckReturning(
+            "UPSERT INTO TestTable (k, a) VALUES (1, 100), (2, 200) RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[102];[23]];[2;[205];[56]]]");
+    }
+
+    Y_UNIT_TEST(InsertReturningStar) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        // g1 = 1 + 2 = 3, g2 = 2*10 + 3 = 23
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 100) RETURNING *;",
+            "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k = 1 ORDER BY k;",
+            "[[[1];[2];[3];[100];[3];[23];1]]");
+
+        fixture.Check(MultiGeneratedSelect, RowsYson({MultiGeneratedRow1}));
+    }
+
+    Y_UNIT_TEST(InsertReturningAllColumns) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 100) RETURNING k, a, b, c, d, g1, g2;",
+            "SELECT k, a, b, c, d, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[1];[2];[3];[100];[3];[23]]]");
+    }
+
+    Y_UNIT_TEST(InsertReturningGeneratedWithDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 100) RETURNING k, a, b, g1;",
+            "SELECT k, a, b, g1 FROM TestTable WHERE k = 1;",
+            "[[1;[1];[2];[3]]]");
+    }
+
+    Y_UNIT_TEST(InsertReturningGeneratedWithoutDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        // b, c omitted -> NULL. g1 = COALESCE(5, 0) + 0 = 5, g2 = 0*10 + 0 = 0
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, d) VALUES (1, 5, 100) RETURNING k, a, b, c, g1, g2;",
+            "SELECT k, a, b, c, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[5];#;#;[5];[0]]]");
+    }
+
+    Y_UNIT_TEST(InsertReturningIndependentColumn) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 100) RETURNING k, d;",
+            "SELECT k, d FROM TestTable WHERE k = 1;",
+            "[[1;[100]]]");
+    }
+
+    Y_UNIT_TEST(InsertReturningMultipleRows) {
+        TTestFixture fixture(MultiGeneratedTableDDL);
+
+        // Row1 g1 = 3, g2 = 23; Row2 g1 = 9, g2 = 56
+        fixture.CheckReturning(
+            "INSERT INTO TestTable (k, a, b, c, d) VALUES (1, 1, 2, 3, 100), (2, 4, 5, 6, 100) RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[3];[23]];[2;[9];[56]]]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningStar) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // REPLACE of an existing row resets omitted b, c, d to NULL. g1 = COALESCE(100, 0) + 0 = 100, g2 = 0
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a) VALUES (1, 100) RETURNING *;",
+            "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k = 1 ORDER BY k;",
+            "[[[100];#;#;#;[100];[0];1]]");
+
+        fixture.Check(MultiGeneratedSelect, TStringBuilder()
+            << "[[1;[100];#;#;#;[100];[0]];" << MultiGeneratedRow2 << ";" << MultiGeneratedRow3 << "]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningNewRow) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Brand-new row. g1 = 1 + 2 = 3, g2 = 2*10 + 3 = 23
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a, b, c, d) VALUES (4, 1, 2, 3, 4) RETURNING *;",
+            "SELECT a, b, c, d, g1, g2, k FROM TestTable WHERE k = 4 ORDER BY k;",
+            "[[[1];[2];[3];[4];[3];[23];4]]");
+
+        fixture.Check(MultiGeneratedSelect,
+            RowsYson({MultiGeneratedRow1, MultiGeneratedRow2, MultiGeneratedRow3, "[4;[1];[2];[3];[4];[3];[23]]"}));
+    }
+
+    Y_UNIT_TEST(ReplaceReturningAllColumns) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Full row replaced. g1 = 5 + 6 = 11, g2 = 6*10 + 7 = 67
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a, b, c, d) VALUES (1, 5, 6, 7, 8) RETURNING k, a, b, c, d, g1, g2;",
+            "SELECT k, a, b, c, d, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[5];[6];[7];[8];[11];[67]]]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningGeneratedWithDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a, b, c, d) VALUES (1, 5, 6, 7, 8) RETURNING k, a, b, g1;",
+            "SELECT k, a, b, g1 FROM TestTable WHERE k = 1;",
+            "[[1;[5];[6];[11]]]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningGeneratedWithoutDependencies) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // b, c reset to NULL. g1 = 5 + 0 = 5, g2 = 0*10 + 0 = 0
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a) VALUES (1, 5) RETURNING k, a, b, c, g1, g2;",
+            "SELECT k, a, b, c, g1, g2 FROM TestTable WHERE k = 1;",
+            "[[1;[5];#;#;[5];[0]]]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningIndependentColumn) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a, b, c, d) VALUES (1, 5, 6, 7, 8) RETURNING k, d;",
+            "SELECT k, d FROM TestTable WHERE k = 1;",
+            "[[1;[8]]]");
+    }
+
+    Y_UNIT_TEST(ReplaceReturningMultipleRows) {
+        TTestFixture fixture(MultiGeneratedTableDDL, MultiGeneratedSeed3);
+
+        // Row1 g1 = 11, g2 = 67; Row2 g1 = 19, g2 = 10*10 + 11 = 111
+        fixture.CheckReturning(
+            "REPLACE INTO TestTable (k, a, b, c, d) VALUES (1, 5, 6, 7, 8), (2, 9, 10, 11, 12) RETURNING k, g1, g2;",
+            "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
+            "[[1;[11];[67]];[2;[19];[111]]]");
+    }
 }
 
 // TODO (ditimizhev): wip

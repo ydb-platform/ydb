@@ -9,6 +9,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <util/string/cast.h>
 #include <util/string/strip.h>
 
 namespace NKikimr::NBlobDepot {
@@ -76,6 +77,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         NKikimrBlobDepot::TS3BackendSettings Settings;
+        TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
@@ -100,20 +102,39 @@ namespace NKikimr::NBlobDepot {
             return TDuration::Seconds(sec);
         }
 
-        void BuildInnerWrapper(const TString& endpoint) {
+        ui16 BalancerProxyPort() const {
+            return Settings.GetBalancerProxyPort();
+        }
+
+        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig) {
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
             }
-            auto* mutableSettings = Settings.MutableSettings();
-            mutableSettings->SetEndpoint(endpoint);
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings);
+
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
             storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow));
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+        }
+
+        void BuildInnerWrapper(const TString& endpoint) {
+            auto* mutableSettings = Settings.MutableSettings();
+            mutableSettings->SetEndpoint(endpoint);
+            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
+                AppData()->AwsClientConfig, *mutableSettings));
             CurrentEndpoint = endpoint;
+        }
+
+        void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
+            auto* mutableSettings = Settings.MutableSettings();
+            mutableSettings->SetEndpoint(OriginalEndpoint);
+            mutableSettings->SetProxyHost(host);
+            mutableSettings->SetProxyPort(port);
+            mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
+            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
+                AppData()->AwsClientConfig, *mutableSettings));
+            CurrentEndpoint = TStringBuilder() << host << ':' << port;
         }
 
         bool BalancerEnabled() const {
@@ -127,7 +148,7 @@ namespace NKikimr::NBlobDepot {
             if (!HttpProxyId) {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
-            const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost() << "/";
+            const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost();
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
@@ -157,9 +178,18 @@ namespace NKikimr::NBlobDepot {
             RefreshInFlight = false;
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
-                TString endpoint = TString(StripString(msg.Response->Body));
-                if (!endpoint.empty() && endpoint != CurrentEndpoint) {
-                    BuildInnerWrapper(endpoint);
+                TString host = TString(StripString(msg.Response->Body));
+                if (!host.empty()) {
+                    ui16 port = BalancerProxyPort();
+                    if (TStringBuf h, p; TStringBuf(host).TrySplit(':', h, p)) {
+                        host = TString(h);
+                        TryFromString(p, port);
+                    }
+
+                    const TString endpoint = TStringBuilder() << host << ':' << port;
+                    if (endpoint != CurrentEndpoint) {
+                        BuildInnerWrapperViaProxy(host, port);
+                    }
                 }
             }
             ScheduleNextRefresh();
@@ -183,6 +213,7 @@ namespace NKikimr::NBlobDepot {
 
         void Bootstrap() {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
+            OriginalEndpoint = endpoint;
             BuildInnerWrapper(endpoint);
             if (BalancerEnabled()) {
                 IssueBalancerRequest();

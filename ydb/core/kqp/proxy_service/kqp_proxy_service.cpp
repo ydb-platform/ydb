@@ -1045,9 +1045,9 @@ public:
                 && WarmupApplicable
                 && PeerProxyNodeResources.size() <= 1)
             {
-                auto rm = TryGetKqpResourceManager(SelfId().NodeId());
-                fastPoll = !rm || !rm->GetInitialBoardSyncDone()
-                    || rm->GetInitialBoardNodeIds().size() > 1;
+                auto resourceManager = GetKqpResourceManager();
+                fastPoll = !resourceManager || !resourceManager->GetInitialBoardSyncDone()
+                    || resourceManager->GetInitialBoardNodeIds().size() > 1;
             }
             if (fastPoll) {
                 d = TDuration::Seconds(2);
@@ -2041,7 +2041,7 @@ private:
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

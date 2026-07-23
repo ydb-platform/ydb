@@ -14,20 +14,12 @@
 
 #include "kqp_resource_estimation.h"
 
-#include <array>
-#include <bitset>
-#include <functional>
-#include <utility>
+namespace NKikimr::NKqp {
 
-
-namespace NKikimr {
-namespace NKqp {
-
-namespace NRm {
+namespace NResourceManager {
 
 using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>;
 
-/// resources request
 struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     ui64 Memory = 0;
@@ -77,8 +69,7 @@ public:
     std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
-    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-        const TString& database, bool collectBacktrace);
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, TString poolId, double memoryPoolPercent, TString database, bool collectBacktrace);
     ~TTxState();
 
     std::pair<TString, TString> MakePoolId() const {
@@ -275,8 +266,8 @@ public:
     virtual TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
     virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
-    virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
-    virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
+    virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, ui32 tasksCount) = 0;
+    virtual void EstimateTaskResources(TTaskResourceEstimation& result, ui32 tasksCount) = 0;
 
     virtual void FreeResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FinishTx(TTxState& tx) = 0;
@@ -294,10 +285,6 @@ public:
     virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
-
-    virtual ui32 GetNodeId() {
-        return 0;
-    }
 };
 
 
@@ -326,19 +313,25 @@ NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters>
     std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
     const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings);
 
-} // namespace NRm
+// Creates a fully initialized resource manager to be passed into CreateKqpResourceManagerActor().
+std::shared_ptr<IKqpResourceManager> CreateKqpResourceManager(
+    const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
+    TIntrusivePtr<TKqpCounters> counters);
+
+} // namespace NResourceManager
 
 struct TKqpProxySharedResources {
     std::atomic<ui32> AtomicLocalSessionCount{0};
 };
 
+// A single resource manager instance must not be shared between several actors.
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
+    std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
+    NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
-    ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
+    TDuration warmupDeadline = TDuration::Zero());
 
-std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
-std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
+std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager();
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp
+

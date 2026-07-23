@@ -16,8 +16,8 @@ namespace NKikimr::NKqp {
 
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
-    TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
-        , TIntrusivePtr<NRm::TTxState> tx
+    TMemoryQuotaManager(std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager
+        , TIntrusivePtr<NResourceManager::TTxState> tx
         , ui64 taskId
         , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
@@ -27,7 +27,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     {}
 
     ~TMemoryQuotaManager() override {
-        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{
+        ResourceManager->FreeResources(*Tx, TaskId, NResourceManager::TKqpResourcesRequest{
             .ExecutionUnits = 1,
             .Memory = Limit - Guarantee,
             .ExternalMemory = Guarantee,
@@ -36,7 +36,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     bool AllocateExtraQuota(ui64 extraSize) override {
         auto result = ResourceManager->AllocateResources(*Tx, TaskId,
-            NRm::TKqpResourcesRequest{.Memory = extraSize});
+            NResourceManager::TKqpResourcesRequest{.Memory = extraSize});
 
         if (!result) {
             AFL_WARN(NKikimrServices::KQP_COMPUTE)
@@ -52,7 +52,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
+        ResourceManager->FreeResources(*Tx, TaskId, NResourceManager::TKqpResourcesRequest{.Memory = extraSize});
     }
 
     bool IsReasonableToUseSpilling() const override {
@@ -63,13 +63,13 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         return Tx->ToString();
     }
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
-    TIntrusivePtr<NRm::TTxState> Tx;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<NResourceManager::TTxState> Tx;
     ui64 TaskId;
 };
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
-    TIntrusivePtr<NRm::TTxState> tx, ui64 taskId, ui64 initialMemoryLimit) {
+NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
+    TIntrusivePtr<NResourceManager::TTxState> tx, ui64 taskId, ui64 initialMemoryLimit) {
     return std::make_shared<TMemoryQuotaManager>(resourceManager, tx, taskId, initialMemoryLimit);
 }
 
@@ -77,8 +77,8 @@ NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(std::shared_ptr<NRm:
 
 struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
-    TChannelQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
-        , TIntrusivePtr<NRm::TTxState> tx
+    TChannelQuotaManager(std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager
+        , TIntrusivePtr<NResourceManager::TTxState> tx
         , ui64 limit, ui64 step = 1_MB)
     : ResourceManager(std::move(resourceManager))
     , Tx(std::move(tx))
@@ -89,7 +89,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     {}
 
     ~TChannelQuotaManager() {
-        ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+        ResourceManager->FreeResources(*Tx, 0, NResourceManager::TKqpResourcesRequest{
             .Memory = Limit.load() - DataMemoryLimit,
             .ExternalMemory = DataMemoryLimit,
         });
@@ -103,7 +103,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
             memoryRequired += AllocationStep - 1;
             memoryRequired &= ~(AllocationStep - 1);
 
-            auto result = ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memoryRequired});
+            auto result = ResourceManager->AllocateResources(*Tx, 0, NResourceManager::TKqpResourcesRequest{.Memory = memoryRequired});
             if (result) {
                 AvailableQuota.fetch_add(memoryRequired);
                 Limit.fetch_add(memoryRequired);
@@ -135,7 +135,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         if (quota > static_cast<i64>(AllocationStep * 10 + DataMemoryLimit)) {
             AvailableQuota.fetch_sub(AllocationStep);
             Limit.fetch_sub(AllocationStep);
-            ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = AllocationStep});
+            ResourceManager->FreeResources(*Tx, 0, NResourceManager::TKqpResourcesRequest{.Memory = AllocationStep});
         }
     }
 
@@ -151,8 +151,8 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return TString();
     }
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
-    TIntrusivePtr<NRm::TTxState> Tx;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<NResourceManager::TTxState> Tx;
     std::atomic<ui64> AllocatedQuota = 0;
     std::atomic<i64> AvailableQuota;
     std::atomic<ui64> Limit;
@@ -160,8 +160,8 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     const ui64 AllocationStep;
 };
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
-    TIntrusivePtr<NRm::TTxState> tx, ui64 initialMemoryLimit, ui64 allocationStep) {
+NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
+    TIntrusivePtr<NResourceManager::TTxState> tx, ui64 initialMemoryLimit, ui64 allocationStep) {
     return std::make_shared<TChannelQuotaManager>(resourceManager, tx, initialMemoryLimit, allocationStep);
 }
 
@@ -177,7 +177,7 @@ TString TasksIdsStr(const TTasksCollection& tasks) {
 class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
     TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
-        std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
+        std::shared_ptr<NResourceManager::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
         bool enableChannelMemoryTracking)
         : TActor(&TThis::StateFunc)
         , Counters_(counters)
@@ -320,13 +320,13 @@ public:
             // - for following start requests (unlikely) we allocate no extra mempry for channels
             channelMemory = externalMemory;
             externalMemory += channelMemory;
-            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+            TxInfo = MakeIntrusive<NResourceManager::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
         }
 
         auto rmResult = ResourceManager_->AllocateResources(
-            *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = tasksCount, .ExternalMemory = externalMemory});
+            *TxInfo, 0, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = tasksCount, .ExternalMemory = externalMemory});
 
         if (!rmResult) {
             ReplyError(msg, rmResult.GetStatus(), ev->Cookie, rmResult.GetFailReason());
@@ -491,8 +491,8 @@ public:
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
-    TIntrusivePtr<NRm::TTxState> TxInfo;
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    TIntrusivePtr<NResourceManager::TTxState> TxInfo;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TActorId ExecuterId;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
@@ -506,7 +506,7 @@ private:
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
-    std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
+    std::shared_ptr<NResourceManager::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
     bool enableChannelMemoryTracking) {
     return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableChannelMemoryTracking);
 }

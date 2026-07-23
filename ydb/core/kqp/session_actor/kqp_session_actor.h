@@ -21,7 +21,7 @@ namespace NKikimr::NKqp::NComputeActor {
     struct IKqpNodeComputeActorFactory;
 }
 
-namespace NKikimr::NKqp::NRm {
+namespace NKikimr::NKqp::NResourceManager {
     class IKqpResourceManager;
 }
 
@@ -99,7 +99,7 @@ class TKqpQueryCache;
 
 IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TKqpQueryCache> queryCache,
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> resourceManager_,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
     const TString& sessionId,
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,

@@ -40,11 +40,11 @@ class TVectorIndexLevelsCacheMaintainer
 public:
     explicit TVectorIndexLevelsCacheMaintainer(
         TIntrusivePtr<TVectorIndexLevelsCache> cache,
-        std::shared_ptr<NRm::IKqpResourceManager> rm,
+        std::shared_ptr<NResourceManager::IKqpResourceManager> rm,
         const NKikimrConfig::TTableServiceConfig::TResourceManager& initialConfig)
         : Cache_(std::move(cache))
         , ResourceManager(rm)
-        , Tx(MakeIntrusive<NRm::TTxState>(ResourceManager, LevelCacheTxId, TInstant::Now(), NKikimr::NResourcePool::DEFAULT_POOL_ID, 100.0, AppData()->TenantName, false))
+        , Tx(MakeIntrusive<NResourceManager::TTxState>(ResourceManager, LevelCacheTxId, TInstant::Now(), NKikimr::NResourcePool::DEFAULT_POOL_ID, 100.0, AppData()->TenantName, false))
         , RmConfig(initialConfig)
     {}
 
@@ -113,7 +113,7 @@ public:
         if ((maxCurrentSizeBytes == 0 || leftBytes < static_cast<i64>(increaseBatchSize))
             && static_cast<ui64>(maxCurrentSizeBytes) + increaseBatchSize <= maxAllowedSizeBytes) {
 
-            auto res = ResourceManager->AllocateResources(*Tx, 1, NRm::TKqpResourcesRequest{.Memory=increaseBatchSize});
+            auto res = ResourceManager->AllocateResources(*Tx, 1, NResourceManager::TKqpResourcesRequest{.Memory=increaseBatchSize});
             if (res) {
                 Cache_->SetMaxBytes(maxCurrentSizeBytes + increaseBatchSize);
                 LOG_N("Altered max bytes to " << HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)
@@ -123,7 +123,7 @@ public:
         } else if (maxAllowedSizeBytes < static_cast<ui64>(maxCurrentSizeBytes)) {
             ui64 deficit = static_cast<ui64>(maxCurrentSizeBytes) - maxAllowedSizeBytes;
             ui64 change = std::min(increaseBatchSize, deficit);
-            ResourceManager->FreeResources(*Tx, 1, NRm::TKqpResourcesRequest{.Memory=change});
+            ResourceManager->FreeResources(*Tx, 1, NResourceManager::TKqpResourcesRequest{.Memory=change});
             i64 newSize = maxCurrentSizeBytes - static_cast<i64>(change);
             Cache_->SetMaxBytes(newSize);
             LOG_N("Altered max bytes to " << HumanReadableSize(newSize, ESizeFormat::SF_BYTES)
@@ -136,8 +136,8 @@ public:
 private:
     TIntrusivePtr<TVectorIndexLevelsCache> Cache_;
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
-    TIntrusivePtr<NRm::TTxState> Tx;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<NResourceManager::TTxState> Tx;
     NKikimrConfig::TTableServiceConfig::TResourceManager RmConfig;
 };
 
@@ -148,7 +148,7 @@ private:
 
 IActor* CreateVectorIndexLevelsCacheMaintainer(
     TIntrusivePtr<TVectorIndexLevelsCache> cache,
-    std::shared_ptr<NRm::IKqpResourceManager> rm,
+    std::shared_ptr<NResourceManager::IKqpResourceManager> rm,
     const NKikimrConfig::TTableServiceConfig::TResourceManager& initialConfig)
 {
     return new TVectorIndexLevelsCacheMaintainer(std::move(cache), std::move(rm), initialConfig);

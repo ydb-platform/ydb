@@ -97,7 +97,12 @@ void TQueryReplayApp::Start() {
     AppData->Counters = MakeIntrusive<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
     ActorSystem.Reset(new TActorSystem(setup, AppData.Get(), LogSettings));
     ActorSystem->Start();
-    ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
+    const NKikimrConfig::TTableServiceConfig::TResourceManager rmConfig;
+    auto resourceManager = NKikimr::NKqp::NResourceManager::CreateKqpResourceManager(
+        rmConfig, MakeIntrusive<NKikimr::NKqp::TKqpCounters>(AppData->Counters));
+    AppData->KqpResourceManager = resourceManager;
+    ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor(
+        rmConfig, std::move(resourceManager)));
 
     if (Queries.empty()) {
         const auto runId = RandomProvider->GenUuid4().AsUuidString();

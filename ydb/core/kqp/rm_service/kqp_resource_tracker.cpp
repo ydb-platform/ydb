@@ -16,7 +16,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 
-namespace NKikimr::NKqp::NRm {
+namespace NKikimr::NKqp::NResourceManager {
 
 namespace {
 
@@ -101,4 +101,4 @@ NActors::IActor* CreateTakeResourcesSnapshotActor(
     return new TTakeResourcesSnapshotActor(boardPath, std::move(callback));
 }
 
-} // namespace NKikimr::NKqp::NRm
+} // namespace NKikimr::NKqp::NResourceManager

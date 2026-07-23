@@ -13,19 +13,19 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/resource_broker.h>
 
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
-namespace NKikimr {
-namespace NKqp {
-namespace NRm {
+#include <utility>
+
+namespace NKikimr::NKqp {
+namespace NResourceManager {
 
 using namespace NActors;
 using namespace NResourceBroker;
@@ -46,15 +46,14 @@ using namespace NResourceBroker;
 #define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 #define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
-TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-    const TString& database, bool collectBacktrace)
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, TString poolId, const double memoryPoolPercent, TString database, bool collectBacktrace)
     : ResourceManager(resourceManager)
     , Counters(resourceManager->GetCounters())
     , TxId(txId)
     , CreatedAt(now)
-    , PoolId(poolId)
+    , PoolId(std::move(poolId))
     , MemoryPoolPercent(memoryPoolPercent)
-    , Database(database)
+    , Database(std::move(database))
     , CollectBacktrace(collectBacktrace)
 {}
 
@@ -182,33 +181,35 @@ class TKqpResourceManager : public IKqpResourceManager {
 public:
 
     TKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters)
-        : Counters(counters)
+        : Counters(std::move(counters))
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
+        Y_ABORT_UNLESS(Counters);
         PublishAfterBootstrap.clear();
         SetConfigValues(config);
-    }
-
-    void Registered(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
-        ActorSystem = actorSystem;
-        SelfId = selfId;
-        if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData(ActorSystem)->Counters);
-        }
         UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
+    }
 
-        CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
+    // Binds the (already initialized) manager to the actor owning it.
+    // Is called during the owner registration - before it can handle any event.
+    void AttachToActor(TActorSystem* actorSystem, TActorId selfId) {
+        ActorSystem = actorSystem;
+        SelfId = selfId;
 
         if (PublishAfterBootstrap.test()) {
             FireResourcesPublishing();
             PublishAfterBootstrap.clear();
         }
+    }
+
+    const std::shared_ptr<TResourceSnapshotState>& GetResourceSnapshotState() const {
+        return ResourceSnapshotState;
     }
 
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
@@ -222,13 +223,6 @@ public:
             .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
             .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
         };
-    }
-
-    void CreateResourceInfoExchanger(
-            const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        auto exchanger = CreateKqpResourceInfoExchangerActor(
-            Counters, ResourceSnapshotState, settings);
-        ResourceInfoExchanger = ActorSystem->Register(exchanger);
     }
 
     bool AllocateExecutionUnits(ui32 cnt) {
@@ -515,10 +509,6 @@ public:
         MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
     }
 
-    ui32 GetNodeId() override {
-        return SelfId.NodeId();
-    }
-
     void FireResourcesPublishing() {
         bool prev = PublishScheduled.test_and_set();
         if (!prev) {
@@ -596,19 +586,9 @@ public:
 
     // state for resource info exchanger
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
-    TActorId ResourceInfoExchanger = TActorId();
 
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
-
-struct TResourceManagers {
-    std::weak_ptr<TKqpResourceManager> Default;
-
-    TMutex Lock;
-    std::unordered_map<ui32, std::weak_ptr<TKqpResourceManager>> ByNodeId;
-};
-
-TResourceManagers ResourceManagers;
 
 } // namespace
 
@@ -621,33 +601,28 @@ public:
         return NKikimrServices::TActivity::KQP_RESOURCE_MANAGER;
     }
 
-    TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId,
-        TDuration warmupDeadline)
-        : NodeId(nodeId)
-        , Config(config)
+    TKqpResourceManagerActor(NKikimrConfig::TTableServiceConfig::TResourceManager config,
+        std::shared_ptr<IKqpResourceManager> resourceManager, const TActorId& resourceBrokerId,
+        std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, TDuration warmupDeadline)
+        : Config(std::move(config))
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , ResourceManager(std::dynamic_pointer_cast<TKqpResourceManager>(std::move(resourceManager)))
         , WarmupInProgress(warmupDeadline > TDuration::Zero())
         , WarmupDeadline(warmupDeadline)
     {
-        ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
+        Y_ABORT_UNLESS(ResourceManager, "KqpResourceManagerActor requires an instance made by CreateKqpResourceManager()");
     }
 
-    // Is called right after service registration
-    // and before any usual actor can try to get ResourceManager
+    // Is called right after service registration and before any event is handled
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         TActorBootstrapped::Registered(sys, owner);
 
-        ResourceManager->Registered(Config, sys, SelfId());
+        ResourceInfoExchanger = sys->Register(CreateKqpResourceInfoExchangerActor(
+            ResourceManager->GetCounters(), ResourceManager->GetResourceSnapshotState(),
+            Config.GetInfoExchangerSettings()));
 
-        with_lock (ResourceManagers.Lock) {
-            if (ResourceManagers.Default.expired()) { // There can be several managers in tests
-                ResourceManagers.Default = ResourceManager;
-            }
-            ResourceManagers.ByNodeId[NodeId] = ResourceManager;
-        }
+        ResourceManager->AttachToActor(sys, SelfId());
     }
 
     void Bootstrap() {
@@ -669,7 +644,7 @@ public:
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_resource_manager", "KQP Resource Manager", false,
-                ResourceManager->ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
@@ -925,11 +900,10 @@ private:
 private:
     void PassAway() override {
         ToBroker(new TEvResourceBroker::TEvNotifyActorDied);
-        if (ResourceManager->ResourceInfoExchanger) {
-            Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
-            ResourceManager->ResourceInfoExchanger = TActorId();
+        if (ResourceInfoExchanger) {
+            Send(ResourceInfoExchanger, new TEvents::TEvPoison);
+            ResourceInfoExchanger = TActorId();
         }
-        ResourceManager->ResourceSnapshotState.reset();
         TActor::PassAway();
     }
 
@@ -1020,14 +994,13 @@ private:
             << (WarmupInProgress ? " (warmup: zero resources)" : "")
             << ", payload: " << payload.ShortDebugString());
         WbState.LastPublishTime = now;
-        if (ResourceManager->ResourceInfoExchanger) {
-            Send(ResourceManager->ResourceInfoExchanger,
+        if (ResourceInfoExchanger) {
+            Send(ResourceInfoExchanger,
                 new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
         }
     }
 
 private:
-    const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 
     const TActorId ResourceBrokerId;
@@ -1045,6 +1018,7 @@ private:
     NKikimrKqp::TKqpProxyNodeResources ProxyNodeResources;
 
     TActorId WhiteBoardService;
+    TActorId ResourceInfoExchanger;
 
     std::shared_ptr<TKqpResourceManager> ResourceManager;
 
@@ -1055,46 +1029,24 @@ private:
     TDuration WarmupDeadline;
 };
 
-} // namespace NRm
+std::shared_ptr<IKqpResourceManager> CreateKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters) {
+    return std::make_shared<TKqpResourceManager>(config, std::move(counters));
+}
+
+} // namespace NResourceManager
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId, TDuration warmupDeadline)
+    std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager, NActors::TActorId resourceBroker,
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, TDuration warmupDeadline)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
+    return new NResourceManager::TKqpResourceManagerActor(config, std::move(resourceManager), resourceBroker,
+        std::move(kqpProxySharedResources), warmupDeadline);
 }
 
-std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
-    if (auto rm = TryGetKqpResourceManager(_nodeId)) {
-        return rm;
-    }
-
-    ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    if (auto rm = TryGetKqpResourceManager(nodeId)) {
-        return rm;
-    }
-
-    Y_ABORT("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
+std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager() {
+    return AppData()->KqpResourceManager;
 }
 
-std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
-    ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    std::shared_ptr<NRm::TKqpResourceManager> rm = NRm::ResourceManagers.Default.lock();
-    if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
-        return rm;
-    }
+} // namespace NKikimr::NKqp
 
-    // for tests only
-    with_lock (NRm::ResourceManagers.Lock) {
-        auto it = NRm::ResourceManagers.ByNodeId.find(nodeId);
-        if (it != NRm::ResourceManagers.ByNodeId.end()) {
-            return it->second.lock();
-        }
-    }
-
-    return nullptr;
-}
-
-} // namespace NKqp
-} // namespace NKikimr

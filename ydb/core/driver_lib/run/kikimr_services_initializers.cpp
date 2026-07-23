@@ -2493,17 +2493,17 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         }
 
         // Create resource manager
-        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources, NodeId, warmupDeadline);
+        const auto& rmConfig = Config.GetTableServiceConfig().GetResourceManager();
+        auto* resourceManagerActor = NKqp::CreateKqpResourceManagerActor(rmConfig, appData->KqpResourceManager, {}, kqpProxySharedResources, warmupDeadline);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
-            TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
+            TActorSetupCmd(resourceManagerActor, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // We need to keep YqlLoggerScope alive as long as something may be trying to log
         GlobalObjects.AddGlobalObject(std::make_shared<NYql::NLog::YqlLoggerScope>(
             new NYql::NLog::TTlsLogBackend(new TNullLogBackend())));
 
-        auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
+        auto* proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             Config.GetQueryServiceConfig(), Config.GetTliConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
             NKqp::MakeKqpFederatedQuerySetupFactory(setup, appData, Config), NYql::NDq::CreateS3ActorsFactory()
         );
@@ -2511,7 +2511,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        auto describeSchemaSecretsService = NSecret::TDescribeSchemaSecretsServiceFactory().CreateService();
+        auto* describeSchemaSecretsService = NSecret::TDescribeSchemaSecretsServiceFactory().CreateService();
         setup->LocalServices.push_back(std::make_pair(
             NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2533,7 +2533,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
                 MakeGRpcServersManagerId(NodeId),
                 NGRpcService::CreateGrpcPublisherServiceActorId(),
             };
-            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
+            auto* warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));

@@ -16,7 +16,7 @@
 
 namespace NKikimr {
 namespace NKqp {
-namespace NRm {
+namespace NResourceManager {
 
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
@@ -783,6 +783,6 @@ NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters>
     return new TKqpResourceInfoExchangerActor(counters, std::move(resourceSnapshotState), settings);
 }
 
-} // namespace NRm
+} // namespace NResourceManager
 } // namespace NKqp
 } // namespace NKikimr

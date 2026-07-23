@@ -1365,7 +1365,12 @@ namespace Tests {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
+            auto resourceManager = NKqp::NResourceManager::CreateKqpResourceManager(
+                rmConfig, MakeIntrusive<NKqp::TKqpCounters>(Runtime->GetAppData(nodeIdx).Counters));
+            Runtime->GetAppData(nodeIdx).KqpResourceManager = resourceManager;
+
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
+                rmConfig, std::move(resourceManager), {}, kqpProxySharedResources);
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 

@@ -28,7 +28,7 @@ class IRequestCtxMtSafe;
 
 }
 
-namespace NKikimr::NKqp::NRm {
+namespace NKikimr::NKqp::NResourceManager {
     class IKqpResourceManager;
 }
 
@@ -155,7 +155,7 @@ public:
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
-        std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+        std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> ResourceManager_;
         std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
         NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;

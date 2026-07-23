@@ -164,7 +164,12 @@ public:
         auto setup = BuildActorSystemSetup(ActorSystemThreadsCount);
         ActorSystem.Reset(new TActorSystem(setup, AppData.Get()));
         ActorSystem->Start();
-        ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
+        const NKikimrConfig::TTableServiceConfig::TResourceManager rmConfig;
+        auto resourceManager = NKikimr::NKqp::NResourceManager::CreateKqpResourceManager(
+            rmConfig, MakeIntrusive<NKikimr::NKqp::TKqpCounters>(AppData->Counters));
+        AppData->KqpResourceManager = resourceManager;
+        ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor(
+            rmConfig, std::move(resourceManager)));
         ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
         HttpGateway = NYql::IHTTPGateway::Make();
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));

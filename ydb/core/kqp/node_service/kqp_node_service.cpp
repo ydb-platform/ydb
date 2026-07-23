@@ -50,7 +50,7 @@ public:
     }
 
     TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config,
-        std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+        std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
         std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
         const TIntrusivePtr<TKqpCounters>& counters,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -466,7 +466,7 @@ private:
 private:
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
     TIntrusivePtr<TKqpCounters> Counters;
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
@@ -490,7 +490,7 @@ NYql::NDq::TReportStatsSettings ReportStatsSettingsFromProto(const NYql::NDqProt
 
 
 IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
     TIntrusivePtr<TKqpCounters> counters, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)

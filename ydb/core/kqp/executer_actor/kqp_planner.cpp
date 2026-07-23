@@ -516,7 +516,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
             memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
-        TxInfo = MakeIntrusive<NRm::TTxState>(
+        TxInfo = MakeIntrusive<NResourceManager::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
             CaFactory_->GetVerboseMemoryLimitException());
     }
@@ -534,7 +534,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
     auto rmResult = ResourceManager_->AllocateResources(
-        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+        *TxInfo, 0, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
 
     if (!rmResult) {
         return rmResult.GetFailReason();

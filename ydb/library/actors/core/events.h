@@ -113,6 +113,9 @@ namespace NActors {
                 Wilson,
                 Preemption,
                 ResumeRunnable,
+                CheckActorLiveness,
+                ActorAlive,
+                ActorDead,
                 End,
 
                 // Compatibility section
@@ -218,6 +221,24 @@ namespace NActors {
         struct TEvGone: public TEventLocal<TEvGone, TSystem::Gone> {
         };
 
+        struct TEvCheckActorLiveness
+            : public TEventSimpleNonLocal<TEvCheckActorLiveness, TSystem::CheckActorLiveness>
+        {
+            static constexpr IEventHandle::TEventFlags RequestFlags =
+                IEventHandle::FlagTrackDelivery |
+                IEventHandle::FlagSystemMessage;
+        };
+
+        struct TEvActorAlive
+            : public TEventSimpleNonLocal<TEvActorAlive, TSystem::ActorAlive>
+        {
+        };
+
+        struct TEvActorDead
+            : public TEventSimpleNonLocal<TEvActorDead, TSystem::ActorDead>
+        {
+        };
+
         struct TEvInvokeResult;
 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
@@ -235,6 +256,9 @@ namespace NActors {
          * be executed with the actor argument equal to nullptr.
          */
         struct TEvResumeRunnable: public TEventLocal<TEvResumeRunnable, TSystem::ResumeRunnable> {
+            static constexpr IEventHandle::TEventFlags EventFlags =
+                IEventHandle::FlagSystemMessage;
+
             TActorRunnableItem* Item; // or nullptr
 
             TEvResumeRunnable(TActorRunnableItem* item) : Item(item) {}

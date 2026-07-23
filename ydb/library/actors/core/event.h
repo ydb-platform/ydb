@@ -144,6 +144,7 @@ namespace NActors {
             FlagDebugTrackReceive = 1 << 6,
             FlagFailFastWhenDisconnected = 1 << 7,
             FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
+            FlagSystemMessage = 1 << 9, // Handled by IActor before its state function
         };
         using TEventFlags = ui32;
 

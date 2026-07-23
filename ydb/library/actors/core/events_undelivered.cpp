@@ -2,6 +2,25 @@
 #include "actorsystem.h"
 
 namespace NActors {
+    namespace {
+        std::unique_ptr<IEventHandle> CreateActorDeadResponse(
+                std::unique_ptr<IEventHandle> ev) {
+            static_assert(
+                TEvents::TEvCheckActorLiveness::RequestFlags ==
+                (IEventHandle::FlagTrackDelivery | IEventHandle::FlagSystemMessage));
+
+            return std::make_unique<IEventHandle>(
+                TEvents::TSystem::ActorDead,
+                0,
+                ev->Sender,
+                ev->Recipient,
+                nullptr,
+                ev->Cookie,
+                nullptr,
+                std::move(ev->TraceId));
+        }
+    }
+
     TString TEvents::TEvUndelivered::ToStringHeader() const {
         return "TSystem::Undelivered";
     }
@@ -50,7 +69,15 @@ namespace NActors {
         }
 
         if (ev->Flags & FlagTrackDelivery) {
-            const ui32 updatedFlags = ev->Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
+            if (ev->Type == TEvents::TSystem::CheckActorLiveness) {
+                return CreateActorDeadResponse(std::move(ev));
+            }
+
+            const ui32 updatedFlags = ev->Flags & ~(
+                FlagTrackDelivery |
+                FlagSubscribeOnSession |
+                FlagGenerateUnsureUndelivered |
+                FlagSystemMessage);
             return std::unique_ptr<IEventHandle>(new IEventHandle(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
                 ev->Cookie, nullptr, std::move(ev->TraceId)));
         }

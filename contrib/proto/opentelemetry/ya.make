@@ -17,11 +17,6 @@ PROTO_NAMESPACE(
     contrib/proto/opentelemetry
 )
 
-INCLUDE_TAGS(
-    TS_PREPARE_DEPS
-    TS_PROTO
-)
-
 GRPC()
 
 SRCS(
@@ -38,3 +33,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    opentelemetry/proto/collector/trace/v1
+)

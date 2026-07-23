@@ -56,7 +56,7 @@ BELONGS ya.make
         LICENSE [1:201]
 
 KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
-BELONGS ya.make
+BELONGS opentelemetry/proto/collector/trace/v1/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0

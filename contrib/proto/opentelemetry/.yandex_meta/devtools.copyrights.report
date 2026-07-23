@@ -57,7 +57,7 @@ BELONGS ya.make
         opentelemetry/proto/logs/v1/logs.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 910900b8454e78c1d447573e15dd959d
-BELONGS ya.make
+BELONGS opentelemetry/proto/collector/trace/v1/ya.make ya.make
     License text:
         // Copyright 2019, OpenTelemetry Authors
     Scancode info:

@@ -1,0 +1,330 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.10.1
+        version: 2.10.1
+      '@grpc/grpc-js':
+        specifier: 1.14.2
+        version: 1.14.2
+      long:
+        specifier: 5.3.2
+        version: 5.3.2
+    devDependencies:
+      '@types/node':
+        specifier: 24.10.2
+        version: 24.10.2
+      ts-proto:
+        specifier: 2.8.3
+        version: 2.8.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+packages:
+
+  '@bufbuild/protobuf@2.10.1':
+    resolution: {integrity: sha512-ckS3+vyJb5qGpEYv/s1OebUHDi/xSNtfgw1wqKZo7MR9F2z+qXr0q5XagafAG/9O0QPVIUfST0smluYSTpYFkg==, tarball: https://npm.yandex-team.ru/@bufbuild%2fprotobuf/-/protobuf-2.10.1.tgz?rbtorrent=}
+
+  '@grpc/grpc-js@1.14.2':
+    resolution: {integrity: sha512-QzVUtEFyu05UNx2xr0fCQmStUO17uVQhGNowtxs00IgTZT6/W2PBLfUkj30s0FKJ29VtTa3ArVNIhNP6akQhqA==, tarball: https://npm.yandex-team.ru/@grpc%2fgrpc-js/-/grpc-js-1.14.2.tgz?rbtorrent=}
+    engines: {node: '>=12.10.0'}
+
+  '@grpc/proto-loader@0.8.0':
+    resolution: {integrity: sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ==, tarball: https://npm.yandex-team.ru/@grpc%2fproto-loader/-/proto-loader-0.8.0.tgz?rbtorrent=}
+    engines: {node: '>=6'}
+    hasBin: true
+
+  '@js-sdsl/ordered-map@4.4.2':
+    resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==, tarball: https://npm.yandex-team.ru/@js-sdsl%2fordered-map/-/ordered-map-4.4.2.tgz?rbtorrent=}
+
+  '@protobufjs/aspromise@1.1.2':
+    resolution: {integrity: sha1-m4sMxmPWaafY9vXQiToU00jzD78=, tarball: https://npm.yandex-team.ru/@protobufjs%2faspromise/-/aspromise-1.1.2.tgz?rbtorrent=0b7cb0c6e97e771b0b2eca1d2d9f2910dd9d8817}
+
+  '@protobufjs/base64@1.1.2':
+    resolution: {integrity: sha512-AZkcAA5vnN/v4PDqKyMR5lx7hZttPDgClv83E//FMNhR2TMcLUhfRUBHCmSl0oi9zMgDDqRUJkSxO3wm85+XLg==, tarball: https://npm.yandex-team.ru/@protobufjs%2fbase64/-/base64-1.1.2.tgz?rbtorrent=da9d67580737b644d8c733b458503addf120d8be}
+
+  '@protobufjs/codegen@2.0.4':
+    resolution: {integrity: sha512-YyFaikqM5sH0ziFZCN3xDC7zeGaB/d0IUb9CATugHWbd1FRFwWwt4ld4OYMPWu5a3Xe01mGAULCdqhMlPl29Jg==, tarball: https://npm.yandex-team.ru/@protobufjs%2fcodegen/-/codegen-2.0.4.tgz?rbtorrent=3b69160c38c42b9d274718cde5a90435f5d2f957}
+
+  '@protobufjs/eventemitter@1.1.0':
+    resolution: {integrity: sha1-NVy8mLr61ZePntCV85diHx0Ga3A=, tarball: https://npm.yandex-team.ru/@protobufjs%2feventemitter/-/eventemitter-1.1.0.tgz?rbtorrent=e83d3cb89e7fe726a61212a38fbe0c4cf76c521a}
+
+  '@protobufjs/fetch@1.1.0':
+    resolution: {integrity: sha1-upn7WYYUr2VwDBYZ/wbUVLDYTEU=, tarball: https://npm.yandex-team.ru/@protobufjs%2ffetch/-/fetch-1.1.0.tgz?rbtorrent=70658be0afc887afaf485d31680cbe7edd2698f7}
+
+  '@protobufjs/float@1.0.2':
+    resolution: {integrity: sha1-Xp4avctz/Ap8uLKR33jIy9l7h9E=, tarball: https://npm.yandex-team.ru/@protobufjs%2ffloat/-/float-1.0.2.tgz?rbtorrent=318b84e0df207760a0982047a828e8f40a1755f8}
+
+  '@protobufjs/inquire@1.1.0':
+    resolution: {integrity: sha1-/yAOPnzyQp4tyvwRQIKOjMY48Ik=, tarball: https://npm.yandex-team.ru/@protobufjs%2finquire/-/inquire-1.1.0.tgz?rbtorrent=65674ee1f39b9156410aab79f8d19144491e0b0b}
+
+  '@protobufjs/path@1.1.2':
+    resolution: {integrity: sha1-bMKyDFya1q0NzP0hynZz2Nf79o0=, tarball: https://npm.yandex-team.ru/@protobufjs%2fpath/-/path-1.1.2.tgz?rbtorrent=07bce51ae4b0385fee21d9cc1f001af292cdd71a}
+
+  '@protobufjs/pool@1.1.0':
+    resolution: {integrity: sha1-Cf0V8tbTq/qbZbw2ZQbWrXhG/1Q=, tarball: https://npm.yandex-team.ru/@protobufjs%2fpool/-/pool-1.1.0.tgz?rbtorrent=5eb9f740b6ea3add1d9c40df060eba49a7f141be}
+
+  '@protobufjs/utf8@1.1.0':
+    resolution: {integrity: sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=, tarball: https://npm.yandex-team.ru/@protobufjs%2futf8/-/utf8-1.1.0.tgz?rbtorrent=4b100a75703341f9022d0c3db0d47b2be32c5444}
+
+  '@types/node@24.10.2':
+    resolution: {integrity: sha512-WOhQTZ4G8xZ1tjJTvKOpyEVSGgOTvJAfDK3FNFgELyaTpzhdgHVHeqW8V+UJvzF5BT+/B54T/1S2K6gd9c7bbA==, tarball: https://npm.yandex-team.ru/@types%2fnode/-/node-24.10.2.tgz?rbtorrent=}
+
+  ansi-regex@5.0.1:
+    resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==, tarball: https://npm.yandex-team.ru/ansi-regex/-/ansi-regex-5.0.1.tgz?rbtorrent=1b2c28e53f2df9567d964d2735662fad58107fae}
+    engines: {node: '>=8'}
+
+  ansi-styles@4.3.0:
+    resolution: {integrity: sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==, tarball: https://npm.yandex-team.ru/ansi-styles/-/ansi-styles-4.3.0.tgz?rbtorrent=71a8bd57f3f3a63a5b0ae879a761b238bb3dd3d7}
+    engines: {node: '>=8'}
+
+  case-anything@2.1.13:
+    resolution: {integrity: sha512-zlOQ80VrQ2Ue+ymH5OuM/DlDq64mEm+B9UTdHULv5osUMD6HalNTblf2b1u/m6QecjsnOkBpqVZ+XPwIVsy7Ng==, tarball: https://npm.yandex-team.ru/case-anything/-/case-anything-2.1.13.tgz?rbtorrent=f0dd9475a1789559a99a0b1bd738a91f43682fe7}
+    engines: {node: '>=12.13'}
+
+  cliui@8.0.1:
+    resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==, tarball: https://npm.yandex-team.ru/cliui/-/cliui-8.0.1.tgz?rbtorrent=45d86472a005c309d221fd9207d7001cceaaf5a8}
+    engines: {node: '>=12'}
+
+  color-convert@2.0.1:
+    resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==, tarball: https://npm.yandex-team.ru/color-convert/-/color-convert-2.0.1.tgz?rbtorrent=769fb795063f259bce31a9f20fc15b0d42646b2e}
+    engines: {node: '>=7.0.0'}
+
+  color-name@1.1.4:
+    resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==, tarball: https://npm.yandex-team.ru/color-name/-/color-name-1.1.4.tgz?rbtorrent=bfe35c629295f687cdeea3875ee112eb55eb6b93}
+
+  detect-libc@1.0.3:
+    resolution: {integrity: sha1-+hN8S9aY7fVc1c0CrFWfkaTEups=, tarball: https://npm.yandex-team.ru/detect-libc/-/detect-libc-1.0.3.tgz?rbtorrent=b64e4119f2b8684ece543716a33acb4bc6e6eba6}
+    engines: {node: '>=0.10'}
+    hasBin: true
+
+  dprint-node@1.0.8:
+    resolution: {integrity: sha512-iVKnUtYfGrYcW1ZAlfR/F59cUVL8QIhWoBJoSjkkdua/dkWIgjZfiLMeTjiB06X0ZLkQ0M2C1VbUj/CxkIf1zg==, tarball: https://npm.yandex-team.ru/dprint-node/-/dprint-node-1.0.8.tgz?rbtorrent=9f88c22ad44b542adff1a190f932ee10324e8cad}
+
+  emoji-regex@8.0.0:
+    resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==, tarball: https://npm.yandex-team.ru/emoji-regex/-/emoji-regex-8.0.0.tgz?rbtorrent=9c63733fe9e4b60ec6164b7b90f008f886358190}
+
+  escalade@3.2.0:
+    resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==, tarball: https://npm.yandex-team.ru/escalade/-/escalade-3.2.0.tgz?rbtorrent=}
+    engines: {node: '>=6'}
+
+  get-caller-file@2.0.5:
+    resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==, tarball: https://npm.yandex-team.ru/get-caller-file/-/get-caller-file-2.0.5.tgz?rbtorrent=7388a9547e901af57589cc4a5a879a2c1c79ca6b}
+    engines: {node: 6.* || 8.* || >= 10.*}
+
+  is-fullwidth-code-point@3.0.0:
+    resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==, tarball: https://npm.yandex-team.ru/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz?rbtorrent=9f8a9fc1a318c9b9a907ba74176b8d156ee129cf}
+    engines: {node: '>=8'}
+
+  lodash.camelcase@4.3.0:
+    resolution: {integrity: sha1-soqmKIorn8ZRA1x3EfZathkDMaY=, tarball: https://npm.yandex-team.ru/lodash.camelcase/-/lodash.camelcase-4.3.0.tgz?rbtorrent=adc808ef31018902469ca1a8c73a21b3b5a6dda9}
+
+  long@5.3.2:
+    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==, tarball: https://npm.yandex-team.ru/long/-/long-5.3.2.tgz?rbtorrent=}
+
+  protobufjs@7.5.4:
+    resolution: {integrity: sha512-CvexbZtbov6jW2eXAvLukXjXUW1TzFaivC46BpWc/3BpcCysb5Vffu+B3XHMm8lVEuy2Mm4XGex8hBSg1yapPg==, tarball: https://npm.yandex-team.ru/protobufjs/-/protobufjs-7.5.4.tgz?rbtorrent=}
+    engines: {node: '>=12.0.0'}
+
+  require-directory@2.1.1:
+    resolution: {integrity: sha1-jGStX9MNqxyXbiNE/+f3kqam30I=, tarball: https://npm.yandex-team.ru/require-directory/-/require-directory-2.1.1.tgz?rbtorrent=6f3a1c36c5c614529836495759b539128977fc9d}
+    engines: {node: '>=0.10.0'}
+
+  string-width@4.2.3:
+    resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==, tarball: https://npm.yandex-team.ru/string-width/-/string-width-4.2.3.tgz?rbtorrent=f8412787e89a7bf0fb94ec78f0b1f13d94822a61}
+    engines: {node: '>=8'}
+
+  strip-ansi@6.0.1:
+    resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==, tarball: https://npm.yandex-team.ru/strip-ansi/-/strip-ansi-6.0.1.tgz?rbtorrent=e155382c29545da38fa473395e43b5f24dc0c529}
+    engines: {node: '>=8'}
+
+  ts-poet@6.12.0:
+    resolution: {integrity: sha512-xo+iRNMWqyvXpFTaOAvLPA5QAWO6TZrSUs5s4Odaya3epqofBu/fMLHEWl8jPmjhA0s9sgj9sNvF1BmaQlmQkA==, tarball: https://npm.yandex-team.ru/ts-poet/-/ts-poet-6.12.0.tgz?rbtorrent=}
+
+  ts-proto-descriptors@2.0.0:
+    resolution: {integrity: sha512-wHcTH3xIv11jxgkX5OyCSFfw27agpInAd6yh89hKG6zqIXnjW9SYqSER2CVQxdPj4czeOhGagNvZBEbJPy7qkw==, tarball: https://npm.yandex-team.ru/ts-proto-descriptors/-/ts-proto-descriptors-2.0.0.tgz?rbtorrent=}
+
+  ts-proto@2.8.3:
+    resolution: {integrity: sha512-TdXInqG+61pj/TvORqITWjvjTTsL1EZxwX49iEj89+xFAcqPT8tjChpAGQXzfcF4MJwvNiuoCEbBOKqVf3ds3g==, tarball: https://npm.yandex-team.ru/ts-proto/-/ts-proto-2.8.3.tgz?rbtorrent=}
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==, tarball: https://npm.yandex-team.ru/typescript/-/typescript-5.9.3.tgz?rbtorrent=}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==, tarball: https://npm.yandex-team.ru/undici-types/-/undici-types-7.16.0.tgz?rbtorrent=}
+
+  wrap-ansi@7.0.0:
+    resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==, tarball: https://npm.yandex-team.ru/wrap-ansi/-/wrap-ansi-7.0.0.tgz?rbtorrent=312c52ab2db72fb9dc9b57f62d1ee32019be6356}
+    engines: {node: '>=10'}
+
+  y18n@5.0.8:
+    resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==, tarball: https://npm.yandex-team.ru/y18n/-/y18n-5.0.8.tgz?rbtorrent=855b16086a3d43ecea19041a0364afa26b8d5b42}
+    engines: {node: '>=10'}
+
+  yargs-parser@21.1.1:
+    resolution: {integrity: sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==, tarball: https://npm.yandex-team.ru/yargs-parser/-/yargs-parser-21.1.1.tgz?rbtorrent=c2796cf6cfd8c257eaf7415f6413bd3da3b5f3cc}
+    engines: {node: '>=12'}
+
+  yargs@17.7.2:
+    resolution: {integrity: sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w==, tarball: https://npm.yandex-team.ru/yargs/-/yargs-17.7.2.tgz?rbtorrent=d2dd948d7a7001182a317272e37e70f12dd457ca}
+    engines: {node: '>=12'}
+
+snapshots:
+
+  '@bufbuild/protobuf@2.10.1': {}
+
+  '@grpc/grpc-js@1.14.2':
+    dependencies:
+      '@grpc/proto-loader': 0.8.0
+      '@js-sdsl/ordered-map': 4.4.2
+
+  '@grpc/proto-loader@0.8.0':
+    dependencies:
+      lodash.camelcase: 4.3.0
+      long: 5.3.2
+      protobufjs: 7.5.4
+      yargs: 17.7.2
+
+  '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@protobufjs/aspromise@1.1.2': {}
+
+  '@protobufjs/base64@1.1.2': {}
+
+  '@protobufjs/codegen@2.0.4': {}
+
+  '@protobufjs/eventemitter@1.1.0': {}
+
+  '@protobufjs/fetch@1.1.0':
+    dependencies:
+      '@protobufjs/aspromise': 1.1.2
+      '@protobufjs/inquire': 1.1.0
+
+  '@protobufjs/float@1.0.2': {}
+
+  '@protobufjs/inquire@1.1.0': {}
+
+  '@protobufjs/path@1.1.2': {}
+
+  '@protobufjs/pool@1.1.0': {}
+
+  '@protobufjs/utf8@1.1.0': {}
+
+  '@types/node@24.10.2':
+    dependencies:
+      undici-types: 7.16.0
+
+  ansi-regex@5.0.1: {}
+
+  ansi-styles@4.3.0:
+    dependencies:
+      color-convert: 2.0.1
+
+  case-anything@2.1.13: {}
+
+  cliui@8.0.1:
+    dependencies:
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+      wrap-ansi: 7.0.0
+
+  color-convert@2.0.1:
+    dependencies:
+      color-name: 1.1.4
+
+  color-name@1.1.4: {}
+
+  detect-libc@1.0.3: {}
+
+  dprint-node@1.0.8:
+    dependencies:
+      detect-libc: 1.0.3
+
+  emoji-regex@8.0.0: {}
+
+  escalade@3.2.0: {}
+
+  get-caller-file@2.0.5: {}
+
+  is-fullwidth-code-point@3.0.0: {}
+
+  lodash.camelcase@4.3.0: {}
+
+  long@5.3.2: {}
+
+  protobufjs@7.5.4:
+    dependencies:
+      '@protobufjs/aspromise': 1.1.2
+      '@protobufjs/base64': 1.1.2
+      '@protobufjs/codegen': 2.0.4
+      '@protobufjs/eventemitter': 1.1.0
+      '@protobufjs/fetch': 1.1.0
+      '@protobufjs/float': 1.0.2
+      '@protobufjs/inquire': 1.1.0
+      '@protobufjs/path': 1.1.2
+      '@protobufjs/pool': 1.1.0
+      '@protobufjs/utf8': 1.1.0
+      '@types/node': 24.10.2
+      long: 5.3.2
+
+  require-directory@2.1.1: {}
+
+  string-width@4.2.3:
+    dependencies:
+      emoji-regex: 8.0.0
+      is-fullwidth-code-point: 3.0.0
+      strip-ansi: 6.0.1
+
+  strip-ansi@6.0.1:
+    dependencies:
+      ansi-regex: 5.0.1
+
+  ts-poet@6.12.0:
+    dependencies:
+      dprint-node: 1.0.8
+
+  ts-proto-descriptors@2.0.0:
+    dependencies:
+      '@bufbuild/protobuf': 2.10.1
+
+  ts-proto@2.8.3:
+    dependencies:
+      '@bufbuild/protobuf': 2.10.1
+      case-anything: 2.1.13
+      ts-poet: 6.12.0
+      ts-proto-descriptors: 2.0.0
+
+  typescript@5.9.3: {}
+
+  undici-types@7.16.0: {}
+
+  wrap-ansi@7.0.0:
+    dependencies:
+      ansi-styles: 4.3.0
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+
+  y18n@5.0.8: {}
+
+  yargs-parser@21.1.1: {}
+
+  yargs@17.7.2:
+    dependencies:
+      cliui: 8.0.1
+      escalade: 3.2.0
+      get-caller-file: 2.0.5
+      require-directory: 2.1.1
+      string-width: 4.2.3
+      y18n: 5.0.8
+      yargs-parser: 21.1.1

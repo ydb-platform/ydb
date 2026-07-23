@@ -76,8 +76,6 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
-        static constexpr ui16 S3PortNum = 4080;
-
         NKikimrBlobDepot::TS3BackendSettings Settings;
         TString OriginalEndpoint;
         TString CurrentEndpoint;
@@ -104,34 +102,39 @@ namespace NKikimr::NBlobDepot {
             return TDuration::Seconds(sec);
         }
 
-        void BuildInnerWrapper(const TString& endpoint) {
+        ui16 BalancerProxyPort() const {
+            return Settings.GetBalancerProxyPort();
+        }
+
+        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig) {
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
             }
-            auto* mutableSettings = Settings.MutableSettings();
-            if (BalancerEnabled() && endpoint != OriginalEndpoint) {
-                mutableSettings->SetEndpoint(OriginalEndpoint);
-                mutableSettings->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-                TStringBuf host = endpoint;
-                ui16 port = S3PortNum;
-                if (TStringBuf h, p; host.TrySplit(':', h, p)) {
-                    host = h;
-                    TryFromString(p, port);
-                }
 
-                mutableSettings->SetProxyHost(TString(host));
-                mutableSettings->SetProxyPort(port);
-            } else {
-                mutableSettings->SetEndpoint(endpoint);
-            }
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings);
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
             storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow));
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+        }
+
+        void BuildInnerWrapper(const TString& endpoint) {
+            auto* mutableSettings = Settings.MutableSettings();
+            mutableSettings->SetEndpoint(endpoint);
+            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
+                AppData()->AwsClientConfig, *mutableSettings));
             CurrentEndpoint = endpoint;
+        }
+
+        void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
+            auto* mutableSettings = Settings.MutableSettings();
+            mutableSettings->SetEndpoint(OriginalEndpoint);
+            mutableSettings->SetProxyHost(host);
+            mutableSettings->SetProxyPort(port);
+            mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
+            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
+                AppData()->AwsClientConfig, *mutableSettings));
+            CurrentEndpoint = TStringBuilder() << host << ':' << port;
         }
 
         bool BalancerEnabled() const {
@@ -175,14 +178,17 @@ namespace NKikimr::NBlobDepot {
             RefreshInFlight = false;
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
-                TString endpoint = TString(StripString(msg.Response->Body));
-                if (!endpoint.empty()) {
-                    if (!endpoint.Contains(':')) {
-                        endpoint += TStringBuf(":") + ToString(S3PortNum);
+                TString host = TString(StripString(msg.Response->Body));
+                if (!host.empty()) {
+                    ui16 port = BalancerProxyPort();
+                    if (TStringBuf h, p; TStringBuf(host).TrySplit(':', h, p)) {
+                        host = TString(h);
+                        TryFromString(p, port);
                     }
 
+                    const TString endpoint = TStringBuilder() << host << ':' << port;
                     if (endpoint != CurrentEndpoint) {
-                        BuildInnerWrapper(endpoint);
+                        BuildInnerWrapperViaProxy(host, port);
                     }
                 }
             }

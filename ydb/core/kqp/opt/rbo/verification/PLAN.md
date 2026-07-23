@@ -513,6 +513,14 @@ ordered choices, and family products/gathers. Large ordered choices switch to
 the exact ordinal representation within the row-pair bound. Cross-plan equality
 fails closed above 4096 explicit outcome pairs. None of these caps is
 approximated.
+Grouped aggregation retains its established directional formula while its
+`N^2` comparison square fits the ordinary pair ceiling. Above that threshold,
+only null-safe key equality is identity-shared as an upper triangle and the
+same ceiling is applied to the `N(N+1)/2` unique comparisons. Membership
+presence and first-representative suppression remain directional; the
+triangular preflight implies fewer than twice the ordinary ceiling's worth of
+those `N^2` guards. This is exact sharing, not a raised cap or a symmetry
+assumption about row presence.
 
 ## StageGraph semantics
 
@@ -868,7 +876,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   comparing the same direct `Optional<String>` member with a non-null `String`
   literal. It reuses schema-preserving `if_present`; broader Boolean trees
   remain opaque. The fresh complete TPCH dashboard records q12 as
-  `FORMULA_EMITTED` after 81/5,732 ms of preparation/verifier work; an earlier
+  `FORMULA_EMITTED` after 109/5,343 ms of preparation/verifier work; an earlier
   focused formula run recorded 108/5,816 ms. Focused and policy-floor solver
   runs return `VERIFIED_BOUNDED` after 108/38,880 and 106/40,602 ms,
   respectively. At that milestone TPCH formula coverage was 7/22, total
@@ -878,7 +886,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Exact direct Decimal Coalesce-zero normalization accepts only one visible
   `Optional<Decimal>` member and either a matching canonical zero or a complete
   Int32-zero `SafeCast`, including the matching `Just` wrapper. It reuses
-  `if_present` and `if` without erasing nullability. The complete current-code
+  `if_present` and `if` without erasing nullability. At that milestone the complete
   TPC-DS dashboard moves q43 through formula construction after 145/4,760 ms
   and moves q77 past finite Decimal `SUM` headroom to the 25,600-pair grouped
   aggregate cap after 2,063/442 ms. TPC-DS reaches 22/99 formulas and the
@@ -889,6 +897,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   near-matches opaque, focused regressions cover both bare and wrapped forms,
   and the repeated complete dashboard restores q40's formula and q80's
   verifier-entry result. No candidate or optimizer bug arose.
+- Exact scalable grouped-aggregate comparison sharing retains the established
+  directional formula while `N^2` fits the ordinary pair cap. Above that
+  threshold, it caches only symmetric composite null-safe group-key comparisons
+  as an upper triangle; row membership and first-representative suppression
+  remain directional. A full current-code TPC-DS dashboard remains policy-valid at
+  22/99 formulas, 48 unsupported queries, and 29 optimizer failures. q25/q29
+  now reject 32,896 unique composite group-key row comparisons instead of
+  65,536, q80 rejects 41,616 instead of 82,944, and q77 clears both 160-row
+  aggregates before its 321-row Sort rejects 51,360 unordered pairs after
+  2,161/19,363 ms. Formula coverage
+  remains 29/121 and the proof floor remains 13/121.
 - Same-type fixed-width integer `+`, `-`, and `*` are exported structurally and
   evaluated with exact strict-NULL and modular overflow semantics. Synthetic
   exporter and Python tests cover all widths, malformed schemas, and overflow;
@@ -999,11 +1018,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   results. Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
 - Construction preflights cap every materialized relation at 4096 candidate
-  rows and each quadratic construction at 16384 candidate-row pairs. This
-  preserves q71's 9072-term Merge ordinal construction while q31 fails closed
-  before allocating its 32768-pair join matrix. q77 now passes export and
-  Decimal `SUM` headroom before its 25,600-pair grouped aggregate fails this
-  preflight.
+  rows and each unshared quadratic construction or shared symmetric comparison
+  triangle at 16384 candidate-row pairs. This preserves q71's 9072-term Merge
+  ordinal construction while q31 fails closed before allocating its 32768-pair
+  join matrix. q77 now passes export, Decimal `SUM` headroom, and both 160-row
+  grouped aggregates before its 51,360-pair Sort fails this preflight.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
   at 1,024 normalized occurrences and depth 128. Independent C++ and Python
   checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG
@@ -1014,11 +1033,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A checked-in hermetic solver floor returns `VERIFIED_BOUNDED` for TPCH q3,
   q6, q12, q14, and q19 plus TPC-DS q3, q42, q48, q52, q55, q90, q93, and q96
   with a fixed 60-second per-query budget. The latest TPCH run recorded
-  114/13,345 ms of preparation/verification for q3, 56/777 ms for q6,
-  106/40,602 ms for q12, 123/34,122 ms for q14, and 122/871 ms for q19; q42
-  recorded 95 ms of preparation and 15,210 ms of verification. q48 recorded
-  179 ms of preparation and 2,997 ms of verification in a proof-floor run;
-  that run also recorded 227 ms of q90 preparation and 7,299 ms of verification.
+  107/11,691 ms of preparation/verification for q3, 57/709 ms for q6,
+  78/34,956 ms for q12, 95/30,288 ms for q14, and 100/830 ms for q19. The
+  latest TPC-DS run recorded 103/14,687 ms for q3, 114/15,310 ms for q42,
+  199/3,911 ms for q48, 121/15,208 ms for q52, 94/10,689 ms for q55,
+  231/8,209 ms for q90, 104/14,782 ms for q93, and 128/445 ms for q96.
   These are
   thirteen curated proofs (10.7% of the workload). q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its

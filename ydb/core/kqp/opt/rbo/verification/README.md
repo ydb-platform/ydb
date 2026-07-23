@@ -48,9 +48,11 @@ checked-in solver proof floor returns
 `VERIFIED_BOUNDED` for TPCH q3, q6, q12, q14, and q19 plus TPC-DS q3, q42,
 q48, q52, q55, q90, q93, and q96: thirteen obligations (10.7% of the
 workload). The latest TPCH proof-floor run prepared/verified q3 in
-114/13,345 ms, q6 in 56/777 ms, q12 in 106/40,602 ms, q14 in 123/34,122 ms,
-and q19 in 122/871 ms. Focused q12 took 108/38,880 ms. The TPC-DS proof floor
-was also rerun after the q12 exporter hardening and retained all eight proofs.
+107/11,691 ms, q6 in 57/709 ms, q12 in 78/34,956 ms, q14 in 95/30,288 ms,
+and q19 in 100/830 ms. Focused q12 took 108/38,880 ms. The latest TPC-DS
+proof-floor run retained all eight proofs: q3, q42, q48, q52, q55, q90, q93,
+and q96 prepared/verified in 103/14,687, 114/15,310, 199/3,911, 121/15,208,
+94/10,689, 231/8,209, 104/14,782, and 128/445 ms, respectively.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and q15, q61, q62,
@@ -66,12 +68,13 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. Their current verifier-side results stop at aggregate
 `avg`, the 32,896-pair Merge construction cap, aggregate `avg`, and the
-82,944-pair grouped-aggregate construction cap, respectively; none is counted
+41,616-pair grouped-aggregate comparison cap, respectively; none is counted
 as a formula. Later formula or proof results satisfy the same depth floor
 automatically.
-TPC-DS q77 also passes both snapshot exporters and finite Decimal `SUM`
-headroom, then fails closed on a 25,600-pair grouped aggregate above the
-16,384-pair construction bound. It is not counted as a formula or proof.
+TPC-DS q77 also passes both snapshot exporters, finite Decimal `SUM` headroom,
+and both 160-row grouped aggregates, then fails closed on a 51,360-pair Sort
+above the 16,384-pair construction bound. It is not counted as a formula or
+proof.
 Separately, the isolated manual
 [Decimal `SUM` runtime diagnostic](runtime_ut/README.md) confirms that execution
 depends on partitioning in both the new-RBO and legacy optimizer modes. It is a
@@ -442,10 +445,10 @@ The subsequent q12 gate admits only exact
 must compare the same direct `Optional<String>` member with a non-null `String`
 literal; broader Boolean trees remain opaque. The wrapper again
 lowers through schema-preserving `if_present`. The fresh complete dashboard
-records q12 as `FORMULA_EMITTED` after 81/5,732 ms of preparation/verifier
+records q12 as `FORMULA_EMITTED` after 109/5,343 ms of preparation/verifier
 work; an earlier focused formula run recorded 108/5,816 ms. Focused and
 policy-backed proofs returned `VERIFIED_BOUNDED`: the focused run recorded
-108/38,880 ms and the latest policy-floor run 106/40,602 ms. This raises
+108/38,880 ms and the then-current policy-floor run 106/40,602 ms. This raises
 TPCH formula coverage to 7/22, total formula coverage to 28/121 (23.1%), TPCH
 proofs to five, and the total proof floor to 13/121 (10.7%). No proof produced
 a candidate, so replay was not invoked and no optimizer correctness bug was
@@ -453,7 +456,7 @@ found.
 
 The next exact gate normalizes only a direct `Optional<Decimal>` member under
 `Coalesce(member, zero)`, including its matching `Just` wrapper, to the
-schema-preserving forms described above. The complete current-code TPC-DS
+schema-preserving forms described above. At that milestone the complete TPC-DS
 dashboard moves q43 through formula construction after 145/4,760 ms and moves
 q77 past Decimal `SUM` headroom to the 25,600-pair grouped-aggregate cap after
 2,063/442 ms. TPC-DS now emits 22/99 formulas and the combined workload emits
@@ -464,6 +467,18 @@ in q40 and q80 being rejected while classifying a near-match. Classification
 now leaves those forms opaque before invoking the strict exact-cast exporter;
 targeted regressions and the repeated complete dashboard restore q40's formula
 and q80's verifier entry. No candidate or optimizer bug arose.
+
+Exact scalable grouped-aggregate sharing preserves the established directional
+formula while its square fits the ordinary pair cap. Above that threshold it
+caches only the symmetric composite null-safe group-key comparisons as an upper
+triangle; row membership and first-representative suppression remain directional. The
+complete current-code TPC-DS dashboard remains policy-valid at 22/99 formulas,
+48 unsupported queries, and 29 optimizer failures. q25 and q29 now reject
+32,896 unique composite group-key row comparisons instead of 65,536, q80
+rejects 41,616 instead of 82,944, and q77 clears both 160-row aggregates before
+its 321-row Sort rejects 51,360 unordered pairs after 2,161/19,363 ms of
+preparation/verifier work. Formula and proof coverage remain 29/121 and 13/121,
+respectively.
 
 The explicit ordinary comparison core accepts every pair drawn from signed and
 unsigned 8-, 16-, 32-, and 64-bit integers for equality, null-safe equality,
@@ -721,6 +736,13 @@ returns `UNSUPPORTED` rather than allocating an unbounded intermediate or
 approximating semantics.
 The pair ceiling admits q71's 9072-term Merge ordinal construction while q31
 deterministically fails before allocating its 32768-pair join matrix.
+When a grouped aggregate's directional square fits the pair ceiling, it retains
+the established directional formula. Otherwise, null-safe group-key equality
+is shared as one symmetric upper-triangular term per unordered row pair and the
+same ceiling is applied to that triangle. Row-presence membership and
+first-representative guards remain directional; the accepted triangular bound
+keeps their `N^2` count strictly below twice the ordinary pair ceiling. No
+directional predicate is treated as symmetric.
 
 Aggregate nodes preserve ordered keys and traits, output type/nullability, and
 phase explicitly:

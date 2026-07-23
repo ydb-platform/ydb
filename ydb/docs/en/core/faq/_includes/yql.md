@@ -107,18 +107,13 @@ There is no explicit limit on the number of entries in the constant table, but m
 
 ### What's the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
 
-It's better to write it using a JOIN with a constant table:
+You can use the `WHERE ... IN` syntax to query by a set of keys (including composite keys):
 
 ```yql
-$keys = AsList(
-    AsStruct(1 AS Key1, "One" AS Key2),
-    AsStruct(2 AS Key1, "Three" AS Key2),
-    AsStruct(4 AS Key1, "One" AS Key2)
-);
+DECLARE $key_pairs AS List<Tuple<Uint64,Uint64>>;
 
-SELECT t.* FROM AS_TABLE($keys) AS k
-INNER JOIN table1 AS t
-ON t.Key1 = k.Key1 AND t.Key2 = k.Key2;
+SELECT * FROM some_table
+WHERE (Key1, Key2) in $key_pairs;
 ```
 
 ## Transactions {#transactions}

@@ -259,6 +259,12 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasMinFreeSectorsReserve()) {
                     pbufferFormat.MinFreeSectorsReserve = Cfg->PBufferConfig->GetMinFreeSectorsReserve();
                 }
+                if (Cfg->PBufferConfig->HasListPersistentBufferMaxRetries()) {
+                    pbufferFormat.ListPersistentBufferMaxRetries = Cfg->PBufferConfig->GetListPersistentBufferMaxRetries();
+                }
+                if (Cfg->PBufferConfig->HasListPersistentBufferRetryPeriodMilliseconds()) {
+                    pbufferFormat.ListPersistentBufferRetryPeriodMilliseconds = Cfg->PBufferConfig->GetListPersistentBufferRetryPeriodMilliseconds();
+                }
                 if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
                     auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();
                     if (newValue >= 100) {

@@ -372,6 +372,7 @@ namespace {
             hFunc(TEvErasePersistentBuffer, Handle)
             hFunc(TEvBatchErasePersistentBuffer, Handle)
             hFunc(TEvListPersistentBuffer, Handle)
+            hFunc(TEvPrivate::TEvRetryListPersistentBuffer, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
 
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)

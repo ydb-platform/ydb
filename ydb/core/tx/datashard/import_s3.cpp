@@ -1405,8 +1405,12 @@ public:
         return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
     }
 
-    TStringBuf LogPrefix() const {
-        return LogPrefix_;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Downloader"},
+            {"selfId", this->SelfId()},
+            {"txId", TxId},
+            {"storageName", NBackup::NFieldsWrappers::GetStorageName<TSettings>()});
     }
 
     static TSettings GetSettings(const NKikimrSchemeOp::TRestoreTask& task);
@@ -1424,7 +1428,6 @@ public:
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
-        , LogPrefix_(TStringBuilder() << PartLogPrefix() << ":" << TxId)
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
@@ -1436,8 +1439,8 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         YDB_LOG_DEBUG("[Import]",
-            {"logPrefix", LogPrefix()},
             {"attempt", Attempt});
 
         if (!CheckScheme()) {
@@ -1452,6 +1455,8 @@ public:
     }
 
     STATEFN(StateAllocateResource) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateAllocateResource"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
@@ -1459,6 +1464,8 @@ public:
     }
 
     STATEFN(StateDownloadData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateDownloadData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
@@ -1476,6 +1483,8 @@ public:
     }
 
     STATEFN(StateDownloadChecksum) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateDownloadChecksum"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
@@ -1494,7 +1503,6 @@ private:
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
-    const TString LogPrefix_;
 
     const ui32 Retries;
     ui32 Attempt = 0;

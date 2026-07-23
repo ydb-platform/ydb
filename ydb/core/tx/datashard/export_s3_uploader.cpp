@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
@@ -139,14 +140,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& msg = *ev->Get();
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
             {"self", this->SelfId()},
             {"status", (msg.Response ? msg.Response->Status : "null")},
             {"body", (msg.Response ? msg.Response->Body : "null")});
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
             YDB_LOG_ERROR("[Export]",
-                {"logPrefix", LogPrefix()},
                 {"self", this->SelfId()},
                 {"error", msg.GetError()});
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
@@ -154,7 +153,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
             YDB_LOG_ERROR("[Export] body",
-                {"logPrefix", LogPrefix()},
                 {"self", this->SelfId()},
                 {"body", msg.Response->Body},
                 {"error", "invalid"});
@@ -166,7 +164,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
         YDB_LOG_NOTICE("[Export]",
-            {"logPrefix", LogPrefix()},
             {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
             {"proxyHost", cfg.proxyHost},
             {"proxyPort", cfg.proxyPort});
@@ -322,8 +319,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
@@ -347,8 +342,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
@@ -372,8 +365,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
@@ -396,8 +387,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
@@ -421,8 +410,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
@@ -450,8 +437,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (checksum)"))) {
@@ -463,8 +448,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"sender", ev->Sender});
 
         Scanner = ev->Sender;
@@ -481,15 +464,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     void Handle(TEvBuffer::TPtr& ev) {
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"sender", ev->Sender},
             {"msg", ev->Get()->ToString()});
 
         if (ev->Sender != Scanner) {
             YDB_LOG_WARN("[Export]",
-                {"logPrefix", LogPrefix()},
-                {"self", this->SelfId()},
                 {"sender", ev->Sender},
                 {"scanner", Scanner});
             return;
@@ -526,8 +505,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (data)"))) {
@@ -552,8 +529,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         auto& upload = ev->Get()->Upload;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"upload", upload});
 
         if (!upload) {
@@ -612,8 +587,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) {
@@ -627,8 +600,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("UploadPart"))) {
@@ -659,8 +630,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (result.IsSuccess()) {
@@ -679,7 +648,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            NActors::NStructuredLog::TTextWriter writer;
+
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
             PassAway();
         }
     }
@@ -688,8 +663,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"result", result});
 
         if (result.IsSuccess()) {
@@ -715,9 +688,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         YDB_LOG_ERROR("[Export]",
-            {"logPrefix", LogPrefix()},
             {"marker", marker},
-            {"self", this->SelfId()},
             {"error", result});
         RetryOrFinish(result.GetError());
 
@@ -738,14 +709,17 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << LogPrefix() << " error: " << error);
+            NStructuredLog::TTextWriter writer;
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Finish(false, errorBuilder);
         }
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
         YDB_LOG_INFO("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"success", success},
             {"error", error},
             {"multipart", MultiPart},
@@ -792,8 +766,11 @@ public:
         return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Uploader"},
+            {"selfId", this->SelfId()},
+            {"storageName", NBackup::NFieldsWrappers::GetStorageName<TSettings>()});
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
@@ -841,9 +818,8 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", this->SelfId()},
             {"attempt", Attempt});
 
         if constexpr (!RequiresHttpResolver<TSettings>) {
@@ -860,6 +836,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
 
@@ -869,6 +847,8 @@ public:
     }
 
     STATEFN(StateResolveProxy) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateResolveProxy"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         default:
@@ -877,6 +857,8 @@ public:
     }
 
     STATEFN(StateUploadScheme) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadScheme"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
@@ -885,6 +867,8 @@ public:
     }
 
     STATEFN(StateUploadPermissions) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadPermissions"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
         default:
@@ -893,6 +877,8 @@ public:
     }
 
     STATEFN(StateUploadChangefeed) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChangefeed"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
         default:
@@ -901,6 +887,8 @@ public:
     }
 
     STATEFN(StateUploadTopic) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadTopic"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
         default:
@@ -909,6 +897,8 @@ public:
     }
 
     STATEFN(StateUploadMetadata) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadMetadata"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
         default:
@@ -917,6 +907,8 @@ public:
     }
 
     STATEFN(StateUploadChecksum) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChecksum"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChecksum);
         default:
@@ -925,6 +917,8 @@ public:
     }
 
     STATEFN(StateUploadData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
             hFunc(TEvDataShard::TEvS3Upload, Handle);

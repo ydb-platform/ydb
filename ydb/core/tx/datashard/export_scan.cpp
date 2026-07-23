@@ -116,9 +116,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvReset::TPtr&) {
         Y_ENSURE(IsReady());
 
-        YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", SelfId()});
+        YDB_LOG_DEBUG("[Export]");
 
         Stats.Reset(new TStats);
         State.Reset(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT).Reset(ES_NO_MORE_DATA);
@@ -129,9 +127,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
         Y_ENSURE(IsReady());
 
-        YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", SelfId()});
+        YDB_LOG_DEBUG("[Export]");
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
         Spent->Alter(true);
@@ -144,8 +140,6 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
         Y_ENSURE(IsReady());
 
         YDB_LOG_DEBUG("[Export]",
-            {"logPrefix", LogPrefix()},
-            {"self", SelfId()},
             {"msg", ev->Get()->ToString()});
 
         Success = ev->Get()->Success;
@@ -154,8 +148,11 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     }
 
 public:
-    static constexpr TStringBuf LogPrefix() {
-        return "scanner"sv;
+
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ExportScan"},
+            {"selfId", this->SelfId()});
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)
@@ -211,8 +208,7 @@ public:
             Success = false;
             Error = Buffer->GetError();
             YDB_LOG_ERROR("[Export]",
-                {"logPrefix", LogPrefix()},
-                {"table", Error});
+                {"error", Error});
             return EScan::Final;
         }
 
@@ -255,6 +251,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReset, Handle);
             hFunc(TEvExportScan::TEvFeed, Handle);

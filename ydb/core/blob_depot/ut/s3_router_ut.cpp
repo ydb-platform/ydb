@@ -106,7 +106,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.MutableSettings()->SetEndpoint("initial-endpoint.example.com");
         settings.MutableSettings()->SetBucket("test-bucket");
         settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort);
-        settings.SetBalancerProxyPort(4080);
         settings.SetBalancerRefreshSecMin(1);
         settings.SetBalancerRefreshSecMax(1);
 
@@ -143,7 +142,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.MutableSettings()->SetEndpoint("initial-endpoint.example.com");
         settings.MutableSettings()->SetBucket("test-bucket");
         settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort);
-        settings.SetBalancerProxyPort(4080);
         settings.SetBalancerRefreshSecMin(60);
         settings.SetBalancerRefreshSecMax(60);
 

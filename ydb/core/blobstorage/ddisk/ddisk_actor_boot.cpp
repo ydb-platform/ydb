@@ -160,7 +160,23 @@ namespace NKikimr::NDDisk {
                         {"errno", result.error()});
                 }
 
+                // Device overestimation tracking: reuse PDisk's measured seek/speed
+                // constants for the first iteration (see plans/io_uring_device_overestimation.md).
+                // SetSampleSink must be called before Start().
+                if (PDiskParams) {
+                    DeviceOverestimationReadSpeedBps = PDiskParams->ReadSpeedBps;
+                    DeviceOverestimationWriteSpeedBps = PDiskParams->WriteSpeedBps;
+                }
+                UringRouter->SetSampleSink([this](const NPDisk::TDeviceIoSample& sample) {
+                    OnDeviceIoSample(sample);
+                });
+
                 UringRouter->Start();
+
+                // Periodically flush buffered samples to the owning PDisk actor so it
+                // can merge them with samples from other sources sharing this device.
+                Schedule(DeviceOverestimationFlushPeriod,
+                    new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
             }
         }
 
@@ -187,6 +203,40 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackPDiskCount = 1;
         }
 #endif
+    }
+
+    void TDDiskActor::OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample) {
+        // Called from the io_uring completion poller thread (via UringRouter's
+        // sample sink). Keep this cheap: just fill BaseCostNs using the flat
+        // model and append under a mutex.
+        NPDisk::TDeviceIoSample sampleWithCost = sample;
+        sampleWithCost.BaseCostNs = EstimateDeviceIoBaseCostNs(sample.IsWrite, sample.Size);
+
+        TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
+        if (DeviceOverestimationSamples.size() >= MaxBufferedDeviceOverestimationSamples) {
+            // Drop oldest half under sustained overflow rather than the actor
+            // never keeping up; this is a monitoring signal, not correctness-critical.
+            const size_t toDrop = DeviceOverestimationSamples.size() / 2 + 1;
+            DeviceOverestimationSamples.erase(
+                DeviceOverestimationSamples.begin(), DeviceOverestimationSamples.begin() + toDrop);
+        }
+        DeviceOverestimationSamples.push_back(sampleWithCost);
+    }
+
+    void TDDiskActor::FlushDeviceOverestimationSamples() {
+        std::vector<NPDisk::TDeviceIoSample> batch;
+        {
+            TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
+            batch.swap(DeviceOverestimationSamples);
+        }
+
+        if (!batch.empty() && BaseInfo.PDiskActorID) {
+            TVector<NPDisk::TDeviceIoSample> samples(batch.begin(), batch.end());
+            Send(BaseInfo.PDiskActorID, new NPDisk::TEvDeviceOverestimationSamples(std::move(samples)));
+        }
+
+        Schedule(DeviceOverestimationFlushPeriod,
+            new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
     }
 
     void TDDiskActor::StartHandlingQueries() {

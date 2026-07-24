@@ -24,6 +24,7 @@
 #endif
 
 #include <ydb/library/pdisk_io/uring_operation.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 
 #include <ydb/core/util/spsc_circular_queue.h>
 
@@ -31,6 +32,7 @@
 #include <queue>
 
 #include <util/generic/hash_set.h>
+#include <util/system/mutex.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
@@ -241,6 +243,45 @@ namespace NKikimr::NDDisk {
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
 #endif
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Device overestimation sample pipeline (see plans/io_uring_device_overestimation.md)
+        //
+        // The io_uring completion poller thread (via UringRouter's sample sink)
+        // pushes raw TDeviceIoSample-s into DeviceOverestimationSamples under
+        // DeviceOverestimationSamplesMutex. Periodically (WakeupFlushDeviceOverestimationSamples)
+        // the actor thread drains the buffer and forwards a batch to the owning
+        // PDisk actor (BaseInfo.PDiskActorID), which merges it with samples from
+        // other sources (PDisk's own block device, other DDisk/PB slots on the
+        // same PDisk) sharing the same physical device.
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        static constexpr size_t MaxBufferedDeviceOverestimationSamples = 4096;
+        static constexpr TDuration DeviceOverestimationFlushPeriod = TDuration::Seconds(5);
+
+        TMutex DeviceOverestimationSamplesMutex;
+        std::vector<NPDisk::TDeviceIoSample> DeviceOverestimationSamples;
+
+        // Flat cost-estimation constants derived once from PDiskParams (seek
+        // time, read/write speed) in InitUring(). Deliberately reuses PDisk's
+        // measured constants for the first iteration (see plan doc); IO_URING
+        // may warrant its own calibrated constants later.
+        ui64 DeviceOverestimationReadSpeedBps = 0;
+        ui64 DeviceOverestimationWriteSpeedBps = 0;
+
+        // Estimates the cost of an operation excluding any seek cost (the
+        // owning PDisk actor's aggregator applies seek cost itself based on
+        // the merged, cross-source stream).
+        ui64 EstimateDeviceIoBaseCostNs(bool isWrite, ui64 size) const {
+            const ui64 speedBps = isWrite ? DeviceOverestimationWriteSpeedBps : DeviceOverestimationReadSpeedBps;
+            if (speedBps == 0) {
+                return 0;
+            }
+            return size * 1000000000ull / speedBps;
+        }
+
+        void OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample);
+        void FlushDeviceOverestimationSamples();
+
     public:
         struct TEvPrivate {
             enum {
@@ -374,6 +415,7 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupFlushDeviceOverestimationSamples = 6,
         };
 
         struct TPbOpSnapshot {

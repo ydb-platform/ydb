@@ -427,6 +427,11 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
+        // Per-window accumulators for the merged (cross-source) device
+        // overestimation ratio; reset every ~15s window (see Exec below).
+        ui64 MergedEstimatedNs = 0;
+        ui64 MergedActualNs = 0;
+
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
@@ -495,6 +500,22 @@ class TRealBlockDevice : public IBlockDevice {
                     isSeekExpected = true;
                 }
                 EndOffset = op->GetOffset() + opSize;
+
+                // Feed the merged (cross-source) device overestimation aggregator with
+                // a raw sample. BaseCostNs intentionally excludes any seek cost: the
+                // aggregator recomputes seek-expected based on its own merged,
+                // completion-ordered stream (which may include samples from IO_URING
+                // sources sharing the same physical device).
+                {
+                    TDeviceIoSample sample;
+                    sample.SubmitCycles = (ui64)completionAction->SubmitTime;
+                    sample.CompleteCycles = (ui64)eventGotAtCycle;
+                    sample.Offset = (ui64)op->GetOffset();
+                    sample.Size = opSize;
+                    sample.IsWrite = (op->GetType() != IAsyncIoOperation::EType::PRead);
+                    sample.BaseCostNs = completionAction->CostNs;
+                    Device.Mon.DeviceOverestimationMerged.Push(sample);
+                }
 
                 double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
@@ -570,6 +591,36 @@ class TRealBlockDevice : public IBlockDevice {
                 PrevActualCostNs = *Device.Mon.DeviceActualCostNs;
                 PrevEstimationAtCycle = eventGotAtCycle;
                 *Device.Mon.GetThreadCPU = ThreadCPUTime();
+
+                // Merge this window's samples (this PDisk block device thread plus
+                // any samples received from IO_URING sources sharing this physical
+                // device) and derive the same overestimation ratio for the merged
+                // stream. See blobstorage_pdisk_device_overestimation.h.
+                auto windowResult = Device.Mon.DeviceOverestimationMerged.ComputeAndReset(Device.SeekCostNs);
+                MergedEstimatedNs += windowResult.EstimatedNs;
+                MergedActualNs += windowResult.ActualNs + 30000000ull;
+                if (MergedEstimatedNs != 0) {
+                    *Device.Mon.DeviceOverestimationRatioMerged = 1000ull * MergedActualNs / (MergedEstimatedNs + 30000000ull);
+                    if (MergedActualNs > MergedEstimatedNs) {
+                        if (MergedActualNs - MergedEstimatedNs < 15000000000ull) {
+                            *Device.Mon.DeviceNonperformanceMsMerged = (MergedActualNs - MergedEstimatedNs) / 15000000ull;
+                        } else {
+                            *Device.Mon.DeviceNonperformanceMsMerged = 1000;
+                        }
+                    } else {
+                        *Device.Mon.DeviceNonperformanceMsMerged = 0;
+                    }
+                } else {
+                    *Device.Mon.DeviceOverestimationRatioMerged = 1000ull;
+                    *Device.Mon.DeviceNonperformanceMsMerged = 0ull;
+                }
+                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged.GetDroppedSamples();
+                // Reset accumulators each window (unlike the legacy PDisk-only
+                // counters above, which are cumulative device-lifetime counters we
+                // diff against Prev*): this makes MergedEstimatedNs/MergedActualNs
+                // pure per-window sums, matching windowResult's own semantics.
+                MergedEstimatedNs = 0;
+                MergedActualNs = 0;
             }
 
             PrevEventGotAtCycle = eventGotAtCycle;

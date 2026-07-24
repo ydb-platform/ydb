@@ -123,10 +123,11 @@ class Utils:
     def alter_old_secret(self, secret_name, value):
         self.execute_scheme(f"ALTER OBJECT {secret_name} (TYPE SECRET) SET value='{value}';")
 
-    def create_eds(self, eds_name, secret_name, schema_secret=False):
+    def create_eds(self, eds_name, secret_name, schema_secret=False, create_or_replace=False):
         secret_setting = "SERVICE_ACCOUNT_SECRET_PATH" if schema_secret else "SERVICE_ACCOUNT_SECRET_NAME"
+        create_type = "CREATE OR REPLACE" if create_or_replace else "CREATE"
         query = f"""
-            CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
+            {create_type} EXTERNAL DATA SOURCE `{eds_name}` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="SERVICE_ACCOUNT",
@@ -146,6 +147,14 @@ class Utils:
                 AWS_REGION="ru-central-1"
             );"""
         self.execute_scheme(query)
+
+    def alter_password_secret(self, object_type, object_name, secret_name, schema_secret=False):
+        secret_setting = "PASSWORD_SECRET_PATH" if schema_secret else "PASSWORD_SECRET_NAME"
+        self.execute_scheme(f"""
+            ALTER {object_type} `{object_name}` SET (STATE = "Paused");
+            ALTER {object_type} `{object_name}` SET ({secret_setting} = "{secret_name}");
+            ALTER {object_type} `{object_name}` SET (STATE = "StandBy");
+        """)
 
     def read_from_eds(self, eds_name):
         return self.execute_query(f"""
@@ -311,6 +320,77 @@ def test_existing_objects_are_ok_if_old_secret_creation_is_disabled(old_secrets_
     old_secrets_utils.assert_path_ready(f"{DATABASE}/eds-old-secret")
     old_secrets_utils.assert_path_ready(f"{DATABASE}/replication-old-secret")
     old_secrets_utils.assert_path_ready(f"{DATABASE}/transfer-old-secret")
+
+    # check that existing objects can't be changed to use old secrets
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.create_eds(
+            "eds-old-secret",
+            "OldSecret",
+            create_or_replace=True,
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.alter_password_secret(
+            "ASYNC REPLICATION",
+            "replication-old-secret",
+            "OldSecret",
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.alter_password_secret(
+            "TRANSFER",
+            "transfer-old-secret",
+            "OldSecret",
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+
+def test_existing_objects_cannot_use_old_secrets_if_old_secret_creation_is_disabled(old_secrets_utils):
+    # create all types of objects with old secrets
+    # secret
+    old_secrets_utils.create_old_secret("OldSecret", value="")
+
+    # eds
+    old_secrets_utils.create_eds("eds-old-secret", "OldSecret")
+
+    # replication
+    old_secrets_utils.create_table("repl_src")
+    old_secrets_utils.create_async_replication("replication-old-secret", "repl_src", "repl_dst", "OldSecret")
+
+    # transfer
+    old_secrets_utils.create_topic("transfer_topic")
+    old_secrets_utils.create_transfer_table("transfer_dst")
+    old_secrets_utils.create_transfer("transfer-old-secret", "transfer_topic", "transfer_dst", "OldSecret")
+
+    # restart cluster with disabled old secret creation
+    old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
+
+    # check that existing objects can't be changed to use old secrets
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.create_eds(
+            "eds-old-secret",
+            "OldSecret",
+            create_or_replace=True,
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.alter_password_secret(
+            "ASYNC REPLICATION",
+            "replication-old-secret",
+            "OldSecret",
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
+
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.alter_password_secret(
+            "TRANSFER",
+            "transfer-old-secret",
+            "OldSecret",
+        )
+    assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
 
 def test_disable_old_secret_creation(old_secrets_utils):

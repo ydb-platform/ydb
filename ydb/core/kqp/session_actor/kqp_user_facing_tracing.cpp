@@ -11,6 +11,10 @@
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <util/generic/utility.h>
+#include <util/generic/vector.h>
+
+#include <algorithm>
+#include <functional>
 #include <util/string/builder.h>
 
 // The single renderer of the user-facing trace. Everything the user sees is built here, at reply
@@ -55,6 +59,14 @@ void EmitPhase(const NWilson::TTraceId& parentId, TInstant start, TInstant end,
     }
 }
 
+// Global span budget of one query render (see MaxUserFacingSpansPerQuery). Tasks are admitted
+// by the precomputed duration cutoff (global top-K), shard children by the running counter.
+struct TSpanBudget {
+    ui64 TaskDurationCutoffMs = 0; // emit tasks with duration >= cutoff; 0 => all
+    i64 ShardSpansRemaining = 0;
+    ui64 Dropped = 0;
+};
+
 // Slowdown signals of one stage, shared between the stage span and the root-level aggregation.
 struct TStageSignals {
     ui64 WaitUs = 0;       // time compute actors spent waiting on I/O rather than computing
@@ -97,8 +109,13 @@ TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
 // Task start/finish are ABSOLUTE epoch ms (raw from the compute actor), unlike the stage
 // aggregate which is offset from BaseTimeMs — so no base is added here.
 void EmitTaskSpans(const NWilson::TTraceId& stageParent,
-        const std::unordered_map<ui64, TUserFacingTaskSnapshot>& tasks, ui64 stageStartMs) {
+        const std::unordered_map<ui64, TUserFacingTaskSnapshot>& tasks, ui64 stageStartMs,
+        TSpanBudget& budget) {
     for (const auto& [taskId, task] : tasks) {
+        if (budget.TaskDurationCutoffMs && task.DurationMs() < budget.TaskDurationCutoffMs) {
+            ++budget.Dropped;
+            continue;
+        }
         // Write tasks (datashard) report FinishTimeMs but leave StartTimeMs unset; fall back to
         // creation time, then to the stage's start, so the task still gets a span in-window.
         const ui64 startMs = task.StartTimeMs ? task.StartTimeMs
@@ -151,6 +168,11 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
             if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
                 continue;
             }
+            if (budget.ShardSpansRemaining <= 0) {
+                ++budget.Dropped;
+                continue;
+            }
+            --budget.ShardSpansRemaining;
             NWilson::TSpan shardSpan = NWilson::TSpan::ConstructTerminated(
                 span.GetTraceId(), span.GetTraceId().Span(span.GetTraceId().GetVerbosity()),
                 TInstant::MilliSeconds(shard.GetStartTimeMs()),
@@ -178,7 +200,7 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
 }
 
 void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqExecutionStats& stats,
-        const TUserFacingTraceTaskStats& taskStats) {
+        const TUserFacingTraceTaskStats& taskStats, TSpanBudget& budget) {
     for (const auto& stage : stats.GetStages()) {
         // Stage start/finish are offsets from BaseTimeMs (absolute epoch ms); base 0 => untimed stage.
         const ui64 base = stage.GetBaseTimeMs();
@@ -237,13 +259,14 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
                 span.Attribute("ydb.tasks_truncated",
                     static_cast<i64>(stage.GetTotalTasksCount() - stageTasks.size()));
             }
-            EmitTaskSpans(span.GetTraceId(), stageTasks, base + startMs);
+            EmitTaskSpans(span.GetTraceId(), stageTasks, base + startMs, budget);
         }
         span.End();
     }
 }
 
-void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExecutionData& trace) {
+void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExecutionData& trace,
+        TSpanBudget& budget) {
     const TUserFacingTraceTimeline& tl = trace.Timeline;
     NWilson::TSpan executeSpan = MakePhase(rootId, tl.Execute.Start, tl.Execute.End, "Execute");
     if (!executeSpan) {
@@ -297,7 +320,7 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan = MakePhase(executeId, run.Start, run.End, "Run");
     }
     const NWilson::TTraceId runId = runSpan ? runSpan.GetTraceId() : NWilson::TTraceId{};
-    EmitStageSpans(runSpan ? runId : executeId, trace.ExecStats, trace.TaskStats);
+    EmitStageSpans(runSpan ? runId : executeId, trace.ExecStats, trace.TaskStats, budget);
     if (runSpan) {
         runSpan.End();
     }
@@ -408,8 +431,37 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
         userSpan.Attribute("ydb.compile.cache_hit", true);
     }
 
+    // Global span budget: stages/phases always render; tasks are admitted by a duration cutoff
+    // chosen so that at most K tasks (globally, across executions) fit the budget; shard children
+    // consume the remainder.
+    TSpanBudget budget;
+    {
+        size_t fixedSpans = 0;
+        TVector<ui64> taskDurations;
+        for (const auto& trace : state.QueryStats.UserFacingTraces) {
+            fixedSpans += 10 + trace.ExecStats.StagesSize(); // phases estimate + stage spans
+            for (const auto& [stageId, tasks] : trace.TaskStats) {
+                for (const auto& [taskId, task] : tasks) {
+                    taskDurations.push_back(task.DurationMs());
+                }
+            }
+        }
+        const size_t taskBudget = MaxUserFacingSpansPerQuery > fixedSpans
+            ? MaxUserFacingSpansPerQuery - fixedSpans : 0;
+        if (taskDurations.size() > taskBudget) {
+            auto nth = taskDurations.begin() + taskBudget;
+            std::nth_element(taskDurations.begin(), nth, taskDurations.end(), std::greater<ui64>());
+            // +1 so tasks exactly at the cutoff are dropped rather than overshooting the budget.
+            budget.TaskDurationCutoffMs = *nth + 1;
+        }
+        const size_t admittedTasks = Min(taskDurations.size(), taskBudget);
+        budget.ShardSpansRemaining = static_cast<i64>(taskBudget - admittedTasks);
+    }
     for (const auto& trace : state.QueryStats.UserFacingTraces) {
-        RenderExecution(parentId, trace);
+        RenderExecution(parentId, trace, budget);
+    }
+    if (budget.Dropped > 0) {
+        userSpan.Attribute("ydb.spans_truncated", static_cast<i64>(budget.Dropped));
     }
 }
 

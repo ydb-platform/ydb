@@ -68,7 +68,7 @@ blob_storage_config:
       rings:
       - fail_domains:
         - vdisk_locations:
-          - node_id: 1
+          - node_id: 1 
             path: SectorMap:1:64
             pdisk_category: SSD
 channel_profile_config:
@@ -88,5 +88,27 @@ table_service_config:
   sql_version: 1
 grpc_config:
   host: 127.0.0.1
+  port: 2136
 monitoring_config:
   monitoring_address: 127.0.0.1
+tracing_config:
+  backend:
+    opentelemetry:
+      collector_url: grpc://localhost:4317
+      service_name: ydb
+  sampling:
+    - fraction: 1
+      level: 15
+      max_traces_per_minute: 1000
+      max_traces_burst: 100
+# Независимый user-facing канал — своё решение сэмплинга, свой trace-id (отдельное дерево)
+user_facing_tracing_config:
+  backend:
+    opentelemetry:
+      collector_url: grpc://localhost:4317
+      service_name: ydb
+  sampling:
+    - fraction: 1
+      level: 15
+      max_traces_per_minute: 1000
+      max_traces_burst: 100

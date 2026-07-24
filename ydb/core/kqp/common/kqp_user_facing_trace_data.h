@@ -83,6 +83,13 @@ constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
 // gets ydb.shards_truncated when hit.
 constexpr size_t MaxUserFacingShardReadsPerTask = 64;
 
+// Global budget of spans emitted per query: per-container caps alone still multiply into
+// hundreds of thousands of spans on a huge OLAP query, which kills the uploader and trace UIs.
+// Phases and stages always render (naturally small); tasks are admitted globally by duration
+// (top-K across all stages of all executions), shard children consume what remains. The root
+// span gets ydb.spans_truncated with the dropped count.
+constexpr size_t MaxUserFacingSpansPerQuery = 5000;
+
 // Operational phases the executer passes through. The renderer decides presentation: which are
 // grouped under "Prepare", and their user-facing names.
 enum class EUserFacingTracePhase : size_t {

@@ -42,6 +42,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateResolveDatabase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
@@ -106,6 +108,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateGetTableProfiles) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
@@ -141,6 +145,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeSrcPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DescribeSrcPath);
@@ -254,6 +260,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateAllocateTxId) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -284,6 +292,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateCreateDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -346,6 +356,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(TEvents::TEvWakeup, DescribeDstPath);
@@ -552,6 +564,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateSubscribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardEvents::TEvNotifyDelete, Handle);
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
@@ -693,6 +707,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);

@@ -16,7 +16,7 @@ namespace NController {
 TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , LogPrefix(this)
+    , LogPrefix(CreateTabletLogPrefix(this))
     , TabletCountersPtr(new TProtobufTabletCounters<
              ESimpleCounters_descriptor,
              ECumulativeCounters_descriptor,
@@ -53,10 +53,14 @@ void TController::DefaultSignalTabletActive(const TActorContext&) {
 }
 
 STFUNC(TController::StateInit) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", ""});
     StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TController::StateDatabaseResolve) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", ""});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvResolveTenantResult, HandleDatabaseResolve);
     default:
@@ -65,6 +69,8 @@ STFUNC(TController::StateDatabaseResolve) {
 }
 
 STFUNC(TController::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", ""});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvAlterReplication, Handle);

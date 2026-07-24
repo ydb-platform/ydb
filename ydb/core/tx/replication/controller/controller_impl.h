@@ -37,12 +37,12 @@ public:
     public:
         TTxBase(const TString& name, TController* self)
             : TTransactionBase(self)
-            , TxLogPrefix(self, name)
+            , TxLogPrefix(CreateTabletLogPrefix(self, name))
         {
         }
 
     protected:
-        const TTabletLogPrefix TxLogPrefix;
+        const NActors::NStructuredLog::TStructuredMessage TxLogPrefix;
     };
 
 private:
@@ -193,7 +193,7 @@ private:
     void Remove(ui64 id);
 
 private:
-    const TTabletLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     THolder<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
 

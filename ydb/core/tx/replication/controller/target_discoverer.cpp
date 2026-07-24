@@ -376,6 +376,8 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribePathResponse, Handle);
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);

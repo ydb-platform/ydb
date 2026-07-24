@@ -20,6 +20,8 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
     }
 
     STATEFN(StateRequestPermission) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAllowDropStream, Handle);
         default:
@@ -41,6 +43,8 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStreamConsumer);
@@ -115,6 +119,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState",""});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
         }

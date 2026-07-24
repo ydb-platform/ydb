@@ -571,6 +571,9 @@ namespace NActors {
     public:
         using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
         enum class ESystemFlag : ui64 {
+            // Notify this actor only after an activation that processed one of
+            // its events. Activations of other actors in the same mailbox are
+            // not reported.
             MailboxProcessingFinished = 1ull << 0,
         };
 

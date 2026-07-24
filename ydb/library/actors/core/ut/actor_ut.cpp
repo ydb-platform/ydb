@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "thread_context.h"
 #include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -936,13 +937,15 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
 
     class TObserverActor : public TActorBootstrapped<TObserverActor> {
     public:
-        TObserverActor(TResult& result, TThreadParkPad& done)
-            : Result(result)
+        TObserverActor(EFinishReason expectedReason, TResult& result, TThreadParkPad& done)
+            : ExpectedReason(expectedReason)
+            , Result(result)
             , Done(done)
         {}
 
         void Bootstrap() {
             SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+            ForceFinishReason();
             Become(&TThis::StateWork);
         }
 
@@ -953,6 +956,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         }
 
         void Handle(TEvents::TEvMailboxProcessingFinished::TPtr& ev) {
+            RestoreExecutorState();
             Result.Reason = ev->Get()->Reason;
             Result.ExecutedEvents = ev->Get()->ExecutedEvents;
             Result.ElapsedCycles = ev->Get()->ElapsedCycles;
@@ -961,8 +965,48 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         }
 
     private:
+        void ForceFinishReason() {
+            OriginalEventsPerMailbox = TlsThreadContext->WorkerContext.EventsPerMailbox;
+            OriginalTimePerMailboxTs = TlsThreadContext->WorkerContext.TimePerMailboxTs;
+            OriginalSoftDeadlineTs = TlsThreadContext->WorkerContext.SoftDeadlineTs;
+            OriginalCapturedSendingType =
+                TlsThreadContext->ExecutionContext.CapturedActivation.SendingType;
+
+            switch (ExpectedReason) {
+                case EFinishReason::QueueEmpty:
+                    break;
+                case EFinishReason::EventCountLimitReached:
+                    TlsThreadContext->WorkerContext.EventsPerMailbox = 1;
+                    break;
+                case EFinishReason::TimeLimitReached:
+                    TlsThreadContext->WorkerContext.TimePerMailboxTs = 0;
+                    break;
+                case EFinishReason::SoftDeadlineReached:
+                    TlsThreadContext->WorkerContext.SoftDeadlineTs = 0;
+                    break;
+                case EFinishReason::TailSend:
+                    TlsThreadContext->ExecutionContext.CapturedActivation.SendingType =
+                        ESendingType::Tail;
+                    break;
+            }
+        }
+
+        void RestoreExecutorState() {
+            TlsThreadContext->WorkerContext.EventsPerMailbox = OriginalEventsPerMailbox;
+            TlsThreadContext->WorkerContext.TimePerMailboxTs = OriginalTimePerMailboxTs;
+            TlsThreadContext->WorkerContext.SoftDeadlineTs = OriginalSoftDeadlineTs;
+            TlsThreadContext->ExecutionContext.CapturedActivation.SendingType =
+                OriginalCapturedSendingType;
+        }
+
+    private:
+        const EFinishReason ExpectedReason;
         TResult& Result;
         TThreadParkPad& Done;
+        ui32 OriginalEventsPerMailbox = 0;
+        ui64 OriginalTimePerMailboxTs = 0;
+        ui64 OriginalSoftDeadlineTs = 0;
+        ESendingType OriginalCapturedSendingType = ESendingType::Common;
     };
 
     class TPersistentObserverActor : public TActorBootstrapped<TPersistentObserverActor> {
@@ -1011,36 +1055,45 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         TThreadParkPad& Done;
     };
 
-    TResult Run(bool activateEveryEvent) {
+    TResult Run(EFinishReason expectedReason) {
         auto setup = TActorBenchmark::GetActorSystemSetup();
-        TActorBenchmark::AddBasicPool(setup, 1, activateEveryEvent, false);
+        TActorBenchmark::AddBasicPool(setup, 1, false, false);
 
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
         TResult result;
         TThreadParkPad done;
-        actorSystem.Register(new TObserverActor(result, done), TMailboxType::HTSwap, 0);
+        actorSystem.Register(
+            new TObserverActor(expectedReason, result, done),
+            TMailboxType::HTSwap,
+            0);
 
         done.Park();
         actorSystem.Stop();
         return result;
     }
 
-    Y_UNIT_TEST(NotifiesWhenQueueIsEmpty) {
-        const TResult result = Run(false);
+    Y_UNIT_TEST(NotifiesForEveryFinishReason) {
+        const EFinishReason expectedReasons[] = {
+            EFinishReason::QueueEmpty,
+            EFinishReason::EventCountLimitReached,
+            EFinishReason::TimeLimitReached,
+            EFinishReason::SoftDeadlineReached,
+            EFinishReason::TailSend,
+        };
 
-        UNIT_ASSERT(result.Reason == EFinishReason::QueueEmpty);
-        UNIT_ASSERT_VALUES_EQUAL(result.ExecutedEvents, 1);
-        UNIT_ASSERT_C(result.ElapsedCycles > 0, "Expected non-zero mailbox processing time");
-    }
+        for (const EFinishReason expectedReason : expectedReasons) {
+            const TResult result = Run(expectedReason);
 
-    Y_UNIT_TEST(NotifiesWhenEventCountLimitIsReached) {
-        const TResult result = Run(true);
-
-        UNIT_ASSERT(result.Reason == EFinishReason::EventCountLimitReached);
-        UNIT_ASSERT_VALUES_EQUAL(result.ExecutedEvents, 1);
-        UNIT_ASSERT_C(result.ElapsedCycles > 0, "Expected non-zero mailbox processing time");
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<ui8>(result.Reason),
+                static_cast<ui8>(expectedReason));
+            UNIT_ASSERT_VALUES_EQUAL(result.ExecutedEvents, 1);
+            UNIT_ASSERT_C(
+                result.ElapsedCycles > 0,
+                "Expected non-zero mailbox processing time");
+        }
     }
 
     Y_UNIT_TEST(SystemFlagStaysSetUntilExplicitlyCleared) {

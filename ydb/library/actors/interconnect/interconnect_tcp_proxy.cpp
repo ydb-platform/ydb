@@ -388,6 +388,10 @@ namespace NActors {
             TransitToErrorState(description);
         };
 
+        if (Session && msg->RdmaHanshakeResult.HasPreinitedSession()) {
+            return error("Unexpected prepared session while we already has one");
+        }
+
         // If session is not created, then create new one.
         if (!Session) {
             RemoteProgramInfo = std::move(msg->ProgramInfo);
@@ -540,6 +544,16 @@ namespace NActors {
             kind += " inconclusive";
         }
         UpdateErrorStateLog(TActivationContext::Now(), kind, ev->Get()->Explanation);
+    }
+
+    void TInterconnectProxyTCP::Handle(TEvProxyCall::TPtr& ev) {
+        ICPROXY_PROFILED;
+        if (Session) {
+            ev->Get()->ReportError("Proxy call over owned session is not supported yet");
+        } else {
+            ev->Get()->Call(this);
+        }
+        TlsActivationContext->Send(ev->Forward(ev->Sender));
     }
 
     void TInterconnectProxyTCP::ProcessPendingSessionEvents() {

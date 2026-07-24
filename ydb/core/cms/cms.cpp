@@ -456,6 +456,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                     {"maxPermissions", maxPermissions});
                 return EActionResult::CapHit;
             }
+            return EActionResult::Ok;
         }
 
         if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
@@ -465,7 +466,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             return EActionResult::Ok;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx,
+        YDB_LOG_DEBUG_CTX(ctx, "",
             {"result", ToString(error.Code).data()},
             {"reason", error.Reason.GetMessage().data()});
 

@@ -396,17 +396,20 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
         inputColumnsSet.insert(col.Value());
     }
 
-    const bool depsComeFromTable = GeneratedDepsComeFromTable(GetTableOp(write));
+    const auto tableOp = GetTableOp(write);
+    const bool depsComeFromTable = GeneratedDepsComeFromTable(tableOp);
 
-    if (depsComeFromTable) {
+    if (tableOp == TYdbOperation::UpdateOn) {
         TVector<const TKikimrColumnMetadata*> touched;
         touched.reserve(generatedColumns.size());
+
         for (const auto* colMeta : generatedColumns) {
             const auto& deps = colMeta->DefaultExpression->Dependencies;
             if (std::ranges::any_of(deps, [&](const TString& dep) { return inputColumnsSet.contains(dep); })) {
                 touched.push_back(colMeta);
             }
         }
+
         generatedColumns.swap(touched);
         if (generatedColumns.empty()) {
             return { .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };

@@ -552,6 +552,101 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 8;", "[[1;8]]");
     }
 
+    Y_UNIT_TEST(NotNullPartialUpsertUntouchedColumn) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v1 Int32,
+                v2 Int32,
+                v3 Int32,
+                g1 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v1, 0) + COALESCE(v2, 0)) STORED,
+                g2 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(v3, 0) + COALESCE(v2, 0)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+
+        // Insert a new row touching only g1's dependency
+        fixture.Exec("UPSERT INTO TestTable (k, v1) VALUES (1, 10);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;10;0]]");
+
+        // Partial UPSERT touching only g2's dependency (v3) on the existing row
+        fixture.Exec("UPSERT INTO TestTable (k, v3) VALUES (1, 5);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;10;5]]");
+    }
+
+    Y_UNIT_TEST(NotNullUpdateOnPartial) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                b Int32,
+                c Int32,
+                note Int32,
+                g1 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+                g2 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(c, 0) * 10) STORED,
+                PRIMARY KEY (k)
+            );
+        )", "UPSERT INTO TestTable (k, a, b, c, note) VALUES (1, 1, 2, 3, 100);");
+
+        // Seed: g1 = 1 + 2 = 3, g2 = 3 * 10 = 30
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;3;30]]");
+
+        // UPDATE ON touching no generated dependency (only note). Both generated columns keep
+        // their stored value; the row is still updated
+        fixture.Exec("UPDATE TestTable ON (k, note) VALUES (1, 999);");
+        fixture.Check("SELECT k, note, g1, g2 FROM TestTable ORDER BY k;", "[[1;[999];3;30]]");
+
+        // UPDATE ON touching a dependency of g1 only (a). g1 is recomputed from the new a and the
+        // looked-up b; g2 is untouched and keeps its value
+        // g1 = 5 + 2 = 7, g2 = 30
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 5);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;7;30]]");
+
+        // UPDATE ON never inserts: a non-existent key is a no-op
+        fixture.Exec("UPDATE TestTable ON (k, note) VALUES (42, 1);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;7;30]]");
+    }
+
+    Y_UNIT_TEST(NotNullUpsertPartial) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                b Int32,
+                c Int32,
+                note Int32,
+                g1 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+                g2 Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(c, 0) * 10) STORED,
+                PRIMARY KEY (k)
+            );
+        )", "UPSERT INTO TestTable (k, a, b, c, note) VALUES (1, 1, 2, 3, 100);");
+
+        // Seed: g1 = 1 + 2 = 3, g2 = 3 * 10 = 30
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;3;30]]");
+
+        // UPDATE existing row touching no generated dependency (only note). Both generated
+        // columns are recomputed from looked-up deps and stay the same
+        fixture.Exec("UPSERT INTO TestTable (k, note) VALUES (1, 777);");
+        fixture.Check("SELECT k, note, g1, g2 FROM TestTable ORDER BY k;", "[[1;[777];3;30]]");
+
+        // UPDATE existing row touching a dependency of g1 only (a). g1 recomputed from new a and
+        // looked-up b; g2 recomputed from looked-up c and stays the same
+        // g1 = 10 + 2 = 12, g2 = 30
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 10);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;12;30]]");
+
+        // INSERT a new row touching no generated dependency (only note). Missing deps default to
+        // NULL; both NOT NULL generated columns are computed from defaults
+        // g1 = 0 + 0 = 0, g2 = 0 * 10 = 0
+        fixture.Exec("UPSERT INTO TestTable (k, note) VALUES (2, 5);");
+
+        // INSERT a new row touching a dependency of g1 only (a)
+        // g1 = 7 + 0 = 7, g2 = 0
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (3, 7);");
+
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;12;30];[2;0;0];[3;7;0]]");
+    }
+
     Y_UNIT_TEST(NotNullDependsOnSerial) {
         TTestFixture fixture(R"(
             CREATE TABLE TestTable (

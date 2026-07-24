@@ -2,6 +2,7 @@ import copy
 import unittest
 from itertools import permutations, product
 from unittest.mock import patch
+from weakref import WeakKeyDictionary
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
     decimal,
@@ -366,50 +367,193 @@ def staged_parallel_sort_merge(order):
     return parse_snapshot(snapshot(nodes, "root_project", graph))
 
 
-def _ground(term, constants):
+class _ExactTestReducer:
+    """Lazy interpreter support for exact declarations in this unit test."""
+
+    def __init__(self, script):
+        self.definitions = {}
+        self.selectors = {}
+        self.cache = {}
+        for declaration in script._declarations:
+            if isinstance(declaration, smt.DefinitionDeclaration):
+                self.definitions[declaration.name] = declaration
+            elif isinstance(declaration, smt.ProductDeclaration):
+                for index, selector in enumerate(declaration.selectors):
+                    self.selectors[selector.name] = (
+                        declaration,
+                        index,
+                    )
+
+    def reduce(self, term):
+        cached = self.cache.get(id(term))
+        if cached is not None and cached[0] is term:
+            return cached[1]
+        result = self._reduce(term)
+        if result is not None:
+            self.cache[id(term)] = (term, result)
+        return result
+
+    def _reduce(self, term):
+        definition = self.definitions.get(term.operation)
+        if definition is not None:
+            replacements = {
+                (parameter.sort, parameter.atom): argument
+                for parameter, argument in zip(
+                    definition.parameters,
+                    term.arguments,
+                )
+            }
+            return self._substitute(definition.body, replacements)
+
+        selected = self.selectors.get(term.operation)
+        if selected is None:
+            return None
+        declaration, index = selected
+        value = term.arguments[0]
+        if value.operation == declaration.constructor.name:
+            return value.arguments[index]
+        if value.operation == "ite":
+            condition, when_true, when_false = value.arguments
+            selector = declaration.selectors[index]
+            return smt.ite(
+                condition,
+                selector(when_true),
+                selector(when_false),
+            )
+        reduced = self.reduce(value)
+        if reduced is None:
+            return None
+        return declaration.selectors[index](reduced)
+
+    def _substitute(self, term, replacements):
+        if term.operation == "symbol":
+            return replacements.get((term.sort, term.atom), term)
+        arguments = tuple(
+            self._substitute(argument, replacements)
+            for argument in term.arguments
+        )
+        if arguments == term.arguments:
+            return term
+        return smt.Term(
+            term.sort,
+            term.operation,
+            arguments,
+            term.atom,
+        )
+
+
+_EXACT_TEST_REDUCERS = WeakKeyDictionary()
+
+
+def _reduce_exact(script, term):
+    reducer = _EXACT_TEST_REDUCERS.get(script)
+    if reducer is None:
+        reducer = _ExactTestReducer(script)
+        _EXACT_TEST_REDUCERS[script] = reducer
+    return reducer.reduce(term)
+
+
+def _ground(term, constants, script=None, cache=None):
+    if cache is None:
+        cache = {}
+    identity = id(term)
+    if identity in cache:
+        return cache[identity]
+    result = _ground_uncached(term, constants, script, cache)
+    cache[identity] = result
+    return result
+
+
+def _ground_uncached(term, constants, script, cache):
     if term.operation == "symbol":
         return constants[term.atom]
     if term.operation in {"bool", "int"}:
         return term.atom
     if term.operation == "not":
-        return not _ground(term.arguments[0], constants)
+        return not _ground(term.arguments[0], constants, script, cache)
     if term.operation == "and":
-        return all(_ground(argument, constants) for argument in term.arguments)
+        return all(
+            _ground(argument, constants, script, cache)
+            for argument in term.arguments
+        )
     if term.operation == "or":
-        return any(_ground(argument, constants) for argument in term.arguments)
+        return any(
+            _ground(argument, constants, script, cache)
+            for argument in term.arguments
+        )
     if term.operation == "=":
-        return _ground(term.arguments[0], constants) == _ground(
-            term.arguments[1], constants
+        return _ground(
+            term.arguments[0],
+            constants,
+            script,
+            cache,
+        ) == _ground(
+            term.arguments[1],
+            constants,
+            script,
+            cache,
         )
     if term.operation == "distinct":
-        values = tuple(_ground(argument, constants) for argument in term.arguments)
+        values = tuple(
+            _ground(argument, constants, script, cache)
+            for argument in term.arguments
+        )
         return len(set(values)) == len(values)
     if term.operation == "<":
-        return _ground(term.arguments[0], constants) < _ground(
-            term.arguments[1], constants
+        return _ground(
+            term.arguments[0],
+            constants,
+            script,
+            cache,
+        ) < _ground(
+            term.arguments[1],
+            constants,
+            script,
+            cache,
         )
     if term.operation == "ite":
         branch = (
             term.arguments[1]
-            if _ground(term.arguments[0], constants)
+            if _ground(term.arguments[0], constants, script, cache)
             else term.arguments[2]
         )
-        return _ground(branch, constants)
+        return _ground(branch, constants, script, cache)
     if term.operation == "+":
-        return sum(_ground(argument, constants) for argument in term.arguments)
+        return sum(
+            _ground(argument, constants, script, cache)
+            for argument in term.arguments
+        )
     if term.operation == "mod":
-        return _ground(term.arguments[0], constants) % _ground(
-            term.arguments[1], constants
+        return _ground(
+            term.arguments[0],
+            constants,
+            script,
+            cache,
+        ) % _ground(
+            term.arguments[1],
+            constants,
+            script,
+            cache,
         )
     if term.operation in {"forall", "exists"}:
         variables = term.arguments[:-1]
         body = term.arguments[-1]
         domains = tuple(_quantifier_domain(variable, body) for variable in variables)
         values = (
-            _ground(body, constants | dict(zip((v.atom for v in variables), assignment)))
+            _ground(
+                body,
+                constants
+                | dict(zip((v.atom for v in variables), assignment)),
+                script,
+                {},
+            )
             for assignment in product(*domains)
         )
         return all(values) if term.operation == "forall" else any(values)
+    if script is not None:
+        reduced = _reduce_exact(script, term)
+        if reduced is not None:
+            return _ground(reduced, constants, script, cache)
     raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
 
 
@@ -490,15 +634,15 @@ def _database_constants(database, rows, router=None, tasks=None):
     return constants
 
 
-def _cell(value, constants):
+def _cell(value, constants, script=None, cache=None):
     return (
         None
-        if _ground(value.is_null, constants)
-        else _ground(value.value, constants)
+        if _ground(value.is_null, constants, script, cache)
+        else _ground(value.value, constants, script, cache)
     )
 
 
-def _sequences(family, constants):
+def _sequences(family, constants, script=None):
     assert family.sequence
     result = set()
     for outcome in family.outcomes:
@@ -508,21 +652,35 @@ def _sequences(family, constants):
                 choice.term.atom: value
                 for choice, value in zip(outcome.choices, assignment)
             }
-            if not _ground(outcome.enabled, grounded):
+            cache = {}
+            if not _ground(outcome.enabled, grounded, script, cache):
                 continue
             relation = outcome.relation
             indices = [
                 index
                 for index, row in enumerate(relation.rows)
-                if _ground(row.present, grounded)
+                if _ground(row.present, grounded, script, cache)
             ]
             if relation.ordinals is not None:
                 indices.sort(
-                    key=lambda index: _ground(relation.ordinals[index], grounded)
+                    key=lambda index: _ground(
+                        relation.ordinals[index],
+                        grounded,
+                        script,
+                        cache,
+                    )
                 )
             names = tuple(column.name for column in relation.columns)
             result.add(tuple(
-                tuple(_cell(relation.rows[index].values[name], grounded) for name in names)
+                tuple(
+                    _cell(
+                        relation.rows[index].values[name],
+                        grounded,
+                        script,
+                        cache,
+                    )
+                    for name in names
+                )
                 for index in indices
             ))
     return result
@@ -1013,6 +1171,118 @@ class SortConcreteDifferentialTest(unittest.TestCase):
 
 
 class SortingNetworkEncodingTest(unittest.TestCase):
+    def test_zero_or_one_live_row_needs_no_packed_declaration(self):
+        columns = (Column("k", "Int64", False),)
+        value = {"k": Value("Int64", smt.FALSE, smt.ZERO)}
+        for rows in ((), (Row(smt.TRUE, value),)):
+            with self.subTest(row_count=len(rows)):
+                script = smt.Script()
+                family = relation._sorting_network_family(
+                    single(Relation(columns, rows)),
+                    (SortOrder("k", True, False),),
+                    script,
+                    "network",
+                )
+
+                self.assertTrue(
+                    family.outcomes[0].relation.present_prefix
+                )
+                self.assertNotIn(
+                    "(declare-datatypes",
+                    script.render(),
+                )
+
+    def test_network_formula_has_one_packed_row_and_one_exact_comparator(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(index % 2),
+                    ),
+                    "payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(index),
+                    ),
+                },
+            )
+            for index in range(4)
+        )
+        script = smt.Script()
+        family = relation._sorting_network_family(
+            single(Relation(columns, rows)),
+            (SortOrder("k", True, False),),
+            script,
+            "network",
+        )
+        first = family.outcomes[0].relation.rows[0]
+        script.assert_term(
+            smt.and_(
+                first.present,
+                smt.not_(first.values["payload"].is_null),
+            )
+        )
+
+        formula = script.render()
+
+        self.assertEqual(formula.count("(declare-datatypes "), 1)
+        self.assertEqual(formula.count("(define-fun "), 1)
+        self.assertIn("(mk_d_", formula)
+        self.assertIn("(df_", formula)
+        # A compare-exchange cell transports one payload and one tie rank.
+        # It does not rebuild an ite for every scalar column lane.
+        self.assertLess(
+            formula.count("(ite "),
+            4 * sort_network.comparator_count(len(rows)),
+        )
+
+    def test_workload_widths_fit_the_packed_payload_budget(self):
+        def payload_cells(row_count, column_count):
+            columns = tuple(
+                Column(f"c{index}", "Int64", False)
+                for index in range(column_count)
+            )
+            values = {
+                column.name: Value("Int64", smt.FALSE, smt.ZERO)
+                for column in columns
+            }
+            relation_value = Relation(
+                columns,
+                tuple(
+                    Row(smt.TRUE, values)
+                    for _ in range(row_count)
+                ),
+            )
+            return relation._sorting_network_payload_cells(
+                relation_value
+            )
+
+        cases = (
+            (256, 139, 71_424),
+            (1_024, 36, 74_752),
+            (324, 22, 14_580),
+        )
+        for row_count, column_count, expected in cases:
+            with self.subTest(
+                rows=row_count,
+                columns=column_count,
+            ):
+                self.assertEqual(
+                    payload_cells(row_count, column_count),
+                    expected,
+                )
+                self.assertLessEqual(
+                    expected,
+                    relation.MAX_SORT_NETWORK_PAYLOAD_CELLS,
+                )
+
     def test_network_matches_every_three_slot_tie_respecting_sequence(self):
         parsed = parse_snapshot(snapshot([scan()], "scan"))
         script = smt.Script()
@@ -1040,7 +1310,7 @@ class SortingNetworkEncodingTest(unittest.TestCase):
         for rows in product(*slot_states):
             constants = _database_constants(database, rows)
             self.assertEqual(
-                _sequences(family, constants),
+                _sequences(family, constants, script),
                 _reference_sequences(rows, reference_order),
                 rows,
             )
@@ -1058,7 +1328,7 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 if not _ground(outcome.enabled, grounded):
                     continue
                 presence = tuple(
-                    _ground(row.present, grounded)
+                    _ground(row.present, grounded, script)
                     for row in outcome.relation.rows
                 )
                 self.assertEqual(
@@ -1115,6 +1385,7 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                         _sequences(
                             family,
                             _database_constants(database, rows),
+                            script,
                         ),
                         _reference_sequences(rows, raw_order),
                         rows,
@@ -1123,8 +1394,14 @@ class SortingNetworkEncodingTest(unittest.TestCase):
     def test_top_sort_network_materializes_only_the_selected_prefix(self):
         order = [order_item("a.k1")]
         parsed = logical_sort(order, top_limit=2, phase="intermediate")
+        script = smt.Script()
+        database = Database(parsed, 4, script)
         with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10):
-            database, family = _logical_family(parsed, 4)
+            family = RelationEvaluator(
+                parsed,
+                database,
+                ScalarEncoder(script),
+            ).root()
         outcome = family.outcomes[0]
 
         self.assertTrue(outcome.relation.present_prefix)
@@ -1142,12 +1419,16 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 for sequence in _reference_sequences(rows, order)
             }
             self.assertEqual(
-                _sequences(family, _database_constants(database, rows)),
+                _sequences(
+                    family,
+                    _database_constants(database, rows),
+                    script,
+                ),
                 expected,
                 rows,
             )
 
-    def test_top_sort_falls_back_when_comparator_cell_budget_is_exhausted(self):
+    def test_top_sort_falls_back_when_payload_cell_budget_is_exhausted(self):
         parsed = parse_snapshot(snapshot([scan()], "scan"))
         script = smt.Script()
         database = Database(parsed, 4, script)
@@ -1160,8 +1441,8 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10),
             patch.object(
                 relation,
-                "MAX_SORT_NETWORK_COMPARATOR_CELLS",
-                17,
+                "MAX_SORT_NETWORK_PAYLOAD_CELLS",
+                27,
             ),
         ):
             family = relation.sort_family(
@@ -1176,6 +1457,31 @@ class SortingNetworkEncodingTest(unittest.TestCase):
         self.assertFalse(outcome.relation.present_prefix)
         self.assertIsNotNone(outcome.relation.ordinals)
         self.assertEqual(len(outcome.relation.rows), 4)
+
+    def test_top_sort_falls_back_when_key_width_budget_is_exhausted(self):
+        parsed = parse_snapshot(snapshot([scan()], "scan"))
+        script = smt.Script()
+        database = Database(parsed, 4, script)
+        source = RelationEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10),
+            patch.object(relation, "MAX_SORT_NETWORK_KEY_COLUMNS", 0),
+        ):
+            family = relation.sort_family(
+                source,
+                (SortOrder("a.k1", True, False),),
+                script,
+                "sort",
+                compact_prefix=True,
+            )
+
+        outcome = family.outcomes[0]
+        self.assertFalse(outcome.relation.present_prefix)
+        self.assertIsNotNone(outcome.relation.ordinals)
 
     def test_present_prefix_limit_slices_offset_slots_exactly(self):
         order = [order_item("a.k1")]
@@ -1202,7 +1508,11 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 for sequence in _reference_sequences(rows, order)
             }
             self.assertEqual(
-                _sequences(family, _database_constants(database, rows)),
+                _sequences(
+                    family,
+                    _database_constants(database, rows),
+                    script,
+                ),
                 expected,
                 rows,
             )
@@ -1253,7 +1563,11 @@ class SortingNetworkEncodingTest(unittest.TestCase):
         self.assertFalse(family.outcomes[0].relation.present_prefix)
         rows = ((0, 0, 0), (1, 0, 1), (2, 0, 2), ABSENT)
         self.assertEqual(
-            _sequences(family, _database_constants(database, rows)),
+            _sequences(
+                family,
+                _database_constants(database, rows),
+                script,
+            ),
             {((1, 0, 1),)},
         )
 
@@ -1281,17 +1595,18 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             rows,
             ordinals=(smt.ZERO, smt.ONE, smt.ZERO, smt.ONE),
         ))
+        script = smt.Script()
         family = relation._sorting_network_family(
             source,
             (SortOrder("k", True, False),),
-            smt.Script(),
+            script,
             "merge",
             ((0, 1), (2, 3)),
         )
 
         self.assertTrue(family.outcomes[0].relation.present_prefix)
         self.assertEqual(
-            _sequences(family, {}),
+            _sequences(family, {}, script),
             {
                 tuple((0, payload) for payload in interleaving)
                 for interleaving in relation._interleavings(
@@ -1391,7 +1706,10 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 term.atom: value
                 for term, value in zip(present, presence)
             }
-            self.assertEqual(_sequences(family, constants), set(expected))
+            self.assertEqual(
+                _sequences(family, constants, script),
+                set(expected),
+            )
 
     def test_merge_uses_network_when_only_ordinal_encoding_exceeds_cap(self):
         columns = (
@@ -1461,10 +1779,11 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             )
             for value, total, count in ((10, 100, 1), (20, 200, 2))
         )
+        script = smt.Script()
         family = relation._sorting_network_family(
             single(Relation(columns, rows)),
             (SortOrder("k", True, False),),
-            smt.Script(),
+            script,
             "network",
         )
         outcome = family.outcomes[0]
@@ -1483,10 +1802,13 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 value = row.values["state"]
                 state = value.decimal_average_state
                 self.assertIsNotNone(state)
+                self.assertEqual(value.decimal_finite_abs_bound, 20)
+                self.assertEqual(state.finite_abs_bound, 200)
+                self.assertEqual(state.count_bound, 2)
                 sequence.append((
-                    _ground(value.value, constants),
-                    _ground(state.sum, constants),
-                    _ground(state.count, constants),
+                    _ground(value.value, constants, script),
+                    _ground(state.sum, constants, script),
+                    _ground(state.count, constants, script),
                 ))
             observed.add(tuple(sequence))
         self.assertEqual(
@@ -1496,6 +1818,138 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 ((20, 200, 2), (10, 100, 1)),
             },
         )
+
+    def test_network_rejects_malformed_decimal_average_state_lanes(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("state", "Decimal(7,2)", False),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "state": Value(
+                        "Decimal(7,2)",
+                        smt.FALSE,
+                        smt.ZERO,
+                        0,
+                        DecimalAverageState(
+                            "Decimal(35,2)",
+                            smt.ZERO,
+                            smt.FALSE,
+                            0,
+                            0,
+                        ),
+                    ),
+                },
+            )
+            for _ in range(2)
+        )
+
+        with self.assertRaisesRegex(
+            RelationError,
+            "avg state has an invalid layout",
+        ):
+            relation._sorting_network_family(
+                single(Relation(columns, rows)),
+                (SortOrder("k", True, False),),
+                smt.Script(),
+                "network",
+            )
+
+
+class PresentPrefixSequenceEqualityTest(unittest.TestCase):
+    COLUMNS = (Column("value", "Int64", True),)
+
+    @classmethod
+    def relation(cls, values, slots, *, present_prefix):
+        assert len(values) <= slots
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "value": Value(
+                        "Int64",
+                        smt.TRUE if value is None else smt.FALSE,
+                        smt.ZERO if value is None else smt.int_value(value),
+                    )
+                },
+            )
+            for value in values
+        )
+        rows += tuple(
+            Row(
+                smt.FALSE,
+                {"value": Value("Int64", smt.FALSE, smt.ZERO)},
+            )
+            for _ in range(slots - len(values))
+        )
+        return Relation(
+            cls.COLUMNS,
+            rows,
+            sequence=True,
+            present_prefix=present_prefix,
+        )
+
+    def test_prefix_equality_compares_corresponding_slots_and_padding(self):
+        cases = (
+            ((), (), True),
+            ((1,), (1,), True),
+            ((None, 2), (None, 2), True),
+            ((1,), (2,), False),
+            ((None,), (0,), False),
+            ((1,), (1, 2), False),
+        )
+        scalar = ScalarEncoder(smt.Script())
+        for left_values, right_values, expected in cases:
+            for left_slots, right_slots in (
+                (len(left_values), len(right_values)),
+                (len(left_values) + 2, len(right_values) + 1),
+            ):
+                with self.subTest(
+                    left=left_values,
+                    right=right_values,
+                    left_slots=left_slots,
+                    right_slots=right_slots,
+                ):
+                    with patch.object(
+                        relation,
+                        "_compressed_rank",
+                        side_effect=AssertionError(
+                            "prefix equality must not compress ranks"
+                        ),
+                    ):
+                        predicate = relation.sequence_equal(
+                            self.relation(
+                                left_values,
+                                left_slots,
+                                present_prefix=True,
+                            ),
+                            self.relation(
+                                right_values,
+                                right_slots,
+                                present_prefix=True,
+                            ),
+                            scalar,
+                        )
+                    self.assertEqual(_ground(predicate, {}), expected)
+
+    def test_non_prefix_input_uses_the_general_sequence_comparison(self):
+        scalar = ScalarEncoder(smt.Script())
+        with patch.object(
+            relation,
+            "_compressed_rank",
+            wraps=relation._compressed_rank,
+        ) as compressed_rank:
+            predicate = relation.sequence_equal(
+                self.relation((1, 2), 3, present_prefix=True),
+                self.relation((1, 2), 3, present_prefix=False),
+                scalar,
+            )
+
+        self.assertTrue(_ground(predicate, {}))
+        self.assertGreater(compressed_rank.call_count, 0)
 
 
 class DecimalSortConcreteDifferentialTest(unittest.TestCase):

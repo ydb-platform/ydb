@@ -6,10 +6,11 @@ import signal
 import subprocess
 
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
+from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
 
 class KillNodeNemesis(MonitoredAgentActor):
-    """SIGKILL one local YDB ic-port process; extract is a monitoring noop."""
+    """SIGKILL one local YDB ic-port process; requires ChaosTarget.ic_port / node_ic_port."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -19,12 +20,25 @@ class KillNodeNemesis(MonitoredAgentActor):
         sig_name = payload.get("signal", "SIGKILL")
         sig = getattr(signal, sig_name, signal.SIGKILL)
         self._logger.info("=== INJECT_FAULT START: KillNodeNemesis ===")
+        target = target_from_payload(payload)
+        ic_port = None
+        if target is not None and target.ic_port is not None:
+            ic_port = int(target.ic_port)
+        elif payload.get("node_ic_port") is not None:
+            ic_port = int(payload["node_ic_port"])
+
+        if ic_port is None:
+            self._logger.error(
+                "KillNodeNemesis: ChaosTarget must include ic_port (or payload.node_ic_port)"
+            )
+            return
+
         cmd = (
-            "ps aux | grep '\\--ic-port' | grep -v grep | awk '{ print $2 }' | shuf -n 1 | xargs -r sudo kill -%d"
-            % (int(sig),)
+            "ps aux | grep '\\--ic-port %d' | grep -v grep | awk '{ print $2 }' | "
+            "xargs -r sudo kill -%d" % (ic_port, int(sig))
         )
         self._logger.info("Executing: %s", cmd)
-        subprocess.check_call(cmd, shell=True)
+        subprocess.run(cmd, shell=True, check=False)
         self.on_success_inject_fault()
         self._logger.info("=== INJECT_FAULT SUCCESS: KillNodeNemesis ===")
 

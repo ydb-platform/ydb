@@ -15,8 +15,14 @@ import requests
 
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
+    NEMESIS_TYPES,
+    guard_mode_for,
+    impact_scope_for,
+    recovery_sec_for,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -38,6 +44,7 @@ class OrchestratorNemesisSchedule:
         is_local_host: Callable[[str], bool],
         get_app_port: Callable[[], int],
         history_limit: int = HISTORY_LIMIT,
+        failure_guard: FailureModelGuard | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -47,6 +54,7 @@ class OrchestratorNemesisSchedule:
         self._get_hosts = get_hosts
         self._is_local_host = is_local_host
         self._get_app_port = get_app_port
+        self._failure_guard = failure_guard
 
     @property
     def lock(self) -> threading.RLock:
@@ -183,10 +191,12 @@ class OrchestratorNemesisSchedule:
         try:
             payload = dict(cmd.payload or {})
             payload["host"] = cmd.host
+            payload["chaos_target"] = cmd.target.to_dict()
             body = {
                 "type": cmd.nemesis_type,
                 "action": cmd.action,
                 "payload": payload,
+                "target": cmd.target.to_dict(),
             }
             if self._is_local_host(cmd.host):
                 create_process_helper(
@@ -194,7 +204,12 @@ class OrchestratorNemesisSchedule:
                     cmd.action,
                     payload=payload,
                 )
-                logger.debug("Started %s on local host (%s)", cmd.nemesis_type, cmd.action)
+                logger.debug(
+                    "Started %s on local host (%s) target=%s",
+                    cmd.nemesis_type,
+                    cmd.action,
+                    cmd.target.identity_key(),
+                )
             else:
                 port = self._get_app_port()
                 requests.post(
@@ -209,6 +224,7 @@ class OrchestratorNemesisSchedule:
                         "type": cmd.nemesis_type,
                         "action": cmd.action,
                         "host": cmd.host,
+                        "target": cmd.target.to_dict(),
                         "execution_id": cmd.execution_id,
                         "scenario_id": cmd.scenario_id,
                         "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -226,7 +242,24 @@ class OrchestratorNemesisSchedule:
             return
         logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
         for cmd in cmds:
-            self.dispatch_command(cmd, track_history=True)
+            self._dispatch_and_record(cmd)
+
+    def _dispatch_and_record(self, cmd: DispatchCommand) -> None:
+        """Dispatch a planned command and record FULL-mode impact (no veto)."""
+        self.dispatch_command(cmd, track_history=True)
+        guard = self._failure_guard
+        if guard is None or not guard.enabled or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
+            return
+        scope = impact_scope_for(cmd.nemesis_type)
+        if cmd.action == "extract":
+            guard.record_extract(cmd.execution_id, cmd.target, scope)
+        elif cmd.action == "inject":
+            guard.record_inject(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                recovery_sec=recovery_sec_for(cmd.nemesis_type),
+            )
 
     def _run_planned_tick(self, process_type: str) -> None:
         hosts = self._get_hosts()
@@ -236,10 +269,7 @@ class OrchestratorNemesisSchedule:
             return
         logger.info("Running %d dispatch(es) for %s", len(cmds), process_type)
         with ThreadPoolExecutor(max_workers=min(len(cmds), 10)) as executor:
-            futures = [
-                executor.submit(self.dispatch_command, cmd, track_history=True)
-                for cmd in cmds
-            ]
+            futures = [executor.submit(self._dispatch_and_record, cmd) for cmd in cmds]
             for future in as_completed(futures):
                 try:
                     future.result()

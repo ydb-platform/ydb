@@ -1,14 +1,16 @@
-"""Serial-style inject: one tick fans out to several agents with increasing ``sleep_before`` in payload."""
+"""Serial-style inject: one tick dispatches to the owner host of a chosen node/slot."""
 
 from __future__ import annotations
 
 import random
-import uuid
 from typing import ClassVar
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import (
+    NemesisPlannerBase,
+    normalize_candidates,
+)
 
 # Lower bound of tools ``schedule_between_kills`` (30, 60) for node serial nemeses.
 DEFAULT_SERIAL_STAGGER_SEC = 30.0
@@ -16,9 +18,11 @@ DEFAULT_SERIAL_STAGGER_SEC = 30.0
 
 class SerialStaggeredInjectPlanner(NemesisPlannerBase):
     """
-    Each ``scheduled_tick``: sample ``K`` distinct hosts (``K`` in 1..4, capped by ``len(hosts)``),
-    dispatch inject to each with ``payload["sleep_before"] = i * stagger_sec`` and the same
-    ``node_id`` / ``slot_idx`` so every agent kills the same daemon (staggered in time).
+    Each ``scheduled_tick``: pick one node/slot from ``candidates`` and dispatch inject
+    only to that entity's owner host (with optional sleep_before for stagger compatibility).
+
+    Previously fanned out the same node_id to K random hosts; that is incorrect for
+    ChaosTarget — only the owner agent can kill the daemon.
     """
 
     PAYLOAD_INJECT: ClassVar[dict] = {}
@@ -41,43 +45,30 @@ class SerialStaggeredInjectPlanner(NemesisPlannerBase):
     def nemesis_type(self) -> str:  # type: ignore[override]
         return self._nemesis_type_key
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        if not hosts:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        targets = normalize_candidates(candidates)
+        if not targets:
             return []
-        cluster = require_external_cluster()
-        if cluster is None:
-            return []
+
         if self._target_kind == "node":
-            ids = list(cluster.nodes.keys())
-            if not ids:
-                return []
-            target_key, target_val = "node_id", random.choice(ids)
+            pool = [t for t in targets if t.kind is TargetKind.NODE] or targets
         elif self._target_kind == "slot":
-            ids = list(cluster.slots.keys())
-            if not ids:
-                return []
-            target_key, target_val = "slot_idx", random.choice(ids)
+            pool = [t for t in targets if t.kind is TargetKind.SLOT] or targets
         else:
             return []
 
-        k = min(random.randint(1, 4), len(hosts))
-        chosen = random.sample(hosts, k)
+        chosen = random.choice(pool)
+        payload: dict = {"sleep_before": 0.0}
+        if chosen.node_id is not None:
+            payload["node_id"] = chosen.node_id
+        if chosen.slot_idx is not None:
+            payload["slot_idx"] = chosen.slot_idx
+        if chosen.ic_port is not None:
+            payload["node_ic_port"] = chosen.ic_port
+
         with self._lock:
-            self._last_hosts = list(chosen)
-        scenario_id = str(uuid.uuid4())
-        return [
-            dispatch(
-                self._nemesis_type_key,
-                h,
-                "inject",
-                {
-                    "sleep_before": float(i) * self._stagger_sec,
-                    target_key: target_val,
-                },
-                scenario_id=scenario_id,
-            )
-            for i, h in enumerate(chosen)
-        ]
+            self._last_hosts = [chosen.host]
+        return [dispatch(self._nemesis_type_key, chosen, "inject", payload)]
 
     def _drain_tracked_hosts(self) -> list[str]:
         out = list(self._last_hosts)

@@ -5,6 +5,12 @@ import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
+    ClusterTopologyModel,
+    FailureModelGuard,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import cluster_yaml_path
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml
 from ydb.tests.stability.nemesis.internal.config import AgentSettings
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
@@ -77,7 +83,25 @@ def initialize_app():
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
-        orchestrator_router.chaos_store = ChaosOrchestratorStore()
+        # Failure-model guard + inventory: fail open if topology/erasure cannot be parsed.
+        failure_guard = None
+        inventory = None
+        try:
+            topology = ClusterTopologyModel(cluster_yaml_path())
+            failure_guard = FailureModelGuard(topology)
+            inventory = ClusterInventory(topology, agent_hosts=loaded_hosts)
+            logger.info("Failure model guard: %s", failure_guard.snapshot())
+        except Exception as e:
+            logger.warning("Failure model guard disabled (init failed): %s", e)
+            failure_guard = None
+            inventory = None
+        orchestrator_router.failure_guard = failure_guard
+        orchestrator_router.cluster_inventory = inventory
+
+        orchestrator_router.chaos_store = ChaosOrchestratorStore(
+            failure_guard=failure_guard,
+            inventory=inventory,
+        )
         orchestrator_router.orchestrator_warden_checker = OrchestratorWardenChecker(
             hosts=loaded_hosts,
             mon_port=orchestrator_router.mon_port,
@@ -89,6 +113,7 @@ def initialize_app():
             get_hosts=lambda: orchestrator_router.hosts,
             is_local_host=orchestrator_router.is_local_host,
             get_app_port=orchestrator_router.get_app_port,
+            failure_guard=failure_guard,
         )
 
     current_app.config["NEMESIS_INITIALIZED"] = True

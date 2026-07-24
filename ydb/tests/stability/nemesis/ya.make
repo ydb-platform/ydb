@@ -24,6 +24,7 @@ PY_SRCS(
     internal/nemesis/runners/datacenter.py
     internal/nemesis/runners/bridge_pile.py
     internal/nemesis/runners/yaml_gates.py
+    internal/nemesis/runners/target_payload.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
     internal/agent/nemesis/runner.py
@@ -40,6 +41,9 @@ PY_SRCS(
     internal/orchestrator/nemesis/topology_fanout_planner.py
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py
+    internal/orchestrator/nemesis/failure_model.py
+    internal/orchestrator/nemesis/chaos_target.py
+    internal/orchestrator/nemesis/cluster_inventory.py
     routers/agent_router.py
     routers/orchestrator_router.py
     app.py
@@ -59,3 +63,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

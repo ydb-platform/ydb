@@ -450,9 +450,9 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
     Safety warden that checks for sanitizer errors (ASan/LSan/TSan/MSan/UBSan)
     in unified_agent logs.
 
-    Uses unified_agent to search kikimr-start logs for the canonical sanitizer
-    error pattern ``ERROR: <Word>Sanitizer:`` (e.g. ``ERROR: LeakSanitizer:``,
-    ``ERROR: AddressSanitizer:``).
+    Uses unified_agent to search kikimr-start logs for sanitizer report headers
+    ``ERROR:`` / ``WARNING: <Word>Sanitizer:`` (e.g. ``ERROR: LeakSanitizer:``,
+    ``WARNING: ThreadSanitizer:`` — TSan data races are WARNING by default).
 
     Each violation in the returned list is a full sanitizer report block,
     spanning from the leading ``=====`` separator line through the trailing
@@ -474,7 +474,7 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
 
     def list_of_safety_violations(self):
         """
-        Check unified_agent logs for sanitizer error blocks.
+        Check unified_agent logs for sanitizer error/warning blocks.
 
         Returns:
             List of violation strings, empty if no violations found.
@@ -491,13 +491,13 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
 
         # AWK program: collect lines between the leading "=====...====="
         # separator and the trailing "SUMMARY:" line. Emit the block only if
-        # it contains an "ERROR: <Word>Sanitizer:" line. Blocks are separated
-        # by lines containing only "--" so we can split on them later.
+        # it contains an "ERROR|WARNING: <Word>Sanitizer:" line. Blocks are
+        # separated by lines containing only "--" so we can split on them later.
         awk_program = (
             'BEGIN { buf=""; in_block=0; has_err=0 } '
             '/^=+$/ { buf=$0 ORS; in_block=1; has_err=0; next } '
             'in_block { buf=buf $0 ORS } '
-            'in_block && /ERROR:[[:space:]]*[A-Za-z]+Sanitizer:/ { has_err=1 } '
+            'in_block && /(ERROR|WARNING):[[:space:]]*[A-Za-z]+Sanitizer:/ { has_err=1 } '
             'in_block && /^SUMMARY:/ { '
             'if (has_err) { printf "%s--%s", buf, ORS } '
             'buf=""; in_block=0; has_err=0 '

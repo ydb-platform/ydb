@@ -217,11 +217,7 @@ FROM
 
 {% note warning %}
 
-{% note warning %}
-
 Запись [пользовательских атрибутов](../datamodel/topic.md#message) через YQL не поддерживается.
-
-{% endnote %}
 
 {% endnote %}
 

@@ -1531,8 +1531,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries ==
             std::set<ui32>({
                 2, 3, 5, 6, 10, 15, 16, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
-                46, 48, 50, 52, 54, 55, 56, 59, 60, 61, 62, 65, 68, 69, 71, 73,
-                76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
+                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68, 69, 71,
+                73, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97,
+                99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
@@ -1541,8 +1542,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
                 2, 3, 5, 6, 10, 15, 16, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
-                46, 48, 50, 52, 54, 55, 56, 59, 60, 61, 62, 65, 68, 69, 71, 73,
-                76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
+                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68, 69, 71,
+                73, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97,
+                99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==

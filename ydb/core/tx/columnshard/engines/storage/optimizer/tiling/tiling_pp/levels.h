@@ -45,6 +45,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
         }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
@@ -62,6 +63,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         } else {
             AFL_VERIFY(false)("portion_id", portionId);
         }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
@@ -142,11 +144,13 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
@@ -226,16 +230,16 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         const ui64 id = p->GetPortionId();
         PortionById.emplace(id, p);
         Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
-        const ui64 maxCount = Intersections.GetMaxCount();
-        this->Counters.Portions->SetHeight(maxCount);
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         const ui64 id = p->GetPortionId();
         Intersections.Remove(id);
         AFL_VERIFY(PortionById.erase(id))("portion_id", id);
-        const ui64 maxCount = Intersections.GetMaxCount();
-        this->Counters.Portions->SetHeight(maxCount);
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     TOptimizationPriority BuildPriority() const {

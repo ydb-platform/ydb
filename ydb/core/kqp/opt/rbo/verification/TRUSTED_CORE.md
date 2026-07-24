@@ -103,10 +103,10 @@ budget.
 The dynamic-`IN` slice adds one explicit typed `in` subplan descriptor. C++ and
 Python independently require exactly one lookup column from the sole Filter
 consumer and one result column from the inner root, with the same non-null
-fixed-width integral type. The binding is non-null `Bool`, uncorrelated, and
-virtual; `OuterBind`, `AddDependencies`, observable `EnsureAtMostOne`, fanout,
-nesting, staging, tuples, coercions, nullable values, and nonintegral
-identities fail closed.
+fixed-width integral or exact `String` type. The binding is non-null `Bool`,
+uncorrelated, and virtual; `OuterBind`, `AddDependencies`, observable
+`EnsureAtMostOne`, fanout, nesting, staging, tuples, coercions, nullable values,
+`Utf8`, Bool, Date, Decimal, and mismatched identities fail closed.
 
 `relation.py` evaluates membership per present outer row as the OR of present
 non-null inner values equal to the non-null lookup value. Thus duplicates
@@ -118,7 +118,9 @@ nested evaluation. The optimized side is still evaluated as
 the ordinary final StageGraph; there is no dynamic-`IN` equivalence shortcut.
 Independent duplicate/empty/negation, cache, left-semi/left-anti, inherited
 error, mapping-mutation, descriptor-boundary, pair-cap, exporter, inspector,
-and real-host `IN`-to-`left_semi` tests cover the vertical path.
+and real-host `IN`-to-`left_semi` tests cover the vertical path. String-specific
+tests also exhaust the finite reference domain across duplicate values, empty
+inputs, row presence, negation, and both semi/anti lowerings.
 
 The side-explicit Join-key slice crosses `semantic_snapshot.cpp`, `ir.py`,
 `scalar.py`, `relation.py`, and the ordinary `stages.py` execution path.

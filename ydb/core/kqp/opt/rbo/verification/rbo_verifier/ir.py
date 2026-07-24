@@ -285,7 +285,7 @@ class ExistsSubplan:
 
 @dataclass(frozen=True, slots=True)
 class InSubplan:
-    """One exact uncorrelated, non-null, single-column IN binding."""
+    """One exact uncorrelated non-null integral/String IN binding."""
 
     binding: str
     root: str
@@ -1244,10 +1244,11 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
                 path,
                 "IN lookup and output types must match exactly",
             )
-        if integer_bounds(lookup.type) is None:
+        if integer_bounds(lookup.type) is None and lookup.type != "String":
             _fail(
                 path,
-                "this IN slice supports only fixed-width integral columns",
+                "this IN slice supports only fixed-width integral "
+                "or String columns",
             )
         return InSubplan(
             binding=binding,

@@ -53,23 +53,38 @@ target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-24
 after the correlated-COUNT repair, exact `DistinctAll` support, restoration of
 the production PostgreSQL parser/runtime in the benchmark host, and the exact
-dynamic-`IN`, nullable Date-year, and q95 multi-distinct slices. They
-establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
+dynamic-`IN`, nullable Date-year, q95 multi-distinct, and exact String
+dynamic-`IN` slices. They establish formula construction for TPCH q1, q3, q4,
+q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
 q25, q29, q37,
-q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
-q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99: 51/121 workload
-queries (42.1%). TPCH has sixteen formulas, four unsupported queries, and two
-optimizer failures; TPC-DS has thirty-five formulas, thirty-eight unsupported
-queries, and twenty-six optimizer failures. Across both suites that is 42
-unsupported queries and 28 optimizer failures.
+q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69,
+q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99:
+53/121 workload queries (43.8%). TPCH has sixteen formulas, four unsupported
+queries, and two optimizer failures; TPC-DS has thirty-seven formulas,
+thirty-six unsupported queries, and twenty-six optimizer failures. Across both
+suites that is 40 unsupported queries and 28 optimizer failures.
 
 There are two useful denominators behind that workload-wide number.
-Ninety-three queries complete optimizer preparation, so 51/93 (54.8%) of
-optimizer-successful queries construct formulas. Seventeen TPCH and forty
-TPC-DS queries actually enter the Python verifier; 51/57 (89.5%) of those
+Ninety-three queries complete optimizer preparation, so 53/93 (57.0%) of
+optimizer-successful queries construct formulas. Seventeen TPCH and forty-two
+TPC-DS queries actually enter the Python verifier; 53/59 (89.8%) of those
 entrants construct the full bounded obligation. The difference is the
 deliberately fail-closed C++ export boundary, not an SMT construction failure.
+
+The latest extension admits dynamic `IN` only when the lookup and result are
+the same non-null `String` type, reusing the exact existential-equality
+semantics already audited for fixed-width integers. It adds TPC-DS q56 and q60
+to formula construction. q45 also clears its initial String-`IN` boundary and
+now stops only at final Read range/ordering semantics. `Utf8`, nullable or
+coercing comparisons, Bool, Date, Decimal, and mismatched types still fail
+closed.
+
+Non-gating solver experiments returned bounded counterexample candidates for
+q56 after 1,260/2,356 ms and q60 after 1,260/2,072 ms of
+preparation/verification. Fixed-witness inspection reproduces both symbolic
+mismatches, but they remain candidates pending independent real-YDB replay;
+they are neither proofs nor additions to the confirmed-defect inventory.
 
 The q95 bridge is a composition of four narrow exact contracts rather than a
 query-specific equivalence shortcut. Join keys are serialized as ordered
@@ -99,7 +114,7 @@ Its focused formula is 288,499 bytes and 1,269 lines. A preceding dedicated
 two-row, two-task proof-floor run returned `VERIFIED_BOUNDED` after
 512/3,013 ms of preparation/verification. The enforced floor is now 10/10
 TPCH and 10/10 TPC-DS, including q95: 20/121 workload queries (16.5%).
-The complete verification-subtree gate passes 34/34 suites and 906/906 tests.
+The complete verification-subtree gate passes 34/34 suites and 910/910 tests.
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -121,7 +136,7 @@ real-host column-store fixture containing both String predicates is
 `VERIFIED_BOUNDED`. Those focused results left formula coverage at 46/121,
 before the subsequent dynamic-`IN` and Date-year slices.
 
-The following exact dynamic-`IN` slice raises that floor by one. Its descriptor
+The initial exact dynamic-`IN` slice raised that floor by one. Its descriptor
 records one typed lookup column and one typed subplan-result column. Both must
 have the same non-null fixed-width integral type; the binding itself must be
 non-null `Bool` and
@@ -139,8 +154,8 @@ experiment returned `VERIFIED_BOUNDED` after about 155/3,035 ms of
 preparation/verification. At that dynamic-`IN` checkpoint, TPCH q16 and TPC-DS
 q95 passed the new binding gate but stopped at later unrelated blockers. q16 is
 now classified at an outer-dependency `EXISTS`; q95's later boundary is closed
-by the exact bridge above. Dynamic-`IN` bindings with nullable,
-`String`, or `Date` lookup/result columns continue to fail closed. A real-host
+by the exact bridge above. At that checkpoint, dynamic-`IN` bindings with
+nullable, `String`, or `Date` lookup/result columns failed closed. A real-host
 fixture captures uncorrelated `IN` in the initial plan and an ordinary
 `left_semi` join in the final plan, then proves the normal bounded obligation.
 That integration target links production PostgreSQL support because the dummy
@@ -179,14 +194,15 @@ optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
 32/32 real-host integration tests.
 
-The current policy-checked TPCH formula dashboard spent 3,004/31,688 ms in
+The current policy-checked TPCH formula dashboard spent 2,917/30,877 ms in
 preparation/verifier work and produced report SHA-256
-`9ba059ae97bc66d4fdbafa200ba9ce74f25f831d3651bf7d7c0ccbd2206a5774`;
-TPC-DS spent 65,034/193,746 ms and produced
-`a31813a6a2f24365680b6209e14a062e75e575d781b43611ca62e998fd4b1c8e`.
-TPC-DS q6 itself emitted its formula after 406/13,069 ms, while q95 emitted
-after 463/463 ms. The preceding milestone reports and their timings/hashes
-remain historical records in
+`6258b600c86ba214fd456f9b26855ab4834314bed5557e25a3923828f9befe05`;
+TPC-DS spent 69,312/193,036 ms and produced
+`baaac25acbbca3bd0c1d2d3fdccbca7d6d017bce404108707d25bcf5a617eafa`.
+TPC-DS q6 itself emitted its formula after 369/12,812 ms, while q56, q60, and
+q95 emitted after 1,275/957, 1,308/950, and 520/477 ms, respectively. The
+preceding milestone reports and their timings/hashes remain historical records
+in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The canonical q6 formula is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation, down from 627,951,195 bytes
@@ -199,10 +215,10 @@ requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
 q19, and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, q95, and
 q96: twenty obligations (16.5% of the workload). The expanded proof-floor gate is
 green and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after
-1,201/63,429 ms and produced report SHA-256
-`dd8d77b71093e5d022a779afd63507db3ad7d2ab63a6d89554c6de5a6aaa2fd4`;
-TPC-DS passes 10/10 after 1,950/39,140 ms and produced
-`f320d97fbae20af9724442671d4fee3be910292507d0697d3890c739f45f68b3`.
+1,190/66,607 ms and produced report SHA-256
+`d64a3940e165de2bd8e57b81492c99c6303ca6f8e6956c7e9f85d081f97d01dc`;
+TPC-DS passes 10/10 after 1,955/41,249 ms and produced
+`05cdf3877c999262b34d094b9c411412fe0ef37ae200959af442960c42b364a7`.
 The preceding nineteen-query proof floor used the same ten TPCH obligations
 and nine TPC-DS obligations without q95. It spent 1,226/59,673 ms for TPCH and
 1,448/36,162 ms for TPC-DS, producing report SHA-256 values
@@ -257,8 +273,9 @@ The complete nineteen-obligation proof floor was confirmed after the dynamic
 `IN` slice: 19/121 workload queries (15.7%) were `VERIFIED_BOUNDED` at two rows
 and two tasks. After the later nullable Date-year bridge, formula coverage was
 50/121 (41.3%) and that proof floor remained unchanged. These are retained
-historical checkpoints; the q95 bridge raises the current figures to 51
-formulas and twenty enforced proofs as recorded above.
+historical checkpoints; the q95 bridge then raised the figures to 51 formulas
+and twenty enforced proofs, and exact String dynamic `IN` raises the current
+formula count to 53 without changing that proof floor.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -1006,9 +1023,9 @@ Focused `EXISTS` gates passed 11/11 in Python, 4/4 in the C++ exporter, and 4/4
 through the real host at that milestone. Dynamic `IN` is now exact for one
 narrow uncorrelated relational shape. The typed descriptor names one lookup
 column from the sole Filter consumer and one result column from the inner root.
-They must have the same non-null fixed-width integral type. The binding has no
-dependency, `OuterBind`, `AddDependencies`, observable `EnsureAtMostOne`,
-nesting, staging, or additional consumer.
+They must have the same non-null fixed-width integral or exact `String` type.
+The binding has no dependency, `OuterBind`, `AddDependencies`, observable
+`EnsureAtMostOne`, nesting, staging, or additional consumer.
 
 For every present consumer row, dynamic `IN` ORs equality with every present
 inner row. This is exact existential membership: duplicates do not multiply
@@ -1017,16 +1034,18 @@ anti-membership form. The cached subplan family is shared by repeated binding
 references, while an error inherited from the inner root remains eager even
 when the outer input is empty. The evaluator rejects more than 16,384
 outer/inner membership pairs cumulatively before construction. Nullable
-values, tuples, coercions, `String`/`Date`, correlations, multiple consumers,
-and malformed lookup/output mappings fail closed.
+values, tuples, coercions, `Utf8`, Bool, Date, Decimal, correlations, multiple
+consumers, and malformed or mismatched lookup/output mappings fail closed.
 
-Focused dynamic-`IN` checks pass 74/74 in the Python subplan matrix, 13/13 in
-the broader C++ subplan matrix, and 1/1 through the real host. The integration
-case proves initial `IN` equivalent to final `left_semi` at two rows and two
-tasks. The exact nullable Date-year projection bridge is also implemented and
-tested independently as described above. Multiple dependencies, broader
-correlations, nullable/coercing dynamic `IN`, range reads, and other OLAP
-pushdowns remain separate extensions.
+The String extension's focused dynamic-`IN` checks pass 16/16 in Python, 4/4
+in the C++ exporter, and 1/1 through the real host. The integration case proves
+initial String `IN` equivalent to final `left_semi` at two rows and two tasks;
+exhaustive finite-domain tests cover String duplicates, empty inputs,
+anti-membership, presence, and bounded reference equivalence. The exact
+nullable Date-year projection bridge is also implemented and tested
+independently as described above. Multiple dependencies, broader correlations,
+nullable/coercing dynamic `IN`, range reads, and other OLAP pushdowns remain
+separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy now adds
 TPC-DS q95 after the earlier TPCH q18 addition; the complete 10/10 TPCH and

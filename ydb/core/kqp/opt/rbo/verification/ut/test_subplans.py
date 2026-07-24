@@ -313,7 +313,7 @@ def _exists_snapshot(
     }
 
 
-def _in_snapshot(*, negate=False, repeat_binding=False):
+def _in_snapshot(*, scalar_type="Int32", negate=False, repeat_binding=False):
     binding_expr = {"kind": "column", "column": IN_BINDING}
     if repeat_binding:
         binding_expr = {
@@ -330,14 +330,14 @@ def _in_snapshot(*, negate=False, repeat_binding=False):
                 {
                     "name": "Outer",
                     "columns": [
-                        {"name": "k", "type": "Int32", "nullable": False},
+                        {"name": "k", "type": scalar_type, "nullable": False},
                     ],
                     "unique_keys": [],
                 },
                 {
                     "name": "Inner",
                     "columns": [
-                        {"name": "k", "type": "Int32", "nullable": False},
+                        {"name": "k", "type": scalar_type, "nullable": False},
                     ],
                     "unique_keys": [],
                 },
@@ -377,12 +377,12 @@ def _in_snapshot(*, negate=False, repeat_binding=False):
                     "root": "inner_scan",
                     "lookup": {
                         "column": "outer.k",
-                        "type": "Int32",
+                        "type": scalar_type,
                         "nullable": False,
                     },
                     "output": {
                         "column": "inner.k",
-                        "type": "Int32",
+                        "type": scalar_type,
                         "nullable": False,
                     },
                     "type": "Bool",
@@ -863,6 +863,33 @@ def _in_constants(
             constants[row.present.atom] = is_present
             constants[row.cells["k"].value.atom] = value
     return constants
+
+
+def _string_in_constants(
+    evaluator,
+    database,
+    outer,
+    inner,
+    *,
+    outer_present=None,
+    inner_present=None,
+):
+    script = evaluator.scalar.script
+    for value in (*outer, *inner):
+        script.string_atom(value)
+    script.seal_string_order()
+    rank_by_value = {
+        value: rank
+        for rank, value in script.string_literals.items()
+    }
+    constants = _in_constants(
+        database,
+        tuple(rank_by_value[value] for value in outer),
+        tuple(rank_by_value[value] for value in inner),
+        outer_present=outer_present,
+        inner_present=inner_present,
+    )
+    return constants, rank_by_value
 
 
 def _correlated_constants(
@@ -2389,62 +2416,175 @@ class InSubplanEvaluationTest(unittest.TestCase):
         ]
 
     def test_exact_membership_handles_duplicates_empty_not_and_repeated_use(self):
-        cases = (
-            (_in_snapshot(), (True, True, True), [2]),
-            (_in_snapshot(), (False, False, False), []),
-            (_in_snapshot(negate=True), (True, True, True), [1, 3]),
-            (
-                _in_snapshot(repeat_binding=True),
-                (True, True, True),
-                [2],
-            ),
+        domains = (
+            ("Int32", (1, 2, 3), (2, 2, 9)),
+            ("String", ("a", "b", "c"), ("b", "b", "z")),
         )
-        for raw, inner_present, expected in cases:
-            with self.subTest(expected=expected):
-                observed = []
-                evaluator, database, family = self._evaluate(
-                    raw,
-                    observer=lambda scope, node, value: observed.append(node),
-                )
-                constants = _in_constants(
-                    database,
-                    (1, 2, 3),
-                    (2, 2, 9),
+        cases = (
+            (False, False, (True, True, True), (1,)),
+            (False, False, (False, False, False), ()),
+            (True, False, (True, True, True), (0, 2)),
+            (False, True, (True, True, True), (1,)),
+        )
+        for scalar_type, outer, inner in domains:
+            for negate, repeat_binding, inner_present, expected_indices in cases:
+                with self.subTest(
+                    scalar_type=scalar_type,
+                    negate=negate,
+                    repeat_binding=repeat_binding,
                     inner_present=inner_present,
+                ):
+                    observed = []
+                    evaluator, database, family = self._evaluate(
+                        _in_snapshot(
+                            scalar_type=scalar_type,
+                            negate=negate,
+                            repeat_binding=repeat_binding,
+                        ),
+                        observer=lambda scope, node, value: observed.append(node),
+                    )
+                    if scalar_type == "String":
+                        constants, rank_by_value = _string_in_constants(
+                            evaluator,
+                            database,
+                            outer,
+                            inner,
+                            inner_present=inner_present,
+                        )
+                        expected = [
+                            rank_by_value[outer[index]]
+                            for index in expected_indices
+                        ]
+                    else:
+                        constants = _in_constants(
+                            database,
+                            outer,
+                            inner,
+                            inner_present=inner_present,
+                        )
+                        expected = [
+                            outer[index]
+                            for index in expected_indices
+                        ]
+                    self.assertEqual(
+                        self._present_values(family.certain(), constants),
+                        expected,
+                    )
+                    self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
+                    self.assertEqual(observed.count("inner_scan"), 1)
+
+    def test_string_membership_matches_the_finite_reference_exhaustively(self):
+        values = ("a", "b", "c")
+        presence_vectors = tuple(product((False, True), repeat=2))
+        for negate in (False, True):
+            with self.subTest(negate=negate):
+                evaluator, database, family = self._evaluate(
+                    _in_snapshot(scalar_type="String", negate=negate),
+                    row_bound=2,
                 )
-                self.assertEqual(
-                    self._present_values(family.certain(), constants),
-                    expected,
-                )
-                self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
-                self.assertEqual(observed.count("inner_scan"), 1)
+                script = evaluator.scalar.script
+                for value in values:
+                    script.string_atom(value)
+                script.seal_string_order()
+                representatives = script.string_literals
+                rank_by_value = {
+                    value: rank
+                    for rank, value in representatives.items()
+                }
+
+                formula = script.render()
+                upper = len(representatives)
+                for table in ("Outer", "Inner"):
+                    for row in database.witness[table]:
+                        atom = row.cells["k"].value.atom
+                        self.assertIn(
+                            f"(assert (and (not (< {atom} 0)) (< {atom} {upper})))",
+                            formula,
+                        )
+
+                for outer in product(values, repeat=2):
+                    outer_ranks = tuple(rank_by_value[value] for value in outer)
+                    for inner in product(values, repeat=2):
+                        inner_ranks = tuple(rank_by_value[value] for value in inner)
+                        for outer_present in presence_vectors:
+                            for inner_present in presence_vectors:
+                                constants = _in_constants(
+                                    database,
+                                    outer_ranks,
+                                    inner_ranks,
+                                    outer_present=outer_present,
+                                    inner_present=inner_present,
+                                )
+                                actual = [
+                                    representatives[rank]
+                                    for rank in self._present_values(
+                                        family.certain(),
+                                        constants,
+                                    )
+                                ]
+                                expected = [
+                                    value
+                                    for index, value in enumerate(outer)
+                                    if outer_present[index]
+                                    and (
+                                        any(
+                                            present and value == candidate
+                                            for candidate, present in zip(
+                                                inner,
+                                                inner_present,
+                                            )
+                                        )
+                                        != negate
+                                    )
+                                ]
+                                self.assertEqual(actual, expected)
 
     def test_in_and_not_in_match_semi_and_anti_join(self):
-        for negate, join_kind in ((False, "left_semi"), (True, "left_anti")):
-            with self.subTest(join_kind=join_kind):
-                raw = _in_snapshot(negate=negate)
-                before = parse_snapshot(raw)
-                after = parse_snapshot(_lower_in_snapshot(raw, join_kind))
-                script = smt.Script()
-                database = Database(before, 3, script)
-                scalar = ScalarEncoder(script)
-                equality = family_equal(
-                    Evaluator(before, database, scalar).root(),
-                    Evaluator(after, database, scalar).root(),
-                    scalar,
-                )
-                for inner_present in (
-                    (False, False, False),
-                    (True, False, True),
-                    (True, True, True),
+        for scalar_type, outer, inner in (
+            ("Int32", (1, 2, 3), (2, 2, 9)),
+            ("String", ("a", "b", "c"), ("b", "b", "z")),
+        ):
+            for negate, join_kind in ((False, "left_semi"), (True, "left_anti")):
+                with self.subTest(
+                    scalar_type=scalar_type,
+                    join_kind=join_kind,
                 ):
-                    constants = _in_constants(
-                        database,
-                        (1, 2, 3),
-                        (2, 2, 9),
-                        inner_present=inner_present,
+                    raw = _in_snapshot(
+                        scalar_type=scalar_type,
+                        negate=negate,
                     )
-                    self.assertTrue(_ground(equality, constants))
+                    before = parse_snapshot(raw)
+                    after = parse_snapshot(_lower_in_snapshot(raw, join_kind))
+                    script = smt.Script()
+                    database = Database(before, 3, script)
+                    scalar = ScalarEncoder(script)
+                    before_evaluator = Evaluator(before, database, scalar)
+                    equality = family_equal(
+                        before_evaluator.root(),
+                        Evaluator(after, database, scalar).root(),
+                        scalar,
+                    )
+                    for inner_present in (
+                        (False, False, False),
+                        (True, False, True),
+                        (True, True, True),
+                    ):
+                        if scalar_type == "String":
+                            constants, _ = _string_in_constants(
+                                before_evaluator,
+                                database,
+                                outer,
+                                inner,
+                                inner_present=inner_present,
+                            )
+                        else:
+                            constants = _in_constants(
+                                database,
+                                outer,
+                                inner,
+                                inner_present=inner_present,
+                            )
+                        self.assertTrue(_ground(equality, constants))
 
     def test_declared_lookup_mapping_is_semantically_observable(self):
         raw = _in_snapshot()
@@ -2540,35 +2680,54 @@ class InSubplanSolverTest(unittest.TestCase):
         return solve(problem, SOLVER, row_bound, 10_000)
 
     def test_in_is_bounded_equivalent_to_left_semi(self):
-        raw = _in_snapshot()
+        for scalar_type in ("Int32", "String"):
+            with self.subTest(scalar_type=scalar_type):
+                raw = _in_snapshot(scalar_type=scalar_type)
 
-        result = self._solve(raw, _lower_in_snapshot(raw, "left_semi"))
+                result = self._solve(
+                    raw,
+                    _lower_in_snapshot(raw, "left_semi"),
+                )
 
-        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_not_in_is_bounded_equivalent_to_left_anti(self):
-        raw = _in_snapshot(negate=True)
+        for scalar_type in ("Int32", "String"):
+            with self.subTest(scalar_type=scalar_type):
+                raw = _in_snapshot(
+                    scalar_type=scalar_type,
+                    negate=True,
+                )
 
-        result = self._solve(raw, _lower_in_snapshot(raw, "left_anti"))
+                result = self._solve(
+                    raw,
+                    _lower_in_snapshot(raw, "left_anti"),
+                )
 
-        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_wrong_lookup_lowering_has_a_solver_counterexample(self):
-        raw = _in_snapshot()
-        raw["schema"]["tables"][0]["columns"].append(
-            {"name": "other", "type": "Int32", "nullable": False}
-        )
-        raw["plan"]["nodes"][0]["columns"].append(
-            {"source": "other", "output": "outer.other"}
-        )
-        raw["plan"]["subplans"][0]["lookup"]["column"] = "outer.other"
-        lowered = _lower_in_snapshot(raw, "left_semi")
-        lowered["plan"]["nodes"][2]["keys"][0]["left"] = "outer.k"
+        for scalar_type in ("Int32", "String"):
+            with self.subTest(scalar_type=scalar_type):
+                raw = _in_snapshot(scalar_type=scalar_type)
+                raw["schema"]["tables"][0]["columns"].append(
+                    {
+                        "name": "other",
+                        "type": scalar_type,
+                        "nullable": False,
+                    }
+                )
+                raw["plan"]["nodes"][0]["columns"].append(
+                    {"source": "other", "output": "outer.other"}
+                )
+                raw["plan"]["subplans"][0]["lookup"]["column"] = "outer.other"
+                lowered = _lower_in_snapshot(raw, "left_semi")
+                lowered["plan"]["nodes"][2]["keys"][0]["left"] = "outer.k"
 
-        result = self._solve(raw, lowered, row_bound=1)
+                result = self._solve(raw, lowered, row_bound=1)
 
-        self.assertEqual(result.status, "COUNTEREXAMPLE")
-        self.assertIsNotNone(result.witness)
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+                self.assertIsNotNone(result.witness)
 
 
 class ScalarSubplanValidationTest(unittest.TestCase):
@@ -3156,27 +3315,44 @@ class InSubplanValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
 
-    def test_lookup_and_output_require_the_same_nonnullable_integral_type(self):
-        mutations = (
-            ("lookup", "nullable", True, "requires non-null"),
-            ("output", "nullable", True, "requires non-null"),
-            ("output", "type", "Int64", "types must match exactly"),
-        )
-        for target, field, value, message in mutations:
-            with self.subTest(target=target, field=field):
-                raw = _in_snapshot()
-                raw["plan"]["subplans"][0][target][field] = value
-                with self.assertRaisesRegex(SnapshotError, message):
-                    parse_snapshot(raw)
+    def test_lookup_and_output_require_the_same_supported_nonnullable_type(self):
+        for scalar_type in ("Int32", "String"):
+            with self.subTest(scalar_type=scalar_type, accepted=True):
+                parse_snapshot(_in_snapshot(scalar_type=scalar_type))
+            for target in ("lookup", "output"):
+                with self.subTest(
+                    scalar_type=scalar_type,
+                    target=target,
+                    nullable=True,
+                ):
+                    raw = _in_snapshot(scalar_type=scalar_type)
+                    raw["plan"]["subplans"][0][target]["nullable"] = True
+                    with self.assertRaisesRegex(SnapshotError, "requires non-null"):
+                        parse_snapshot(raw)
 
-        for scalar_type in ("Bool", "String", "Date", "Decimal(7,2)"):
-            with self.subTest(scalar_type=scalar_type):
-                raw = _in_snapshot()
-                for target in ("lookup", "output"):
-                    raw["plan"]["subplans"][0][target]["type"] = scalar_type
+        for lookup_type, output_type in (
+            ("Int32", "Int64"),
+            ("String", "Utf8"),
+            ("String", "Int32"),
+        ):
+            with self.subTest(
+                lookup_type=lookup_type,
+                output_type=output_type,
+            ):
+                raw = _in_snapshot(scalar_type=lookup_type)
+                raw["plan"]["subplans"][0]["output"]["type"] = output_type
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only fixed-width integral",
+                    "types must match exactly",
+                ):
+                    parse_snapshot(raw)
+
+        for scalar_type in ("Bool", "Utf8", "Date", "Decimal(7,2)"):
+            with self.subTest(scalar_type=scalar_type):
+                raw = _in_snapshot(scalar_type=scalar_type)
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "only fixed-width integral or String",
                 ):
                     parse_snapshot(raw)
 

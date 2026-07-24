@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace NYdb::inline Dev::NTopic::NDeferredPublish {
+namespace NYdb::inline Dev::NTopic {
 
 constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
 
@@ -118,11 +118,11 @@ using TAsyncCancelPublicationResult = NThreading::TFuture<TCancelPublicationResu
 using TAsyncListPublicationsResult = NThreading::TFuture<TListPublicationsResult>;
 using TAsyncDescribePublicationResult = NThreading::TFuture<TDescribePublicationResult>;
 
-class TTopicDeferredPublishClient {
+class TDeferredPublishClient {
     class TImpl;
 
 public:
-    TTopicDeferredPublishClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+    TDeferredPublishClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncBeginPublicationResult BeginPublication(
         const std::string& extPublicationId,
@@ -147,4 +147,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::NTopic::NDeferredPublish
+} // namespace NYdb::NTopic

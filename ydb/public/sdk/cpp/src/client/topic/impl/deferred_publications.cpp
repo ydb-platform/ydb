@@ -11,7 +11,7 @@
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/deferred_publication_ack_tracker.h>
 
-namespace NYdb::inline Dev::NTopic::NDeferredPublish {
+namespace NYdb::inline Dev::NTopic {
 
 namespace {
 
@@ -102,7 +102,7 @@ const TPublicationDescription& TDescribePublicationResult::GetPublication() cons
     return Publication_;
 }
 
-class TTopicDeferredPublishClient::TImpl : public TClientImplCommon<TTopicDeferredPublishClient::TImpl> {
+class TDeferredPublishClient::TImpl : public TClientImplCommon<TDeferredPublishClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
@@ -332,45 +332,45 @@ public:
     }
 };
 
-TTopicDeferredPublishClient::TTopicDeferredPublishClient(
+TDeferredPublishClient::TDeferredPublishClient(
     const TDriver& driver,
     const TCommonClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
 }
 
-TAsyncBeginPublicationResult TTopicDeferredPublishClient::BeginPublication(
+TAsyncBeginPublicationResult TDeferredPublishClient::BeginPublication(
     const std::string& extPublicationId,
     const TBeginPublicationSettings& settings)
 {
     return Impl_->BeginPublication(extPublicationId, settings);
 }
 
-TAsyncPublishResult TTopicDeferredPublishClient::Publish(
+TAsyncPublishResult TDeferredPublishClient::Publish(
     const TDeferredPublication& publication,
     const TPublishSettings& settings)
 {
     return Impl_->Publish(publication, settings);
 }
 
-TAsyncCancelPublicationResult TTopicDeferredPublishClient::CancelPublication(
+TAsyncCancelPublicationResult TDeferredPublishClient::CancelPublication(
     const TDeferredPublication& publication,
     const TCancelPublicationSettings& settings)
 {
     return Impl_->CancelPublication(publication, settings);
 }
 
-TAsyncListPublicationsResult TTopicDeferredPublishClient::ListPublications(
+TAsyncListPublicationsResult TDeferredPublishClient::ListPublications(
     const TListPublicationsSettings& settings)
 {
     return Impl_->ListPublications(settings);
 }
 
-TAsyncDescribePublicationResult TTopicDeferredPublishClient::DescribePublication(
+TAsyncDescribePublicationResult TDeferredPublishClient::DescribePublication(
     const TDeferredPublication& publication,
     const TDescribePublicationSettings& settings)
 {
     return Impl_->DescribePublication(publication, settings);
 }
 
-} // namespace NYdb::NTopic::NDeferredPublish
+} // namespace NYdb::NTopic

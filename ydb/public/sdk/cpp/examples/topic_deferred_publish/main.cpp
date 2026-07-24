@@ -15,7 +15,7 @@ int main() {
     NYdb::TDriver driver(config);
 
     NYdb::NTopic::TTopicClient topicClient(driver);
-    NYdb::NTopic::NDeferredPublish::TTopicDeferredPublishClient deferredClient(driver);
+    NYdb::NTopic::TDeferredPublishClient deferredClient(driver);
 
     // 1. BeginPublication
     auto begin = deferredClient.BeginPublication(extPublicationId).GetValueSync();

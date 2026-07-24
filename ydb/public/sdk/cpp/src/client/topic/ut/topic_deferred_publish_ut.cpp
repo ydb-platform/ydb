@@ -9,7 +9,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb;
-using namespace NYdb::NTopic::NDeferredPublish;
+using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 
 namespace {
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TopicDeferredPublishSdkClient) {
 Y_UNIT_TEST(BeginPublicationRejectsEmptyExtPublicationId) {
     TDriverConfig config;
     TDriver driver(config);
-    TTopicDeferredPublishClient client(driver);
+    TDeferredPublishClient client(driver);
 
     auto result = client.BeginPublication("").GetValueSync();
     UNIT_ASSERT(!result.IsSuccess());
@@ -173,7 +173,7 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyExtPublicationId) {
 Y_UNIT_TEST(BeginPublicationDisabledByDefault) {
     TTopicSdkTestSetup setup("BeginPublicationDisabledByDefault");
     TDriver driver(setup.MakeDriverConfig());
-    TTopicDeferredPublishClient client(driver);
+    TDeferredPublishClient client(driver);
 
     auto result = client.BeginPublication("ext-disabled").GetValueSync();
     UNIT_ASSERT(!result.IsSuccess());
@@ -185,7 +185,7 @@ Y_UNIT_TEST(BeginPublicationDisabledByDefault) {
 Y_UNIT_TEST(BeginPublicationCreatesPublication) {
     TTopicSdkTestSetup setup("BeginPublicationCreatesPublication", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
-    TTopicDeferredPublishClient client(driver);
+    TDeferredPublishClient client(driver);
 
     const std::string extId = "ext-sdk-begin";
     auto begin = client.BeginPublication(extId).GetValueSync();
@@ -206,7 +206,7 @@ Y_UNIT_TEST(DescribePublicationByHandle) {
     TTopicSdkTestSetup setup("DescribePublicationByHandle", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     auto zeroId = deferredClient.DescribePublication(NTopic::TDeferredPublication(0)).GetValueSync();
     UNIT_ASSERT(!zeroId.IsSuccess());
@@ -245,7 +245,7 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
     TTopicSdkTestSetup setup("PublishMakesDataVisible", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-publish";
     const std::string payload = "sdk-deferred-payload";
@@ -271,7 +271,7 @@ Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     TTopicSdkTestSetup setup("StreamWriteAllowsOmitExtPublicationId", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-omit-ext";
     const std::string payload = "sdk-omit-ext-payload";
@@ -299,7 +299,7 @@ Y_UNIT_TEST(StreamWriteAllowsEmptyAndAlternateExtPublicationId) {
     TTopicSdkTestSetup setup("StreamWriteAllowsEmptyAndAlternateExtPublicationId", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-empty-and-alt";
     const std::string payloadAlt = "sdk-alt-ext-payload";
@@ -332,7 +332,7 @@ Y_UNIT_TEST(CancelDiscardsData) {
     TTopicSdkTestSetup setup("CancelDiscardsData", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-cancel";
     const std::string payload = "sdk-cancel-payload";
@@ -356,7 +356,7 @@ Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
     TTopicSdkTestSetup setup("StagingNotVisibleBeforePublish", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-staging";
     const std::string payload = "sdk-staging-payload";
@@ -384,7 +384,7 @@ Y_UNIT_TEST(RepeatFinalizeNotFound) {
     TTopicSdkTestSetup setup("RepeatFinalizeNotFound", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-repeat-finalize";
     const auto topicPath = setup.GetFullTopicPath();
@@ -408,7 +408,7 @@ Y_UNIT_TEST(ColdPublishByIntPublicationId) {
     TTopicSdkTestSetup setup("ColdPublishByIntPublicationId", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-cold-publish";
     const std::string payload = "sdk-cold-payload";
@@ -435,7 +435,7 @@ Y_UNIT_TEST(IndependentColdHandleSkipsLocalAckWait) {
     TTopicSdkTestSetup setup("IndependentColdHandleSkipsLocalAckWait", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-independent-cold";
     const std::string payload = "sdk-independent-cold-payload";
@@ -464,7 +464,7 @@ Y_UNIT_TEST(WriteAfterPublishClosesWriteSession) {
     TTopicSdkTestSetup setup("WriteAfterPublishClosesWriteSession", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-write-after-publish";
     const auto topicPath = setup.GetFullTopicPath();
@@ -521,7 +521,7 @@ Y_UNIT_TEST(PublishAfterIdleSessionClose) {
     TTopicSdkTestSetup setup("PublishAfterIdleSessionClose", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-idle-close";
     const std::string payload = "sdk-idle-close-payload";
@@ -551,7 +551,7 @@ Y_UNIT_TEST(PublishRetryAfterWriteSessionAbort) {
     TTopicSdkTestSetup setup("PublishRetryAfterWriteSessionAbort", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-abort-retry";
     const std::string payload = "sdk-abort-retry-payload";
@@ -598,7 +598,7 @@ Y_UNIT_TEST(CancelRetryAfterWriteSessionAbort) {
     TTopicSdkTestSetup setup("CancelRetryAfterWriteSessionAbort", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     const std::string extId = "ext-sdk-cancel-abort-retry";
     const std::string payload = "sdk-cancel-abort-retry-payload";
@@ -642,7 +642,7 @@ Y_UNIT_TEST(StreamWriteRejectsDeferredPlusTx) {
     TTopicSdkTestSetup setup("StreamWriteRejectsDeferredPlusTx", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());
     NTopic::TTopicClient topicClient(driver);
-    TTopicDeferredPublishClient deferredClient(driver);
+    TDeferredPublishClient deferredClient(driver);
 
     auto begin = deferredClient.BeginPublication("ext-sdk-deferred-tx").GetValueSync();
     UNIT_ASSERT(begin.IsSuccess());

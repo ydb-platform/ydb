@@ -1021,7 +1021,8 @@ public:
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
         // Shares other's Partitioning in O(1); the next structural change
-        // copies-on-write, so Order's raw ptrs never dangle.
+        // copies-on-write, so Order's raw ptrs never dangle. The copy is still
+        // O(partitions) via Stats.PartitionStats and VerifyConsistency below.
         TTableInfo::TPtr copy(new TTableInfo(other));
 
         copy->VerifyConsistency();

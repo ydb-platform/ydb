@@ -1593,11 +1593,10 @@ TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathId pathId) const {
 
 TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathElement::TPtr pathEl) const {
     TPathId domainId = ResolvePathIdForDomain(pathEl);
-    Y_ABORT_UNLESS(SubDomains.contains(domainId));
     // const getter hands out a mutable handle (pre-existing contract)
-    auto info = const_cast<TSchemeShard*>(this)->SubDomains.UpdateUntracked(domainId);
-    Y_ABORT_UNLESS(info);
-    return info;
+    const auto* info = SubDomains.FindPtr(domainId);
+    Y_ABORT_UNLESS(info && *info);
+    return *info;
 }
 
 TPathId TSchemeShard::GetDomainKey(TPathElement::TPtr pathEl) const {
@@ -5414,9 +5413,9 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
                 } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->GetOlapStorePathIdVerified()) {
-                    Y_ABORT_UNLESS(OlapStores.contains(tableInfo->GetOlapStorePathIdVerified()));
-                    auto storeInfo = OlapStores.at(tableInfo->GetOlapStorePathIdVerified());
-                    const auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
+                    const auto* storeInfo = OlapStores.FindPtr(tableInfo->GetOlapStorePathIdVerified());
+                    Y_ABORT_UNLESS(storeInfo);
+                    const auto& preset = (*storeInfo)->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.GetVersion());
                 } else {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj());

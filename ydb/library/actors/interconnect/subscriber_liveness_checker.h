@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/helpers/actor_liveness_checker.h>
 
 #include <util/generic/vector.h>
 
@@ -8,14 +8,9 @@
 
 namespace NActors {
 
-    struct TSubscriberLivenessInfo {
-        TActorId ActorId;
-        ui32 ActivityIndex = Max<ui32>();
-    };
-
-    IActor* CreateSubscriberLivenessChecker(
+    void RegisterSubscriberLivenessChecker(
         const TActorId& subscriptionOwner,
-        TVector<TSubscriberLivenessInfo> subscribers);
+        TVector<TActorLivenessCheckTarget> subscribers);
 
     template <typename TSubscribers>
     void RegisterSubscriberLivenessChecker(
@@ -25,17 +20,15 @@ namespace NActors {
             return;
         }
 
-        TVector<TSubscriberLivenessInfo> subscriberInfos;
+        TVector<TActorLivenessCheckTarget> subscriberInfos;
         subscriberInfos.reserve(subscribers.size());
         for (const auto& item : subscribers) {
             subscriberInfos.push_back({
                 .ActorId = item.first,
-                .ActivityIndex = item.second.ActivityIndex,
+                .Cookie = item.second.ActivityIndex,
             });
         }
-        TActivationContext::Register(
-            CreateSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberInfos)),
-            subscriptionOwner);
+        RegisterSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberInfos));
     }
 
 }

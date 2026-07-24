@@ -35,6 +35,11 @@ reserved for isolated tests and is not a faithful corpus-preparation host.
 Every obligation has two symbolic row slots per referenced base table and a
 fixed task bound of two. These bounds are part of every verdict. They do not
 claim unbounded SQL equivalence or cover `ConvertToPhysical` and execution.
+Query preparation and pre-physical equivalence are deliberately orthogonal.
+The Final boundary is captured before `ConvertToPhysical`; a later lowering or
+compilation failure can therefore coexist with a complete, auditable RBO pair.
+Such a result says nothing about executability and does not extend the proof
+beyond the captured pre-physical boundary.
 
 ## Running the dashboard
 
@@ -97,35 +102,55 @@ each experimental setting with `--test-env=NAME=value` as above.
 
 Each dashboard suite writes the stable report names `tpch_coverage.json` or
 `tpcds_coverage.json`; proof-floor tests write `tpch_proof_floor.json` or
-`tpcds_proof_floor.json` into their test output directories. The version-four
-report contains suite, bounds, solver presence, timeout, per-query timing and
-status, the status summary, grouped unsupported and optimizer-failure
-inventories, and the evaluated coverage policy. Counterexample, unknown,
-schema-mismatch, and solver-error rows also preserve the two snapshots, the
-exact assembled query sent to KQP, the byte-for-byte verifier verdict, SHA-256
-digests for those four inputs, and, when one was emitted, the SMT formula as
-test artifacts. The raw verdict artifact is authoritative for counterexample
-witnesses. The report's parsed verdict copy omits that witness so integers wider
-than `ui64`, including Decimal cells, cannot be rounded during JSON re-encoding.
-The nested policy-evaluation object has its own format identifier; it cannot be
-mistaken for the strict checked-in input-policy document.
+`tpcds_proof_floor.json` into their test output directories. The version-five
+report has two independent row partitions. `summary` counts the terminal
+semantic/capture `status`; `prepare_summary` counts `prepare_status`
+(`SUCCEEDED`, `FAILED`, or `UNKNOWN`, with `NOT_RUN` reserved for suite-level
+harness rows). Every row has a `prepare_reason`, empty on success. If
+preparation fails after an exact Initial/Final pair was delivered, the harness
+still audits both exports and invokes the verifier when both are supported. It
+also preserves the assembled query and each supported snapshot or unsupported
+boundary diagnostic with SHA-256 bindings.
 
-The checked-in policy has three monotonic contracts. The verifier-entry floor
-requires TPCH q1 and TPC-DS q5, q59, q65, and q80 to keep passing both snapshot
-exporters and invoke the verifier. All except q59 satisfy the stronger formula
-floor; q59 remains entry-only at the audited Sort pair cap. Any later formula
-or proof still satisfies every weaker floor. The
+`optimizer_failure_inventory` groups every failed preparation by
+`prepare_reason`, including rows whose terminal semantic status is
+`UNSUPPORTED`, `FORMULA_EMITTED`, or a solver result. It therefore overlaps
+`unsupported_inventory`; neither inventory is a partition and their sizes must
+not be summed. Terminal `OPTIMIZER_FAILURE` is narrower: preparation failed
+before an exact normal pair was available.
+
+Counterexample, unknown, schema-mismatch, and solver-error rows preserve the
+two snapshots, the exact assembled query sent to KQP, the byte-for-byte
+verifier verdict, SHA-256 digests for those four inputs, and, when one was
+emitted, the SMT formula as test artifacts. The raw verdict artifact is
+authoritative for counterexample witnesses. The report's parsed verdict copy
+omits that witness so integers wider than `ui64`, including Decimal cells,
+cannot be rounded during JSON re-encoding. The nested version-three
+policy-evaluation object has its own format identifier; it cannot be mistaken
+for the strict version-four checked-in input-policy document.
+
+The checked-in policy has one orthogonal operational floor and three monotonic
+semantic depths. `required_prepare_success_queries` preserves successful
+preparation for the currently gated operational cases; this prevents version
+five's independent semantic classification from hiding a preparation
+regression. The verifier-entry floor requires TPCH q1 and TPC-DS q5, q59, q65,
+and q80 to keep passing both snapshot exporters and invoke the verifier. All
+except q59 satisfy the stronger formula floor; q59 remains entry-only at the
+audited Sort pair cap. Any later formula or proof still satisfies every weaker
+semantic floor. A newly admitted failed-preparation pair can enter a semantic
+floor without automatically entering the preparation floor. The
 formula-construction floor requires TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10,
 q15, q16, q18, q19, q25, q29, q33,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65,
 q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95,
 q96, q97, and q99.
-Both floors are enforced only for a complete formula-only suite. The proof
-floor requires TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19, q21, and q22
-plus TPC-DS q3, q16, q38, q42, q48, q52, q55, q69, q87, q90, q93, q94, q95,
-and q96;
-dedicated hermetic tests require each one to remain `VERIFIED_BOUNDED`.
+The preparation-success, verifier-entry, and formula floors are enforced only
+for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
+q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16, q38, q42,
+q48, q52, q55, q69, q87, q90, q93, q94, q95, and q96; dedicated hermetic
+tests require each one both to complete preparation and to remain
+`VERIFIED_BOUNDED`.
 Arbitrary focused solver experiments are never mistaken for the proof floor,
 even when they happen to select the same IDs. Newly supported or proven queries
 are allowed without editing a floor. Policy parsing and evaluation fail closed,
@@ -142,9 +167,16 @@ each enforced floor, and every violation before the test fails.
 | `UNKNOWN` | Z3 timed out or could not decide the obligation. It is neither proof nor counterexample. |
 | `SCHEMA_MISMATCH` | Root names, order, types, or nullability differ; this is a direct correctness failure. |
 | `UNSUPPORTED` | Export or verification failed closed on unmodeled semantics. Both initial and final reasons are inventoried when present. |
-| `OPTIMIZER_FAILURE` | The real host could not prepare the benchmark query, before verification. |
+| `OPTIMIZER_FAILURE` | Preparation failed before an exact Initial/Final boundary-result pair was available, so no semantic pair was classified. |
 | `SOLVER_ERROR` | The external solver failed or violated the expected protocol. |
 | `HARNESS_ERROR` | Suite setup, snapshot capture, verifier invocation, or report protocol failed. |
+
+`prepare_status` is independent of `status`. In particular, `UNSUPPORTED`,
+`FORMULA_EMITTED`, `VERIFIED_BOUNDED`, or `COUNTEREXAMPLE` may coexist with
+`prepare_status: FAILED`. A bounded result in that case concerns only the
+captured RBO transformation; it does not repair or contradict the later
+preparation failure. `summary` and `prepare_summary` each partition the rows
+along one axis, but values from the two summaries must not be added together.
 
 The current test fails on `COUNTEREXAMPLE`, `SCHEMA_MISMATCH`, `SOLVER_ERROR`,
 `HARNESS_ERROR`, or an enforced coverage-policy violation. `UNKNOWN`,
@@ -154,14 +186,15 @@ query.
 
 Every `COUNTEREXAMPLE` report is an input to the separate
 `kqp_rbo_confirm` command documented in [README.md](README.md). That command
-validates the version-four hashes for both snapshots, the query, and the
-byte-exact raw verifier verdict; fixes the inspector to the witness read
-directly from that authoritative raw artifact; and drives every replayable
-single-result candidate through isolated real-YDB replay. Multi-result TPC-DS
-q14, q23, and q39 currently fail closed as `UNRESOLVED`. A symbolic candidate
-is not a confirmed real-execution divergence before that result is
-`REAL_RESULT_DIVERGENCE`; attributing a reproduced divergence to the captured
-StageGraph remains a separate diagnostic step.
+accepts version-four or version-five reports, validates the hashes for both
+snapshots, the query, and the byte-exact raw verifier verdict; fixes the
+inspector to the witness read directly from that authoritative raw artifact;
+and drives every replayable single-result candidate through isolated real-YDB
+replay. Multi-result TPC-DS q14, q23, and q39 currently fail closed as
+`UNRESOLVED`. A symbolic candidate is not a confirmed real-execution
+divergence before that result is `REAL_RESULT_DIVERGENCE`; attributing a
+reproduced divergence to the captured StageGraph remains a separate diagnostic
+step.
 
 The current verifier can also make query errors part of an obligation: error
 matches error, successful relations are compared only on success, and
@@ -187,17 +220,17 @@ execution divergence can coexist.
 
 ## Latest measured formula coverage
 
-The complete post-fix formula-only dashboards for the exact duplicate-source
-Map-projection milestone were generated on 2026-07-24. They emit 63
-formulas, record an outcome for every workload entry, and meet both suite
-policies. The complete proof-floor gates confirm all twenty-five checked-in
-obligations as `VERIFIED_BOUNDED`: 11/11 TPCH and 14/14 TPC-DS at two rows per
-table and two tasks. Focused solver runs separately retain per-query evidence
-for the preceding three proof-floor additions, TPCH q21 and TPC-DS q16/q94.
-The verifier-entry
-floor remains TPCH q1 and TPC-DS q5, q59, q65, and q80; all except q59 satisfy
-the stronger formula floor, while q59 remains entry-only at its audited
-construction cap. `FORMULA_EMITTED` alone is not a solver proof.
+The complete version-five formula-only dashboards were generated on
+2026-07-24 after the exact duplicate-source Map-projection milestone. They emit
+63 formulas, record both a semantic and preparation outcome for every workload
+entry, and meet both suite policies. The retained proof-floor gates confirm all
+twenty-five checked-in obligations as `VERIFIED_BOUNDED`: 11/11 TPCH and 14/14
+TPC-DS at two rows per table and two tasks. Focused solver runs separately
+retain per-query evidence for the preceding three proof-floor additions, TPCH
+q21 and TPC-DS q16/q94. The verifier-entry floor remains TPCH q1 and TPC-DS
+q5, q59, q65, and q80; all except q59 satisfy the stronger formula floor,
+while q59 remains entry-only at its audited construction cap.
+`FORMULA_EMITTED` alone is not a solver proof.
 
 Exact `DistinctAll` adds TPC-DS q6. The preceding correlated-COUNT correctness
 repair intentionally moves TPCH q17 and TPC-DS q1, q30, q32, q81, and q92 from
@@ -207,22 +240,43 @@ implemented safely. None of those six formulas belonged to the solver proof
 floor. With production PostgreSQL support restored, TPCH q20 now reaches the
 same fail-closed reconstruction gate instead of stopping in host preparation.
 
-The complete measured inventory is:
+The complete semantic-outcome partition is:
 
-| Suite | Formula emitted | Unsupported | Optimizer failure | Total |
+| Suite | Formula emitted | Unsupported | No-pair `OPTIMIZER_FAILURE` | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 17 (q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q21, q22) | 3 | 2 | 22 |
-| TPCDS_YQL | 46 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 27 | 26 | 99 |
+| TPCDS_YQL | 46 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 35 | 18 | 99 |
+
+Preparation is an independent partition:
+
+| Suite | Preparation succeeded | Preparation failed | Total |
+|---|---:|---:|---:|
+| TPCH_YQL | 20 | 2 | 22 |
+| TPCDS_YQL | 73 | 26 | 99 |
 
 Eighteen TPCH and fifty-two TPC-DS queries pass both exporters and enter the
-verifier.
+verifier. TPCH has twenty exact Initial/Final boundary-result pairs; TPC-DS has
+eighty-one.
 
-The current TPCH dashboard spent 3,245/50,777 ms in preparation/verifier work
+The current TPCH dashboard spent 2,752/42,193 ms in preparation/verifier work
 and produced report SHA-256
-`dc0b0269be9b508eb930b0cb646ce4ec0cf7febd826315c6accc6d6a5ae88aa1`.
-Its TPC-DS counterpart spent 66,495/356,670 ms and produced
-`aa28d105660d213add6957bbf192e21fd2300608fa2ec3062a30de541403de23`.
+`2cf12ff5803e229a1c8af9ec04a6d3314ab91f7b471bdc883e683da8654541f5`.
+Its TPC-DS counterpart spent 81,647/413,358 ms and produced
+`507eaf74a90f01b722824277a4632cbdf5cf5076d4809a978d0065cdcc927a11`.
 Both complete formula policies are green.
+
+A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
+and q98. All eight rows have `prepare_status: FAILED` and an exact
+Initial/Final boundary-result pair, while their terminal semantic status is
+`UNSUPPORTED`; none enters the verifier or constructs a formula. Seven initial
+exports reject scalar callable `YqlAggWin`, while q49 first rejects a Decimal
+`SafeCast` scale change. The final boundaries independently reject
+`YqlAggWin` for q12/q20/q53/q63/q89/q98, `YqlWin` for q49, and Read
+range/ordering semantics for q51. The run spent 3,186/0 ms in
+preparation/verifier work and produced report SHA-256
+`37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
+It adds no formula or bounded proof; it exposes and preserves the semantic
+blockers that the former single preparation status masked.
 
 TPC-DS q54 now reaches `FORMULA_EMITTED` through an exact Map projection that
 copies one visible input into multiple distinct output columns. Its dashboard
@@ -235,8 +289,8 @@ coverage, not a bounded proof, and q54 is not in the proof floor.
 The milestone passes 529/529 Python verifier tests, 205/205 C++ exporter
 tests, 39/39 real-host integration tests, and 12/12 coverage-policy tests.
 
-The current complete proof-floor gate is also policy-valid and green. TPCH
-passes 11/11 `VERIFIED_BOUNDED` after 1,445/67,977 ms of
+The retained version-four complete proof-floor gate is policy-valid and green.
+TPCH passes 11/11 `VERIFIED_BOUNDED` after 1,445/67,977 ms of
 preparation/verification and produced report SHA-256
 `c5668fdda1f40493fdcef4729118d634a63c25f44024106198cdd89775d9d4ed`.
 TPC-DS passes 14/14 after 3,328/49,834 ms and produced
@@ -314,18 +368,46 @@ canonical direct render is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation; a 60-second solver experiment
 remains `UNKNOWN`.
 
-The current complete formula slice is 63/121 queries (52.1%), with 30
-unsupported queries and 28 optimizer-preparation failures. Seventy queries
-pass both snapshot exporters and enter the formula verifier, and 63/70 (90.0%)
-construct formulas.
-Relative to all 93 optimizer-successful queries, including snapshot-boundary
-failures, formula coverage is 63/93 (67.7%). This is a useful end-to-end
-pre-physical optimizer sample, not a claim about the remaining 58 workload
-entries or larger inputs. Formula construction is not a bounded proof.
-The 30 unsupported rows split into 21 initial-export, two final-export, and
-seven verifier results. In other words, the strict C++ boundary rejects 23 plan
-pairs before formula construction, while seven exported pairs fail closed in
-the verifier itself.
+The current complete formula slice is 63/121 queries (52.1%). Its semantic
+partition is 63 formula-emitted, 38 unsupported, and 20 without an exact
+initial/final pair because whole-query preparation failed. Preparation is a
+separate axis: 93 queries succeed and 28 fail, with eight failed preparations
+that nevertheless preserve an exact pair and therefore also reach a semantic
+unsupported result.
+
+Thus 101/121 queries have exact boundary-result pairs, 63/101 (62.4%) of those
+pairs construct formulas, and 63/93 (67.7%) construct formulas within the
+preparation-successful subset. Seventy pairs enter the Python verifier, where
+63/70 (90.0%) construct formulas. This is a useful end-to-end pre-physical
+optimizer sample, not a claim about larger inputs. Formula construction is not
+a bounded proof.
+
+The 38 semantic unsupported rows split by primary reason into 29
+initial-export, two final-export, and seven verifier results. The two exporter
+columns contain 31 pair rejections in total; the seven remaining exact pairs
+fail closed in the verifier itself.
+
+These counts also expose the approximate work needed to make formulas for most
+of the captured workload. The preparation-successful gap currently clusters
+into roughly 8--10 semantic families, or 12--18 narrow, reviewable milestones:
+floating-point/`Double`, division, and `avg` (11 first blockers); factorized
+Sort/Merge/join shapes (seven); nested subplans; range reads; scalar
+`Apply`/`Map`; and smaller Date/`Unwrap`, count-distinct, and `Concat` slices.
+The focused eight-query failed-preparation audit adds exact window semantics
+and lowering as the main captured-pair family, Decimal scale-changing casts
+for q49, and a secondary range-read boundary for q51. Including that overlap,
+the captured-pair gap is approximately 10--12 families or 16--24 milestones.
+
+These are planning estimates, not coverage floors. Starting from 63 formulas,
+roughly 3--5 milestones may reach 70--76, 8--12 may reach 80--88, and 12--18
+may reach 88--93 formulas among preparation-successful queries. Later blockers
+can invalidate the ranges. They assume deliberately workload-targeted semantic
+gates; a safer budget for clean, reusable implementations is approximately
+15--22 milestones for the preparation-successful gap and 20--30 for all
+currently captured pairs. The remaining 20 workload entries have no exact
+captured pair and require frontend/optimizer work before verifier semantics can
+help; consequently the present captured-pair ceiling is 101/121. Even reaching
+that ceiling would establish formula construction, not solver proof.
 
 The output-IU resolver maps a physical read name, full output-IU name,
 or short output-IU name to the same logical scan output. If a referenced
@@ -624,9 +706,12 @@ The 26 optimizer-preparation failures are q1, q12, q14, q17, q20, q23, q27,
 q30, q32, q36, q39, q41, q44, q47, q49, q51, q53, q57, q63, q67, q70, q81,
 q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
 aggregate shapes rejected by the general empty-row reconstruction gate.
+Eight failures--q12, q20, q49, q51, q53, q63, q89, and q98--still preserve
+exact initial/final boundary results and therefore overlap the semantic
+unsupported inventory. The other 18 are terminal no-pair preparation failures.
 
-The exporter matrix below covers the recorded boundary failures among 21 of
-the 27 unsupported queries in the latest complete dashboard. IDs can appear
+The exporter matrix below covers the recorded boundary failures among 29 of
+the 35 unsupported queries in the latest complete dashboard. IDs can appear
 in both exporter columns or under more than one reason because both snapshots
 are audited independently. The six queries that pass
 export and fail closed inside the verifier are listed after the matrix.
@@ -637,9 +722,10 @@ export and fail closed inside the verifier are listed after the matrix.
 | Dynamic `IN` binding contains a nested subplan reference | q58 | - |
 | Static `SqlIn` tuple item annotation is nullable | - | q83 |
 | Scalar callable `Map` | q24 | q24 |
-| Read has range or ordering semantics | - | q9, q45 |
-| Unavailable read column `__kqp_rbo_ignore_arg_8` | - | q58 |
-| Unavailable read column `year` | - | q66 |
+| Scalar callable `YqlAggWin` | q12, q20, q51, q53, q63, q89, q98 | q12, q20, q53, q63, q89, q98 |
+| Scalar callable `YqlWin` | - | q49 |
+| Exact Decimal `SafeCast` supports only same-scale widening | q49 | - |
+| Read has range or ordering semantics | - | q9, q45, q51 |
 | Restricted `Concat` has no storage-bounded String member | q66 | - |
 | Ordinary count-distinct input is not exact non-null `Int64` | q28 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
@@ -906,7 +992,12 @@ The exact ordered two-dependency `EXISTS` slice then adds TPCH q21 and TPC-DS
 q16/q94 to both the formula and proof floors. Exact duplicate-source Map
 projection then adds TPC-DS q54 to the formula floor without changing the proof
 floor. The current complete inventory is 17/22 TPCH and 46/99 TPC-DS formulas,
-or 63/121 (52.1%), with 30 unsupported and 28 optimizer-failure queries.
+or 63/121 (52.1%). Its semantic partition contains 38 unsupported and 20
+no-pair optimizer-failure queries; independently, preparation succeeds for 93
+and fails for 28. Eight failed preparations retain exact pairs and overlap the
+unsupported inventory. There are 101 exact pairs and 70 verifier entrants, so
+the corresponding formula ratios are 63/101 (62.4%), 63/93 (67.7%) within the
+preparation-successful subset, and 63/70 (90.0%) at verifier entry.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after

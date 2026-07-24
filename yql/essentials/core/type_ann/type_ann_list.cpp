@@ -563,15 +563,16 @@ namespace {
         if (!EnsureTuple(winList, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
+        const bool isSession = sessionSpec && TCoSessionWindowTraits::Match(sessionSpec.Get());
         for (auto winOn: winList.Children()) {
             if (!TCoWinOnBase::Match(winOn.Get())) {
                 auto errMsg = TStringBuilder() << "Expected WinOnRows/WinOnGroups/WinOnRange";
-                if (!sessionColumns) {
+                if (!isSession) {
                     errMsg << "/WinFilter";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), errMsg));
                 return IGraphTransformer::TStatus::Error;
-            } else if (sessionColumns && sessionColumns->ChildrenSize() && TCoWinFilter::Match(winOn.Get())) {
+            } else if (isSession && TCoWinFilter::Match(winOn.Get())) {
                 ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), "WinFilter is not supported with SessionWindow"));
                 return IGraphTransformer::TStatus::Error;
             }

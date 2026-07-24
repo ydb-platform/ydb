@@ -424,11 +424,11 @@ TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprCo
     auto calcs = ExtractCalcsOverWindow(node.Input().Ptr(), ctx);
     YQL_ENSURE(!calcs.empty(), "Empty CalcOverWindow should be processed earlier");
     TCoCalcOverWindowTuple calc(calcs.back());
-    if (!calc.SessionColumns().Empty()) {
+    if (!calc.SessionSpec().Maybe<TCoVoid>()) {
         // we are not ready for fusing session windows yet
         return node.Ptr();
     }
-    YQL_ENSURE(calc.SessionSpec().Maybe<TCoVoid>());
+    YQL_ENSURE(calc.SessionColumns().Empty());
 
     TExprNode::TPtr calcInput = node.Input().Cast<TCoInputBase>().Input().Ptr();
     const TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();

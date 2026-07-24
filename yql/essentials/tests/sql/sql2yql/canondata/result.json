@@ -11633,6 +11633,13 @@
             "uri": "https://{canondata_backend}/1942173/8c5157c555883078451557793ef27b73eb262e7a/resource.tar.gz#test_sql2yql.test_window-nofuse_filter_with_session_window_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-nofuse_filter_with_session_window_nocols]": [
+        {
+            "checksum": "1d42dd66418571202904f17f7d1813f5",
+            "size": 5643,
+            "uri": "https://{canondata_backend}/1942415/b03cb88bfc10f1e7662c3cf258890791821a1e96/resource.tar.gz#test_sql2yql.test_window-nofuse_filter_with_session_window_nocols_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-null_type]": [
         {
             "checksum": "e1ea14ebf16ad22d262fb37141f82707",
@@ -19538,6 +19545,11 @@
     "test_sql_format.test[window-nofuse_filter_with_session_window]": [
         {
             "uri": "file://test_sql_format.test_window-nofuse_filter_with_session_window_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-nofuse_filter_with_session_window_nocols]": [
+        {
+            "uri": "file://test_sql_format.test_window-nofuse_filter_with_session_window_nocols_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-null_type]": [

@@ -137,9 +137,18 @@ public:
                 return;
             }
 
+            // Intentionally stricter than typical SDK extractors (e.g. DescribeTopic):
+            // Begin returns an authoritative publication handle. SUCCESS without a usable
+            // result body would produce IntPublicationId=0 and later look like a client
+            // BAD_REQUEST on Publish/Cancel. Prefer CLIENT_INTERNAL_ERROR without a handle
+            // (same family as TPlainStatus::Internal for unexpected server payloads).
             BeginPublicationResult result;
-            if (any) {
-                any->UnpackTo(&result);
+            if (!any || !any->UnpackTo(&result)) {
+                promise.SetValue(TBeginPublicationResult(TStatus(
+                    EStatus::CLIENT_INTERNAL_ERROR,
+                    NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(
+                        "Incorrect response from server")})));
+                return;
             }
 
             TDeferredPublication publication(result.int_publication_id(), extPublicationId);

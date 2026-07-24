@@ -456,19 +456,18 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                     {"maxPermissions", maxPermissions});
                 return EActionResult::CapHit;
             }
-            return EActionResult::Ok;
         }
 
         if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS,
-                      "Result: DISALLOW_TEMP_SYS_TABLET, deferring action: %s",
-                      action.ShortDebugString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "Result: DISALLOW_TEMP_SYS_TABLET",
+                {"deferringAction", action.ShortDebugString().data()});
             sysTabletDeferredActions.push_back(&action);
             return EActionResult::Ok;
         }
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
-                  ToString(error.Code).data(), error.Reason.GetMessage().data());
+        YDB_LOG_DEBUG_CTX(ctx,
+            {"result", ToString(error.Code).data()},
+            {"reason", error.Reason.GetMessage().data()});
 
         if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
             response.MutableStatus()->SetCode(error.Code);

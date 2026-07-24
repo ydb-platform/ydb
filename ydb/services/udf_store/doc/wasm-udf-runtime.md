@@ -77,10 +77,51 @@ JSON, парсится `wasm/manifest.*` → `TWasmManifest`:
 - **`required_libraries`** — **упорядоченный** список имён из `library_source`.
   - **Первая** библиотека ставится как runtime via `AddSdk` / `CreateImageFromSdk` → модуль линкуется как **`"env"`**.
   - Остальные — `AddPrecompiledModule(..., name)` под своим именем (например `"helpers"`).
-- **`functions`** — экспорты и типы ABI (`unversioned_value`).
+- **`functions`** — plain экспорты и типы ABI (`unversioned_value`).
+- **`objects`** — stateful UDF с TypeConfig (ParseTskv-style). Разворачиваются в `functions` с `yql_binding=type_config_callable` (create/call/destroy exports). Реестр объектов — **static** `object_framework`, не отдельный wasm в `required_libraries`.
 
 Пустой `required_libraries` → compartment из `CreateEmptyImage()` (standard host intrinsics: `AllocateBytes`, `ThrowException`).  
 Если нужны `malloc`/`free` без пользовательского sdk — это отдельная тема (см. pitfalls).
+
+### Objects / TypeConfigCallable
+
+```json
+{
+  "module_name": "Prefix",
+  "required_libraries": ["sdk"],
+  "objects": [
+    {
+      "name": "Prefix",
+      "create_export": "prefix_create",
+      "destroy_export": "prefix_destroy",
+      "methods": [{
+        "name": "Apply",
+        "export": "prefix_apply",
+        "yql_binding": "type_config_callable",
+        "argument_types": [{"value": "string", "tag": "concrete_type"}],
+        "result_type": {"value": "string", "tag": "concrete_type"}
+      }]
+    }
+  ]
+}
+```
+
+YQL UX (opaque TypeConfig blob — host не парсит):
+
+```sql
+$fn = YQL::Udf(AsAtom("Prefix.Apply"), Void(), Void(), AsAtom("pre-"));
+SELECT $fn("x");  -- "pre-x"
+```
+
+Host path (`TWasmConfiguredCallable`):
+
+1. На первом `Run` (и после смены compartment generation): pin config blob через `compartment->AllocateBytes` + `memcpy`, вызвать `create_export(config)` → **ui64 handle**.
+2. Каждый `Run`: `call_export(handle, args…)`.
+3. Handle валиден только в текущем query compartment; при новом Acquire — recreate.
+
+Статическая библиотека: `wasm/object_framework/` (`ObjectFrameworkCreate/Get/Destroy`). Модуль линкует через `PEERDIR`, не upload’ит framework.wasm.
+
+Имена методов становятся YQL-именами функций (`Prefix::Apply`) и должны быть уникальны в манифесте.
 
 ---
 
@@ -97,7 +138,7 @@ JSON, парсится `wasm/manifest.*` → `TWasmManifest`:
 
 1. Не стартует, пока `AreLibraryDependenciesReady(manifest)` (все `required_libraries` в snapshot со статусом `ready`).
 2. Проверяет, что artifact’ы библиотек существуют.
-3. Валидирует экспорты (`CollectWasmExports` vs `functions` в манифесте).
+3. Валидирует экспорты (`CollectWasmExports` vs plain `functions[].name` и create/call/destroy для `objects`).
 4. Компилирует user module → artifact (`kind=module`, id = md5).
 5. Обновляет `meta.compile_status`.
 
@@ -138,9 +179,10 @@ JSON, парсится `wasm/manifest.*` → `TWasmManifest`:
    - `libraries.empty()` → `CreateEmptyImage()`;
    - иначе → `CreateImageFromSdk(first)` + `AddPrecompiledModule` для остальных.
 5. Для каждого артефакта: `AddPrecompiledModule(moduleBytecode, moduleName)`.
-6. Резолвит экспорты в map `"ModuleName::Func" → void*` (`MakeExportKey`).
+6. Резолвит экспорты в map `"ModuleName::Export" → void*` (`MakeExportKey`) — для plain это YQL-имя, для objects — create/call/destroy.
+7. Выставляет `Generation` (monotonic) на handle — TypeConfig callable пересоздаёт объекты при смене generation.
 
-Результат — `TQueryCompartmentHandle` (compartment + Exports). Владелец — `TQueryCompartmentScope`.
+Результат — `TQueryCompartmentHandle` (compartment + Exports + Generation). Владелец — `TQueryCompartmentScope`.
 
 ### TLS
 
@@ -163,7 +205,7 @@ JSON, парсится `wasm/manifest.*` → `TWasmManifest`:
    - в bootstrap: `TQueryCompartmentScope(settings)` → `Acquire`;
    - на выполнение событий / DoExecute: `Activate()` → TLS guard;
    - при ошибке Acquire — `ErrorFromIssue` / failure state **до** `SetTaskRunner`.
-4. Исполнение UDF → `TWasmUdfFunction::Run` читает TLS query compartment и вызывает export.
+4. Исполнение UDF → `TWasmUdfFunction::Run` или `TWasmConfiguredCallable::Run` читает TLS query compartment и вызывает export.
 
 Ошибка Acquire до появления task stats раньше маскировалась `AFL_ENSURE(stats.GetTasks().size() == 1)` в `kqp_executer_stats.cpp`; пустые Tasks при early failure теперь пропускаются, чтобы клиент видел исходный issue.
 
@@ -217,6 +259,7 @@ Calling convention `unversioned_value`: указатели на `TUnversionedVal
 | throw (`Throw::fail`) | `[]` | только host `ThrowException` |
 | md5 | `["sdk"]` | полный emscripten sdk как env |
 | with_helpers | `["sdk", "helpers"]` | sdk + промежуточная библиотека + модуль |
+| prefix (objects) | `["sdk"]` | TypeConfig + `object_framework` PEERDIR |
 
 C++ examples (emscripten): `tests/functional/udf_store/examples/`.  
 CI без emscripten: WAT в `tests/functional/udf_store/data/wasm/`.
@@ -231,3 +274,5 @@ CI без emscripten: WAT в `tests/functional/udf_store/data/wasm/`.
 4. `TWasmUdfFunction::Run` требует активный query TLS (`GetCurrentQueryCompartment()`).
 5. Object code обязателен для библиотек и модулей в runtime path.
 6. Compile модуля ждёт `compile_status=ready` у всех библиотек из манифеста.
+7. Object registry — static link в модуль (`object_framework`), не отдельная entry в `required_libraries`.
+8. Host хранит только **ui64** handle (+ generation); семантика TypeConfig blob — у модуля.

@@ -6,6 +6,7 @@
 | Документ | Содержание |
 |---|---|
 | [wasm-udf-runtime.md](./wasm-udf-runtime.md) | Архитектура: storage → AOT → catalog → per-query compartment → Run |
+| [adr-wasm-udf-objects.md](./adr-wasm-udf-objects.md) | ADR: objects / TypeConfig / static object_framework / ui64 |
 | [pitfalls-and-open-issues.md](./pitfalls-and-open-issues.md) | Известные ловушки, уже найденные баги, открытые вопросы |
 | [examples-and-tests.md](./examples-and-tests.md) | Примеры, функциональные/unit тесты, как гонять |
 
@@ -25,9 +26,11 @@ ydb/services/udf_store/
     query_compartment_scope.h     # RAII scope для CA / literal executer
     registry_helpers.*            # CreateRegistryCompartment, InvokeUdfExport, …
     udf_function.*                # TWasmUdfFunction::Run (TLS query compartment)
+    udf_configured_callable.*     # TypeConfig → create → ui64 → call
+    object_framework/             # static registry (PEERDIR into UDF modules)
     host.*                        # AllocateBytes / ThrowException host ABI
     compile.*                     # CompileModuleObjectCode (WAVM AOT)
-    manifest.*                    # JSON manifest parse
+    manifest.*                    # JSON manifest parse (functions + objects)
   metadata_subscription/          # snapshot meta + libraries
 
 ydb/library/wasm/
@@ -41,7 +44,7 @@ ydb/core/kqp/
   executer_actor/kqp_executer_stats.cpp  # пустые Tasks при early CA fail
 
 ydb/tests/functional/udf_store/
-  examples/{sdk,helpers,with_helpers,md5,add,throw}/
+  examples/{sdk,helpers,with_helpers,md5,add,throw,prefix}/
   data/wasm/                      # WAT-фикстуры для CI
   test_udf_store.py
   upload_udf/

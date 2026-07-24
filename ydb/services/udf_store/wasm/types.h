@@ -14,10 +14,35 @@ enum class EUdfValueType {
     String,
 };
 
+enum class EWasmUdfBinding {
+    Plain,
+    TypeConfigCallable,
+};
+
 struct TWasmUdfDescriptor {
     TString Name;
     TVector<EUdfValueType> Args;
     EUdfValueType Result = EUdfValueType::Null;
+    EWasmUdfBinding Binding = EWasmUdfBinding::Plain;
+    // For TypeConfigCallable: create/call/destroy exports (destroy optional).
+    TString CreateExport;
+    TString CallExport;
+    TString DestroyExport;
+};
+
+struct TWasmObjectMethodDescriptor {
+    TString Name;
+    TString Export;
+    EWasmUdfBinding Binding = EWasmUdfBinding::TypeConfigCallable;
+    TVector<EUdfValueType> Args;
+    EUdfValueType Result = EUdfValueType::Null;
+};
+
+struct TWasmObjectDescriptor {
+    TString Name;
+    TString CreateExport;
+    TString DestroyExport;
+    TVector<TWasmObjectMethodDescriptor> Methods;
 };
 
 struct TWasmManifest {
@@ -26,6 +51,7 @@ struct TWasmManifest {
     TString CallingConvention;
     TVector<TString> RequiredLibraries;
     TVector<TWasmUdfDescriptor> Functions;
+    TVector<TWasmObjectDescriptor> Objects;
 };
 
 } // namespace NKikimr::NUdfStore::NWasm

@@ -52,6 +52,56 @@ Y_UNIT_TEST(ParseRequiredLibraries) {
     UNIT_ASSERT_VALUES_EQUAL(parsed.RequiredLibraries[1], "helpers");
 }
 
+Y_UNIT_TEST(ParseObjectsTypeConfigCallable) {
+    const TString manifest = R"({
+        "module_name": "Prefix",
+        "calling_convention": "unversioned_value",
+        "required_libraries": ["sdk"],
+        "objects": [
+            {
+                "name": "Prefix",
+                "create_export": "prefix_create",
+                "destroy_export": "prefix_destroy",
+                "methods": [
+                    {
+                        "name": "Apply",
+                        "export": "prefix_apply",
+                        "yql_binding": "type_config_callable",
+                        "argument_types": [
+                            {"value": "string", "tag": "concrete_type"}
+                        ],
+                        "result_type": {"value": "string", "tag": "concrete_type"}
+                    }
+                ]
+            }
+        ]
+    })";
+
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Objects.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "Apply");
+    UNIT_ASSERT(parsed.Functions[0].Binding == EWasmUdfBinding::TypeConfigCallable);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].CreateExport, "prefix_create");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].CallExport, "prefix_apply");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].DestroyExport, "prefix_destroy");
+}
+
+Y_UNIT_TEST(RejectTypeConfigOnPlainFunctions) {
+    const TString manifest = R"({
+        "module_name": "Bad",
+        "functions": [
+            {
+                "name": "x",
+                "yql_binding": "type_config_callable",
+                "argument_types": [],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION(ParseManifest(manifest), yexception);
+}
+
 Y_UNIT_TEST(RejectEmptyManifest) {
     UNIT_ASSERT_EXCEPTION(ParseManifest(""), yexception);
 }

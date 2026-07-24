@@ -3,6 +3,7 @@
 #include "compartment_manager.h"
 #include "invocation_context.h"
 #include "registry_helpers.h"
+#include "udf_configured_callable.h"
 
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
@@ -260,14 +261,18 @@ void TWasmSoModule::GetAllFunctions(IFunctionsSink& sink) const {
         return;
     }
     for (const auto& name : State_->FunctionOrder) {
-        sink.Add(TStringRef(name));
+        const auto* descriptor = State_->Functions.FindPtr(name);
+        auto entry = sink.Add(TStringRef(name));
+        if (descriptor && descriptor->Binding == EWasmUdfBinding::TypeConfigCallable) {
+            entry->SetTypeAwareness();
+        }
     }
 }
 
 void TWasmSoModule::BuildFunctionTypeInfo(
     const TStringRef& name,
     TType* /*userType*/,
-    const TStringRef& /*typeConfig*/,
+    const TStringRef& typeConfig,
     ui32 flags,
     IFunctionTypeInfoBuilder& builder) const
 {
@@ -277,18 +282,23 @@ void TWasmSoModule::BuildFunctionTypeInfo(
             return;
         }
         const TString functionName(name.Data(), name.Size());
-        if (!State_->Exports.contains(functionName)) {
-            builder.SetError(TStringRef::Of("Unknown wasm UDF function"));
-            return;
-        }
         const auto* descriptor = State_->Functions.FindPtr(functionName);
         if (!descriptor) {
-            builder.SetError(TStringRef::Of("Missing wasm UDF descriptor"));
+            builder.SetError(TStringRef::Of("Unknown wasm UDF function"));
             return;
         }
 
         const bool typesOnly = (flags & TFlags::TypesOnly) != 0;
-        TWasmUdfFunction::Register(builder, typesOnly, State_, *descriptor);
+        if (descriptor->Binding == EWasmUdfBinding::TypeConfigCallable) {
+            TWasmConfiguredCallable::Register(
+                builder,
+                typesOnly,
+                State_,
+                *descriptor,
+                TString(typeConfig.Data(), typeConfig.Size()));
+        } else {
+            TWasmUdfFunction::Register(builder, typesOnly, State_, *descriptor);
+        }
     } catch (const std::exception&) {
         builder.SetError(CurrentExceptionMessage());
     }

@@ -7,12 +7,15 @@ PEERDIR(
     ydb/library/wasm/api
     ydb/library/wasm/engine
     ydb/services/udf_store/wasm
+    ydb/services/udf_store/wasm/object_framework
 )
 
 SRCS(
     manifest_ut.cpp
     blob_chunks_ut.cpp
     compartment_manager_ut.cpp
+    object_framework_ut.cpp
+    objects_abi_ut.cpp
     throw_exception_ut.cpp
     with_helpers_ut.cpp
     ../wasm/manifest.cpp

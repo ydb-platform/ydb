@@ -2,6 +2,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 
 namespace NKikimr::NUdfStore::NWasm {
@@ -52,12 +53,12 @@ EUdfValueType ParseTypedValue(const NJson::TJsonValue& valueNode, TStringBuf whe
     return ParseValueType(valueNode["value"].GetString());
 }
 
-TVector<EUdfValueType> ParseArgumentTypes(const NJson::TJsonValue& functionNode) {
+TVector<EUdfValueType> ParseArgumentTypes(const NJson::TJsonValue& node) {
     TVector<EUdfValueType> result;
-    if (!functionNode.Has("argument_types")) {
+    if (!node.Has("argument_types")) {
         return result;
     }
-    const auto& args = functionNode["argument_types"];
+    const auto& args = node["argument_types"];
     if (!args.IsArray()) {
         ythrow yexception() << "argument_types must be an array in wasm manifest";
     }
@@ -65,6 +66,20 @@ TVector<EUdfValueType> ParseArgumentTypes(const NJson::TJsonValue& functionNode)
         result.push_back(ParseTypedValue(arg, "argument_types"));
     }
     return result;
+}
+
+EWasmUdfBinding ParseBinding(const NJson::TJsonValue& node) {
+    if (!node.Has("yql_binding")) {
+        return EWasmUdfBinding::Plain;
+    }
+    const auto binding = node["yql_binding"].GetString();
+    if (binding == "plain") {
+        return EWasmUdfBinding::Plain;
+    }
+    if (binding == "type_config_callable") {
+        return EWasmUdfBinding::TypeConfigCallable;
+    }
+    ythrow yexception() << "Unsupported yql_binding in wasm manifest: " << binding;
 }
 
 TWasmUdfDescriptor ParseFunctionDescriptor(const NJson::TJsonValue& functionNode) {
@@ -82,7 +97,98 @@ TWasmUdfDescriptor ParseFunctionDescriptor(const NJson::TJsonValue& functionNode
     descriptor.Name = functionNode["name"].GetString();
     descriptor.Args = ParseArgumentTypes(functionNode);
     descriptor.Result = ParseTypedValue(functionNode["result_type"], "result_type");
+    descriptor.Binding = ParseBinding(functionNode);
+    if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable) {
+        ythrow yexception()
+            << "type_config_callable is only supported under objects[].methods, not functions[]";
+    }
     return descriptor;
+}
+
+TWasmObjectMethodDescriptor ParseObjectMethod(const NJson::TJsonValue& methodNode) {
+    if (!methodNode.IsMap()) {
+        ythrow yexception() << "Each objects[].methods entry must be an object";
+    }
+    if (!methodNode.Has("name")) {
+        ythrow yexception() << "Missing method name in objects[].methods";
+    }
+    if (!methodNode.Has("export")) {
+        ythrow yexception() << "Missing export in objects[].methods";
+    }
+    if (!methodNode.Has("result_type")) {
+        ythrow yexception() << "Missing result_type in objects[].methods";
+    }
+
+    TWasmObjectMethodDescriptor method;
+    method.Name = methodNode["name"].GetString();
+    method.Export = methodNode["export"].GetString();
+    method.Args = ParseArgumentTypes(methodNode);
+    method.Result = ParseTypedValue(methodNode["result_type"], "objects[].methods.result_type");
+    method.Binding = methodNode.Has("yql_binding")
+        ? ParseBinding(methodNode)
+        : EWasmUdfBinding::TypeConfigCallable;
+    return method;
+}
+
+TWasmObjectDescriptor ParseObjectDescriptor(const NJson::TJsonValue& objectNode) {
+    if (!objectNode.IsMap()) {
+        ythrow yexception() << "Each objects[] entry must be an object";
+    }
+    if (!objectNode.Has("name")) {
+        ythrow yexception() << "Missing objects[].name";
+    }
+    if (!objectNode.Has("create_export")) {
+        ythrow yexception() << "Missing objects[].create_export";
+    }
+    if (!objectNode.Has("methods") || !objectNode["methods"].IsArray()
+        || objectNode["methods"].GetArray().empty())
+    {
+        ythrow yexception() << "objects[].methods must be a non-empty array";
+    }
+
+    TWasmObjectDescriptor object;
+    object.Name = objectNode["name"].GetString();
+    object.CreateExport = objectNode["create_export"].GetString();
+    if (objectNode.Has("destroy_export")) {
+        object.DestroyExport = objectNode["destroy_export"].GetString();
+    }
+    for (const auto& methodNode : objectNode["methods"].GetArray()) {
+        object.Methods.push_back(ParseObjectMethod(methodNode));
+    }
+    return object;
+}
+
+void ExpandObjectsIntoFunctions(TWasmManifest& manifest) {
+    THashSet<TString> knownNames;
+    for (const auto& function : manifest.Functions) {
+        knownNames.insert(function.Name);
+    }
+
+    for (const auto& object : manifest.Objects) {
+        for (const auto& method : object.Methods) {
+            if (!knownNames.insert(method.Name).second) {
+                ythrow yexception()
+                    << "Duplicate YQL function name '" << method.Name
+                    << "' from objects[].methods (names must be unique across functions/objects)";
+            }
+            TWasmUdfDescriptor descriptor;
+            descriptor.Name = method.Name;
+            descriptor.Args = method.Args;
+            descriptor.Result = method.Result;
+            descriptor.Binding = method.Binding;
+            descriptor.CreateExport = object.CreateExport;
+            descriptor.CallExport = method.Export;
+            descriptor.DestroyExport = object.DestroyExport;
+            if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable
+                && descriptor.CreateExport.empty())
+            {
+                ythrow yexception()
+                    << "type_config_callable method '" << method.Name
+                    << "' requires objects[].create_export";
+            }
+            manifest.Functions.push_back(std::move(descriptor));
+        }
+    }
 }
 
 } // namespace
@@ -97,9 +203,6 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
     }
     if (!root.Has("module_name")) {
         ythrow yexception() << "Wasm manifest is missing module_name";
-    }
-    if (!root.Has("functions")) {
-        ythrow yexception() << "Wasm manifest is missing functions";
     }
 
     TWasmManifest manifest;
@@ -128,12 +231,30 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
         }
     }
 
-    const auto& functions = root["functions"];
-    if (!functions.IsArray() || functions.GetArray().empty()) {
-        ythrow yexception() << "Wasm manifest functions must be a non-empty array";
+    if (root.Has("functions")) {
+        const auto& functions = root["functions"];
+        if (!functions.IsArray()) {
+            ythrow yexception() << "Wasm manifest functions must be an array";
+        }
+        for (const auto& functionNode : functions.GetArray()) {
+            manifest.Functions.push_back(ParseFunctionDescriptor(functionNode));
+        }
     }
-    for (const auto& functionNode : functions.GetArray()) {
-        manifest.Functions.push_back(ParseFunctionDescriptor(functionNode));
+
+    if (root.Has("objects")) {
+        const auto& objects = root["objects"];
+        if (!objects.IsArray()) {
+            ythrow yexception() << "Wasm manifest objects must be an array";
+        }
+        for (const auto& objectNode : objects.GetArray()) {
+            manifest.Objects.push_back(ParseObjectDescriptor(objectNode));
+        }
+        ExpandObjectsIntoFunctions(manifest);
+    }
+
+    if (manifest.Functions.empty()) {
+        ythrow yexception()
+            << "Wasm manifest must declare non-empty functions[] and/or objects[]";
     }
     return manifest;
 }

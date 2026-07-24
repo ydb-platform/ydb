@@ -2,17 +2,47 @@
 
 #include "host.h"
 #include "registry_helpers.h"
+#include "types.h"
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <atomic>
+#include <string>
+
 namespace NKikimr::NUdfStore::NWasm {
 
 namespace {
 
 thread_local TQueryCompartmentHandle* CurrentQueryCompartment = nullptr;
+
+ui64 NextCompartmentGeneration() {
+    static std::atomic<ui64> counter{0};
+    return ++counter;
+}
+
+void BindExport(
+    TQueryCompartmentHandle& handle,
+    const TString& moduleName,
+    const TString& exportName)
+{
+    if (exportName.empty()) {
+        return;
+    }
+    const auto key = MakeExportKey(moduleName, exportName);
+    if (handle.Exports.contains(key)) {
+        return;
+    }
+    auto* exportPtr = handle.Compartment->GetFunction(std::string(exportName));
+    if (!exportPtr) {
+        ythrow yexception()
+            << "Missing WASM export '" << exportName
+            << "' in module '" << moduleName << "'";
+    }
+    handle.Exports.emplace(key, exportPtr);
+}
 
 } // namespace
 
@@ -66,6 +96,7 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
     }
 
     auto handle = std::make_unique<TQueryCompartmentHandle>();
+    handle->Generation = NextCompartmentGeneration();
     // CreateRegistryCompartment installs the first library via AddSdk ("env");
     // only then do we AddPrecompiledModule the UDF (e.g. Md5).
     handle->Compartment = CreateRegistryCompartment(libraries);
@@ -77,16 +108,12 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
             artifact->ModuleName);
 
         for (const auto& function : artifact->Manifest.Functions) {
-            const auto key = MakeExportKey(artifact->ModuleName, function.Name);
-            auto* exportPtr = handle->Compartment->GetFunction(std::string(function.Name));
-            if (!exportPtr) {
-                ythrow yexception()
-                    << "Missing WASM export '" << function.Name
-                    << "' in module '" << artifact->ModuleName << "'";
-            }
-            if (!handle->Exports.emplace(key, exportPtr).second) {
-                ythrow yexception()
-                    << "Duplicate WASM export key '" << key << "'";
+            if (function.Binding == EWasmUdfBinding::TypeConfigCallable) {
+                BindExport(*handle, artifact->ModuleName, function.CreateExport);
+                BindExport(*handle, artifact->ModuleName, function.CallExport);
+                BindExport(*handle, artifact->ModuleName, function.DestroyExport);
+            } else {
+                BindExport(*handle, artifact->ModuleName, function.Name);
             }
         }
     }

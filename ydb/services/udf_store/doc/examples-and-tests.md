@@ -12,6 +12,7 @@
 | `md5/` | UDF с libc (MD5) | `["sdk"]` |
 | `add/` | Минимальный UDF без libs | `[]` |
 | `throw/` | Host `ThrowException` | `[]` |
+| `prefix/` | Objects + TypeConfig (`Prefix::Apply`) | `["sdk"]` + PEERDIR `object_framework` |
 
 Сборка:
 
@@ -22,7 +23,8 @@ ya make --target-platform=clang18-emscripten-wasm64 --build profile \
   ydb/tests/functional/udf_store/examples/with_helpers \
   ydb/tests/functional/udf_store/examples/md5 \
   ydb/tests/functional/udf_store/examples/add \
-  ydb/tests/functional/udf_store/examples/throw
+  ydb/tests/functional/udf_store/examples/throw \
+  ydb/tests/functional/udf_store/examples/prefix
 ```
 
 `webassembly_udf.inc` + `sdk/ld_plugin.py` вырезают sdk-архивы из линковки UDF (sdk подаётся отдельно через store).
@@ -34,6 +36,12 @@ ya make --target-platform=clang18-emscripten-wasm64 --build profile \
 3. UDF with_helpers + `manifest.json` (`required_libraries: ["sdk","helpers"]`)
 4. Дождаться `compile_status=ready` у библиотек и модуля
 5. `SELECT WithHelpers::scale(7);` → `21`
+
+Prefix (objects):
+
+1. upload library `sdk`
+2. upload UDF `prefix` + `manifest.json` (`objects[]`)
+3. `$fn = YQL::Udf(AsAtom("Prefix.Apply"), Void(), Void(), AsAtom("pre-")); SELECT $fn("x");` → `pre-x`
 
 ---
 
@@ -75,8 +83,10 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 
 | Тест | Что проверяет |
 |---|---|
-| `manifest_ut` | parse `required_libraries`, functions |
+| `manifest_ut` | parse `required_libraries`, functions, `objects` → TypeConfigCallable |
 | `compartment_manager_ut` | catalog register/resolve, TLS guard |
+| `object_framework_ut` | static registry create/get/destroy, 2 objects |
+| `objects_abi_ut` | WAT create/call exports (ui64 handles) |
 | `throw_exception_ut` | host ThrowException → reason `fail(); ex: … boom-from-wasm` |
 | `with_helpers_ut` | Empty+AddSdk(sdk_stub)+helpers+module, `scale(7)==21` |
 | `blob_chunks_ut` | chunk split/join |
@@ -84,6 +94,8 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 ```bash
 ./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*WithHelpers*'
 ./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ThrowException*'
+./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ObjectFramework*'
+./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ObjectsAbi*'
 ```
 
 ---

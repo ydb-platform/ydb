@@ -181,11 +181,25 @@ void TWasmCompileActor::StartNextLibrary() {
 void TWasmCompileActor::ValidateExports() {
     const auto format = NWasm::DetectBytecodeFormat(ParsedManifest_.ModuleExtension);
     const auto exports = NWasm::CollectWasmExports(WasmSource_.Body, format);
-    for (const auto& descriptor : ParsedManifest_.Functions) {
-        if (!exports.contains(descriptor.Name)) {
+
+    auto requireExport = [&](const TString& exportName) {
+        if (exportName.empty()) {
+            return;
+        }
+        if (!exports.contains(exportName)) {
             ythrow yexception()
                 << "Wasm module for UDF '" << Md5_
-                << "' does not export function '" << descriptor.Name << "'";
+                << "' does not export function '" << exportName << "'";
+        }
+    };
+
+    for (const auto& descriptor : ParsedManifest_.Functions) {
+        if (descriptor.Binding == NWasm::EWasmUdfBinding::TypeConfigCallable) {
+            requireExport(descriptor.CreateExport);
+            requireExport(descriptor.CallExport);
+            requireExport(descriptor.DestroyExport);
+        } else {
+            requireExport(descriptor.Name);
         }
     }
 }

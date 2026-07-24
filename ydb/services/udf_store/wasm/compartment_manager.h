@@ -15,8 +15,10 @@ namespace NKikimr::NUdfStore::NWasm {
 
 struct TQueryCompartmentHandle : public TNonCopyable {
     std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> Compartment;
-    // Key: "ModuleName::FuncName"
+    // Key: "ModuleName::ExportName" (YQL name or create/call/destroy export)
     THashMap<TString, void*> Exports;
+    // Monotonic id for this acquire; TypeConfig callables recreate objects on change.
+    ui64 Generation = 0;
 };
 
 using TQueryCompartmentHandlePtr = std::unique_ptr<TQueryCompartmentHandle>;

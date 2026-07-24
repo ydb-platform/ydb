@@ -39,6 +39,14 @@ Unit-тесты линковки обходят кэш: `CreateEmptyImage` + `Ad
 
 ---
 
+### 7. Objects / TypeConfig
+
+Реестр — static `object_framework` внутри module image, не `required_libraries`.  
+Host pin’ит TypeConfig blob через `AllocateBytes` (не Run-pool), хранит ui64 + generation.  
+Stale handle после нового Acquire → recreate на следующем `Run`.
+
+---
+
 ## Открытые / осторожно трогать
 
 ### A. `CreateEmptyImage` без sdk и wasm-`malloc`
@@ -79,8 +87,8 @@ C++ UDF → отдельная библиотека: нужен `import_module("
 
 ## Чеклист при изменении линковки / compartment
 
-- [ ] Unit: `ut/with_helpers_ut`, `ut/throw_exception_ut`
+- [ ] Unit: `ut/with_helpers_ut`, `ut/throw_exception_ut`, `ut/object_framework_ut`, `ut/objects_abi_ut`
 - [ ] Functional: `test_using_wasm_udf`, `test_using_wasm_udf_with_sdk_and_library`
-- [ ] Ручной сценарий: upload sdk → helpers → with_helpers / md5 / throw
+- [ ] Ручной сценарий: upload sdk → helpers → with_helpers / md5 / throw / prefix
 - [ ] Ошибка Acquire видна в UI (не `stats.GetTasks().size() == 1`)
 - [ ] `ThrowException("…")` доходит как `fail(); ex: …`

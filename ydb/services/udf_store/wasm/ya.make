@@ -11,6 +11,7 @@ SRCS(
     registry_helpers.cpp
     single_module_loader.cpp
     system_libraries.cpp
+    udf_configured_callable.cpp
     udf_function.cpp
 )
 
@@ -38,4 +39,5 @@ END()
 
 RECURSE(
     abi
+    object_framework
 )

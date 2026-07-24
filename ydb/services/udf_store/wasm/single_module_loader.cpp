@@ -2,6 +2,7 @@
 
 #include "module_catalog.h"
 #include "registry_helpers.h"
+#include "types.h"
 
 #include <util/generic/yexception.h>
 
@@ -28,9 +29,17 @@ TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params) 
     state->Md5 = params.Md5;
     state->ModuleName = params.Manifest.ModuleName;
     for (const auto& descriptor : params.Manifest.Functions) {
-        state->Exports.insert(descriptor.Name);
         state->Functions[descriptor.Name] = descriptor;
         state->FunctionOrder.push_back(descriptor.Name);
+        if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable) {
+            state->Exports.insert(descriptor.CreateExport);
+            state->Exports.insert(descriptor.CallExport);
+            if (!descriptor.DestroyExport.empty()) {
+                state->Exports.insert(descriptor.DestroyExport);
+            }
+        } else {
+            state->Exports.insert(descriptor.Name);
+        }
     }
     return state;
 }

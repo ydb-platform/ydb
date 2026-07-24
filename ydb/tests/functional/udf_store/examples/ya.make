@@ -2,6 +2,7 @@ RECURSE(
     add
     helpers
     md5
+    prefix
     sdk
     throw
     with_helpers

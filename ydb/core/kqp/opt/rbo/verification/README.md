@@ -19,7 +19,8 @@ either a direct comparison, a binary same-member String
 membership/complement predicate, or the reviewed canonical String predicates,
 exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
-semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
+semantics for comparison, weak integral-to-Decimal casts, same-scale
+nondecreasing-precision Decimal widening, arithmetic, ordering, `SUM`, and
 Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
 explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
@@ -54,35 +55,58 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete post-fix formula-only measurements were generated on
-2026-07-24 from source `dfd6546dfd5` after the correlated-COUNT repair, exact
+2026-07-24 from source `5dafcc79a4e` after the correlated-COUNT repair, exact
 `DistinctAll` support, restoration of
 the production PostgreSQL parser/runtime in the benchmark host, and the exact
 dynamic-`IN`, nullable Date-year, q95 multi-distinct, and exact String
 dynamic-`IN` slices, followed by the exact proven-total Date `Unwrap` and
-positive nullable-integral dynamic-`IN` gates.
+positive nullable-integral dynamic-`IN` gates, then exact nullable integral
+casts and same-scale Decimal widening under weak `SafeCast`.
 They establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
-q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
-q25, q29, q33, q37, q38,
+q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q18,
+q19, q25, q29, q33, q37, q38,
 q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69,
 q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, and q99:
-56/121 workload queries (46.3%). TPCH has sixteen formulas, four unsupported
-queries, and two optimizer failures; TPC-DS has forty formulas,
-thirty-three unsupported queries, and twenty-six optimizer failures. Across
-both suites that is 37 unsupported queries and 28 optimizer failures.
+57/121 workload queries (47.1%). TPCH has sixteen formulas, four unsupported
+queries, and two optimizer failures; TPC-DS has forty-one formulas,
+thirty-two unsupported queries, and twenty-six optimizer failures. Across
+both suites that is 36 unsupported queries and 28 optimizer failures.
 
 There are two useful denominators behind that workload-wide number.
-Ninety-three queries complete optimizer preparation, so 56/93 (60.2%) of
-optimizer-successful queries construct formulas. Seventeen TPCH and forty-five
-TPC-DS queries actually enter the Python verifier; 56/62 (90.3%) of those
-entrants construct the full bounded obligation. The 31-query gap from 93
-optimizer-successful queries to 62 verifier entrants is the deliberately
+Ninety-three queries complete optimizer preparation, so 57/93 (61.3%) of
+optimizer-successful queries construct formulas. Seventeen TPCH and forty-six
+TPC-DS queries actually enter the Python verifier; 57/63 (90.5%) of those
+entrants construct the full bounded obligation. The 30-query gap from 93
+optimizer-successful queries to 63 verifier entrants is the deliberately
 fail-closed C++ export boundary.
-Of the 37 current unsupported results, 26 stop at initial export, five at final
-export, and six inside the verifier. Thus 31 are intentionally rejected before
+Of the 36 current unsupported results, 25 stop at initial export, five at final
+export, and six inside the verifier. Thus 30 are intentionally rejected before
 formula construction is attempted; only six exported plan pairs currently fail
 to construct a formula.
 
-The latest dynamic-`IN` gate accepts independently nullable lookup and result
+The latest Decimal-cast gate emits a `cast_decimal` node only for weak
+`SafeCast`, with a mandatory canonical `source_type` that the Python decoder
+independently checks against the inferred type of the serialized argument.
+The C++ exporter requires the result descriptor and its annotations to be one
+canonical `Decimal(p,s)` with at least one integral digit; the Python decoder
+independently validates the serialized result type and source-matching
+nullability. For an exact integer source, a present value is scaled by `10^s`
+and finite overflow saturates to the corresponding signed infinity; source
+NULL alone produces result NULL. For a canonical Decimal source, only
+same-scale, nondecreasing-precision widening is admitted: it preserves the raw
+finite, signed-infinity, or NaN code exactly, while propagating NULL.
+`StrictCast`, `Convert` outside the existing complete-literal normalization,
+an absent or mismatched `source_type`, scale changes, precision narrowing,
+other source types, malformed or mismatched targets, and nullability changes
+all fail closed.
+
+This moves TPC-DS q18 through formula construction after 1,002/51,090 ms of
+preparation/verifier work. The separate real-host regression proves both
+nullable families at two rows and two tasks, but that synthetic result is not
+a proof of the full benchmark query. TPC-DS q18 is formula-only and produced no
+optimizer-bug finding.
+
+The preceding dynamic-`IN` gate accepts independently nullable lookup and result
 columns only when their underlying types are the same fixed-width integer and
 the binding appears only as a direct positive top-level Filter conjunct. In
 that context, existential equality over present non-NULL values is exact:
@@ -240,12 +264,18 @@ optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
 32/32 real-host integration tests.
 
-The current policy-checked TPCH formula dashboard spent 2,814/29,457 ms in
+The current policy-checked TPCH formula dashboard spent 2,872/28,853 ms in
 preparation/verifier work and produced report SHA-256
+`c0eadbb10b2b1f394d604bb5cc5097d9fac26646e6d3aa97b90e2ff47b0712d2`;
+TPC-DS spent 63,947/243,682 ms and produced
+`6e895ad5385f95b0528362e228d992065bb44487262cb22e5ddb5ba38ba9b844`.
+TPC-DS q18 emitted after 1,002/51,090 ms.
+The immediately preceding 56-formula q33 checkpoint was generated from source
+`dfd6546dfd5`. Its TPCH dashboard spent 2,814/29,457 ms and produced
 `b3bc23c618c62f73cbc362ed568a33caf484c98804160b799bf42530f9dc66e4`;
-TPC-DS spent 66,416/198,352 ms and produced
+its TPC-DS dashboard spent 66,416/198,352 ms and produced
 `e0ab31819ceb0b1764d0e2be5b0af56c20c41e693b51b8b3f33408b389650d3b`.
-TPC-DS q33 emitted after 1,551/1,158 ms.
+TPC-DS q33 emitted after 1,551/1,158 ms in those historical reports.
 The immediately preceding 55-formula Date-`Unwrap` checkpoint was generated
 from source `93a01455afe`. Its TPCH dashboard spent 2,810/30,317 ms and
 produced
@@ -273,12 +303,18 @@ requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
 q19, and q22 plus TPC-DS q3, q38, q42, q48, q52, q55, q69, q87, q90, q93,
 q95, and q96: twenty-two obligations (18.2% of the workload). The current post-fix
 proof-floor gate is green and policy-valid: TPCH passes 10/10
-`VERIFIED_BOUNDED` after 1,185/62,768 ms and produced report SHA-256
-`1b68432f4e269bd19ca6064338fd008439391a1b1ffc9fa3f511d96418c6a8c6`;
-TPC-DS passes 12/12 after 2,800/43,618 ms and produced
-`2b32e78f680ca78e59ca158ceaf35e46cc61623f9f5bfe33c0aa938a525ac5e0`.
-The complete verification subtree at this milestone passes 34/34 suites and
-925/925 tests.
+`VERIFIED_BOUNDED` after 1,212/75,124 ms and produced report SHA-256
+`f90794bec99f5d739648c6f7fca81574ed52b8070257204d14f373edc0d38361`;
+TPC-DS passes 12/12 after 2,937/50,488 ms and produced
+`96e07f8139df89f7b2a0f216dd82ee0044afb592c10a7d43f3183275a796caa9`.
+The complete verification subtree at this q18 milestone passes 34/34 suites
+and 934/934 tests.
+At the immediately preceding q33 checkpoint, TPCH passed 10/10 after
+1,185/62,768 ms with report
+`1b68432f4e269bd19ca6064338fd008439391a1b1ffc9fa3f511d96418c6a8c6`,
+and TPC-DS passed 12/12 after 2,800/43,618 ms with report
+`2b32e78f680ca78e59ca158ceaf35e46cc61623f9f5bfe33c0aa938a525ac5e0`;
+its complete verification subtree passed 34/34 suites and 925/925 tests.
 At the immediately preceding Date-`Unwrap` checkpoint, the same twenty-two
 obligations were already enforced: TPCH passed 10/10 after 1,234/58,883 ms
 with report
@@ -352,8 +388,10 @@ and twenty enforced proofs, and exact String dynamic `IN` raised the formula
 count at the next checkpoint to 53 without changing that proof floor. The
 exact proven-total Date `Unwrap` gate then raised the counts to 55 formulas
 and twenty-two enforced proofs. The positive nullable-integral dynamic-`IN`
-gate raises the current formula count to 56; q33 is not added to the unchanged
-twenty-two-query proof floor.
+gate raised the formula count to 56; q33 was not added to the proof floor.
+The weak nullable Decimal-`SafeCast` gate raises the current formula count to
+57; TPC-DS q18 is likewise not added to the unchanged twenty-two-query proof
+floor.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -700,15 +738,32 @@ confirmed optimizer bug.
 A complete cast of a non-null integer constant to a non-null Decimal is handled
 before opaque fallback: the exporter evaluates the YDB cast and emits the
 resulting tagged Decimal literal. A separate explicit `cast_decimal` node models
-`SafeCast` of any non-null exact signed or unsigned 8/16/32/64-bit integer
-expression to a non-null canonical `Decimal(p,s)`. The target descriptor and
-its annotation must agree exactly with the result, and `p - s >= 1`. Evaluation
+weak `SafeCast` from any exact signed or unsigned 8/16/32/64-bit integer
+expression, or from a canonical Decimal expression under the widening rule
+below, to a canonical `Decimal(p,s)`. The snapshot carries a mandatory
+`source_type`; the decoder requires it to equal the independently inferred
+argument type. The target descriptor and its outer and nested annotations must
+agree exactly with the result, `p - s >= 1`, and result nullability must equal
+source nullability.
+
+For an integer source, evaluation propagates source NULL and otherwise
 multiplies the integer by `10^s`; a coefficient whose absolute value reaches
-`10^p` becomes the corresponding signed infinity, matching MiniKQL. Complete
-integer literals retain the normalized-literal representation, while
-value-specific incomplete literals use `cast_decimal`. `Convert`, `StrictCast`,
-nullable source/target/result shapes, zero-integral-digit targets, and
-non-integer Decimal cast sources remain outside this explicit gate.
+`10^p` becomes the corresponding signed infinity, matching weak MiniKQL
+`SafeCast`. A present overflow is therefore not NULL. Complete integer literals
+retain the normalized-literal representation, while value-specific incomplete
+literals use `cast_decimal`. For a Decimal source, only a same-scale cast to
+equal or greater precision is accepted. That conversion is raw-code identity:
+finite coefficients, signed infinities, and NaN are preserved exactly, and a
+source NULL remains NULL.
+
+`Convert`, `StrictCast`, sources outside exact integers and canonical Decimals,
+missing or mismatched `source_type`, cross-scale Decimal casts, precision
+narrowing, changed nullability, zero-integral-digit targets, and malformed or
+mismatched descriptors or annotations remain outside this explicit gate. A
+real-host two-row/two-task regression covers nullable integral-to-Decimal and
+nullable same-scale Decimal-widening expressions and returns
+`VERIFIED_BOUNDED`. The full TPC-DS q18 obligation only emits a formula; this
+extension is neither a q18 proof nor an optimizer-bug finding.
 
 A second constant normalization covers only a direct non-null `String` or
 `Utf8` literal passed to `SafeCast` with an `Optional<Decimal(p,s)>` result and

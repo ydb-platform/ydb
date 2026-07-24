@@ -115,8 +115,8 @@ requires TPCH q1 and TPC-DS q5, q65, and q80 to keep passing both snapshot
 exporters and invoke the verifier. All four now satisfy the stronger formula
 floor. Any later formula or proof still satisfies every weaker floor. The
 formula-construction floor requires TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
-q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
-q25, q29, q33,
+q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q18,
+q19, q25, q29, q33,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65,
 q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96,
 and q99.
@@ -186,14 +186,15 @@ execution divergence can coexist.
 ## Latest measured formula coverage
 
 The latest complete post-fix formula-only dashboards were generated on
-2026-07-24 from source `dfd6546dfd5` after the correlated-COUNT repair, exact
+2026-07-24 from source `5dafcc79a4e` after the correlated-COUNT repair, exact
 `DistinctAll` support, and restoration of the production PostgreSQL
 parser/runtime in the benchmark host, then added exact
 uncorrelated dynamic `IN`, the exact nullable Date-year projection bridge, and
 the side-explicit shared-IU/q95 aggregate slice, followed by exact same-type
 String dynamic `IN`, the exact proven-total Date `Unwrap` gate, and exact
-positive-Filter semantics for nullable integral dynamic `IN`. Together they
-emit the 56-query
+positive-Filter semantics for nullable integral dynamic `IN`, then exact weak
+`SafeCast` semantics for nullable integral-to-Decimal casts and same-scale
+Decimal widening. Together they emit the 57-query
 floor below and record an outcome for every workload entry. The policy contains
 twenty-two proof obligations: ten TPCH queries including q18 and twelve TPC-DS
 queries including q38, q87, and q95. The refreshed proof-floor gate is
@@ -214,14 +215,21 @@ same fail-closed reconstruction gate instead of stopping in host preparation.
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 16 (q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q22) | 4 | 2 | 22 |
-| TPCDS_YQL | 40 (q3, q5, q6, q10, q15, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, q99) | 33 | 26 | 99 |
+| TPCDS_YQL | 41 (q3, q5, q6, q10, q15, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, q99) | 32 | 26 | 99 |
 
-The current TPCH dashboard spent 2,814/29,457 ms in preparation/verifier work
+The current TPCH dashboard spent 2,872/28,853 ms in preparation/verifier work
 and produced report SHA-256
-`b3bc23c618c62f73cbc362ed568a33caf484c98804160b799bf42530f9dc66e4`.
-Its TPC-DS counterpart spent 66,416/198,352 ms and produced
+`c0eadbb10b2b1f394d604bb5cc5097d9fac26646e6d3aa97b90e2ff47b0712d2`.
+Its TPC-DS counterpart spent 63,947/243,682 ms and produced
+`6e895ad5385f95b0528362e228d992065bb44487262cb22e5ddb5ba38ba9b844`.
+TPC-DS q18 emitted after 1,002/51,090 ms.
+
+The immediately preceding 56-formula q33 checkpoint was generated from source
+`dfd6546dfd5`. Its TPCH dashboard spent 2,814/29,457 ms and produced
+`b3bc23c618c62f73cbc362ed568a33caf484c98804160b799bf42530f9dc66e4`;
+its TPC-DS dashboard spent 66,416/198,352 ms and produced
 `e0ab31819ceb0b1764d0e2be5b0af56c20c41e693b51b8b3f33408b389650d3b`.
-TPC-DS q33 emitted after 1,551/1,158 ms.
+TPC-DS q33 emitted after 1,551/1,158 ms in those historical reports.
 
 The immediately preceding 55-formula Date-`Unwrap` checkpoint was generated
 from source `93a01455afe`. Its TPCH dashboard spent 2,810/30,317 ms and
@@ -260,17 +268,39 @@ canonical direct render is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation; a 60-second solver experiment
 remains `UNKNOWN`.
 
-The supported formula slice is 56/121 queries (46.3%), with 37 unsupported
-queries and 28 optimizer-preparation failures. Sixty-two queries pass both
-snapshot exporters and enter the formula verifier, and 56/62 (90.3%) construct
+The supported formula slice is 57/121 queries (47.1%), with 36 unsupported
+queries and 28 optimizer-preparation failures. Sixty-three queries pass both
+snapshot exporters and enter the formula verifier, and 57/63 (90.5%) construct
 formulas. Relative to all 93 optimizer-successful queries, including
-snapshot-boundary failures, formula coverage is 56/93 (60.2%). This is a useful
-end-to-end pre-physical optimizer sample, not a claim about the remaining 65
+snapshot-boundary failures, formula coverage is 57/93 (61.3%). This is a useful
+end-to-end pre-physical optimizer sample, not a claim about the remaining 64
 workload entries or larger inputs. Formula construction is not a bounded proof.
-The 37 unsupported rows split into 26 initial-export, five final-export, and
-six verifier results. In other words, the strict C++ boundary rejects 31 plan
+The 36 unsupported rows split into 25 initial-export, five final-export, and
+six verifier results. In other words, the strict C++ boundary rejects 30 plan
 pairs before formula construction, while six exported pairs fail closed in the
 verifier itself.
+
+The latest exact Decimal-cast gate accepts only weak `SafeCast` and serializes
+an explicit `cast_decimal` node with a mandatory canonical `source_type`. The
+Python decoder independently infers the argument type and requires an exact
+match; it also checks the serialized canonical `Decimal(p,s)` result type,
+positive integral-digit count, and source-matching nullability. Independently,
+the C++ exporter requires the target descriptor and its outer and nested
+annotations to agree exactly with that result. An exact integral source
+preserves NULL, scales each present value by `10^s`, and saturates finite
+overflow to signed infinity rather than NULL. A canonical Decimal source is
+accepted only for same-scale, nondecreasing-precision widening; the raw finite,
+signed-infinity, or NaN code is identity and NULL propagates.
+
+`StrictCast`, `Convert` outside the existing complete-literal normalization,
+an absent or mismatched `source_type`, other source families, Decimal scale
+changes or precision narrowing, nullability changes, zero-integral-digit
+targets, and malformed or mismatched descriptors and annotations fail closed.
+This moves TPC-DS q18 through formula construction after 1,002/51,090 ms of
+preparation/verifier work. A separate real-host
+two-row/two-task fixture proves nullable integral-to-Decimal and nullable
+same-scale Decimal-widening expressions. That synthetic proof does not prove
+the full q18 query: q18 is formula-only and produced no optimizer-bug finding.
 
 At the preceding focused post-dashboard checkpoint, a semantic slice
 canonicalized generic `EndsWith`/`StringContains` with their executed OLAP
@@ -386,7 +416,7 @@ checkpoint, formula coverage stayed at 53/121, 53/93 optimizer-successful
 queries, and 53/59 verifier entrants. Neither query entered the unchanged
 20/121 proof floor.
 
-The latest exact proven-total Date-`Unwrap` gate accepts only
+The earlier exact proven-total Date-`Unwrap` gate accepts only
 `Unwrap(Coalesce(member, zero))` with a non-null Date result, an exact binary
 `Optional<Date>` coalesce, and one direct visible `Optional<Date>` member. The
 observed initial boundary spells zero as the exact reviewed
@@ -405,7 +435,7 @@ return `VERIFIED_BOUNDED` after 333/1,115 and 324/1,052 ms, respectively, at
 two rows and two tasks. The String `Unwrap` in TPC-DS q8 does not match this
 Date-only totality argument and remains unsupported.
 
-The latest dynamic-`IN` extension accepts independently nullable lookup and
+The preceding dynamic-`IN` extension accepts independently nullable lookup and
 output columns only when their underlying types are the same fixed-width
 integer and every binding reference is a direct positive top-level Filter
 conjunct. In that context an inner NULL cannot make membership true, while both
@@ -515,8 +545,8 @@ q30, q32, q36, q39, q41, q44, q47, q49, q51, q53, q57, q63, q67, q70, q81,
 q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
 aggregate shapes rejected by the general empty-row reconstruction gate.
 
-The exporter matrix below covers the recorded boundary failures among 28 of
-the 33 unsupported queries in the current complete run. IDs can appear in both
+The exporter matrix below covers the recorded boundary failures among 27 of
+the 32 unsupported queries in the current complete run. IDs can appear in both
 exporter columns or under more than one reason because both snapshots are
 audited independently. The five queries that pass export and fail closed inside
 the verifier are listed after the matrix.
@@ -535,7 +565,6 @@ the verifier are listed after the matrix.
 | Unavailable physical column `__kqp_rbo_ignore_arg_8` | - | q58 |
 | Unavailable physical column `year` | - | q66 |
 | Restricted `Concat` has no storage-bounded String member | q66 | - |
-| Nullable integral `SafeCast` to Decimal | q18 | q18 |
 | Ordinary count-distinct input is not exact non-null `Int64` | q28 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `/` | q73, q78 | q73, q78 |
@@ -762,9 +791,8 @@ leaked intermediate state, and broken direct lineage. Focused C++ exporter
 tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
-The current post-fix dashboards emit 16/22 TPCH and 40/99 TPC-DS formulas, for
-56/121
-(46.3%). They record 37 unsupported and 28 optimizer-failure queries. Exact
+The current post-fix dashboards emit 16/22 TPCH and 41/99 TPC-DS formulas, for
+57/121 (47.1%). They record 36 unsupported and 28 optimizer-failure queries. Exact
 `DistinctAll` adds TPC-DS q6; the correlated-COUNT correctness repair moves
 TPCH q17 and TPC-DS q1/q30/q32/q81/q92 to intentional optimizer-side
 fail-closed results. The preceding relational `EXISTS` milestone added TPCH
@@ -777,7 +805,9 @@ both policies. Exact String dynamic `IN` adds q56/q60 to formula construction
 without changing the proof floor. Exact proven-total Date `Unwrap` adds q38
 and q87 to formula construction and the proof policy. Exact nullable-integral
 dynamic `IN` in a positive Filter context adds q33 to formula construction
-without changing the proof floor.
+without changing the proof floor. Exact weak nullable integral-to-Decimal
+`SafeCast` and same-scale Decimal widening add TPC-DS q18 to formula
+construction without changing the proof floor.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -793,13 +823,20 @@ contains twenty-two confirmed `VERIFIED_BOUNDED` obligations.
   (18.2%) of the workload,
   for the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
   The current post-fix policy gate passes 10/10 TPCH and 12/12 TPC-DS, all
-  `VERIFIED_BOUNDED`. Its TPCH proof-floor report spent 1,185/62,768 ms and
+  `VERIFIED_BOUNDED`. Its TPCH proof-floor report spent 1,212/75,124 ms and
   has SHA-256
+  `f90794bec99f5d739648c6f7fca81574ed52b8070257204d14f373edc0d38361`;
+  TPC-DS spent 2,937/50,488 ms and has
+  `96e07f8139df89f7b2a0f216dd82ee0044afb592c10a7d43f3183275a796caa9`.
+  The complete verification subtree at this q18 milestone passes 34/34 suites
+  and 934/934 tests.
+  At the immediately preceding q33 checkpoint, TPCH passed 10/10 after
+  1,185/62,768 ms and produced
   `1b68432f4e269bd19ca6064338fd008439391a1b1ffc9fa3f511d96418c6a8c6`;
-  TPC-DS spent 2,800/43,618 ms and has
+  TPC-DS passed 12/12 after 2,800/43,618 ms and produced
   `2b32e78f680ca78e59ca158ceaf35e46cc61623f9f5bfe33c0aa938a525ac5e0`.
-  The complete verification subtree passes 34/34 suites and 925/925 tests at
-  this milestone. At the preceding Date-`Unwrap` checkpoint, the same
+  Its complete verification subtree passed 34/34 suites and 925/925 tests.
+  At the preceding Date-`Unwrap` checkpoint, the same
   twenty-two-query proof floor spent 1,234/58,883 ms for TPCH and
   2,522/41,013 ms for TPC-DS and produced
   `db65dfe267b0b343f3cded64a32a028fab5561f4ad7b48a5803e0d3629c77f37` and
@@ -1339,10 +1376,12 @@ fail-closed reclassification. Side-explicit one-sided join keys, exact direct
 Uint64 `Just`, scalar final Uint64 SUM unwrap, and direct scalar
 `COUNT(DISTINCT Int64)` then raise the floor to 51. Exact String dynamic `IN`
 raises the next floor to 53. Exact proven-total Date `Unwrap` raises the next
-floor to 55, and positive nullable-integral dynamic `IN` raises the current
-floor to 56. Multiple dependencies, broader correlations, coercing dynamic
-`IN`, nullable String/Date and non-positive nullable contexts, range reads, and
-other OLAP pushdowns remain later work;
+floor to 55, positive nullable-integral dynamic `IN` raises the next floor to
+56, and exact weak nullable integral-to-Decimal `SafeCast` plus same-scale
+Decimal widening raises the current floor to 57. Multiple dependencies,
+broader correlations, coercing dynamic `IN`, nullable String/Date and
+non-positive nullable contexts, range reads, and other OLAP pushdowns remain
+later work;
 solver/formula-size work promotes supported queries only after reproducible
 `VERIFIED_BOUNDED` results. The required policy now contains twenty-two
 obligations, and the expanded policy gate confirms all 22/22.

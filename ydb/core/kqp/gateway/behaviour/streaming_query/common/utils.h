@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/node.h>
+#include <yql/essentials/sql/v1/translation/node.h>
 
 #include <util/generic/string.h>
 

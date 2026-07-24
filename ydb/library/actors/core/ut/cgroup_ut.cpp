@@ -13,8 +13,6 @@
 
 #include <ydb/library/actors/protos/services_common.pb.h>
 
-#include <library/cpp/logger/backend.h>
-#include <library/cpp/logger/record.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/core/future.h>

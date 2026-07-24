@@ -4,19 +4,15 @@
 #include "cgroup_v1.h"
 #include "cgroup_v2.h"
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
-#include <util/generic/vector.h>
 #include <util/string/builder.h>
 
 namespace NActors {
@@ -393,6 +389,10 @@ namespace NActors {
 
     } // namespace NDetail
 
+    bool TCGroupOomAlert::HasReason(ECGroupOomReason reason) const {
+        return Reasons & static_cast<ui32>(reason);
+    }
+
     TCGroupOomSubSystem::TCGroupOomSubSystem(TCGroupOomConfig config)
         : Config(std::move(config))
     {
@@ -405,6 +405,10 @@ namespace NActors {
             (*Config.MemoryPressureFullAvg10Threshold >= 0 &&
                 *Config.MemoryPressureFullAvg10Threshold <= 100),
             "cgroup OOM PSI threshold must be in [0, 100]");
+    }
+
+    const TCGroupOomConfig& TCGroupOomSubSystem::GetConfig() const {
+        return Config;
     }
 
     TSubSystemDependencies TCGroupOomSubSystem::GetDependencies() const {

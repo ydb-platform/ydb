@@ -48,9 +48,7 @@ namespace NActors {
         ui64 NewHighEvents = 0;
         ui64 NewMaxEvents = 0;
 
-        bool HasReason(ECGroupOomReason reason) const {
-            return Reasons & static_cast<ui32>(reason);
-        }
+        bool HasReason(ECGroupOomReason reason) const;
     };
 
     struct TCGroupOomConfig {
@@ -74,9 +72,7 @@ namespace NActors {
 
         explicit TCGroupOomSubSystem(TCGroupOomConfig config);
 
-        const TCGroupOomConfig& GetConfig() const {
-            return Config;
-        }
+        const TCGroupOomConfig& GetConfig() const;
 
         TSubSystemDependencies GetDependencies() const override;
         void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override;

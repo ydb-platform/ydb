@@ -51,8 +51,10 @@ public:
     }
 
     ui64 GetDataBlobBytes() const {
-        AFL_VERIFY(BlobBytes.Val() >= IndexBlobBytes.Val())("blob", BlobBytes.Val())("index", IndexBlobBytes.Val());
-        return BlobBytes.Val() - IndexBlobBytes.Val();
+        const ui64 blob = BlobBytes.Val();
+        const ui64 index = IndexBlobBytes.Val();
+        AFL_VERIFY(blob >= index)("blob", blob)("index", index);
+        return blob - index;
     }
 
     ui64 GetRawBytes() const {

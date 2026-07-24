@@ -2954,8 +2954,6 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if isinstance(node, OuterBind)
     }
     for node in snapshot.plan.nodes:
-        if node.id not in main_nodes:
-            continue
         leaked_bindings = all_bindings & schemas[node.id].keys()
         if leaked_bindings:
             _fail(

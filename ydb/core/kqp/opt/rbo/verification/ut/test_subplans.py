@@ -3303,10 +3303,34 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "collides with an input column"):
             parse_snapshot(raw)
 
-    def test_binding_cannot_leak_into_main_relational_output(self):
+    def test_binding_cannot_leak_into_any_relational_output(self):
         raw = _base_snapshot()
         raw["plan"]["nodes"][1]["columns"][0]["output"] = BINDING
         raw["plan"]["output"] = [BINDING]
+        with self.assertRaisesRegex(SnapshotError, "must remain virtual"):
+            parse_snapshot(raw)
+
+        raw = _nested_scalar_in_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "inner_project",
+                "op": "project",
+                "input": "inner_filter",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": BINDING,
+                        "expression": {
+                            "kind": "column",
+                            "column": "inner.k",
+                        },
+                    }
+                ],
+            }
+        )
+        outer_in = raw["plan"]["subplans"][0]
+        outer_in["root"] = "inner_project"
+        outer_in["output"]["column"] = BINDING
         with self.assertRaisesRegex(SnapshotError, "must remain virtual"):
             parse_snapshot(raw)
 

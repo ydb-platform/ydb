@@ -18,4 +18,5 @@ RECURSE(
     yql_facade_run
     yql_highlight
     yql_linter
+    ysondiff
 )

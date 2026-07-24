@@ -13,8 +13,8 @@ ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.2
 PEERDIR(
     contrib/libs/curl
     contrib/libs/opentelemetry-cpp/api
-    contrib/libs/opentelemetry-proto
     contrib/libs/protobuf
+    contrib/proto/opentelemetry
     contrib/restricted/nlohmann_json
 )
 

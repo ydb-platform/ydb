@@ -1,4 +1,4 @@
-#include <yql/essentials/sql/v1/node.h>
+#include <yql/essentials/sql/v1/translation/node.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <library/cpp/json/writer/json.h>

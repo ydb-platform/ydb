@@ -130,21 +130,13 @@ def find_file(path):
     return res
 
 
-output_path_cache = {}
-
-
 def yql_output_path(*args, **kwargs):
     if not get_param('LOCAL_BENCH_XX'):
         # abspath is needed, because output_path may be relative when test is run directly (without ya make).
         return os.path.abspath(yatest.common.output_path(*args, **kwargs))
 
     else:
-        if args and args in output_path_cache:
-            return output_path_cache[args]
-        res = os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
-        if args:
-            output_path_cache[args] = res
-        return res
+        return os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
 
 
 def yql_binary_path(*args, **kwargs):
@@ -282,6 +274,10 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         attr = def_attr
 
     if attr is not None:
+        if not isinstance(attr, (six.binary_type, six.text_type)):
+            attr = cyson.dumps(attr, format='pretty')
+        if isinstance(attr, six.binary_type):
+            attr = attr.decode('utf-8')
         if attr_postprocess is not None:
             attr = attr_postprocess(attr)
 
@@ -1006,9 +1002,12 @@ def normalize_table_yson(y):
     if isinstance(y, dict):
         normDict = OrderedDict()
         for k, v in sorted(six.iteritems(y), key=lambda x: x[0], reverse=True):
-            if k == "_other":
-                normDict[normalize_table_yson(k)] = sorted(normalize_table_yson(v))
-            elif v != "Void" and v is not None and not isinstance(v, YsonEntity):
+            if k == "_other" or k == b"_other":
+                normDict[normalize_table_yson(k)] = sorted(
+                    normalize_table_yson(v),
+                    key=cyson.dumps,
+                )
+            elif v != "Void" and v != b"Void" and v is not None and not isinstance(v, YsonEntity):
                 normDict[normalize_table_yson(k)] = normalize_table_yson(v)
         return normDict
     return y
@@ -1102,7 +1101,7 @@ def normalize_result(res, sort):
         for data in r[b'Write']:
             is_list = (b'Type' in data) and (data[b'Type'][0] == b'ListType')
             if is_list and sort and b'Data' in data:
-                data[b'Data'] = sorted(data[b'Data'])
+                data[b'Data'] = sorted(data[b'Data'], key=cyson.dumps)
             if b'Ref' in data:
                 data[b'Ref'] = []
                 data[b'Truncated'] = True

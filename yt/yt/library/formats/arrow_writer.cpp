@@ -2424,7 +2424,7 @@ public:
         TableCount_ = tableSchemas.size();
         ColumnSchemas_.resize(tableSchemas.size());
         TableIdToIndex_.resize(tableSchemas.size());
-        IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
+        IsTableInitialized_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
             THashSet<std::string> columnNames;
@@ -2454,6 +2454,20 @@ public:
                 ColumnSchemas_[tableIndex][GetTabletIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetTabletIndexColumnId()), GetTabletIndexColumnId());
             }
         }
+    }
+
+    TFuture<void> Close() override
+    {
+        try {
+            for (int tableIndex = 0; tableIndex < TableCount_; ++tableIndex) {
+                if (!IsTableInitialized_[tableIndex]) {
+                    WriteRowsForSingleTable(TRange<TUnversionedRow>(), tableIndex);
+                }
+            }
+        } catch (const std::exception& ex) {
+            SetError(TError(ex));
+        }
+        return TSchemalessFormatWriterBase::Close();
     }
 
 private:
@@ -2593,7 +2607,7 @@ private:
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
-    std::vector<bool> IsFirstBatchForSpecificTable_;
+    std::vector<bool> IsTableInitialized_;
     TConvertedColumnRange MissingColumns_;
 
     std::vector<TArrowWriterBuffer> Buffers_;
@@ -2634,7 +2648,7 @@ private:
 
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
-        if (!IsFirstBatchForSpecificTable_[tableIndex]) {
+        if (!IsTableInitialized_[tableIndex]) {
             int currentIndex = 0;
             for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
                 auto columnId = columnSchema.first;
@@ -2644,7 +2658,7 @@ private:
                 }
             }
 
-            IsFirstBatchForSpecificTable_[tableIndex] = true;
+            IsTableInitialized_[tableIndex] = true;
         }
 
         TypedColumns_.resize(TableIdToIndex_[tableIndex].size());

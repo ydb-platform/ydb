@@ -1,0 +1,23 @@
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Global.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Global.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Global.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Global.cpp
+@@ -41,6 +41,7 @@ Global* Runtime::createGlobal(Compartment* compartment,
+ 		if(global->id == UINTPTR_MAX)
+ 		{
+ 			delete global;
++			WAVM_ASSERT(global->id != UINTPTR_MAX);
+ 			return nullptr;
+ 		}
+ 	}
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Instance.cpp
+@@ -175,7 +175,7 @@ Instance* Runtime::instantiateModuleInternal(Compartment* compartment,
+ 		Platform::RWMutex::ExclusiveLock compartmentLock(compartment->mutex);
+ 		id = compartment->instances.add(UINTPTR_MAX, nullptr);
+ 	}
+-	if(id == UINTPTR_MAX) { return nullptr; }
++	WAVM_ASSERT(id != UINTPTR_MAX);
+ 
+ 	// Deserialize the disassembly names.
+ 	DisassemblyNames disassemblyNames;

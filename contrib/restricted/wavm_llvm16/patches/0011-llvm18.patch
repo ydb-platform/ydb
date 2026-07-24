@@ -1,0 +1,43 @@
+commit 242ab0166e0b3ae29fd381117df005246a4e4eb9
+merge: 3c801a723b9f0eca043275e810f76c9286a7e0ab 6626b8f9a0ad0f481d29b698fbe42d5158b49aae
+author: robot-brewer
+date: 2024-11-11T09:16:28+03:00
+revision: 15280800
+
+    Release clang18 #3
+    
+    https://github.com/yandex/toolchain-registry/releases/tag/clang18-v3
+    
+    REVIEW: 7167654
+
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
+@@ -18,7 +18,7 @@ PUSH_DISABLE_WARNINGS_FOR_LLVM_HEADERS
+ #include <llvm-c/Disassembler.h>
+ #include <llvm/ADT/SmallVector.h>
+ #include <llvm/ADT/StringRef.h>
+-#include <llvm/ADT/Triple.h>
++#include <llvm/TargetParser/Triple.h>
+ #include <llvm/ADT/ilist_iterator.h>
+ #include <llvm/CodeGen/TargetSubtargetInfo.h>
+ #include <llvm/ExecutionEngine/ExecutionEngine.h>
+@@ -29,7 +29,7 @@ PUSH_DISABLE_WARNINGS_FOR_LLVM_HEADERS
+ #include <llvm/Object/SymbolSize.h>
+ #include <llvm/Pass.h>
+ #include <llvm/Support/FileSystem.h>
+-#include <llvm/Support/Host.h>
++#include <llvm/TargetParser/Host.h>
+ #include <llvm/Support/raw_ostream.h>
+ #include <llvm/Target/TargetMachine.h>
+ #include <llvm/Transforms/Scalar.h>
+@@ -93,7 +93,9 @@ static void optimizeLLVMModule(llvm::Module& llvmModule, bool shouldLogMetrics)
+ 	fpm.add(llvm::createPromoteMemoryToRegisterPass());
+ 	fpm.add(llvm::createInstructionCombiningPass());
+ 	fpm.add(llvm::createCFGSimplificationPass());
++#if LLVM_VERSION_MAJOR <= 16
+ 	fpm.add(llvm::createJumpThreadingPass());
++#endif
+ #if LLVM_VERSION_MAJOR >= 12
+ 	// LLVM 12 removed the constant propagation pass in favor of the instsimplify pass, which is
+ 	// itself marked as legacy.

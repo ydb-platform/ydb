@@ -13,16 +13,6 @@ constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2026, 1);
 
 } // namespace
 
-bool IsValidLangVersion(TLangVersion ver) {
-    for (const auto& version : Versions) {
-        if (ver == MakeLangVersion(version.first, version.second)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool ParseLangVersion(TStringBuf str, TLangVersion& result) {
     result = UnknownLangVersion;
     if (str.size() != 7 || str[4] != '.') {

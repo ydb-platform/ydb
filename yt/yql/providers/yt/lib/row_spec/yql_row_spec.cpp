@@ -1309,14 +1309,14 @@ void TYqlRowSpecInfo::FillFlags(NYT::TNode& attrs) const {
     attrs[RowSpecAttrStrictSchema] = StrictSchema;
     attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags;
 
-    // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
-    TSingularTypesVisitor visitor;
-    Type->Accept(visitor);
-    attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
-
     // Backward compatibility. TODO: remove after releasing compatibility flags
     if (NativeYtTypeFlags != 0) {
         attrs[RowSpecAttrUseNativeYtTypes] = true;
+
+        // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
+        TSingularTypesVisitor visitor;
+        Type->Accept(visitor);
+        attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
     }
 }
 

@@ -194,3 +194,22 @@ message TContinuationParams {
 message TExternalDataChannelParams {
     optional bytes HandshakeId = 1;
 }
+
+message TSystemPayloadV2 {
+    message TPingRequest {
+    }
+    message TPingResponse {
+        optional uint64 WallClock = 1; // TInstant::GetValue() for the sending node
+    }
+    message TPingConfirm {
+        optional uint64 WallClock = 1; // TInstant::GetValue() for the sending node
+    }
+    message TRequest {
+        oneof Request {
+            TPingRequest PingRequest = 1;
+            TPingResponse PingResponse = 2;
+            TPingConfirm PingConfirm = 3;
+        }
+    }
+    repeated TRequest Requests = 1;
+}

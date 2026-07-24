@@ -1,9 +1,19 @@
 #pragma once
 
+#include <util/system/compiler.h>
+
 #include <atomic>
 #include <functional>
 
 namespace NYdb::inline Dev::NTopic::NTesting {
+
+#if !defined(NDEBUG) || defined(_san_enabled_)
+#define YDB_TOPIC_DECOMPRESSION_TEST_HOOKS_ENABLED 1
+#else
+#define YDB_TOPIC_DECOMPRESSION_TEST_HOOKS_ENABLED 0
+#endif
+
+#if YDB_TOPIC_DECOMPRESSION_TEST_HOOKS_ENABLED
 
 // Test-only hooks to synchronize Cleanup/StartDecompressionTasks for race detection (TSan).
 inline std::atomic<std::function<void()>*>& CleanupPopHook() {
@@ -31,4 +41,32 @@ inline void ClearDecompressionTasksPopHooks() {
     StartTasksPopHook().store(nullptr, std::memory_order_release);
 }
 
-} // namespace NYdb::NTopic::NTesting
+inline void InvokeCleanupPopHook() {
+    if (auto* hook = CleanupPopHook().load(std::memory_order_acquire)) {
+        (*hook)();
+    }
+}
+
+inline void InvokeStartTasksPopHook() {
+    if (auto* hook = StartTasksPopHook().load(std::memory_order_acquire)) {
+        (*hook)();
+    }
+}
+
+#else
+
+inline void SetDecompressionTasksPopHooks(std::function<void()>, std::function<void()>) {
+}
+
+inline void ClearDecompressionTasksPopHooks() {
+}
+
+inline void InvokeCleanupPopHook() {
+}
+
+inline void InvokeStartTasksPopHook() {
+}
+
+#endif
+
+} // namespace NYdb::inline Dev::NTopic::NTesting

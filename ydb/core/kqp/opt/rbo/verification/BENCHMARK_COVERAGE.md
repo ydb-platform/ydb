@@ -495,6 +495,21 @@ preparation/verifier work. It is formula coverage only: q33 is not a bounded
 proof or an optimizer-bug finding. TPC-DS q58 and q83 remain at their
 dynamic-`IN` boundaries.
 
+The subsequent Date extension accepts only an uncorrelated same-type Date
+lookup/output pair. Nullability is independent, but if either side is nullable
+every binding use must be a direct positive top-level Filter conjunct.
+Membership is true exactly for a present non-NULL equal pair; Date values stay
+inside the existing bounded domain. Coercions, nullable `String`, and nullable
+non-positive Boolean contexts remain closed. Focused C++ checks and a
+real-host nullable-Date `IN`-to-`left_semi` proof are green.
+
+A fresh focused q58 run now clears the Date-type gate and stops at the deeper
+initial-boundary reason
+`IN subplan binding _rbo_arg_1 contains a nested subplan reference`. It still
+does not construct a formula, so no dashboard count or proof-policy row changes.
+q58's nested subplan and q83's final static nullable-Date `SqlIn` remain future
+work.
+
 ### TPCH inventory
 
 Optimizer preparation fails closed for q17 and q20 in correlated scalar
@@ -599,10 +614,12 @@ q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
 aggregate shapes rejected by the general empty-row reconstruction gate.
 
 The exporter matrix below covers the recorded boundary failures among 22 of
-the 28 unsupported queries in the current complete inventory. IDs can appear
-in both exporter columns or under more than one reason because both snapshots
-are audited independently. The six queries that pass export and fail closed
-inside the verifier are listed after the matrix.
+the 28 unsupported queries in the latest complete dashboard. It intentionally
+retains that dashboard's pre-Date-extension classifications; the focused q58
+delta above has no formula or policy effect and is not substituted for a full
+rerun. IDs can appear in both exporter columns or under more than one reason
+because both snapshots are audited independently. The six queries that pass
+export and fail closed inside the verifier are listed after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
@@ -678,7 +695,9 @@ rather than introducing coercion or SQL-NULL semantics into that first slice.
 The later exact String extension moves q56/q60 to formulas and q45 to final
 range semantics; at that checkpoint q33/q58/q83 remained fail-closed. The
 later nullable-integral positive-Filter gate moves q33 through formula
-construction; q58 and q83 remain dynamic-`IN` blockers.
+construction; q58 and q83 remained dynamic-`IN` blockers at that checkpoint.
+The subsequent Date gate moves q58 to a nested-subplan blocker in the focused
+run; q83's remaining known boundary is final static nullable-Date `SqlIn`.
 
 The focused q10/q35/q69 report spent 513/11,387, 542/0, and 324/1,004 ms in
 preparation/verification. q10 and q69 emit formulas; q35 clears the subplan
@@ -1434,29 +1453,32 @@ optimizer-bug finding.
 Dynamic `IN` now has its own typed relational descriptor rather than being
 treated as generic `EXISTS`. It names exactly one lookup column from the one
 Filter consumer and one result column from the inner root. Non-null columns
-may have the same fixed-width integral or exact `String` type. Same-type
-fixed-width integral lookup and result columns may instead be independently
-nullable only when every binding reference is a direct positive top-level
-Filter conjunct. The binding remains non-null `Bool`, virtual, and
+may have the same fixed-width integral, exact `String`, or Date type. Same-type
+fixed-width integral or Date lookup and result columns may instead be
+independently nullable only when every binding reference is a direct positive
+top-level Filter conjunct. The binding remains non-null `Bool`, virtual, and
 uncorrelated. `OuterBind`, `AddDependencies`, observable `EnsureAtMostOne`,
 nesting, staging, fanout, tuple mappings, coercions, nullable `String`, `Utf8`,
-Bool, Date, Decimal, other nullable types, and mismatched types fail closed.
+Bool, Decimal, other nullable types, and mismatched types fail closed.
 
 The evaluator computes one Boolean membership value per present outer row as
 the OR of present, non-NULL equal pairs. Duplicate inner rows collapse and
 empty input is false. For non-null columns, `NOT` in the consumer expresses
-anti-membership. For nullable integral columns, the admitted positive Filter
-is true exactly when that OR is true; SQL FALSE and UNKNOWN both reject the
-outer row, while `NOT`, `OR`, and embedded uses fail closed. A repeated binding
-reference reuses the same cached subplan family. Errors inherited while
+anti-membership. For nullable integral or Date columns, the admitted positive
+Filter is true exactly when that OR is true; SQL FALSE and UNKNOWN both reject
+the outer row, while `NOT`, `OR`, and embedded uses fail closed. A repeated
+binding reference reuses the same cached subplan family. Errors inherited while
 evaluating the inner root are eager, including when no outer row is present.
 The outer/inner product is charged to one cumulative shared 16,384-pair cap.
+Date uses the same equality construction under the exact bounded Date domain;
+the nullable truth restriction is identical to the integral case.
 Focused tests cover duplicates, empty input, `NOT`, independent integral
 nullability, NULL truth, rejected Boolean contexts, cache reuse, left-semi and
 left-anti reference equivalence, inherited errors, mapping mutations, every
 descriptor gate, and the exact cap. Real-host integral, String, and positive
-nullable-integral fixtures prove initial dynamic `IN` equivalent to the final
-ordinary `left_semi` StageGraph at two rows and two tasks. Exhaustive
+nullable-integral and nullable-Date fixtures prove initial dynamic `IN`
+equivalent to the final ordinary `left_semi` StageGraph at two rows and two
+tasks. Exhaustive
 finite-domain String tests cover duplicates, empty inputs, `NOT`, row presence,
 and reference equality.
 
@@ -1492,9 +1514,12 @@ floor to 55, positive nullable-integral dynamic `IN` raises the next floor to
 Decimal widening raises the next floor to 57. Exact pushed-OLAP
 physical/full/short output-IU resolution raises the next floor to 59. Exact
 ordered two-dependency equality/inequality `EXISTS` raises the current floor to
-62. More than two dependencies, other correlation shapes, coercing dynamic
-`IN`, nullable String/Date and non-positive nullable contexts, range reads, and
-other OLAP pushdowns remain later work;
+62. Exact nullable-Date dynamic `IN` is implemented without changing that
+floor: focused q58 reaches a nested-subplan blocker and still has no formula.
+Nested subplans, q83's static nullable-Date `SqlIn`, more than two dependencies,
+other correlation shapes, coercing dynamic `IN`, nullable String and
+non-positive nullable contexts, range reads, and other OLAP pushdowns remain
+later work;
 solver/formula-size work promotes supported queries only after reproducible
 `VERIFIED_BOUNDED` results. The required policy now contains twenty-five
 obligations, and the current complete gates confirm all 25/25.

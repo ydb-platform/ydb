@@ -2943,6 +2943,7 @@ struct TTwoDependencyExistsExportFixture {
 
 enum class EInSubplanColumnKind {
     Int32,
+    Date,
     String,
 };
 
@@ -2967,15 +2968,23 @@ struct TInSubplanExportFixture {
               true))
         , Utf8(ScalarType(Ctx, NUdf::EDataSlot::Utf8))
         , Date(ScalarType(Ctx, NUdf::EDataSlot::Date))
+        , OptionalDate(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Date,
+              true))
         , ColumnType(
               columnKind == EInSubplanColumnKind::String
                   ? String
-                  : Int32)
+                  : columnKind == EInSubplanColumnKind::Date
+                      ? Date
+                      : Int32)
     {
         const TString columnType =
             columnKind == EInSubplanColumnKind::String
                 ? TString("String")
-                : TString("Int32");
+                : columnKind == EInSubplanColumnKind::Date
+                    ? TString("Date")
+                    : TString("Int32");
         const auto& outerTable = AddTable(
             Ctx,
             "/Root/InOuter",
@@ -3043,6 +3052,7 @@ struct TInSubplanExportFixture {
     const TTypeAnnotationNode* const OptionalString;
     const TTypeAnnotationNode* const Utf8;
     const TTypeAnnotationNode* const Date;
+    const TTypeAnnotationNode* const OptionalDate;
     const TTypeAnnotationNode* const ColumnType;
     const TInfoUnit Binding{"_rbo_in", true};
     const TInfoUnit Lookup{"outer.k"};
@@ -14328,6 +14338,122 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "must be a direct positive Filter conjunct");
     }
 
+    Y_UNIT_TEST(ExportsNullableDateInOnlyAsPositiveFilterConjunct) {
+        TInSubplanExportFixture fixture(EInSubplanColumnKind::Date);
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto assertNullability = [&](
+            const TTypeAnnotationNode* lookupType,
+            const TTypeAnnotationNode* outputType,
+            bool lookupNullable,
+            bool outputNullable)
+        {
+            SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+                {"outer.k", lookupType},
+            });
+            SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+                {"inner.k", outputType},
+            });
+            SetExactOutputType(fixture.Ctx, *fixture.Consumer, {
+                {"outer.k", lookupType},
+            });
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(
+                    *fixture.Root,
+                    fixture.Ctx.RboCtx,
+                    catalog.Catalog));
+            const auto& descriptor =
+                snapshot["plan"]["subplans"].GetArraySafe()[0];
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["lookup"]["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["lookup"]["nullable"].GetBooleanSafe(),
+                lookupNullable);
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["output"]["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["output"]["nullable"].GetBooleanSafe(),
+                outputNullable);
+        };
+        assertNullability(
+            fixture.Date,
+            fixture.Date,
+            false,
+            false);
+        assertNullability(
+            fixture.OptionalDate,
+            fixture.Date,
+            true,
+            false);
+        assertNullability(
+            fixture.Date,
+            fixture.OptionalDate,
+            false,
+            true);
+        assertNullability(
+            fixture.OptionalDate,
+            fixture.OptionalDate,
+            true,
+            true);
+
+        auto direct = fixture.BindingValue.GetExpressionBody();
+        fixture.Consumer->FilterExpr = TExpression(
+            TypedCallable(
+                fixture.Ctx,
+                "And",
+                {
+                    direct,
+                    TypedLiteral(
+                        fixture.Ctx,
+                        "Bool",
+                        "true",
+                        fixture.Bool),
+                },
+                fixture.Bool),
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "a direct positive nullable Date IN conjunct must remain supported");
+
+        fixture.Consumer->FilterExpr = TExpression(
+            TypedCallable(
+                fixture.Ctx,
+                "Not",
+                {direct},
+                fixture.Bool),
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        const auto negated = ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!negated.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            negated.UnsupportedReason,
+            "must be a direct positive Filter conjunct");
+
+        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+            {"outer.k", fixture.OptionalInt32},
+        });
+        const auto mismatched = ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!mismatched.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            mismatched.UnsupportedReason,
+            "lookup and result must have the same supported type");
+    }
+
     Y_UNIT_TEST(ExportsExactUncorrelatedNonNullStringInSubplan) {
         TInSubplanExportFixture fixture(EInSubplanColumnKind::String);
         const auto catalog = CaptureSemanticSnapshotCatalogV1(
@@ -14404,19 +14530,19 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         };
 
         setResultType(fixture.OptionalString);
-        reject("result must be a fixed-width integer or non-null String");
+        reject("result must be a fixed-width integer, Date, or non-null String");
         setResultType(fixture.Utf8);
-        reject("result must be a fixed-width integer or non-null String");
+        reject("result must be a fixed-width integer, Date, or non-null String");
         setResultType(fixture.Bool);
-        reject("result must be a fixed-width integer or non-null String");
+        reject("result must be a fixed-width integer, Date, or non-null String");
         setResultType(fixture.Date);
-        reject("result must be a fixed-width integer or non-null String");
+        reject("lookup and result must have the same supported type");
         setResultType(DecimalType(fixture.Ctx, "12", "2"));
-        reject("result must be a fixed-width integer or non-null String");
+        reject("result must be a fixed-width integer, Date, or non-null String");
         setResultType(fixture.String);
 
         setLookupType(fixture.OptionalString);
-        reject("nullable lookup must be a fixed-width integer");
+        reject("nullable lookup must be a fixed-width integer or Date");
         setLookupType(fixture.Utf8);
         reject("lookup and result must have the same supported type");
         setLookupType(fixture.Int32);
@@ -14481,7 +14607,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Bool},
         });
-        reject("result must be a fixed-width integer or non-null String");
+        reject("result must be a fixed-width integer, Date, or non-null String");
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Int32},
         });

@@ -29,8 +29,8 @@ and eager inherited errors, exact one-equality-correlated scalar aggregate
 subplans, plus uncorrelated, one-equality-correlated, and exact ordered
 two-dependency equality/inequality relational `EXISTS`,
 exact uncorrelated single-column dynamic `IN`, including independently nullable
-same-type fixed-width integers only as a direct positive top-level Filter
-conjunct,
+same-type fixed-width integers or Date only as a direct positive top-level
+Filter conjunct,
 the exact nullable
 `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection shape,
 the exact proven-total Date `Unwrap(Coalesce(member, zero))` shape,
@@ -152,16 +152,23 @@ nullable families at two rows and two tasks, but that synthetic result is not
 a proof of the full benchmark query. TPC-DS q18 is formula-only and produced no
 optimizer-bug finding.
 
-The preceding dynamic-`IN` gate accepts independently nullable lookup and result
-columns only when their underlying types are the same fixed-width integer and
-the binding appears only as a direct positive top-level Filter conjunct. In
-that context, existential equality over present non-NULL values is exact:
-SQL FALSE and UNKNOWN both reject the outer row. `NOT`, `OR`, embedded binding
-references, nullable `String`, coercions, and every other nullable type fail
-closed. This moves TPC-DS q33 through formula construction after
-1,551/1,158 ms of preparation/verifier work. It is formula coverage only, not
-a bounded proof or an optimizer-bug finding; TPC-DS q58 and q83 remain at
-their dynamic-`IN` boundaries.
+The dynamic-`IN` gate accepts independently nullable lookup and result columns
+when their underlying types are the same fixed-width integer or Date and the
+binding appears only as a direct positive top-level Filter conjunct. In that
+context, existential equality over present non-NULL values is exact: SQL FALSE
+and UNKNOWN both reject the outer row. `NOT`, `OR`, embedded nullable binding
+references, nullable `String`, coercions, and other nullable types fail closed.
+The earlier integral step moved TPC-DS q33 through formula construction after
+1,551/1,158 ms of preparation/verifier work; it is formula coverage only.
+
+The Date step keeps values in the existing bounded Date domain. Focused C++
+checks and the real-host nullable-Date `IN`-to-`left_semi` obligation are
+green. A fresh focused TPC-DS q58 run now passes the Date-type boundary and
+fails closed later with
+`IN subplan binding _rbo_arg_1 contains a nested subplan reference`; it still
+does not emit a formula. Coverage counts and proof policy therefore remain
+unchanged. q58's nested subplan and q83's static nullable-Date `SqlIn` remain
+future slices.
 
 The preceding exact Date-`Unwrap` gate admits only a non-null Date
 `Unwrap` of a binary Optional-Date `Coalesce` whose first argument is one
@@ -1266,11 +1273,12 @@ Dynamic `IN` is now exact for one narrow uncorrelated relational shape. The
 typed descriptor names one lookup
 column from the sole Filter consumer and one result column from the inner root.
 Their underlying types must match exactly. Non-null columns may be fixed-width
-integral or exact `String`; lookup and output nullability may vary
-independently only for the same fixed-width integral type. If either column is
-nullable, every binding reference must be a direct positive top-level Filter
-conjunct. The binding has no dependency, `OuterBind`, `AddDependencies`,
-observable `EnsureAtMostOne`, nesting, staging, or additional consumer.
+integral, exact `String`, or Date; lookup and output nullability may vary
+independently only for the same fixed-width integral or Date type. If either
+column is nullable, every binding reference must be a direct positive top-level
+Filter conjunct. The binding has no dependency, `OuterBind`,
+`AddDependencies`, observable `EnsureAtMostOne`, nesting, staging, or
+additional consumer.
 
 For every present consumer row, dynamic `IN` ORs equality with every present
 inner row. This is exact existential membership: duplicates do not multiply
@@ -1284,9 +1292,10 @@ UNKNOWN to FALSE. The cached subplan family is shared by repeated binding
 references, while an error inherited from the inner root remains eager even
 when the outer input is empty. The evaluator rejects more than 16,384
 outer/inner membership pairs cumulatively before construction. Tuples,
-coercions, `Utf8`, Bool, Date, Decimal, nullable `String`, correlations,
+coercions, `Utf8`, Bool, Decimal, nullable `String`, correlations,
 multiple consumers, and malformed or mismatched lookup/output mappings fail
-closed.
+closed. Date membership uses the existing exact bounded
+`[0, NUdf::MAX_DATE)` domain.
 
 The String extension's focused dynamic-`IN` checks pass 16/16 in Python, 4/4
 in the C++ exporter, and 1/1 through the real host. The integration case proves
@@ -1296,10 +1305,13 @@ anti-membership, presence, and bounded reference equivalence. The exact
 nullable Date-year projection bridge is also implemented and tested
 independently as described above. The nullable-integral extension adds
 independent NULL, duplicate, empty-input, shape-rejection, and `left_semi`
-checks plus a real-host positive nullable `IN` fixture. Multiple dependencies,
-broader dynamic-`IN` correlations, nullable `String`, nullable anti-membership
-or embedded Boolean contexts, coercing dynamic `IN`, range reads, and other
-OLAP pushdowns remain separate extensions.
+checks plus a real-host positive nullable `IN` fixture. The Date extension
+reuses those exact truth semantics, adds independent Date nullability and
+bounded-domain checks, and proves a real-host nullable-Date `IN` equivalent to
+`left_semi`. Nested subplans, multiple dependencies, broader dynamic-`IN`
+correlations, nullable `String`, nullable anti-membership or embedded Boolean
+contexts, coercing dynamic `IN`, static nullable-Date `SqlIn`, range reads, and
+other OLAP pushdowns remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact
@@ -1878,8 +1890,10 @@ dynamic-`IN` fixture captures a typed non-null integral lookup/result
 descriptor initially and an ordinary `left_semi` join finally, then proves the
 two-row/two-task obligation. A second fixture captures independently nullable
 `Int64` lookup/result columns used as a positive Filter conjunct, checks the
-same `left_semi` lowering, and proves the normal obligation. A nullable-Date
-projection fixture checks the
+same `left_semi` lowering, and proves the normal obligation. A Date fixture
+does the same for independently nullable Date lookup/result columns, retaining
+the positive-Filter restriction and proving the bounded obligation. A
+nullable-Date projection fixture checks the
 exact `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` normalization,
 including the `yql-datetime-year-v1` opaque node and explicit Optional lift in
 both snapshots, then proves the two-row/two-task obligation. A separate

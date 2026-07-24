@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence, TypeAlias
 from . import decimal
 from .types import (
     BOOL,
+    DATE,
     MAX_DATE,
     VOID,
     equality_comparison_compatible,
@@ -1256,16 +1257,20 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
         if (
             (lookup.nullable or output.nullable)
             and integer_bounds(lookup.type) is None
+            and lookup.type != DATE
         ):
             _fail(
                 path,
-                "nullable-column IN supports only fixed-width integral columns",
+                "nullable-column IN supports only fixed-width integral or Date columns",
             )
-        if integer_bounds(lookup.type) is None and lookup.type != "String":
+        if (
+            integer_bounds(lookup.type) is None
+            and lookup.type not in {DATE, "String"}
+        ):
             _fail(
                 path,
-                "this IN slice supports only fixed-width integral "
-                "or String columns",
+                "this IN slice supports only fixed-width integral, "
+                "Date, or String columns",
             )
         return InSubplan(
             binding=binding,

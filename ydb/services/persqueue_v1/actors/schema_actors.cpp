@@ -2,6 +2,7 @@
 
 #include "persqueue_utils.h"
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -277,15 +278,35 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
         HFuncCtx(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
         HFuncCtx(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle, ctx);
         HFuncCtx(TEvPQProxy::TEvRequestTablet, Handle, ctx);
+        HFuncCtx(TEvents::TEvWakeup, Handle, ctx);
         default: return false;
     }
     return true;
 }
 
 void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    CancelRequestTimeout(ctx);
     for (auto& [_, tablet] : Tablets) {
         NTabletPipe::CloseClient(ctx, tablet.Pipe);
     }
+}
+
+void TDescribeTopicActorImpl::CancelRequestTimeout(const TActorContext& ctx) {
+    if (TimeoutTimerActorId) {
+        ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoison());
+        TimeoutTimerActorId = {};
+    }
+}
+
+TDuration TDescribeTopicActorImpl::RemainingRequestTimeout() const {
+    if (!RequestStartTime) {
+        return RequestTimeout;
+    }
+    const auto now = TAppData::TimeProvider->Now();
+    if (now >= *RequestStartTime + RequestTimeout) {
+        return TDuration::Zero();
+    }
+    return *RequestStartTime + RequestTimeout - now;
 }
 
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
@@ -310,6 +331,9 @@ void TDescribeTopicActorImpl::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 }
 
 void TDescribeTopicActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+    if (TBase::IsDead) {
+        return;
+    }
     this->Request_->RaiseIssue(FillIssue(error, errorCode));
     TBase::Reply(status, ctx);
 }
@@ -361,6 +385,18 @@ void TDescribeTopicActorImpl::Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, con
     }
 
     RequestTablet(tabletInfo, ctx);
+}
+
+void TDescribeTopicActorImpl::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    TimeoutTimerActorId = {};
+    YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Request timed out",
+        {"selfId", ctx.SelfID});
+    RaiseError(
+        "Describe topic request timed out",
+        Ydb::PersQueue::ErrorCode::ERROR,
+        Ydb::StatusIds::TIMEOUT,
+        ctx
+    );
 }
 
 void TDescribeTopicActorImpl::RequestTablet(ui64 tabletId, const TActorContext& ctx) {
@@ -443,7 +479,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     }
     NTabletPipe::SendData(
         ctx, Tablets[BalancerTabletId].Pipe,
-        new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
+        new TEvPersQueue::TEvGetPartitionsLocation(partsVector, RemainingRequestTimeout())
     );
     ++RequestsInfly;
 }
@@ -534,6 +570,7 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         auto res = ApplyResponse(ev, ctx);
         if (res) {
             GotLocation = true;
+            LocationsBackoff.Reset();
             AFL_ENSURE(RequestsInfly > 0);
             --RequestsInfly;
 
@@ -546,11 +583,25 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         }
     }
 
+    if (!LocationsBackoff.HasMore()) {
+        YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl PartitionsLocation retries exceeded",
+            {"selfId", ctx.SelfID},
+            {"response", record.DebugString()});
+        return RaiseError(
+            "Partition locations are not available",
+            Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
+            Ydb::StatusIds::UNAVAILABLE,
+            ctx
+        );
+    }
+
+    const auto delay = LocationsBackoff.Next();
     YDB_LOG_DEBUG_CTX(ctx, "DescribeTopicImpl Something wrong on location, retry",
         {"selfId", ctx.SelfID},
+        {"iteration", LocationsBackoff.GetIteration()},
+        {"delay", delay.ToString()},
         {"response", record.DebugString()});
-    //Something gone wrong, retry
-    ctx.Schedule(TDuration::MilliSeconds(200), new TEvPQProxy::TEvRequestTablet(BalancerTabletId));
+    ctx.Schedule(delay, new TEvPQProxy::TEvRequestTablet(BalancerTabletId));
 }
 
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
@@ -781,6 +832,8 @@ bool TDescribeTopicActorImpl::ProcessTablets(
         Tablets[pi.GetTabletId()].TabletId = pi.GetTabletId();
     }
 
+    RequestStartTime = TAppData::TimeProvider->Now();
+
     for (auto& pair : Tablets) {
         RequestTablet(pair.second, ctx);
     }
@@ -790,6 +843,8 @@ bool TDescribeTopicActorImpl::ProcessTablets(
         return false;
     }
 
+    TimeoutTimerActorId = CreateLongTimer(ctx, RequestTimeout,
+        new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
     return true;
 }
 
@@ -884,6 +939,9 @@ void TPartitionsLocationActor::Finalize() {
 }
 
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
+    if (TBase::IsDead) {
+        return;
+    }
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
 }

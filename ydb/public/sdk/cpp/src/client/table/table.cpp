@@ -244,6 +244,21 @@ const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
     return Metadata_;
 }
 
+TSetNotNullOperation::TSetNotNullOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::SetNotNullMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<ESetNotNullState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Path = metadata.path();
+    Metadata_.Columns.assign(metadata.columns().begin(), metadata.columns().end());
+}
+
+const TSetNotNullOperation::TMetadata& TSetNotNullOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {
@@ -3025,6 +3040,8 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
             return ETokenizer::Standard;
         case Ydb::Table::FulltextIndexSettings::KEYWORD:
             return ETokenizer::Keyword;
+        case Ydb::Table::FulltextIndexSettings::ALPHANUMERIC:
+            return ETokenizer::Alphanumeric;
         default:
             return ETokenizer::Unspecified;
         }
@@ -3078,6 +3095,8 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
             return Ydb::Table::FulltextIndexSettings::STANDARD;
         case ETokenizer::Keyword:
             return Ydb::Table::FulltextIndexSettings::KEYWORD;
+        case ETokenizer::Alphanumeric:
+            return Ydb::Table::FulltextIndexSettings::ALPHANUMERIC;
         case ETokenizer::Unspecified:
             return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
         }

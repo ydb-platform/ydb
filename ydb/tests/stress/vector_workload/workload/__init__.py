@@ -54,6 +54,9 @@ class YdbVectorWorkload(WorkloadBase):
         prefix = self.database.rstrip('/') + '/'
         if path.startswith(prefix):
             return path[len(prefix):]
+        if path.rstrip('/') == self.database.rstrip('/'):
+            raise ValueError(
+                f"path must be under the database, not the database itself: {path}")
         return path.lstrip('/')
 
     def __del__(self):

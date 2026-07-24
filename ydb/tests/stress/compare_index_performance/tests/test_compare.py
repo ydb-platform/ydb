@@ -222,6 +222,9 @@ class TestCompareIndexPerformance:
             yatest.common.get_param('compare_current_table_service_config', default=''))
 
         self.workload = yatest.common.get_param('compare_workload', default='vector')
+        if self.workload not in ('vector', 'fulltext'):
+            print(f"WARNING: unrecognized compare_workload={self.workload!r}; "
+                  "all workloads will be skipped (expected 'vector' or 'fulltext')")
 
         # Dataset source: 'generate' (default) or 's3'
         self.dataset_source = yatest.common.get_param('compare_dataset_source', default='generate')
@@ -233,6 +236,16 @@ class TestCompareIndexPerformance:
         # Optional S3 queries table (when dataset_source == 's3' and queries pre-computed)
         self.s3_query_source = yatest.common.get_param('compare_s3_query_source', default='')
         self.s3_query_destination = yatest.common.get_param('compare_s3_query_destination', default='')
+
+        if self.dataset_source == 's3':
+            missing = [name for name, val in [
+                ('compare_s3_endpoint', self.s3_endpoint),
+                ('compare_s3_bucket', self.s3_bucket),
+                ('compare_s3_source', self.s3_source),
+                ('compare_s3_destination', self.s3_destination),
+            ] if not val]
+            if missing:
+                pytest.fail(f"compare_dataset_source=s3 requires: {', '.join(missing)}")
 
         # Flamegraph collection (off by default). When on, each workload run is
         # profiled with `perf` and a CPU flamegraph SVG is produced per side per

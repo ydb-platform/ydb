@@ -83,14 +83,16 @@ A defect in these files can turn inequivalent supported plans into
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, exact Sort/Merge representations, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
 `Term` caches its structural hash when the immutable SMT DAG node is
-constructed. The cached field is excluded from equality; equality still checks
-the complete `(sort, operation, arguments, atom)` structure, and Python
-dictionary and set lookup still resolves hash collisions with that equality.
+constructed. A different hash proves inequality; equal hashes still require
+the complete `(sort, operation, arguments, atom)` structural comparison, and
+Python dictionary and set lookup therefore resolves collisions with exact
+equality.
 Equality uses an iterative identity-pair worklist, checks exact runtime classes
 and ordered arguments, and therefore does not turn Python recursion depth into
 a verifier limit. The cache changes the cost of repeated routing-fact and set
@@ -286,6 +288,38 @@ referenced collisions, and unused collisions. The complete benchmark
 dashboards independently move TPC-DS q2/q97 to formulas and q59 to the
 verifier's exact construction cap; none of these results is a bounded proof.
 
+The exact sorting-network slice crosses `sort_network.py`, `smt.py`,
+`relation.py`, and the row-preserving paths in `stages.py`. The topology module
+contains only the padded-size calculation and deterministic bitonic comparator
+schedule. For each syntactically live candidate, `relation.py` allocates one
+bounded finite rank; global distinctness makes the ranks a permutation. SQL
+key comparison dominates rank comparison, so ranks choose exactly the
+otherwise-unobservable order of equal keys. Present rows compare before absent
+rows, power-of-two padding is always absent, and every comparator moves the
+complete `Row` plus its rank under one shared condition. Nullable values,
+Decimal finite bounds, and hidden AVG sum/count state therefore cannot split
+across candidate identities.
+
+The fixed output slots have a present-prefix invariant. Only root wrapping,
+OuterBind, Project, and one-input Stage gather preserve it; Filter, source
+partitioning, hash routing, and multi-input gather clear it. Ordered Limit
+statically slices slots only while the invariant is present. Merge additionally
+requires concrete semantic input ordinals and adds unconditional adjacent rank
+edges in each producer's ordinal order. Every legal order of present rows
+extends to a full rank permutation including absent holes, so those chains
+denote precisely the sorted producer-order-preserving interleavings.
+
+Selection is fail-closed: ordinary pair construction remains capped at 16,384;
+the network is separately capped at 32,768 comparators and 131,072
+comparator/column row transports. Intermediate TopSort compacts only when the
+uncompacted shaped slots from both fixed verifier tasks would make the
+downstream Merge exceed the pair cap. Exhaustive topology, NULL/direction,
+tie/duplicate, presence-prefix, offset, producer-hole/reversed-ordinal,
+mixed-key Merge, Decimal-AVG-state, and cap-fallback tests are the independent
+evidence. The complete TPCH dashboard moves q2 to a formula; q59/q78 remain
+outside the network budget. This slice adds no equivalence axiom and no bounded
+proof.
+
 The nullable Date-year bridge likewise changes only `semantic_snapshot.cpp`.
 It admits one direct visible `Optional<Date>` member, a complete cast to
 `Optional<Timestamp>`, and the exact reviewed unary
@@ -353,18 +387,18 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-nullable-Decimal-`SafeCast` 2026-07-24 physical-line audit records
-implementation, test, and diagnostic rows at source `5dafcc79a4e`;
+The post-sorting-network 2026-07-24 physical-line audit records
+implementation, test, and diagnostic rows at source `d84b3ee7a0a`;
 documentation includes this evidence update:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,896 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,005 |
-| **Proof-producing code total** | **19,901** |
-| Tests, outside the TCB | 48,872 |
-| Diagnostic/orchestration tools, outside the TCB | 5,182 |
-| Documentation, outside the TCB | 6,282 |
+| Ten trusted Python semantic modules | 11,623 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,354 |
+| **Proof-producing code total** | **20,977** |
+| Tests, outside the TCB | 52,016 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+| Documentation, outside the TCB | 7,285 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
@@ -496,7 +530,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, and exact Decimal weak-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
-| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
+| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |

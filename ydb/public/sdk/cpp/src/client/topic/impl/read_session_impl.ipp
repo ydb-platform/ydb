@@ -3315,18 +3315,20 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
             messageData.clear_data();
 
-            auto log = partitionStream->GetLog();
-            if (recordsSkipped > 0) {
-                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
-                    << "Take Data (codec batch). Partition " << partitionStream->GetPartitionId()
-                    << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
-                    << minOffset << "-" << maxOffset << "), messages: " << result.MessagesTaken
-                    << ", skipped as committed: " << recordsSkipped);
-            } else {
-                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
-                    << "Take Data. Partition " << partitionStream->GetPartitionId()
-                    << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
-                    << minOffset << "-" << maxOffset << ")");
+            if (auto session = CbContext->LockShared()) {
+                const auto& log = session->GetLog();
+                if (recordsSkipped > 0) {
+                    LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
+                        << "Take Data (codec batch). Partition " << partitionStream->GetPartitionId()
+                        << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+                        << minOffset << "-" << maxOffset << "), messages: " << result.MessagesTaken
+                        << ", skipped as committed: " << recordsSkipped);
+                } else {
+                    LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
+                        << "Take Data. Partition " << partitionStream->GetPartitionId()
+                        << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+                        << minOffset << "-" << maxOffset << ")");
+                }
             }
             return result;
         }
@@ -3355,11 +3357,13 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
         result.DataSize += messageData.data().size();
         messageData.clear_data();
 
-        auto log = partitionStream->GetLog();
-        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
-            << "Take Data. Partition " << partitionStream->GetPartitionId()
-            << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
-            << minOffset << "-" << maxOffset << ")");
+        if (auto session = CbContext->LockShared()) {
+            const auto& log = session->GetLog();
+            LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
+                << "Take Data. Partition " << partitionStream->GetPartitionId()
+                << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+                << minOffset << "-" << maxOffset << ")");
+        }
         return result;
     }
 
@@ -3402,11 +3406,13 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
     // Clear data to free internal session's memory.
     messageData.clear_data();
 
-    auto log = partitionStream->GetLog();
-    LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
-                                        << "Take Data. Partition " << partitionStream->GetPartitionId()
-                                        << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
-                                        << minOffset << "-" << maxOffset << ")");
+    if (auto session = CbContext->LockShared()) {
+        const auto& log = session->GetLog();
+        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
+            << "Take Data. Partition " << partitionStream->GetPartitionId()
+            << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+            << minOffset << "-" << maxOffset << ")");
+    }
     return result;
 }
 

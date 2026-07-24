@@ -645,7 +645,7 @@ class LimitOutcomeTest(unittest.TestCase):
         distributed = smt.or_(
             *(branch.predicate for branch in comparison.mismatch.branches)
         )
-        script.assert_(
+        script.assert_term(
             smt.not_(
                 smt.eq(comparison.mismatch.counterexample, distributed)
             )

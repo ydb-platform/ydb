@@ -412,10 +412,13 @@ def _lower_in_snapshot(raw, join_kind):
             "left": "outer_scan",
             "right": descriptor["root"],
             "kind": join_kind,
-            "predicate": _equality(
-                descriptor["lookup"]["column"],
-                descriptor["output"]["column"],
-            ),
+            "keys": [
+                {
+                    "left": descriptor["lookup"]["column"],
+                    "right": descriptor["output"]["column"],
+                }
+            ],
+            "predicate": _literal("Bool", True),
         }
     )
     result["plan"]["subplans"] = []
@@ -2463,7 +2466,8 @@ class InSubplanEvaluationTest(unittest.TestCase):
                 "left": "outer_scan",
                 "right": "inner_scan",
                 "kind": "left_semi",
-                "predicate": _equality("outer.k", "inner.k"),
+                "keys": [{"left": "outer.k", "right": "inner.k"}],
+                "predicate": _literal("Bool", True),
             }
         )
         lowered["plan"]["subplans"] = []
@@ -2559,10 +2563,7 @@ class InSubplanSolverTest(unittest.TestCase):
         )
         raw["plan"]["subplans"][0]["lookup"]["column"] = "outer.other"
         lowered = _lower_in_snapshot(raw, "left_semi")
-        lowered["plan"]["nodes"][2]["predicate"] = _equality(
-            "outer.k",
-            "inner.k",
-        )
+        lowered["plan"]["nodes"][2]["keys"][0]["left"] = "outer.k"
 
         result = self._solve(raw, lowered, row_bound=1)
 

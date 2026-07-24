@@ -123,7 +123,7 @@ class Probes:
                     f"concrete_trace_probe:{len(bound_by_structure)}",
                     term.sort,
                 )
-                self.script.assert_(smt.eq(bound, term))
+                self.script.assert_term(smt.eq(bound, term))
                 self._requested.append(bound)
             bound_by_structure[structural_id] = bound
         self._bound = {

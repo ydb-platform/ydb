@@ -271,6 +271,85 @@ def local_join_stage_snapshot(left_connection=None, right_connection=None):
     )
 
 
+def shared_name_semi_join_stage_snapshot(kind):
+    schema_value = {
+        "tables": [
+            {
+                "name": table,
+                "columns": [
+                    {"name": "k", "type": "Int64", "nullable": True},
+                ],
+                "unique_keys": [],
+            }
+            for table in ("A", "B")
+        ]
+    }
+    left = {
+        "id": "left",
+        "op": "scan",
+        "table": "A",
+        "columns": [{"source": "k", "output": "shared.k"}],
+        "pushed_limit": None,
+    }
+    right = {
+        "id": "right",
+        "op": "scan",
+        "table": "B",
+        "columns": [{"source": "k", "output": "shared.k"}],
+        "pushed_limit": None,
+    }
+    join = {
+        "id": "join",
+        "op": "join",
+        "left": "left",
+        "right": "right",
+        "kind": kind,
+        "keys": [{"left": "shared.k", "right": "shared.k"}],
+        "predicate": {
+            "kind": "literal",
+            "type": "Bool",
+            "value": True,
+        },
+    }
+    shuffle = {
+        "kind": "hash_shuffle",
+        "keys": ["shared.k"],
+        "hash_function": "HashV1",
+        "use_spilling": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [left, right, join],
+            "join",
+            ["shared.k"],
+            [
+                _stage("left_source", ["left"], [], ["left"], "row"),
+                _stage("right_source", ["right"], [], ["right"], "row"),
+                _stage("join_stage", ["join"], ["left", "right"], ["join"]),
+            ],
+            [
+                _edge(
+                    "left_edge",
+                    "left_source",
+                    "join_stage",
+                    0,
+                    0,
+                    **shuffle,
+                ),
+                _edge(
+                    "right_edge",
+                    "right_source",
+                    "join_stage",
+                    0,
+                    1,
+                    **shuffle,
+                ),
+            ],
+        )
+    )
+
+
 def duplicate_edge_stage_value():
     union = {
         "id": "union",
@@ -473,6 +552,44 @@ def aggregate_stage_snapshot(
             (["a.k"] if grouped else []) + ["result"],
             stages,
             edges,
+        )
+    )
+
+
+def unwrapped_uint64_sum_snapshot():
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1].update(
+        type="Uint64",
+        nullable=True,
+    )
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": "sum",
+                "output": "result",
+                "type": "Uint64",
+                # This is the raw prephysical type. Scalar Unwrap is lowered
+                # to Coalesce(..., Uint64(0)), so the inferred node schema is
+                # non-nullable.
+                "nullable": True,
+                "distinct": False,
+                "unwrap": True,
+            }
+        ],
+        "phase": "final",
+        "distinct_all": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [copy.deepcopy(SCAN_A), aggregate],
+            "aggregate",
+            ["result"],
         )
     )
 
@@ -850,6 +967,36 @@ def count_star_snapshot():
         _snapshot_with_stage_graph(
             schema_value,
             [copy.deepcopy(SCAN_A), project, aggregate],
+            "aggregate",
+            ["result"],
+        )
+    )
+
+
+def count_distinct_int64_snapshot():
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": "count",
+                "output": "result",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": True,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            [copy.deepcopy(SCAN_A), aggregate],
             "aggregate",
             ["result"],
         )
@@ -1678,7 +1825,7 @@ class SolverProtocolTest(unittest.TestCase):
     def test_problem_without_exact_branches_keeps_the_legacy_single_query(self):
         script = smt.Script()
         obligation = script.fresh_constant("obligation", smt.BOOL)
-        script.assert_(obligation)
+        script.assert_term(obligation)
         problem = Problem(script, {})
         unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
 
@@ -2236,8 +2383,157 @@ class ConstructionAuditBoundTest(unittest.TestCase):
                     2,
                 )
 
+    def test_distinct_aggregate_pair_cap_precedes_construction(self):
+        snapshot = count_distinct_int64_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 3, script)
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 2):
+            with self.assertRaisesRegex(
+                RelationError,
+                "distinct aggregate requires 3 candidate-row pairs.*"
+                "2 pair construction",
+            ):
+                RelationEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                ).root()
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root()
+
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_staged_shared_name_join_keys_remain_side_explicit(self):
+        states = (
+            (False, None),
+            (True, None),
+            (True, 0),
+            (True, 1),
+        )
+        for kind in ("left_semi", "left_anti", "right_semi", "right_anti"):
+            snapshot = shared_name_semi_join_stage_snapshot(kind)
+            script = smt.Script()
+            database = Database(snapshot, 1, script)
+            router = Router(script)
+            relation = StageEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root().certain()
+
+            for left, right, left_task, right_task in product(
+                states,
+                states,
+                (False, True),
+                (False, True),
+            ):
+                constants = {}
+                for table, state in (("A", left), ("B", right)):
+                    witness = database.witness[table][0]
+                    present, value = state
+                    constants[witness.present.atom] = present
+                    cell = witness.cells["k"]
+                    constants[cell.is_null.atom] = value is None
+                    constants[cell.value.atom] = 0 if value is None else value
+                constants[router.source_task("A", 0).atom] = left_task
+                constants[router.source_task("B", 0).atom] = right_task
+
+                matches = (
+                    left[0]
+                    and right[0]
+                    and left[1] is not None
+                    and right[1] is not None
+                    and left[1] == right[1]
+                )
+                selected = left if kind.startswith("left_") else right
+                keep = selected[0] and (
+                    matches if kind.endswith("_semi") else not matches
+                )
+                expected = (
+                    Counter({(selected[1],): 1})
+                    if keep
+                    else Counter()
+                )
+                with self.subTest(
+                    kind=kind,
+                    left=left,
+                    right=right,
+                    left_task=left_task,
+                    right_task=right_task,
+                ):
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            constants,
+                            self._hash_choice,
+                        ),
+                        expected,
+                    )
+
+    def test_scalar_uint64_unwrap_coalesces_an_empty_sum_to_zero(self):
+        snapshot = unwrapped_uint64_sum_snapshot()
+        self.assertEqual(
+            [
+                (column.type, column.nullable)
+                for column in snapshot.output_schema()
+            ],
+            [("Uint64", False)],
+        )
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        states = (None, (0, None), (0, 0), (0, 1), (0, (1 << 64) - 1))
+        for rows in product(states, repeat=2):
+            non_null = [
+                row[1]
+                for row in rows
+                if row is not None and row[1] is not None
+            ]
+            expected = Counter({(sum(non_null) % (1 << 64),): 1})
+            with self.subTest(rows=rows):
+                self.assertEqual(
+                    self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    ),
+                    expected,
+                )
+
+    def test_scalar_count_distinct_matches_a_tiny_set_reference(self):
+        snapshot = count_distinct_int64_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 3, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        states = (None, (0, -1), (0, 0), (0, 1))
+        for rows in product(states, repeat=3):
+            expected = Counter({
+                (len({row[1] for row in rows if row is not None}),): 1,
+            })
+            with self.subTest(rows=rows):
+                self.assertEqual(
+                    self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    ),
+                    expected,
+                )
+
     def test_composite_distinct_all_matches_nullable_tuple_set_reference(self):
         snapshot = composite_distinct_all_snapshot()
         script = smt.Script()
@@ -3834,45 +4130,39 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
             )
         )
 
-    def test_unmodeled_aggregate_traits_fail_closed(self):
+    def test_unmodeled_aggregate_function_fails_closed(self):
         value = aggregate_stage_snapshot("count", False, False)
-        for field, replacement, message in (
-            ("distinct", True, "distinct aggregate"),
-            ("unwrap", True, "unwrapped aggregate"),
-            ("function", "median", "not modeled: median"),
-        ):
-            with self.subTest(field=field):
-                trait = value.plan.nodes[-1].aggregates[0]
-                raw = _snapshot_with_stage_graph(
-                    _stage_schema("A"),
-                    [
-                        copy.deepcopy(SCAN_A),
+        trait = value.plan.nodes[-1].aggregates[0]
+        raw = _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            [
+                copy.deepcopy(SCAN_A),
+                {
+                    "id": "aggregate",
+                    "op": "aggregate",
+                    "input": "a",
+                    "keys": [],
+                    "aggregates": [
                         {
-                            "id": "aggregate",
-                            "op": "aggregate",
-                            "input": "a",
-                            "keys": [],
-                            "aggregates": [
-                                {
-                                    "input": trait.input,
-                                    "function": replacement if field == "function" else trait.function,
-                                    "output": trait.output,
-                                    "type": trait.output_type,
-                                    "nullable": trait.output_nullable,
-                                    "distinct": replacement if field == "distinct" else trait.distinct,
-                                    "unwrap": replacement if field == "unwrap" else trait.unwrap,
-                                }
-                            ],
-                            "phase": "undefined",
-                            "distinct_all": False,
-                        },
+                            "input": trait.input,
+                            "function": "median",
+                            "output": trait.output,
+                            "type": trait.output_type,
+                            "nullable": trait.output_nullable,
+                            "distinct": trait.distinct,
+                            "unwrap": trait.unwrap,
+                        }
                     ],
-                    "aggregate",
-                    ["result"],
-                )
-                snapshot = parse_snapshot(raw)
-                with self.assertRaisesRegex(VerificationError, message):
-                    build_logical_kernel_problem_for_tests(snapshot, snapshot, 1)
+                    "phase": "undefined",
+                    "distinct_all": False,
+                },
+            ],
+            "aggregate",
+            ["result"],
+        )
+        snapshot = parse_snapshot(raw)
+        with self.assertRaisesRegex(VerificationError, "not modeled: median"):
+            build_logical_kernel_problem_for_tests(snapshot, snapshot, 1)
 
     def test_two_task_map_and_hash_shuffle_preserve_rows(self):
         logical = passthrough_stage_snapshot()

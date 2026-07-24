@@ -59,7 +59,28 @@ TReadSession::~TReadSession() {
     }
 
     Abort();
+
+    std::vector<TSingleClusterReadSessionImpl::TPtr> sessions;
+    {
+        std::lock_guard guard(Lock);
+        sessions.reserve(ClusterSessions.size());
+        for (auto& [_, sessionInfo] : ClusterSessions) {
+            if (sessionInfo.Session) {
+                sessions.push_back(sessionInfo.Session);
+            }
+        }
+    }
+
+    const TInstant closeDeadline = TInstant::Now() + TDuration::Seconds(5);
+    for (const auto& session : sessions) {
+        if (!session->WaitAllDecompressionTasks(closeDeadline)) {
+            LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session destroy timeout");
+        }
+    }
     ClearAllEvents();
+    for (const auto& session : sessions) {
+        session->ClearAllPartitionStreamEvents();
+    }
 
     for (const auto& ctx : CbContexts) {
         ctx->Cancel();
@@ -398,6 +419,7 @@ bool TReadSession::Close(TDuration timeout) {
         AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
         return false;
     }
+    const TInstant closeDeadline = TInstant::Now() + timeout;
     Connections->ScheduleCallback(timeout,
                                   std::move(timeoutCallback),
                                   timeoutContext);
@@ -422,8 +444,21 @@ bool TReadSession::Close(TDuration timeout) {
         EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
     }
 
-    std::lock_guard guard(Lock);
-    Aborting = true; // Set abort flag for doing nothing on destructor.
+    {
+        std::lock_guard guard(Lock);
+        Aborting = true; // Set abort flag for doing nothing on destructor.
+    }
+
+    for (const auto& session : sessions) {
+        if (!session->WaitAllDecompressionTasks(closeDeadline)) {
+            LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session close timeout");
+        }
+    }
+    ClearAllEvents();
+    for (const auto& session : sessions) {
+        session->ClearAllPartitionStreamEvents();
+    }
+
     return result;
 }
 

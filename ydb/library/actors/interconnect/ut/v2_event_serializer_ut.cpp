@@ -22,6 +22,8 @@ struct TEventProcessor : TEventDeserializer::IEventProcessor {
     void PushEvent(std::unique_ptr<IEventHandle> event) override {
         Events.push_back(std::move(event));
     }
+
+    void Process(NActorsInterconnect::TSystemPayloadV2&) override {}
 };
 
 // deterministic payload for the event with the given index, so that the receiver can validate consistency

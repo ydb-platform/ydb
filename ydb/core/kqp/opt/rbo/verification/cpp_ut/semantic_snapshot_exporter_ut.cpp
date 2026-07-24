@@ -3092,6 +3092,120 @@ struct TInSubplanExportFixture {
     TIntrusivePtr<TOpFilter> Consumer;
 };
 
+struct TNestedInSubplanExportFixture {
+    TNestedInSubplanExportFixture()
+        : OptionalDate(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Date,
+              true))
+        , Bool(ScalarType(Ctx, NUdf::EDataSlot::Bool))
+    {
+        const auto& mainTable = AddTable(
+            Ctx,
+            "/Root/NestedInMain",
+            {{"date", "Date", false}});
+        const auto& candidateTable = AddTable(
+            Ctx,
+            "/Root/NestedInCandidate",
+            {{"date", "Date", false}});
+        const auto& allowedTable = AddTable(
+            Ctx,
+            "/Root/NestedInAllowed",
+            {{"date", "Date", false}});
+        MainRead = MakeRead(Ctx, mainTable, "main", {"date"});
+        CandidateRead = MakeRead(
+            Ctx,
+            candidateTable,
+            "candidate",
+            {"date"});
+        AllowedRead = MakeRead(Ctx, allowedTable, "allowed", {"date"});
+        SetExactOutputType(Ctx, *MainRead, {
+            {"main.date", OptionalDate},
+        });
+        SetExactOutputType(Ctx, *CandidateRead, {
+            {"candidate.date", OptionalDate},
+        });
+        SetExactOutputType(Ctx, *AllowedRead, {
+            {"allowed.date", OptionalDate},
+        });
+
+        Root = std::make_unique<TOpRoot>(
+            MainRead,
+            Pos,
+            TVector<TString>{"main.date"});
+        Root->PlanProps.Subplans.Add(
+            NestedBinding,
+            TSubplanEntry{
+                AllowedRead,
+                {NestedLookup},
+                ESubplanType::IN_SUBPLAN,
+                NestedBinding,
+                {}});
+
+        NestedBindingValue = MakeColumnAccess(
+            NestedBinding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(NestedBindingValue, Bool);
+        NestedConsumer = MakeIntrusive<TOpFilter>(
+            CandidateRead,
+            Pos,
+            NestedBindingValue);
+        SetExactOutputType(Ctx, *NestedConsumer, {
+            {"candidate.date", OptionalDate},
+        });
+        Root->PlanProps.Subplans.Add(
+            OuterBinding,
+            TSubplanEntry{
+                NestedConsumer,
+                {OuterLookup},
+                ESubplanType::IN_SUBPLAN,
+                OuterBinding,
+                {}});
+
+        OuterBindingValue = MakeColumnAccess(
+            OuterBinding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(OuterBindingValue, Bool);
+        MainConsumer = MakeIntrusive<TOpFilter>(
+            MainRead,
+            Pos,
+            OuterBindingValue);
+        SetExactOutputType(Ctx, *MainConsumer, {
+            {"main.date", OptionalDate},
+        });
+        Root->SetInput(MainConsumer);
+    }
+
+    TSubplanEntry& NestedEntry() {
+        return Root->PlanProps.Subplans.PlanMap.at(NestedBinding);
+    }
+
+    TSubplanEntry& OuterEntry() {
+        return Root->PlanProps.Subplans.PlanMap.at(OuterBinding);
+    }
+
+    TExportTestContext Ctx;
+    const TPositionHandle Pos;
+    const TTypeAnnotationNode* const OptionalDate;
+    const TTypeAnnotationNode* const Bool;
+    const TInfoUnit NestedBinding{"_rbo_nested_in", true};
+    const TInfoUnit OuterBinding{"_rbo_outer_in", true};
+    const TInfoUnit NestedLookup{"candidate.date"};
+    const TInfoUnit OuterLookup{"main.date"};
+    TIntrusivePtr<TOpRead> MainRead;
+    TIntrusivePtr<TOpRead> CandidateRead;
+    TIntrusivePtr<TOpRead> AllowedRead;
+    std::unique_ptr<TOpRoot> Root;
+    TExpression NestedBindingValue;
+    TIntrusivePtr<TOpFilter> NestedConsumer;
+    TExpression OuterBindingValue;
+    TIntrusivePtr<TOpFilter> MainConsumer;
+};
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -14762,6 +14876,307 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_UNEQUAL(nestedConsumerId, mainConsumerId);
     }
 
+    Y_UNIT_TEST(ExportsOneLevelClosedNestedInSubplan) {
+        TNestedInSubplanExportFixture fixture;
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx));
+        const auto& plan = snapshot["plan"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            plan["subplans"].GetArraySafe().size(),
+            2);
+        const auto& nested =
+            FindSubplan(snapshot, "_rbo_nested_in");
+        const auto& outer =
+            FindSubplan(snapshot, "_rbo_outer_in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["kind"].GetStringSafe(),
+            "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["kind"].GetStringSafe(),
+            "in");
+        UNIT_ASSERT(!nested.Has("subplans"));
+        UNIT_ASSERT(!outer.Has("subplans"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["lookup"]["column"].GetStringSafe(),
+            "candidate.date");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["lookup"]["nullable"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["output"]["column"].GetStringSafe(),
+            "allowed.date");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["output"]["nullable"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["lookup"]["column"].GetStringSafe(),
+            "main.date");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["lookup"]["nullable"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["output"]["column"].GetStringSafe(),
+            "candidate.date");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["output"]["nullable"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["consumers"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            outer["consumers"].GetArraySafe().size(),
+            1);
+
+        const TString nestedRootId =
+            nested["root"].GetStringSafe();
+        const TString nestedConsumerId =
+            nested["consumers"][0].GetStringSafe();
+        const TString outerRootId =
+            outer["root"].GetStringSafe();
+        const TString outerConsumerId =
+            outer["consumers"][0].GetStringSafe();
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNodeById(snapshot, nestedRootId)["op"].GetStringSafe(),
+            "scan");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nestedConsumerId,
+            outerRootId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNodeById(snapshot, nestedConsumerId)["predicate"]["column"]
+                .GetStringSafe(),
+            "_rbo_nested_in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerConsumerId,
+            plan["root"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNodeById(snapshot, outerConsumerId)["predicate"]["column"]
+                .GetStringSafe(),
+            "_rbo_outer_in");
+    }
+
+    Y_UNIT_TEST(NestedInSubplanAdmissionContractsFailClosed) {
+        {
+            TNestedInSubplanExportFixture fixture;
+            fixture.NestedEntry().DependentIUs.push_back(
+                fixture.NestedLookup);
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must be uncorrelated");
+        }
+
+        {
+            TNestedInSubplanExportFixture fixture;
+            fixture.NestedConsumer->FilterExpr = TExpression(
+                TypedCallable(
+                    fixture.Ctx,
+                    "Not",
+                    {fixture.NestedBindingValue.GetExpressionBody()},
+                    fixture.Bool),
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must be a direct positive Filter conjunct");
+        }
+
+        {
+            TNestedInSubplanExportFixture fixture;
+            auto& owner = fixture.OuterEntry();
+            owner.Tuple.clear();
+            owner.Type = ESubplanType::EXPR;
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "only an uncorrelated scalar or a one-level closed IN "
+                "binding may be consumed inside an IN subplan");
+        }
+
+        {
+            TNestedInSubplanExportFixture fixture;
+            fixture.Root->PlanProps.StageGraph.AddStage();
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "cannot contain residual subplans");
+        }
+
+        {
+            TNestedInSubplanExportFixture fixture;
+            auto wrapper = MakeIntrusive<TOpLimit>(
+                fixture.AllowedRead,
+                fixture.Pos,
+                MakeConstant(
+                    "Uint64",
+                    "1",
+                    fixture.Pos,
+                    &fixture.Ctx.ExprCtx),
+                EOpPhase::Undefined);
+            SetExactOutputType(fixture.Ctx, *wrapper, {
+                {"allowed.date", fixture.OptionalDate},
+            });
+            fixture.OuterEntry().Plan = wrapper;
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "is reachable below distinct subplan binding");
+        }
+    }
+
+    Y_UNIT_TEST(NestedInSubplanDepthAndCyclesFailClosed) {
+        {
+            TNestedInSubplanExportFixture fixture;
+            const auto& leafTable = AddTable(
+                fixture.Ctx,
+                "/Root/NestedInLeaf",
+                {{"date", "Date", false}});
+            auto leafRead = MakeRead(
+                fixture.Ctx,
+                leafTable,
+                "leaf",
+                {"date"});
+            SetExactOutputType(fixture.Ctx, *leafRead, {
+                {"leaf.date", fixture.OptionalDate},
+            });
+            const TInfoUnit leafBinding("_rbo_leaf_in", true);
+            fixture.Root->PlanProps.Subplans.Add(
+                leafBinding,
+                TSubplanEntry{
+                    leafRead,
+                    {TInfoUnit("allowed.date")},
+                    ESubplanType::IN_SUBPLAN,
+                    leafBinding,
+                    {}});
+            auto leafValue = MakeColumnAccess(
+                leafBinding,
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            AnnotateExpression(leafValue, fixture.Bool);
+            auto leafConsumer = MakeIntrusive<TOpFilter>(
+                fixture.AllowedRead,
+                fixture.Pos,
+                leafValue);
+            SetExactOutputType(fixture.Ctx, *leafConsumer, {
+                {"allowed.date", fixture.OptionalDate},
+            });
+            fixture.NestedEntry().Plan = leafConsumer;
+
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "nesting deeper than one level");
+        }
+
+        {
+            TNestedInSubplanExportFixture fixture;
+            auto outerValue = MakeColumnAccess(
+                fixture.OuterBinding,
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            AnnotateExpression(outerValue, fixture.Bool);
+            auto cyclicConsumer = MakeIntrusive<TOpFilter>(
+                fixture.AllowedRead,
+                fixture.Pos,
+                outerValue);
+            SetExactOutputType(fixture.Ctx, *cyclicConsumer, {
+                {"allowed.date", fixture.OptionalDate},
+            });
+            fixture.NestedEntry().Plan = cyclicConsumer;
+
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "cyclic subplan references");
+        }
+    }
+
+    Y_UNIT_TEST(NestedInSubplanConsumerHasUniquePlanRoot) {
+        TNestedInSubplanExportFixture fixture;
+        auto firstRoot = MakeIntrusive<TOpLimit>(
+            fixture.NestedConsumer,
+            fixture.Pos,
+            MakeConstant(
+                "Uint64",
+                "1",
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx),
+            EOpPhase::Undefined);
+        auto secondRoot = MakeIntrusive<TOpLimit>(
+            fixture.NestedConsumer,
+            fixture.Pos,
+            MakeConstant(
+                "Uint64",
+                "2",
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx),
+            EOpPhase::Undefined);
+        SetExactOutputType(fixture.Ctx, *firstRoot, {
+            {"candidate.date", fixture.OptionalDate},
+        });
+        SetExactOutputType(fixture.Ctx, *secondRoot, {
+            {"candidate.date", fixture.OptionalDate},
+        });
+        fixture.OuterEntry().Plan = firstRoot;
+
+        const TInfoUnit secondBinding("_rbo_second_outer_in", true);
+        fixture.Root->PlanProps.Subplans.Add(
+            secondBinding,
+            TSubplanEntry{
+                secondRoot,
+                {fixture.OuterLookup},
+                ESubplanType::IN_SUBPLAN,
+                secondBinding,
+                {}});
+        auto secondValue = MakeColumnAccess(
+            secondBinding,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(secondValue, fixture.Bool);
+        auto secondMainConsumer = MakeIntrusive<TOpFilter>(
+            fixture.MainConsumer,
+            fixture.Pos,
+            secondValue);
+        SetExactOutputType(fixture.Ctx, *secondMainConsumer, {
+            {"main.date", fixture.OptionalDate},
+        });
+        fixture.Root->SetInput(secondMainConsumer);
+
+        const auto result = ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "subplan consumer is reachable from multiple plan roots");
+    }
+
     Y_UNIT_TEST(ExportsNullableIntegralInOnlyAsPositiveFilterConjunct) {
         TInSubplanExportFixture fixture;
         const auto catalog = CaptureSemanticSnapshotCatalogV1(
@@ -16803,8 +17218,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "only an uncorrelated scalar binding may be consumed "
-            "inside an IN subplan");
+            "only an uncorrelated scalar or a one-level closed IN "
+            "binding may be consumed inside an IN subplan");
     }
 
     Y_UNIT_TEST(ScalarSubplanRootTopologyFailsClosed) {

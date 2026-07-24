@@ -6879,22 +6879,47 @@ private:
 
     void ValidateNestedSubplanConsumer(
         const TSubplanDescriptor& owner,
-        const TSubplanDescriptor& nested) const
+        const TSubplanDescriptor& nested)
     {
         const auto* scalar =
             std::get_if<TScalarSubplanDetails>(&nested.Details);
-        if (
-            SubplanKind(owner) != ESubplanKind::In ||
-            !scalar ||
-            scalar->Correlation)
-        {
+        const bool admissible =
+            SubplanKind(owner) == ESubplanKind::In &&
+            ((scalar && !scalar->Correlation) ||
+             SubplanKind(nested) == ESubplanKind::In);
+        if (!admissible) {
             Unsupported(TStringBuilder()
                 << KindName(owner)
                 << " subplan binding " << owner.Binding
                 << " contains an unsupported nested subplan reference to "
                 << KindName(nested) << " binding " << nested.Binding
-                << "; only an uncorrelated scalar binding may be consumed "
-                   "inside an IN subplan");
+                << "; only an uncorrelated scalar or a one-level closed IN "
+                   "binding may be consumed inside an IN subplan");
+        }
+        NestedSubplanReferences.emplace_back(
+            owner.Binding,
+            nested.Binding);
+    }
+
+    void ValidateNestedSubplanTopology() const {
+        THashSet<TString> owners;
+        for (const auto& reference : NestedSubplanReferences) {
+            owners.insert(reference.first);
+        }
+        for (const auto& [ownerBinding, nestedBinding] :
+            NestedSubplanReferences)
+        {
+            const auto& nested =
+                Subplans[SubplanIndices.at(nestedBinding)];
+            if (SubplanKind(nested) == ESubplanKind::In &&
+                owners.contains(nestedBinding))
+            {
+                Unsupported(TStringBuilder()
+                    << "Nested IN subplan binding " << nestedBinding
+                    << " inside IN subplan binding " << ownerBinding
+                    << " must be closed; cyclic subplan references and "
+                       "nesting deeper than one level are unsupported");
+            }
         }
     }
 
@@ -7035,6 +7060,7 @@ private:
         RegisterSubplans(roots);
         ValidateSubplanRootTopology();
         IndexSubplanConsumers();
+        ValidateNestedSubplanTopology();
         ValidateSubplanConsumerContracts();
     }
 
@@ -8126,6 +8152,7 @@ private:
     TVector<IOperator*> NodeOrder;
     TVector<TSubplanDescriptor> Subplans;
     THashMap<TString, size_t> SubplanIndices;
+    TVector<std::pair<TString, TString>> NestedSubplanReferences;
     THashMap<const IOperator*, TVector<TString>> ConsumerBindings;
     TString RootId;
     NJson::TJsonValue Nodes = JsonArray();

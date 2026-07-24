@@ -93,7 +93,7 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
     status = ydb_cluster.get_database_status(database)
     assert_that(status.state, equal_to(cms_pb.GetDatabaseStatusResult.RUNNING))
 
-    # Check data integriy
+    # Check data integrity
     with ydb.QuerySessionPool(driver, size=1) as pool:
         result_sets = pool.execute_with_retries("SELECT * FROM " + table_name)
         assert len(result_sets) == 1

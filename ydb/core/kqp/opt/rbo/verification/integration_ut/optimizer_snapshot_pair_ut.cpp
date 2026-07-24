@@ -660,6 +660,40 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesMapCopyingOneSourceToTwoOutputs) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT row.Id AS FirstId, row.Id AS SecondId
+            FROM `/Root/RboOrdered` AS row;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            pair.Initial["plan"]["output"].GetArraySafe().size(),
+            2);
+        bool foundDuplicateSource = false;
+        for (const auto* project : PlanNodes(pair.Initial, "project")) {
+            THashMap<TString, ui32> sourceCounts;
+            for (const auto& column :
+                 (*project)["columns"].GetArraySafe())
+            {
+                const auto& expression = column["expression"];
+                if (expression["kind"].GetStringSafe() != "column") {
+                    continue;
+                }
+                const TString source =
+                    expression["column"].GetStringSafe();
+                foundDuplicateSource =
+                    ++sourceCounts[source] >= 2 ||
+                    foundDuplicateSource;
+            }
+        }
+        UNIT_ASSERT_C(
+            foundDuplicateSource,
+            "initial snapshot must retain the duplicate-source projection");
+    }
+
     Y_UNIT_TEST(RealHostVerifiesDistinctAllAcrossHashShuffle) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);

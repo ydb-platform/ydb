@@ -1,6 +1,8 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
+#include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
@@ -207,7 +209,7 @@ public:
             if (!Self->FeatureFlags.GetEnableScaleRecommender()) {
                 return Error(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableScaleRecommender is off", ctx);
             }
-            
+
             const auto& policies = rec.scale_recommender_policies();
             if (policies.policies().size() > 1) {
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Currently, no more than one policy is supported at a time", ctx);
@@ -243,25 +245,64 @@ public:
                 }
             }
         }
-        
+
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.alter_attributes()) {
+
             if (!key)
                return Error(Ydb::StatusIds::BAD_REQUEST,
                              "Attribute name shouldn't be empty", ctx);
+
+            if (key.size() > NSchemeShard::TUserAttributesLimits::MaxNameLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Key '%s' is too long, max: " PRIu32 ", actual: %zu",
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxNameLen, key.size()),
+                    ctx);
+            }
+
+            if (value.size() > NSchemeShard::TUserAttributesLimits::MaxValueLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Value for key '%s' is too long, max: " PRIu32 ", actual: %zu",
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxValueLen, value.size()),
+                    ctx);
+            }
+
             if (attrNames.contains(key))
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
+
             attrNames.insert(key);
         }
 
-        THashMap<TString, ui64> attributeMap;
+        THashMap<TString, ui64> existingAttributesIndexes;
+        THashMap<TString, TString> allAttributes;
         for (ui64 i = 0 ; i < Tenant->Attributes.UserAttributesSize(); i++) {
-            bool res = attributeMap.emplace(Tenant->Attributes.GetUserAttributes(i).GetKey(), i).second;
+            const auto& attr = Tenant->Attributes.GetUserAttributes(i);
+            bool res = existingAttributesIndexes.emplace(attr.GetKey(), i).second;
             if (!res)
                 return Error(Ydb::StatusIds::INTERNAL_ERROR,
                              "Unexpected duplicate attribute found in CMS local db", ctx);
+            allAttributes[attr.GetKey()] = attr.GetValue();
+        }
+
+        // Check new total attributes size
+        for (const auto& [key, value] : rec.alter_attributes()) {
+            allAttributes[key] = value;
+        }
+        ui64 totalBytes = 0;
+        for (const auto& [key, value] : allAttributes) {
+            if (value.empty()) {
+                continue;
+            }
+            totalBytes += key.size();
+            totalBytes += value.size();
+        }
+        if (totalBytes > NSchemeShard::TUserAttributesLimits::MaxBytes) {
+            return Error(Ydb::StatusIds::BAD_REQUEST,
+                Sprintf("Total attributes size is too big: %" PRIu64 " bytes (maximum allowed is %" PRIu32 " bytes)",
+                    totalBytes, NSchemeShard::TUserAttributesLimits::MaxBytes),
+                ctx);
         }
 
         // Apply computational units changes.
@@ -326,10 +367,17 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
+        // Apply attributes changes.
+
+        // Attributes with empty values are kept forever as tombstones
+        // to self-heal divergence with subdomain if subdomain AlterUserAttributes
+        // request didn't reach SchemeShard (due to Console restart
+        // right after persisting updated Tenant->Attributes in local db
+        // but before sending request into subdomain, etc)
         if (!rec.alter_attributes().empty()) {
             for (const auto& [key, value] : rec.alter_attributes()) {
-                const auto it = attributeMap.find(key);
-                if (it != attributeMap.end()) {
+                const auto it = existingAttributesIndexes.find(key);
+                if (it != existingAttributesIndexes.end()) {
                     if (value) {
                         Tenant->Attributes.MutableUserAttributes(it->second)->SetValue(value);
                     } else {

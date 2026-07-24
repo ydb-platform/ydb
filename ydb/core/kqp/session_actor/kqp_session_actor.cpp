@@ -1680,14 +1680,16 @@ public:
 
             request.StatsMode = queryState->GetStatsMode();
             if (queryState->UserFacingTraceId) {
-                // Trace detail scales with the sampled level. Collection-only: the executer
-                // collects at max(StatsMode, this), the client response stays at StatsMode.
+                // Trace detail scales with the sampled level: below Basic — phases only, above —
+                // full detail (stages/tasks/shards). Deliberately never PROFILE: the renderer
+                // uses nothing profile-exclusive, and profile collection taxes every compute
+                // actor and datashard of the query. Collection-only: the executer collects at
+                // max(StatsMode, this), the client response stays at StatsMode.
                 const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
                 using TLevels = TComponentTracingLevels::TQueryProcessor;
                 request.UserFacingTraceCollectionMode =
-                      level >= TLevels::Detailed ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE
-                    : level >= TLevels::Basic    ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
-                    :                              Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                      level >= TLevels::Basic ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
+                    :                           Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
             }
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();

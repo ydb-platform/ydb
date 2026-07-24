@@ -857,7 +857,7 @@ public:
     }
 
     void StartRead(TShardState* state) {
-        if (IngressStats.CollectProfile()) {
+        if (IngressStats.CollectFull()) {
             auto& shard = UserFacingShardReads[state->TabletId];
             shard.SetShardId(state->TabletId);
             if (!shard.GetStartTimeMs()) {
@@ -1028,7 +1028,7 @@ public:
             return;
         }
 
-        if (IngressStats.CollectProfile()) {
+        if (IngressStats.CollectFull()) {
             auto& shard = UserFacingShardReads[Reads[id].Shard->TabletId];
             shard.SetShardId(Reads[id].Shard->TabletId);
             shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
@@ -1767,7 +1767,7 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
-    // Per-shard read summaries for the user-facing trace; collected only at profile level.
+    // Per-shard read summaries for the user-facing trace; collected at full stats level.
     THashMap<ui64, NKqpProto::TKqpShardReadStats> UserFacingShardReads;
 
     bool FirstShardStarted = false;

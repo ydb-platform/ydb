@@ -654,7 +654,7 @@ private:
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
 
-        if (IngressStats.CollectProfile()) {
+        if (IngressStats.CollectFull()) {
             auto& shard = UserFacingShardReads[shardId];
             shard.SetShardId(shardId);
             shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
@@ -1188,7 +1188,7 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
-        if (IngressStats.CollectProfile()) {
+        if (IngressStats.CollectFull()) {
             auto& shard = UserFacingShardReads[shardId];
             shard.SetShardId(shardId);
             if (!shard.GetStartTimeMs()) {
@@ -1463,7 +1463,7 @@ private:
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
     size_t TotalRetryAttempts = 0;
-    // Per-shard read summaries for the user-facing trace; collected only at profile level.
+    // Per-shard read summaries for the user-facing trace; collected at full stats level.
     THashMap<ui64, NKqpProto::TKqpShardReadStats> UserFacingShardReads;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;

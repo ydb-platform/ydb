@@ -56,7 +56,7 @@ message TKqpLockStats {
     repeated uint32 DeferredBreakerNodeIds = 6;  // Node IDs matching DeferredBreakerQuerySpanIds
 }
 
-// Per-shard read of one task, collected only at profile stats level (user-facing tracing).
+// Per-shard read of one task, collected at full stats level (user-facing tracing).
 message TKqpShardReadStats {
     uint64 ShardId = 1;
     uint64 StartTimeMs = 2;  // absolute epoch ms, wall clock of the read actor

@@ -5256,7 +5256,7 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        CollectUserFacingProfile = ev->Get()->CollectUserFacingProfile;
+        CollectUserFacingShards = ev->Get()->CollectUserFacingShards;
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
@@ -5704,7 +5704,7 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
-        if (CollectUserFacingProfile && preparedInfo.ShardId) {
+        if (CollectUserFacingShards && preparedInfo.ShardId) {
             auto& ack = UserFacingShardAcks[preparedInfo.ShardId];
             ack.ShardId = preparedInfo.ShardId;
             ack.PreparedAt = TInstant::Now();
@@ -5734,7 +5734,7 @@ public:
     }
 
     void OnCommitted(ui64 shardId, ui64) override {
-        if (CollectUserFacingProfile && shardId) {
+        if (CollectUserFacingShards && shardId) {
             auto& ack = UserFacingShardAcks[shardId];
             ack.ShardId = shardId;
             ack.CommittedAt = TInstant::Now();
@@ -6159,7 +6159,7 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
-    bool CollectUserFacingProfile = false;
+    bool CollectUserFacingShards = false;
     THashMap<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
     TUserFacingTraceTimeline::TWindow UserFacingCommitPrepareShards;
     TUserFacingTraceTimeline::TWindow UserFacingCommitCoordinator;

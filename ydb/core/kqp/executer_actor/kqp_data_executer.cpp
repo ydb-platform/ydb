@@ -228,8 +228,8 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->CollectUserFacingProfile = UserFacingTraceData
-                && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+            event->CollectUserFacingShards = UserFacingTraceData
+                && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),

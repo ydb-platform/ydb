@@ -112,8 +112,8 @@ namespace NActors {
             XdcSocket->Shutdown(SHUT_RDWR);
         }
 
-        for (const auto& [actorId, cookie] : Subscribers) {
-            Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, cookie);
+        for (const auto& [actorId, info] : Subscribers) {
+            Send(actorId, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, info.Cookie);
         }
         Subscribers.clear();
 
@@ -149,8 +149,11 @@ namespace NActors {
         Terminate(TDisconnectReason::UserRequest());
     }
 
-    void TInterconnectSessionTCPv2::AddSubscriber(const TActorId& actorId, ui64 cookie) {
-        Subscribers[actorId] = cookie;
+    void TInterconnectSessionTCPv2::AddSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex) {
+        Subscribers[actorId] = {
+            .Cookie = cookie,
+            .ActivityIndex = activityIndex,
+        };
     }
 
     IEventBase* TInterconnectSessionTCPv2::MakeNodeConnectedEvent() const {
@@ -177,7 +180,7 @@ namespace NActors {
         Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
         auto msg = ev->Release<TEvForwardSubscribeSession>();
         Y_ABORT_UNLESS(msg->Event);
-        AddSubscriber(msg->Event->Sender, msg->Event->Cookie);
+        AddSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex);
         Send(msg->Event->Sender, MakeNodeConnectedEvent(), 0, msg->Event->Cookie);
         EnqueueOutgoing(TAutoPtr<IEventHandle>(msg->Event.Release()));
     }

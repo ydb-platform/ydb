@@ -3,11 +3,19 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
+#include <util/string/builder.h>
 
 namespace NActors {
     namespace {
+
+        TStringBuf FormatSubscriberActivityName(ui32 activityIndex) {
+            return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
+        }
 
         class TSubscriberLivenessChecker
             : public TActorBootstrapped<TSubscriberLivenessChecker>
@@ -15,10 +23,13 @@ namespace NActors {
         public:
             TSubscriberLivenessChecker(
                     const TActorId& subscriptionOwner,
-                    TVector<TActorId> subscribers)
+                    TVector<TSubscriberLivenessInfo> subscribers)
                 : SubscriptionOwner(subscriptionOwner)
-                , PendingSubscribers(subscribers.begin(), subscribers.end())
-            {}
+            {
+                for (const auto& subscriber : subscribers) {
+                    PendingSubscribers.emplace(subscriber.ActorId, subscriber.ActivityIndex);
+                }
+            }
 
             void Bootstrap() {
                 if (PendingSubscribers.empty()) {
@@ -29,7 +40,8 @@ namespace NActors {
                 // Every liveness probe is guaranteed to eventually produce exactly one response:
                 // ActorAlive or ActorDead for a local target, and ActorLivenessUnsure for a remote one.
                 // The checker can therefore wait for all responses without a timeout.
-                for (const TActorId& subscriber : PendingSubscribers) {
+                for (const auto& [subscriber, activityIndex] : PendingSubscribers) {
+                    Y_UNUSED(activityIndex);
                     TActivationContext::Send(new IEventHandle(
                         TEvents::TSystem::CheckActorLiveness,
                         TEvents::TEvCheckActorLiveness::RequestFlags,
@@ -52,7 +64,9 @@ namespace NActors {
             }
 
             void Handle(TEvents::TEvActorDead::TPtr& ev) {
-                if (PendingSubscribers.erase(ev->Sender)) {
+                if (const auto it = PendingSubscribers.find(ev->Sender); it != PendingSubscribers.end()) {
+                    ++LeakedSubscribersByActivity[it->second];
+                    PendingSubscribers.erase(it);
                     // The IC session identifies the subscription by event sender.
                     TActivationContext::Send(new IEventHandle(
                         SubscriptionOwner,
@@ -74,20 +88,41 @@ namespace NActors {
 
             void PassAwayIfDone() {
                 if (PendingSubscribers.empty()) {
+                    LogLeakedSubscribers();
                     PassAway();
                 }
             }
 
+            void LogLeakedSubscribers() const {
+                if (LeakedSubscribersByActivity.empty()) {
+                    return;
+                }
+
+                TStringBuilder details;
+                bool first = true;
+                for (const auto& [activityIndex, count] : LeakedSubscribersByActivity) {
+                    if (!first) {
+                        details << ", ";
+                    }
+                    first = false;
+                    details << "{activity# " << FormatSubscriberActivityName(activityIndex)
+                        << " actors# " << count << '}';
+                }
+                LOG_WARN_S(*TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
+                    "Subscriber liveness check found leaked subscriptions: " << details);
+            }
+
         private:
             const TActorId SubscriptionOwner;
-            THashSet<TActorId> PendingSubscribers;
+            THashMap<TActorId, ui32> PendingSubscribers;
+            TMap<ui32, ui64> LeakedSubscribersByActivity;
         };
 
     }
 
     IActor* CreateSubscriberLivenessChecker(
             const TActorId& subscriptionOwner,
-            TVector<TActorId> subscribers) {
+            TVector<TSubscriberLivenessInfo> subscribers) {
         return new TSubscriberLivenessChecker(subscriptionOwner, std::move(subscribers));
     }
 

@@ -8,9 +8,14 @@
 
 namespace NActors {
 
+    struct TSubscriberLivenessInfo {
+        TActorId ActorId;
+        ui32 ActivityIndex = Max<ui32>();
+    };
+
     IActor* CreateSubscriberLivenessChecker(
         const TActorId& subscriptionOwner,
-        TVector<TActorId> subscribers);
+        TVector<TSubscriberLivenessInfo> subscribers);
 
     template <typename TSubscribers>
     void RegisterSubscriberLivenessChecker(
@@ -20,13 +25,16 @@ namespace NActors {
             return;
         }
 
-        TVector<TActorId> subscriberIds;
-        subscriberIds.reserve(subscribers.size());
+        TVector<TSubscriberLivenessInfo> subscriberInfos;
+        subscriberInfos.reserve(subscribers.size());
         for (const auto& item : subscribers) {
-            subscriberIds.push_back(item.first);
+            subscriberInfos.push_back({
+                .ActorId = item.first,
+                .ActivityIndex = item.second.ActivityIndex,
+            });
         }
         TActivationContext::Register(
-            CreateSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberIds)),
+            CreateSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberInfos)),
             subscriptionOwner);
     }
 

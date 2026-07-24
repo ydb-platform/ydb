@@ -109,7 +109,7 @@ namespace NActors {
 
         void EnqueueOutgoing(TAutoPtr<IEventHandle> ev);
 
-        void AddSubscriber(const TActorId& actorId, ui64 cookie);
+        void AddSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>());
         IEventBase* MakeNodeConnectedEvent() const;
 
     private:
@@ -129,8 +129,13 @@ namespace NActors {
         ui64 BytesSent = 0;
         ui64 BytesReceived = 0;
 
-        // subscribers awaiting connection state notifications (actor id -> cookie)
-        THashMap<TActorId, ui64> Subscribers;
+        struct TSubscriberInfo {
+            ui64 Cookie = 0;
+            ui32 ActivityIndex = Max<ui32>();
+        };
+
+        // subscribers awaiting connection state notifications
+        THashMap<TActorId, TSubscriberInfo> Subscribers;
 
         std::shared_ptr<std::atomic<int64_t>> ClockSkew = std::make_shared<std::atomic<int64_t>>();
         std::shared_ptr<std::atomic<uint64_t>> PingRTT = std::make_shared<std::atomic<uint64_t>>();

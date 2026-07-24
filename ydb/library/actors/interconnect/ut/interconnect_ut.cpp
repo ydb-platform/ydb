@@ -556,6 +556,36 @@ private:
     std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
 };
 
+struct TSubscriberLivenessLogState {
+    std::atomic<ui32> Warnings = 0;
+    TMutex Mutex;
+    TString LastWarning;
+};
+
+class TSubscriberLivenessLogBackend : public TLogBackend {
+public:
+    explicit TSubscriberLivenessLogBackend(std::shared_ptr<TSubscriberLivenessLogState> state)
+        : State(std::move(state))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        const TStringBuf line(rec.Data, rec.Len);
+        if (rec.Priority == TLOG_WARNING &&
+                line.Contains("Subscriber liveness check found leaked subscriptions")) {
+            with_lock (State->Mutex) {
+                State->LastWarning = line;
+            }
+            State->Warnings.fetch_add(1, std::memory_order_release);
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::shared_ptr<TSubscriberLivenessLogState> State;
+};
+
 } // namespace
 
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
@@ -1122,9 +1152,25 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
         settings.SubscriberLivenessCheckInterval = checkInterval;
         settings.EnableInterconnectSessionV2 = useSessionV2;
     };
-    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr,
+    auto logState = std::make_shared<TSubscriberLivenessLogState>();
+    auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+        TActorId(0, "logger"),
+        static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+        NLog::PRI_DEBUG,
+        NLog::PRI_DEBUG,
+        0U);
+    loggerSettings->Append(
+        NActorsServices::EServiceCommon_MIN,
+        NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name);
+    loggerSettings->SetAllowDrop(false);
+    loggerSettings->SetThrottleDelay(TDuration::Zero());
+    auto logBackendFactory = [logState] {
+        return TAutoPtr<TLogBackend>(new TSubscriberLivenessLogBackend(logState));
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings,
         useSessionV2 ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
-        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer);
+        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
 
     auto* subscriber = new TConnectionSubscriberActor(1);
     const TActorId subscriberId = cluster.RegisterActor(subscriber, 2);
@@ -1143,6 +1189,7 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
     if (checkInterval != TDuration::Zero()) {
         Sleep(3 * checkInterval);
         UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
     }
 
     cluster.KillActor(2, subscriberId);
@@ -1154,9 +1201,17 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
                 return false;
             }
         }, "dead subscriber removed");
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return logState->Warnings.load(std::memory_order_acquire) == 1;
+        }, "leaked subscriber warning");
+        with_lock (logState->Mutex) {
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "activity# manual");
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "actors# 1");
+        }
     } else {
         Sleep(TDuration::MilliSeconds(300));
         UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
     }
 }
 

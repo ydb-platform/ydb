@@ -153,6 +153,7 @@ class Evaluator:
                     else None
                 ),
                 ordinals=relation.ordinals,
+                present_prefix=relation.present_prefix,
             ),
         )
 
@@ -414,6 +415,7 @@ def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
                 sequence=relation.sequence,
                 order=relation.order,
                 ordinals=relation.ordinals,
+                present_prefix=relation.present_prefix,
             )
         rows = tuple(row for relation in relations for row in relation.rows)
         return Relation(

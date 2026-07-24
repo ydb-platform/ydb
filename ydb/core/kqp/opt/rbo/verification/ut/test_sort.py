@@ -3,7 +3,12 @@ import unittest
 from itertools import permutations, product
 from unittest.mock import patch
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, relation, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
+    decimal,
+    relation,
+    smt,
+    sort_network,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
     SnapshotError,
@@ -25,6 +30,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     single,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    DecimalAverageState,
     Encoder as ScalarEncoder,
     Value,
 )
@@ -47,6 +53,41 @@ REFERENCE_DECIMAL_INF = 100_000_000_000_000_000_000_000_000_000_000_000
 REFERENCE_DECIMAL_NAN = REFERENCE_DECIMAL_INF + 1
 COLUMNS = ("a.k1", "a.k2", "a.payload")
 COLUMN_INDEX = {name: index for index, name in enumerate(COLUMNS)}
+
+
+class SortNetworkTopologyTest(unittest.TestCase):
+    def test_bitonic_topology_sorts_every_small_binary_input(self):
+        for count in range(1, 9):
+            schedule = tuple(sort_network.comparators(count))
+            self.assertEqual(
+                len(schedule),
+                sort_network.comparator_count(count),
+            )
+            size = sort_network.padded_size(count)
+            self.assertTrue(all(
+                0 <= left < right < size
+                for left, right, _ in schedule
+            ))
+            for values in product((0, 1), repeat=count):
+                items = list(values) + [2] * (size - count)
+                for left, right, ascending in schedule:
+                    swap = (
+                        items[right] < items[left]
+                        if ascending
+                        else items[left] < items[right]
+                    )
+                    if swap:
+                        items[left], items[right] = items[right], items[left]
+                self.assertEqual(items, sorted(items), (count, values))
+
+    def test_topology_validates_count_and_has_a_stable_large_cost(self):
+        for value in (0, -1, True, 1.0):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "must be positive"):
+                    sort_network.padded_size(value)
+        self.assertEqual(sort_network.comparator_count(256), 4_608)
+        self.assertEqual(sort_network.comparator_count(324), 11_520)
+        self.assertEqual(sort_network.comparator_count(1024), 28_160)
 
 
 def uint64(value):
@@ -340,6 +381,9 @@ def _ground(term, constants):
         return _ground(term.arguments[0], constants) == _ground(
             term.arguments[1], constants
         )
+    if term.operation == "distinct":
+        values = tuple(_ground(argument, constants) for argument in term.arguments)
+        return len(set(values)) == len(values)
     if term.operation == "<":
         return _ground(term.arguments[0], constants) < _ground(
             term.arguments[1], constants
@@ -968,6 +1012,492 @@ class SortConcreteDifferentialTest(unittest.TestCase):
                 )
 
 
+class SortingNetworkEncodingTest(unittest.TestCase):
+    def test_network_matches_every_three_slot_tie_respecting_sequence(self):
+        parsed = parse_snapshot(snapshot([scan()], "scan"))
+        script = smt.Script()
+        database = Database(parsed, 3, script)
+        source = RelationEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        order = (SortOrder("a.k1", True, False),)
+        family = relation._sorting_network_family(
+            source,
+            order,
+            script,
+            "network",
+        )
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertIsNone(family.outcomes[0].relation.ordinals)
+        slot_states = tuple(
+            (ABSENT,) + tuple((key, 0, slot) for key in (None, 0))
+            for slot in range(3)
+        )
+        reference_order = [order_item("a.k1")]
+        for rows in product(*slot_states):
+            constants = _database_constants(database, rows)
+            self.assertEqual(
+                _sequences(family, constants),
+                _reference_sequences(rows, reference_order),
+                rows,
+            )
+            outcome = family.outcomes[0]
+            for assignment in product(
+                *(range(choice.bound) for choice in outcome.choices)
+            ):
+                grounded = constants | {
+                    choice.term.atom: value
+                    for choice, value in zip(
+                        outcome.choices,
+                        assignment,
+                    )
+                }
+                if not _ground(outcome.enabled, grounded):
+                    continue
+                presence = tuple(
+                    _ground(row.present, grounded)
+                    for row in outcome.relation.rows
+                )
+                self.assertEqual(
+                    presence,
+                    tuple(sorted(presence, reverse=True)),
+                    (rows, assignment),
+                )
+
+    def test_network_matches_mixed_keys_directions_and_null_orders(self):
+        orders = (
+            (
+                order_item("a.k1", True, True),
+                order_item("a.k2", False, False),
+            ),
+            (
+                order_item("a.k1", False, False),
+                order_item("a.k2", True, True),
+            ),
+        )
+        slot_states = tuple(
+            (ABSENT,)
+            + tuple(
+                (first, second, slot)
+                for first, second in product((None, 0), repeat=2)
+            )
+            for slot in range(3)
+        )
+        for raw_order in orders:
+            with self.subTest(order=raw_order):
+                parsed = parse_snapshot(snapshot([scan()], "scan"))
+                script = smt.Script()
+                database = Database(parsed, 3, script)
+                source = RelationEvaluator(
+                    parsed,
+                    database,
+                    ScalarEncoder(script),
+                ).root()
+                order = tuple(
+                    SortOrder(
+                        item["column"],
+                        item["ascending"],
+                        item["nulls_first"],
+                    )
+                    for item in raw_order
+                )
+                family = relation._sorting_network_family(
+                    source,
+                    order,
+                    script,
+                    "network",
+                )
+                for rows in product(*slot_states):
+                    self.assertEqual(
+                        _sequences(
+                            family,
+                            _database_constants(database, rows),
+                        ),
+                        _reference_sequences(rows, raw_order),
+                        rows,
+                    )
+
+    def test_top_sort_network_materializes_only_the_selected_prefix(self):
+        order = [order_item("a.k1")]
+        parsed = logical_sort(order, top_limit=2, phase="intermediate")
+        with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10):
+            database, family = _logical_family(parsed, 4)
+        outcome = family.outcomes[0]
+
+        self.assertTrue(outcome.relation.present_prefix)
+        self.assertEqual(len(outcome.relation.rows), 2)
+        self.assertEqual(len(outcome.choices), 4)
+        cases = (
+            (ABSENT, ABSENT, ABSENT, ABSENT),
+            ((0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)),
+            ((3, 0, 0), (1, 0, 1), ABSENT, (2, 0, 3)),
+            ((None, 0, 0), (1, 0, 1), (0, 0, 2), ABSENT),
+        )
+        for rows in cases:
+            expected = {
+                sequence[:2]
+                for sequence in _reference_sequences(rows, order)
+            }
+            self.assertEqual(
+                _sequences(family, _database_constants(database, rows)),
+                expected,
+                rows,
+            )
+
+    def test_top_sort_falls_back_when_comparator_cell_budget_is_exhausted(self):
+        parsed = parse_snapshot(snapshot([scan()], "scan"))
+        script = smt.Script()
+        database = Database(parsed, 4, script)
+        source = RelationEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+        ).root()
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10),
+            patch.object(
+                relation,
+                "MAX_SORT_NETWORK_COMPARATOR_CELLS",
+                17,
+            ),
+        ):
+            family = relation.sort_family(
+                source,
+                (SortOrder("a.k1", True, False),),
+                script,
+                "sort",
+                compact_prefix=True,
+            )
+
+        outcome = family.outcomes[0]
+        self.assertFalse(outcome.relation.present_prefix)
+        self.assertIsNotNone(outcome.relation.ordinals)
+        self.assertEqual(len(outcome.relation.rows), 4)
+
+    def test_present_prefix_limit_slices_offset_slots_exactly(self):
+        order = [order_item("a.k1")]
+        parsed = logical_ordered_limit(order, count=2, offset=1)
+        script = smt.Script()
+        database = Database(parsed, 4, script)
+        with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5):
+            family = RelationEvaluator(
+                parsed,
+                database,
+                ScalarEncoder(script),
+            ).root()
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertEqual(len(family.outcomes[0].relation.rows), 2)
+        cases = (
+            (ABSENT, ABSENT, ABSENT, ABSENT),
+            ((0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3)),
+            ((3, 0, 0), (1, 0, 1), ABSENT, (2, 0, 3)),
+        )
+        for rows in cases:
+            expected = {
+                sequence[1:3]
+                for sequence in _reference_sequences(rows, order)
+            }
+            self.assertEqual(
+                _sequences(family, _database_constants(database, rows)),
+                expected,
+                rows,
+            )
+
+    def test_filter_clears_the_present_prefix_invariant(self):
+        order = [order_item("a.k1")]
+        value = snapshot(
+            [
+                scan(),
+                sort_node(
+                    "sort",
+                    "scan",
+                    order,
+                    limit=2,
+                    phase="intermediate",
+                ),
+                {
+                    "id": "filter",
+                    "op": "filter",
+                    "input": "sort",
+                    "predicate": {
+                        "kind": "eq",
+                        "left": {
+                            "kind": "column",
+                            "column": "a.payload",
+                        },
+                        "right": {
+                            "kind": "literal",
+                            "type": "Int64",
+                            "value": 1,
+                        },
+                    },
+                },
+                limit_node("limit", "filter", 1),
+            ],
+            "limit",
+        )
+        parsed = parse_snapshot(value)
+        script = smt.Script()
+        database = Database(parsed, 4, script)
+        with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10):
+            family = RelationEvaluator(
+                parsed,
+                database,
+                ScalarEncoder(script),
+            ).root()
+
+        self.assertFalse(family.outcomes[0].relation.present_prefix)
+        rows = ((0, 0, 0), (1, 0, 1), (2, 0, 2), ABSENT)
+        self.assertEqual(
+            _sequences(family, _database_constants(database, rows)),
+            {((1, 0, 1),)},
+        )
+
+    def test_merge_network_is_exactly_the_producer_order_linear_extensions(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(payload),
+                    ),
+                },
+            )
+            for payload in (10, 20, 30, 40)
+        )
+        source = single(Relation(
+            columns,
+            rows,
+            ordinals=(smt.ZERO, smt.ONE, smt.ZERO, smt.ONE),
+        ))
+        family = relation._sorting_network_family(
+            source,
+            (SortOrder("k", True, False),),
+            smt.Script(),
+            "merge",
+            ((0, 1), (2, 3)),
+        )
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertEqual(
+            _sequences(family, {}),
+            {
+                tuple((0, payload) for payload in interleaving)
+                for interleaving in relation._interleavings(
+                    ((10, 20), (30, 40))
+                )
+            },
+        )
+
+    def test_public_merge_network_handles_reversed_ordinals_and_holes(self):
+        columns = (
+            Column("k1", "Int64", False),
+            Column("k2", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        script = smt.Script()
+        present = tuple(
+            script.fresh_constant(f"present:{index}", smt.BOOL)
+            for index in range(4)
+        )
+        row_values = (
+            (1, 0, 10),
+            (0, 2, 20),
+            (1, 1, 30),
+            (0, 1, 40),
+        )
+        rows = tuple(
+            Row(
+                row_present,
+                {
+                    "k1": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(first),
+                    ),
+                    "k2": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(second),
+                    ),
+                    "payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(payload),
+                    ),
+                },
+            )
+            for row_present, (first, second, payload) in zip(
+                present,
+                row_values,
+            )
+        )
+        order = (
+            SortOrder("k1", True, False),
+            SortOrder("k2", False, True),
+        )
+        source = single(Relation(
+            columns,
+            rows,
+            sequence=True,
+            order=order,
+            ordinals=(smt.ONE, smt.ZERO, smt.ONE, smt.ZERO),
+        ))
+        with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5):
+            family = merge_family(
+                source,
+                order,
+                ((0, 1), (2, 3)),
+                script,
+                "merge",
+            )
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertIsNone(family.outcomes[0].relation.ordinals)
+        cases = (
+            (
+                (True, True, True, True),
+                (
+                    (
+                        (0, 2, 20),
+                        (0, 1, 40),
+                        (1, 1, 30),
+                        (1, 0, 10),
+                    ),
+                ),
+            ),
+            (
+                (False, True, True, False),
+                (((0, 2, 20), (1, 1, 30)),),
+            ),
+            (
+                (True, False, False, True),
+                (((0, 1, 40), (1, 0, 10)),),
+            ),
+        )
+        for presence, expected in cases:
+            constants = {
+                term.atom: value
+                for term, value in zip(present, presence)
+            }
+            self.assertEqual(_sequences(family, constants), set(expected))
+
+    def test_merge_uses_network_when_only_ordinal_encoding_exceeds_cap(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(payload),
+                    ),
+                },
+            )
+            for payload in range(6)
+        )
+        source = single(Relation(
+            columns,
+            rows,
+            sequence=True,
+            order=(SortOrder("k", True, False),),
+            ordinals=tuple(smt.int_value(index) for index in range(6)),
+        ))
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 20),
+            patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
+        ):
+            family = merge_family(
+                source,
+                (SortOrder("k", True, False),),
+                ((0, 1, 2, 3, 4), (5,)),
+                smt.Script(),
+                "merge",
+            )
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertEqual(len(family.outcomes[0].choices), 6)
+
+    def test_network_moves_decimal_average_state_as_one_row(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("state", "Decimal(7,2)", False),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "state": Value(
+                        "Decimal(7,2)",
+                        smt.FALSE,
+                        smt.int_value(value),
+                        value,
+                        DecimalAverageState(
+                            "Decimal(35,2)",
+                            smt.int_value(total),
+                            smt.int_value(count),
+                            total,
+                            count,
+                        ),
+                    ),
+                },
+            )
+            for value, total, count in ((10, 100, 1), (20, 200, 2))
+        )
+        family = relation._sorting_network_family(
+            single(Relation(columns, rows)),
+            (SortOrder("k", True, False),),
+            smt.Script(),
+            "network",
+        )
+        outcome = family.outcomes[0]
+        observed = set()
+        for assignment in product(
+            *(range(choice.bound) for choice in outcome.choices)
+        ):
+            constants = {
+                choice.term.atom: value
+                for choice, value in zip(outcome.choices, assignment)
+            }
+            if not _ground(outcome.enabled, constants):
+                continue
+            sequence = []
+            for row in outcome.relation.rows:
+                value = row.values["state"]
+                state = value.decimal_average_state
+                self.assertIsNotNone(state)
+                sequence.append((
+                    _ground(value.value, constants),
+                    _ground(state.sum, constants),
+                    _ground(state.count, constants),
+                ))
+            observed.add(tuple(sequence))
+        self.assertEqual(
+            observed,
+            {
+                ((10, 100, 1), (20, 200, 2)),
+                ((20, 200, 2), (10, 100, 1)),
+            },
+        )
+
+
 class DecimalSortConcreteDifferentialTest(unittest.TestCase):
     def test_total_code_order_matches_independent_reference_exhaustively(self):
         self.assertEqual(decimal.INF, REFERENCE_DECIMAL_INF)
@@ -1459,6 +1989,7 @@ class SortMutationTest(unittest.TestCase):
         parsed = logical_sort([order_item("a.k1")])
         with (
             patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(relation, "MAX_SORT_NETWORK_COMPARATORS", 5),
             patch.object(
                 relation,
                 "factorial",

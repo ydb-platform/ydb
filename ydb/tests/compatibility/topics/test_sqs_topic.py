@@ -4,7 +4,7 @@ import pytest
 import time
 
 from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, string_version_to_tuple, logger
-from ydb.tests.stress.topic_sqs.workload import Workload
+from ydb.tests.stress.sqs_topic.workload import Workload
 
 
 MIN_SUPPORTED_VERSION = "stable-26-1-2"

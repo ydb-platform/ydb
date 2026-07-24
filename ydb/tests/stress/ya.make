@@ -30,7 +30,7 @@ RECURSE(
     testshard_workload
     topic
     topic_kafka
-    topic_sqs
+    sqs_topic
     transfer
     vector_workload
     viewer

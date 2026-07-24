@@ -1,11 +1,11 @@
-PY3_PROGRAM(topic_sqs)
+PY3_PROGRAM(sqs_topic)
 
 PY_SRCS(
     __main__.py
 )
 
 PEERDIR(
-    ydb/tests/stress/topic_sqs/workload
+    ydb/tests/stress/sqs_topic/workload
 )
 
 END()

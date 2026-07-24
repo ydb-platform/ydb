@@ -26,6 +26,9 @@ namespace NActors {
                 }
 
                 Become(&TThis::StateFunc);
+                // Every liveness probe is guaranteed to eventually produce exactly one response:
+                // ActorAlive or ActorDead for a local target, and ActorLivenessUnsure for a remote one.
+                // The checker can therefore wait for all responses without a timeout.
                 for (const TActorId& subscriber : PendingSubscribers) {
                     TActivationContext::Send(new IEventHandle(
                         TEvents::TSystem::CheckActorLiveness,

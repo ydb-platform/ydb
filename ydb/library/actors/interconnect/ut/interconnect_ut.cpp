@@ -1112,13 +1112,12 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
 }
 
-void RunSubscriberLivenessCheck(bool useSessionV2) {
+void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
     if (useSessionV2 && !TUringContext::IsAvailable()) {
         Cerr << "io_uring not available; skipping" << Endl;
         return;
     }
 
-    const TDuration checkInterval = TDuration::MilliSeconds(100);
     auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
         settings.SubscriberLivenessCheckInterval = checkInterval;
         settings.EnableInterconnectSessionV2 = useSessionV2;
@@ -1141,17 +1140,24 @@ void RunSubscriberLivenessCheck(bool useSessionV2) {
         }
     }, "live subscriber registered");
 
-    Sleep(3 * checkInterval);
-    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+    if (checkInterval != TDuration::Zero()) {
+        Sleep(3 * checkInterval);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+    }
 
     cluster.KillActor(2, subscriberId);
-    WaitForCondition(TDuration::Seconds(10), [&] {
-        try {
-            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
-        } catch (const TPatternNotFound&) {
-            return false;
-        }
-    }, "dead subscriber removed");
+    if (checkInterval != TDuration::Zero()) {
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "dead subscriber removed");
+    } else {
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+    }
 }
 
 } // namespace
@@ -1165,11 +1171,19 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     }
 
     Y_UNIT_TEST(SubscriberLivenessCheck) {
-        RunSubscriberLivenessCheck(false);
+        RunSubscriberLivenessCheck(false, TDuration::MilliSeconds(100));
     }
 
     Y_UNIT_TEST(SubscriberLivenessCheckV2) {
-        RunSubscriberLivenessCheck(true);
+        RunSubscriberLivenessCheck(true, TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabled) {
+        RunSubscriberLivenessCheck(false, TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabledV2) {
+        RunSubscriberLivenessCheck(true, TDuration::Zero());
     }
 
     Y_UNIT_TEST(RdmaRetryWatchdogPendingSessionsAggregated) {

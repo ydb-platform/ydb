@@ -57,8 +57,10 @@ namespace NActors {
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
-        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval,
-            new TEvPrivate::TEvCheckSubscriberLiveness);
+        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+                interval != TDuration::Zero()) {
+            Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
+        }
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
     }
 
@@ -192,16 +194,13 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::CheckSubscriberLiveness() {
-        if (!Subscribers.empty()) {
-            TVector<TActorId> subscribers;
-            subscribers.reserve(Subscribers.size());
-            for (const auto& [actorId, _] : Subscribers) {
-                subscribers.push_back(actorId);
-            }
-            Register(CreateSubscriberLivenessChecker(SelfId(), std::move(subscribers)));
+        const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+        if (interval == TDuration::Zero()) {
+            return;
         }
-        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval,
-            new TEvPrivate::TEvCheckSubscriberLiveness);
+
+        RegisterSubscriberLivenessChecker(SelfId(), Subscribers);
+        Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
     }
 
     void TInterconnectSessionTCPv2::HandlePoison() {

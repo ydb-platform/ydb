@@ -78,7 +78,10 @@ namespace NActors {
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
             Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
-        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval, new TEvCheckSubscriberLiveness);
+        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+                interval != TDuration::Zero()) {
+            Schedule(interval, new TEvCheckSubscriberLiveness);
+        }
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
@@ -318,15 +321,13 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::CheckSubscriberLiveness() {
-        if (!Subscribers.empty()) {
-            TVector<TActorId> subscribers;
-            subscribers.reserve(Subscribers.size());
-            for (const auto& [actorId, _] : Subscribers) {
-                subscribers.push_back(actorId);
-            }
-            Register(CreateSubscriberLivenessChecker(SelfId(), std::move(subscribers)));
+        const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+        if (interval == TDuration::Zero()) {
+            return;
         }
-        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval, new TEvCheckSubscriberLiveness);
+
+        RegisterSubscriberLivenessChecker(SelfId(), Subscribers);
+        Schedule(interval, new TEvCheckSubscriberLiveness);
     }
 
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,

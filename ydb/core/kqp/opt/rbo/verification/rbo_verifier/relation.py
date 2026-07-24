@@ -16,6 +16,7 @@ from .ir import (
     Expr,
     ExistsSubplan,
     Filter,
+    InSubplan,
     Join,
     Limit,
     OuterBind,
@@ -213,6 +214,20 @@ class _CorrelatedPairBudget:
         )
 
 
+@dataclass(slots=True)
+class _BooleanSubplanPairBudget:
+    """One cumulative construction budget for every Boolean subplan outcome."""
+
+    count: int = 0
+
+    def charge(self, count: int) -> None:
+        self.count += count
+        _require_relation_row_pairs(
+            self.count,
+            "Boolean subplan evaluation",
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class MismatchBranch:
     """One exact, independently solvable part of the mismatch predicate."""
@@ -392,6 +407,7 @@ class Evaluator:
         outer_bindings: Mapping[str, Value] | None = None,
         _context: _EvaluatorContext | None = None,
         _correlated_pair_budget: _CorrelatedPairBudget | None = None,
+        _boolean_subplan_pair_budget: _BooleanSubplanPairBudget | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.database = database
@@ -455,6 +471,11 @@ class Evaluator:
             _correlated_pair_budget
             if _correlated_pair_budget is not None
             else _CorrelatedPairBudget()
+        )
+        self._boolean_subplan_pair_budget = (
+            _boolean_subplan_pair_budget
+            if _boolean_subplan_pair_budget is not None
+            else _BooleanSubplanPairBudget()
         )
 
     def root(self) -> RelationFamily:
@@ -1279,16 +1300,18 @@ class Evaluator:
 
         outcomes: list[Outcome] = []
         for partial in partials:
-            exists_pairs = sum(
+            membership_pairs = sum(
                 len(partial.relations[0].rows)
                 * len(partial.relations[index].rows)
                 for index, subplan in enumerate(
                     uncorrelated_subplans,
                     start=1,
                 )
-                if isinstance(subplan, ExistsSubplan)
+                if isinstance(subplan, (ExistsSubplan, InSubplan))
             )
-            _require_relation_row_pairs(exists_pairs, "EXISTS evaluation")
+            self._boolean_subplan_pair_budget.charge(
+                membership_pairs,
+            )
 
             def bindings(row_index: int, row: Row) -> Mapping[str, Value]:
                 values = {
@@ -1342,7 +1365,7 @@ class Evaluator:
                     "a correlated scalar subplan must be evaluated per outer row"
                 )
             return self._evaluate_scalar_subplan(subplan)
-        assert isinstance(subplan, ExistsSubplan)
+        assert isinstance(subplan, (ExistsSubplan, InSubplan))
         return SubplanFamily(
             tuple(
                 SubplanOutcome(outcome, smt.FALSE)
@@ -1358,11 +1381,20 @@ class Evaluator:
     ) -> Value:
         if isinstance(subplan, ScalarSubplan):
             return relation.rows[0].values[subplan.binding]
-        assert isinstance(subplan, ExistsSubplan)
+        assert isinstance(subplan, (ExistsSubplan, InSubplan))
         matches = []
         for inner_row in relation.rows:
             match = inner_row.present
-            if subplan.predicate is not None:
+            if isinstance(subplan, InSubplan):
+                outer_value = outer_row.values[subplan.lookup.column]
+                inner_value = inner_row.values[subplan.output.column]
+                match = smt.and_(
+                    match,
+                    smt.not_(outer_value.is_null),
+                    smt.not_(inner_value.is_null),
+                    smt.eq(outer_value.value, inner_value.value),
+                )
+            elif subplan.predicate is not None:
                 assert subplan.dependency is not None
                 dependency = subplan.dependency
                 match = smt.and_(
@@ -1422,6 +1454,7 @@ class Evaluator:
                 ),
                 _context=self._context,
                 _correlated_pair_budget=self._correlated_pair_budget,
+                _boolean_subplan_pair_budget=self._boolean_subplan_pair_budget,
             )
             scalar_family = self._scalarize_subplan(
                 subplan,

@@ -642,6 +642,102 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             ),
         )
 
+    def test_in_subplan_descriptor_is_explicit_and_digest_sensitive(self):
+        nodes = (
+            ir.EmptySource("main_unit"),
+            ir.Project(
+                "outer",
+                "main_unit",
+                (
+                    ir.Projection("outer.lookup", _literal(1)),
+                    ir.Projection("outer.other", _literal(2)),
+                ),
+                False,
+            ),
+            ir.Filter("main_filter", "outer", _column("$in")),
+            ir.Project(
+                "main_project",
+                "main_filter",
+                (ir.Projection("result", _column("outer.lookup")),),
+                False,
+            ),
+            ir.EmptySource("sub_unit"),
+            ir.Project(
+                "sub_value",
+                "sub_unit",
+                (
+                    ir.Projection("inner.value", _literal(3)),
+                    ir.Projection("inner.other", _literal(4)),
+                ),
+                False,
+            ),
+        )
+        descriptor = ir.InSubplan(
+            binding="$in",
+            root="sub_value",
+            lookup=ir.SubplanOutput("outer.lookup", "Int64", False),
+            output=ir.SubplanOutput("inner.value", "Int64", False),
+            consumers=("main_filter",),
+        )
+        snapshot = ir.Snapshot(
+            (),
+            ir.Plan(nodes, "main_project", ("result",), (descriptor,)),
+            None,
+        )
+
+        rendered = render_snapshot(snapshot)
+
+        self.assertIn(
+            'subplan binding="$in" kind=in root="sub_value" '
+            'lookup={column="outer.lookup", type="Int64", nullable=false} '
+            'output={column="inner.value", type="Int64", nullable=false} '
+            'type="Bool" nullable=false dependencies=[] '
+            'consumers=["main_filter"]',
+            rendered,
+        )
+        self.assertNotEqual(
+            snapshot_digest(snapshot),
+            snapshot_digest(
+                replace(
+                    snapshot,
+                    plan=replace(
+                        snapshot.plan,
+                        subplans=(
+                            replace(
+                                descriptor,
+                                lookup=ir.SubplanOutput(
+                                    "outer.other",
+                                    "Int64",
+                                    False,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            ),
+        )
+        self.assertNotEqual(
+            snapshot_digest(snapshot),
+            snapshot_digest(
+                replace(
+                    snapshot,
+                    plan=replace(
+                        snapshot.plan,
+                        subplans=(
+                            replace(
+                                descriptor,
+                                output=ir.SubplanOutput(
+                                    "inner.other",
+                                    "Int64",
+                                    False,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            ),
+        )
+
     def test_semantic_digest_is_stable_and_field_sensitive(self):
         snapshot = _stage_snapshot()
         digest = snapshot_digest(snapshot)

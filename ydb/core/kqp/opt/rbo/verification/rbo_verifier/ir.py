@@ -276,7 +276,18 @@ class ExistsSubplan:
     consumers: tuple[str, ...]
 
 
-Subplan: TypeAlias = ScalarSubplan | ExistsSubplan
+@dataclass(frozen=True, slots=True)
+class InSubplan:
+    """One exact uncorrelated, non-null, single-column IN binding."""
+
+    binding: str
+    root: str
+    lookup: SubplanOutput
+    output: SubplanOutput
+    consumers: tuple[str, ...]
+
+
+Subplan: TypeAlias = ScalarSubplan | ExistsSubplan | InSubplan
 
 
 @dataclass(frozen=True, slots=True)
@@ -1097,6 +1108,16 @@ def _parse_stage_graph(value: Any, path: str) -> StageGraph:
     )
 
 
+def _parse_subplan_output(value: Any, path: str) -> SubplanOutput:
+    obj = _object(value, path)
+    _keys(obj, {"column", "type", "nullable"}, path)
+    return SubplanOutput(
+        column=_string(obj["column"], f"{path}.column"),
+        type=_scalar_type(obj["type"], f"{path}.type"),
+        nullable=_bool(obj["nullable"], f"{path}.nullable"),
+    )
+
+
 def _parse_subplan(value: Any, path: str) -> Subplan:
     obj = _object(value, path)
     kind = _string(obj.get("kind"), f"{path}.kind")
@@ -1109,9 +1130,13 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
         "dependencies",
         "consumers",
     }
-    if kind not in {"scalar", "exists"}:
+    if kind not in {"scalar", "exists", "in"}:
         _fail(f"{path}.kind", f"unsupported subplan kind {kind!r}")
-    variant_keys = {"output"} if kind == "scalar" else {"predicate"}
+    variant_keys = {
+        "scalar": {"output"},
+        "exists": {"predicate"},
+        "in": {"lookup", "output"},
+    }[kind]
     _keys(obj, common_keys | variant_keys, path)
     binding = _string(obj["binding"], f"{path}.binding")
     root = _string(obj["root"], f"{path}.root")
@@ -1130,13 +1155,7 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
         )
     )
     if kind == "scalar":
-        raw_output = _object(obj["output"], f"{path}.output")
-        _keys(raw_output, {"column", "type", "nullable"}, f"{path}.output")
-        output = SubplanOutput(
-            column=_string(raw_output["column"], f"{path}.output.column"),
-            type=_scalar_type(raw_output["type"], f"{path}.output.type"),
-            nullable=_bool(raw_output["nullable"], f"{path}.output.nullable"),
-        )
+        output = _parse_subplan_output(obj["output"], f"{path}.output")
         if scalar_type != output.type:
             _fail(
                 f"{path}.type",
@@ -1157,6 +1176,41 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
             root=root,
             output=output,
             dependency=dependencies[0] if dependencies else None,
+            consumers=consumers,
+        )
+    if kind == "in":
+        if scalar_type != BOOL:
+            _fail(f"{path}.type", "an IN binding must have type 'Bool'")
+        if nullable:
+            _fail(f"{path}.nullable", "this IN binding must be non-nullable")
+        if dependencies:
+            _fail(
+                f"{path}.dependencies",
+                "this IN binding must be uncorrelated",
+            )
+
+        lookup = _parse_subplan_output(obj["lookup"], f"{path}.lookup")
+        output = _parse_subplan_output(obj["output"], f"{path}.output")
+        if lookup.nullable or output.nullable:
+            _fail(
+                path,
+                "this IN slice requires non-null lookup and output columns",
+            )
+        if lookup.type != output.type:
+            _fail(
+                path,
+                "IN lookup and output types must match exactly",
+            )
+        if integer_bounds(lookup.type) is None:
+            _fail(
+                path,
+                "this IN slice supports only fixed-width integral columns",
+            )
+        return InSubplan(
+            binding=binding,
+            root=root,
+            lookup=lookup,
+            output=output,
             consumers=consumers,
         )
     if scalar_type != BOOL:
@@ -2157,6 +2211,12 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"{path}.consumers",
                     "a correlated scalar binding must have exactly one consumer",
                 )
+        elif isinstance(subplan, InSubplan):
+            if len(subplan.consumers) != 1:
+                _fail(
+                    f"{path}.consumers",
+                    "an IN binding must have exactly one Filter consumer",
+                )
         else:
             raise AssertionError(f"unknown subplan class {type(subplan).__name__}")
 
@@ -2178,7 +2238,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     (
                         "scalar subplan consumers must be Project or Filter nodes"
                         if isinstance(subplan, ScalarSubplan)
-                        else "an EXISTS consumer must be a Filter node"
+                        else (
+                            "an EXISTS consumer must be a Filter node"
+                            if isinstance(subplan, ExistsSubplan)
+                            else "an IN consumer must be a Filter node"
+                        )
                     ),
                 )
             if subplan.binding not in _node_expression_columns(consumer):
@@ -2585,6 +2649,15 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 f"{path}.root",
                 "EXISTS roots with observable error outcomes are not modeled",
             )
+        if isinstance(subplan, InSubplan) and any(
+            isinstance(nodes[node_id], Limit)
+            and nodes[node_id].ensure_at_most_one
+            for node_id in subplan_nodes[subplan.binding]
+        ):
+            _fail(
+                f"{path}.root",
+                "IN roots with observable error outcomes are not modeled",
+            )
         if (
             isinstance(subplan, ExistsSubplan)
             and subplan.predicate is not None
@@ -2803,8 +2876,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             "only in the correlation Filter; exact Project "
                             "pass-through is allowed",
                         )
-        else:
-            assert isinstance(subplan, ExistsSubplan)
+        elif isinstance(subplan, ExistsSubplan):
             if subplan.predicate is not None:
                 assert subplan.dependency is not None
                 dependency = subplan.dependency
@@ -2843,6 +2915,52 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 )
                 if predicate_type.name != BOOL:
                     _fail(f"{path}.predicate", "EXISTS predicate must be Boolean")
+        else:
+            assert isinstance(subplan, InSubplan)
+            actual_output = schema.get(subplan.output.column)
+            expected_output = Column(
+                subplan.output.column,
+                subplan.output.type,
+                subplan.output.nullable,
+            )
+            if actual_output is None:
+                _fail(
+                    f"{path}.output",
+                    "declared IN output column is not produced by its root",
+                )
+            if actual_output != expected_output:
+                _fail(
+                    f"{path}.output",
+                    "declared IN output schema does not match its root",
+                )
+            if any(
+                isinstance(nodes[node_id], OuterBind)
+                for node_id in subplan_nodes[subplan.binding]
+            ):
+                _fail(
+                    f"{path}.root",
+                    "an uncorrelated IN root may not contain outer_bind",
+                )
+
+            consumer = nodes[subplan.consumers[0]]
+            assert isinstance(consumer, Filter)
+            outer_schema = schemas[consumer.input]
+            actual_lookup = outer_schema.get(subplan.lookup.column)
+            expected_lookup = Column(
+                subplan.lookup.column,
+                subplan.lookup.type,
+                subplan.lookup.nullable,
+            )
+            if actual_lookup is None:
+                _fail(
+                    f"{path}.lookup",
+                    "declared IN lookup column is not available to the consumer",
+                )
+            if actual_lookup != expected_lookup:
+                _fail(
+                    f"{path}.lookup",
+                    "declared IN lookup schema does not match the consumer input",
+                )
         if subplan.root in main_nodes:
             _fail(
                 f"{path}.root",

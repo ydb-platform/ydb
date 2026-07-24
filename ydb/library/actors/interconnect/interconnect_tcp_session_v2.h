@@ -62,8 +62,8 @@ namespace NActors {
         const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
         ui64 GetTotalOutputQueueSize() const override { return 0; }
         std::optional<ui8> GetXDCFlags() const override { return std::nullopt; }
-        TDuration GetPingRTT() const override { return TDuration::Zero(); }
-        i64 GetClockSkew() const override { return 0; }
+        TDuration GetPingRTT() const override { return TDuration::FromValue(PingRTT->load()); }
+        i64 GetClockSkew() const override { return ClockSkew->load(); }
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
 
     private:
@@ -125,6 +125,9 @@ namespace NActors {
 
         // subscribers awaiting connection state notifications (actor id -> cookie)
         THashMap<TActorId, ui64> Subscribers;
+
+        std::shared_ptr<std::atomic<int64_t>> ClockSkew = std::make_shared<std::atomic<int64_t>>();
+        std::shared_ptr<std::atomic<uint64_t>> PingRTT = std::make_shared<std::atomic<uint64_t>>();
     };
 
 }

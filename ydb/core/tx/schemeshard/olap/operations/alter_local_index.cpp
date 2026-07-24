@@ -43,10 +43,10 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        auto indexData = context.SS->Indexes.at(path->PathId);
         Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes[path->PathId] = indexData->AlterData;
+        context.SS->Indexes.SetUntracked(path->PathId, indexData->AlterData);
 
         auto parentPath = TPath::Init(path->PathId, context.SS).Parent();
         ++parentPath->DirAlterVersion;
@@ -240,7 +240,6 @@ public:
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, indexPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabIndex(context.SS, indexPath.Base()->PathId);
 
         context.DbChanges.PersistPath(indexPath.Base()->PathId);
         context.DbChanges.PersistAlterIndex(indexPath.Base()->PathId);

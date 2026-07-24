@@ -154,7 +154,6 @@ public:
 
         context.MemChanges.GrabPath(context.SS, resourcePool->PathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        context.MemChanges.GrabResourcePool(context.SS, resourcePool->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(resourcePool->PathId);
@@ -162,7 +161,7 @@ public:
         context.DbChanges.PersistResourcePool(resourcePool->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.SS->ResourcePools[resourcePool->PathId] = resourcePoolInfo;
+        context.SS->ResourcePools.Set({.Path = resourcePool->PathId, .Value = resourcePoolInfo, .Changes = context.MemChanges});
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterResourcePool, resourcePool->PathId);
         txState.Shards.clear();

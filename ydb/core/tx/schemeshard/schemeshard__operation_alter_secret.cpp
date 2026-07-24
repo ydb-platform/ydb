@@ -59,7 +59,7 @@ public:
         Y_ABORT_UNLESS(secretInfo->Description.GetVersion() + 1 == alterData->Description.GetVersion());
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->Secrets[secretPathId] = alterData;
+        context.SS->Secrets.SetUntracked(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -152,7 +152,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Secrets.contains(secretPath.Base()->PathId));
-        auto secretInfo = context.SS->Secrets.at(secretPath.Base()->PathId);
+        auto& secretInfo = context.SS->Secrets.Update(secretPath.Base()->PathId, context.MemChanges);
 
         if (secretInfo->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Secret is not created yet");
@@ -165,7 +165,6 @@ public:
         }
 
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
-        context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(secretPath.Base()->PathId);

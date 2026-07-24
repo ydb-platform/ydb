@@ -197,7 +197,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
                 continue;
             }
 
-            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+            const auto indexInfo = context.SS->Indexes.at(childPathId);
             if (!DoesIndexSupportTTL(indexInfo->Type)) {
                 errStr = TStringBuilder() << "Table with " << indexInfo->Type << " index doesn't support TTL";
                 status = NKikimrScheme::StatusInvalidParameter;
@@ -337,7 +337,7 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
             continue;
         }
 
-        const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId);
+        const auto indexInfo = ss->Indexes.at(childPathId);
         for (const auto& indexKey: indexInfo->IndexKeys) {
             if (deletedColumns.contains(indexKey)) {
                 errStr = TStringBuilder ()
@@ -473,7 +473,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
         table->FinishAlter();
 
         if (!table->IsAsyncReplica()) {
@@ -699,7 +699,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+        auto& table = context.SS->Tables.Update(path.Base()->PathId, context.MemChanges);
 
         if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -834,7 +834,7 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-    TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
+    auto tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
 
     for (const auto& dropColumn : alter.GetDropColumns()) {
         const TString& colName = dropColumn.GetName();

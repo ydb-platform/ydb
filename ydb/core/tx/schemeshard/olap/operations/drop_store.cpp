@@ -323,7 +323,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->OlapStores.contains(path.Base()->PathId));
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path.Base()->PathId);
+        auto storeInfo = context.SS->OlapStores.at(path.Base()->PathId);
 
         if (!storeInfo->ColumnTables.empty()) {
             errStr = TStringBuilder() << "OlapStore cannot be dropped until all tables are dropped";

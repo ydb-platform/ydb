@@ -315,7 +315,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
@@ -714,8 +714,11 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         TPathElement::TPtr newTable = dstPath.Base();
         newTable->CreateTxId = OperationId.GetTxId();
@@ -740,9 +743,8 @@ public:
             newTable->SetIncrementalRestoreTable();
         }
 
-        context.SS->Tables[newTable->PathId] = tableInfo;
+        context.SS->Tables.Set({.Path = newTable->PathId, .Value = tableInfo, .Changes = context.MemChanges});
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
-        context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");
 
         if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) && parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

@@ -1120,11 +1120,11 @@ private:
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
         if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.DstPathId).GetPtr();
+            auto table = Self->ColumnTables.at(item.DstPathId);
             return GetIssues(table, restoreTxId);
         } else {
             Y_ABORT_UNLESS(Self->Tables.contains(item.DstPathId));
-            TTableInfo::TPtr table = Self->Tables.at(item.DstPathId);
+            auto table = Self->Tables.at(item.DstPathId);
             return GetIssues(table, restoreTxId);
         }
     }

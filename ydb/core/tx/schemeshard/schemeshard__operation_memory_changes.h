@@ -6,8 +6,12 @@
 
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
+
+#include <functional>
 
 #include <optional>
 
@@ -17,13 +21,21 @@ class TSchemeShard;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
-    TStack<TPathState> Paths;
+    // Holds both GrabPath snapshots (non-null elem) and GrabNewPath markers (null elem).
+    // Subclassed to expose the underlying container for the debug-only scan below.
+    struct TPathStack : TStack<TPathState> {
+        bool Contains(const TPathId& id) const {
+            for (const auto& [pid, elem] : this->c) {
+                if (pid == id) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+    TPathStack Paths;
 
-    using TIndexState = std::pair<TPathId, TTableIndexInfo::TPtr>;
-    TStack<TIndexState> Indexes;
 
-    using TCdcStreamState = std::pair<TPathId, TCdcStreamInfo::TPtr>;
-    TStack<TCdcStreamState> CdcStreams;
 
     using TTableSnapshotState = std::pair<TPathId, TTxId>;
     TStack<TTableSnapshotState> TablesWithSnapshots;
@@ -31,14 +43,10 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TLockState = std::pair<TPathId, TTxId>;
     TStack<TLockState> LockedPaths;
 
-    using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
-    TStack<TTableState> Tables;
 
     using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
     TStack<TColumnTableState> ColumnTables;
 
-    using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
-    TStack<TSequenceState> Sequences;
 
     using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
     TStack<TShardState> Shards;
@@ -53,23 +61,11 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
 
-    using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;
-    TStack<TExternalTableState> ExternalTables;
 
-    using TExternalDataSourceState = std::pair<TPathId, TExternalDataSourceInfo::TPtr>;
-    TStack<TExternalDataSourceState> ExternalDataSources;
 
-    using TViewState = std::pair<TPathId, TViewInfo::TPtr>;
-    TStack<TViewState> Views;
 
-    using TResourcePoolState = std::pair<TPathId, TResourcePoolInfo::TPtr>;
-    TStack<TResourcePoolState> ResourcePools;
 
-    using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
-    TStack<TBackupCollectionState> BackupCollections;
 
-    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
-    TStack<TSysViewState> SysViews;
 
     using TLongIncrementalRestoreOpState = std::pair<TOperationId, std::optional<NKikimrSchemeOp::TLongIncrementalRestoreOp>>;
     TStack<TLongIncrementalRestoreOpState> LongIncrementalRestoreOps;
@@ -85,28 +81,45 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBCPathToFullBackupState = std::pair<TPathId, std::optional<ui64>>;
     TStack<TBCPathToFullBackupState> BCPathToFullBackup;
 
-    using TSecretState = std::pair<TPathId, TSecretInfo::TPtr>;
-    TStack<TSecretState> Secrets;
 
-    using TStreamingQueryState = std::pair<TPathId, TStreamingQueryInfo::TPtr>;
-    TStack<TStreamingQueryState> StreamingQueries;
 
     using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
     TStack<TSharedShardEntry> SharedShardEntries;
 
-    using TTestShardSetState = std::pair<TPathId, TTestShardSetInfo::TPtr>;
-    TStack<TTestShardSetState> TestShardSets;
+
+    TStack<std::function<void()>> DbRefUndos;
+
+    // Dedup: at most one value snapshot per (self-ref map, path) per tx, so
+    // repeated Update() on the same object doesn't re-copy it.
+    THashMap<const void*, THashSet<TPathId>> UpdateSnapshotted;
+
+    // Only the propose tx can roll back (UnDo runs only from AbortOperationPropose),
+    // so only it records undos; other txs would just accumulate dead weight.
+    bool Armed = false;
 
 public:
     ~TMemoryChanges() = default;
+
+    // Called from IgniteOperation.
+    void Arm() { Armed = true; }
+
+    // True only inside an armed propose; tracked Set/Update are legal only then.
+    bool IsArmed() const { return Armed; }
+
+    // Debug: was this path grabbed (GrabPath/GrabNewPath) in this tx? A tracked Set()
+    // that acquires a ref on an ungrabbed path can't fully roll back.
+    bool IsPathTracked(const TPathId& id) const { return Paths.Contains(id); }
+
+    // True the first time this (map, path) needs a snapshot; false when disarmed.
+    bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
+        return Armed && UpdateSnapshotted[map].insert(id).second;
+    }
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
 
     void GrabNewPath(TSchemeShard* ss, const TPathId& pathId);
     void GrabPath(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewTable(TSchemeShard* ss, const TPathId& pathId);
-    void GrabTable(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabColumnTable(TSchemeShard* ss, const TPathId& pathId);
@@ -116,37 +129,19 @@ public:
 
     void GrabDomain(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
-    void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewSequence(TSchemeShard* ss, const TPathId& pathId);
-    void GrabSequence(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
-    void GrabCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
 
     void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
     void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
 
-    void GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId);
-    void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
-    void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
-    void GrabView(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId);
-    void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId);
-    void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
-    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
     void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
@@ -156,17 +151,19 @@ public:
     void GrabNewFullBackupOp(TSchemeShard* ss, ui64 id);
     void GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId);
 
-    void GrabNewSecret(TSchemeShard* ss, const TPathId& pathId);
-    void GrabSecret(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
-    void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
     void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
-    void GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId);
-    void GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId);
+
+    // TDbRefMap::Set records its own rollback closure here (undone LIFO),
+    // replacing the per-map GrabNew*/Grab* + UnDo branches.
+    void RecordDbRefUndo(std::function<void()> undo) {
+        if (Armed) {
+            DbRefUndos.push(std::move(undo));
+        }
+    }
 
     void UnDo(TSchemeShard* ss);
 };

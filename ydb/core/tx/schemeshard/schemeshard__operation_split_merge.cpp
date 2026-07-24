@@ -1083,7 +1083,7 @@ public:
             context.DbChanges.PersistShard(shard.Idx);
         }
 
-        TTableInfo::TPtr mutableTableInfo = context.SS->Tables.at(path->PathId);
+        auto& mutableTableInfo = context.SS->Tables.Update(path->PathId, context.MemChanges);
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
         context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId) = op;
@@ -1136,7 +1136,7 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
+        auto& tableInfo = context.SS->Tables.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(tableInfo);
 
         // Undo the in-memory changes made by Propose() using inverse operations.

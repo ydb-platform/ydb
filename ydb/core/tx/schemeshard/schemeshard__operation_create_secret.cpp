@@ -86,7 +86,7 @@ public:
         secretPath->StepCreated = step;
         context.SS->PersistCreateStep(db, secretPathId, step);
 
-        context.SS->Secrets[secretPathId] = alterData;
+        context.SS->Secrets.SetUntracked(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -223,7 +223,6 @@ public:
         const auto secretPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, secretPathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
-        context.MemChanges.GrabNewSecret(context.SS, secretPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(secretPathId);
@@ -275,13 +274,12 @@ public:
         secretDescription.SetValue(createSecretProto.GetValue());
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
-        context.SS->Secrets[secretPathId] = secretInfo;
+        context.SS->Secrets.Set({.Path = secretPathId, .Value = secretInfo, .Changes = context.MemChanges});
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPath(db, dstPath->PathId);
         context.SS->PersistSecret(db, dstPath->PathId, *secretInfo);
         context.SS->PersistSecretAlter(db, dstPath->PathId, *secretInfo->AlterData);
-        context.SS->IncrementPathDbRefCount(dstPath->PathId);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSecret, secretPathId);
         txState.State = TTxState::Propose;

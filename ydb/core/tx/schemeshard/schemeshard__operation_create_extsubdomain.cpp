@@ -211,7 +211,7 @@ public:
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
         if (resourcesDomainId) {
-            TSubDomainInfo::TPtr resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
+            auto resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
             TTabletId sharedHive = context.SS->GetGlobalHive();
             if (resourcesDomain->GetTenantHiveID()) {
                 sharedHive = resourcesDomain->GetTenantHiveID();
@@ -234,13 +234,12 @@ public:
         }
 
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
-        auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
+        auto& subDomainInfo = context.SS->SubDomains.EmplaceUntracked(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
         subDomainInfo->SetAlter(alter);
 
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);
         context.SS->PersistSubDomainAlter(db, newNode->PathId, *alter);
-        context.SS->IncrementPathDbRefCount(newNode->PathId);
 
         if (parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

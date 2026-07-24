@@ -11,6 +11,7 @@
 #include <ydb/core/tx/message_seqno.h>
 
 #include "schemeshard_identificators.h"  // for TStepId, TTxId, TShardIdx
+#include "schemeshard_path_db_ref.h"  // for TPathDbRef
 #include "schemeshard_subop_types.h"  // for ETxType
 #include "schemeshard_subop_state_types.h"  // for ETxState
 
@@ -92,6 +93,12 @@ struct TTxState {
     bool NeedUpdateObject = false;
     bool NeedSyncHive = false;
     // not persist:
+    // DbRefCount references on TargetPathId/SourcePathId. Holding the handle
+    // is holding the reference: acquired via AcquirePathRefs by both
+    // TSchemeShard::CreateTx and TTxInit restore, released automatically when
+    // the tx state is erased from TxInFlight, wherever that happens.
+    TPathDbRef TargetPathRef;
+    TPathDbRef SourcePathRef;
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
@@ -119,6 +126,21 @@ struct TTxState {
         , State(Waiting)
         , StartTime(::Now())
     {}
+
+    // `sourceExists` is false only for an orphaned in-flight tx whose source path
+    // is gone: reference the target, not the missing source.
+    void AcquirePathRefs(TSchemeShard* ss, bool sourceExists = true) {
+        Y_ABORT_UNLESS(!TargetPathRef && !SourcePathRef);
+        TargetPathRef.Reset(ss, TargetPathId, "transaction target path");
+        if (SourcePathId && sourceExists) {
+            SourcePathRef.Reset(ss, SourcePathId, "transaction source path");
+        }
+    }
+
+    void DisarmPathRefs() {
+        TargetPathRef.DetachWithoutRelease();
+        SourcePathRef.DetachWithoutRelease();
+    }
 
     void AcceptPendingSchemeNotification() {
         ReadyForNotifications = true;

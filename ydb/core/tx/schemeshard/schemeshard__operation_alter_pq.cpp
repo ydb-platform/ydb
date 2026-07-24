@@ -660,7 +660,7 @@ public:
             }
         }
 
-        TTopicInfo::TPtr topic = context.SS->Topics.at(path.Base()->PathId);
+        auto& topic = context.SS->Topics.Update(path.Base()->PathId, context.MemChanges);
         Y_ABORT_UNLESS(topic);
 
         if (topic->AlterVersion == 0) {

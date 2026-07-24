@@ -963,10 +963,32 @@ private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
     void CalculateColumnIdByName() const;
 
-    // Stable-address store: THashMap uses separate chaining, so element references
-    // survive insert.  Also serves as the O(1) ShardIdx lookup index.
-    THashMap<TShardIdx, TTableShardInfo> PartitionStore;
-    TPartitionsVec Partitions;  // ordered by EndOfRange; raw ptrs into PartitionStore
+    // Partition set, shared copy-on-write. Store is a stable-address map, Order
+    // holds raw ptrs into it. DeepCopy shares this O(1); mutations build a fresh
+    // one (or EnsureUniquePartitioning for the in-place cond-erase update).
+    struct TPartitioning {
+        THashMap<TShardIdx, TTableShardInfo> Store;
+        TPartitionsVec Order; // ordered by EndOfRange; raw ptrs into Store
+    };
+    std::shared_ptr<TPartitioning> Partitioning = std::make_shared<TPartitioning>();
+
+    static std::shared_ptr<TPartitioning> ClonePartitioning(const TPartitioning& src) {
+        auto copy = std::make_shared<TPartitioning>();
+        copy->Store = src.Store;
+        copy->Order.resize(src.Order.size());
+        for (ui64 i = 0; i < src.Order.size(); ++i) {
+            copy->Order[i] = copy->Store.FindPtr(src.Order[i]->ShardIdx);
+        }
+        return copy;
+    }
+    // Detach from any shared (snapshot) partitioning before an in-place mutation.
+    TPartitioning& EnsureUniquePartitioning() {
+        if (Partitioning.use_count() != 1) {
+            Partitioning = ClonePartitioning(*Partitioning);
+        }
+        return *Partitioning;
+    }
+
     TCondEraseSchedule CondEraseSchedule;
     THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
@@ -977,8 +999,9 @@ private:
     TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
+    // Ptr into the (possibly shared) store; read-only unless EnsureUniquePartitioning was called.
     TTableShardInfo* FindPartition(const TShardIdx& shardIdx) {
-        return PartitionStore.FindPtr(shardIdx);
+        return Partitioning->Store.FindPtr(shardIdx);
     }
 
 public:
@@ -997,14 +1020,9 @@ public:
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
+        // Shares other's Partitioning in O(1); the next structural change
+        // copies-on-write, so Order's raw ptrs never dangle.
         TTableInfo::TPtr copy(new TTableInfo(other));
-        // Partitions holds raw pointers into PartitionStore; after the value copy
-        // they point into other's store — rebuild them to point into the copy's.
-        copy->Partitions.resize(other.Partitions.size());
-        for (ui64 i = 0; i < other.Partitions.size(); ++i) {
-            copy->Partitions[i] = copy->PartitionStore.FindPtr(other.Partitions[i]->ShardIdx);
-            Y_ABORT_UNLESS(copy->Partitions[i]);
-        }
 
         copy->VerifyConsistency();
 
@@ -1114,21 +1132,20 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
-    // Rebuild PartitionStore/Partitions from newPartitioning; Stats are already correct
-    // (caller is a DeepCopy of a table with the same physical shard set).
+    // Keeps existing Stats (caller is a DeepCopy of a table with the same physical shard set).
     void MovePartitioning(TVector<TTableShardInfo>&& newPartitioning);
-    // Rebuild PartitionStore/Partitions and Stats from scratch for all-new shard IDs
+    // Rebuilds Stats from scratch for all-new shard IDs
     // (caller is a fresh dst table whose old placeholder shards had zero stats).
     void CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning);
 
-    // O(N) consistency check across Partitions, PartitionStore, Stats, and CondEraseSchedule.
+    // O(N) consistency check across Partitioning->Order, Partitioning->Store, Stats, and CondEraseSchedule.
     void VerifyConsistency() const;
 
     // In-place split/merge: replaces the contiguous src shard range with dst shards.
     void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const TVector<TShardIdx>& removedShards, ui64 splitFirstIdx, TInstant now);
 
     const TVector<TTableShardInfo*>& GetPartitions() const {
-        return Partitions;
+        return Partitioning->Order;
     }
 
     const TAggregatedStats& GetStats() const {
@@ -1169,7 +1186,7 @@ public:
     }
 
     const THashMap<TShardIdx, TTableShardInfo>& GetPartitionStore() const {
-        return PartitionStore;
+        return Partitioning->Store;
     }
 
     ui64 GetExpectedPartitionCount() const {
@@ -1230,7 +1247,7 @@ public:
         // We also want auto merge enabled when table has more shards than the
         // specified maximum number of partitions. This way when something
         // splits by size over the limit we merge some smaller partitions.
-        return Partitions.size() > GetMaxPartitionsCount() && !params.DisableForceShardSplit;
+        return Partitioning->Order.size() > GetMaxPartitionsCount() && !params.DisableForceShardSplit;
     }
 
     NKikimrSchemeOp::TSplitByLoadSettings GetEffectiveSplitByLoadSettings(
@@ -1345,9 +1362,9 @@ public:
             return true;
         }
         // Otherwise we split when we may add one more partition
-        if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
+        if (Partitioning->Order.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
             reason = TStringBuilder() << "split by size ("
-                << "shardCount: " << Partitions.size() << ", "
+                << "shardCount: " << Partitioning->Order.size() << ", "
                 << "maxShardCount: " << GetMaxPartitionsCount() << ", "
                 << "shardSize: " << dataSize << ", "
                 << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
@@ -1403,14 +1420,14 @@ public:
             return nullptr;
         }
         const TShardIdx& shardIdx = CondEraseSchedule.Top().second;
-        const auto* p = PartitionStore.FindPtr(shardIdx);
+        const auto* p = Partitioning->Store.FindPtr(shardIdx);
         Y_ABORT_UNLESS(p);
         return p;
     }
 
     // Schedule any partition not already in the schedule or in-flight.
     void ScheduleAllCondErase() {
-        for (const auto* p : Partitions) {
+        for (const auto* p : Partitioning->Order) {
             if (!CondEraseSchedule.Contains(p->ShardIdx) && !InFlightCondErase.contains(p->ShardIdx)) {
                 CondEraseSchedule.Push(p->NextCondErase, p->ShardIdx);
             }
@@ -1449,6 +1466,7 @@ public:
     }
 
     void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
+        EnsureUniquePartitioning(); // in-place mutation: detach from any shared snapshot
         auto* p = FindPartition(shardIdx);
         Y_ENSURE(p);
 
@@ -2986,6 +3004,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
     THolder<NKikimrFileStore::TConfig> AlterConfig;
     ui64 AlterVersion = 0;
 
+    TFileStoreInfo() = default;
+    // Deep-copies the owned AlterConfig so the info can be snapshotted for undo.
+    TFileStoreInfo(const TFileStoreInfo& other)
+        : IndexShardIdx(other.IndexShardIdx)
+        , IndexTabletId(other.IndexTabletId)
+        , Config(other.Config)
+        , Version(other.Version)
+        , AlterConfig(other.AlterConfig ? MakeHolder<NKikimrFileStore::TConfig>(*other.AlterConfig) : nullptr)
+        , AlterVersion(other.AlterVersion)
+    {}
+    TFileStoreInfo& operator=(const TFileStoreInfo&) = delete;
+
     void PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) {
         Y_ENSURE(!AlterConfig);
         Y_ENSURE(!AlterVersion);
@@ -3076,6 +3106,18 @@ struct TKesusInfo : public TSimpleRefCount<TKesusInfo> {
     ui64 Version = 0;
     THolder<Ydb::Coordination::Config> AlterConfig;
     ui64 AlterVersion = 0;
+
+    TKesusInfo() = default;
+    // Deep-copies the owned AlterConfig so the info can be snapshotted for undo.
+    TKesusInfo(const TKesusInfo& other)
+        : KesusShardIdx(other.KesusShardIdx)
+        , KesusTabletId(other.KesusTabletId)
+        , Config(other.Config)
+        , Version(other.Version)
+        , AlterConfig(other.AlterConfig ? MakeHolder<Ydb::Coordination::Config>(*other.AlterConfig) : nullptr)
+        , AlterVersion(other.AlterVersion)
+    {}
+    TKesusInfo& operator=(const TKesusInfo&) = delete;
 
     void FinishAlter() {
         Y_ENSURE(AlterConfig, "No alter config at Alter completion");
@@ -3520,7 +3562,7 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 };
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 

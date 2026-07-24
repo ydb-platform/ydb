@@ -160,7 +160,6 @@ class TAlterStreamingQuery : public TSubOperation {
         const TPathId& pathId = dstPath.Base()->PathId;
 
         context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
-        context.MemChanges.GrabStreamingQuery(context.SS, pathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);
@@ -193,7 +192,7 @@ class TAlterStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
-        context.SS->StreamingQueries[dstPath.Base()->PathId] = queryInfo;
+        context.SS->StreamingQueries.Set({.Path = dstPath.Base()->PathId, .Value = queryInfo, .Changes = context.MemChanges});
     }
 
 public:

@@ -430,7 +430,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         TPath tenantRoot = TPath::Init(pathId, ss);
         Y_ABORT_UNLESS(tenantRoot.Base()->IsExternalSubDomainRoot());
 
-        TSubDomainInfo::TPtr& subDomain = ss->SubDomains.at(pathId);
+        auto subDomain = ss->SubDomains.at(pathId);
 
         if (!ss->SubDomainsLinks.IsActive(pathId)) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -623,7 +623,7 @@ void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::
             Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
 
             const ui64 version = ss->GetPathVersion(TPath::Init(pathId, ss)).GetGeneralVersion();
-            if (operation->AddPublishingPath(pathId, version)) {
+            if (operation->AddPublishingPath(ss, pathId, version)) {
                 ss->PersistPublishingPath(db, txId, pathId, version);
             }
         }
@@ -1058,11 +1058,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
                              << ", subscribers: " << operation->Subscribers.size());
 
             for (const auto& pub : operation->Publications) {
+                const auto& [pathId, version] = pub.first;
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Publication details: "
                         << " tx: " << txId
-                        << ", " << pub.first
-                        << ", " << pub.second);
+                        << ", pathId: " << pathId
+                        << ", version: " << version);
             }
 
             ss->Publications[txId] = {

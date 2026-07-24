@@ -302,6 +302,7 @@ SRCS(
     schemeshard_path.h
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
+    schemeshard_path_db_ref.cpp
     schemeshard_path_element.h
     schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h

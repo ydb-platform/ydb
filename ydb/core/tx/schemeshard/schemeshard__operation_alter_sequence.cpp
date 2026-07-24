@@ -99,7 +99,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
+        auto sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -191,14 +191,14 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.SetUntracked(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -491,7 +491,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(dstPath->PathId));
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(dstPath->PathId);
+        auto& sequenceInfo = context.SS->Sequences.Update(dstPath->PathId, context.MemChanges);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;

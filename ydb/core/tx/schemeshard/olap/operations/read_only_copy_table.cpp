@@ -559,7 +559,6 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
         context.MemChanges.GrabNewColumnTable(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
@@ -601,7 +600,7 @@ public:
             tableInfo->IsReadOnly = true;
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy table info");
+        context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");
 
         const auto tabletType = ETabletType::ColumnShard;
         const auto dstPathId = dstPath.Base()->PathId;

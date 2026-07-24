@@ -13,6 +13,7 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_db_ref_map.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -263,6 +264,10 @@ public:
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
+    // Set at the start of destruction so TPathDbRef::Release() during member
+    // teardown does not touch already-destroyed members (PathsById,
+    // CleanDroppedPathsCandidates, ...).
+    bool IsBeingDestroyed = false;
 
     bool IsDomainSchemeShard = false;
 
@@ -284,7 +289,12 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables;
+    // Every TDbRefMap below registers here from its constructor (it takes
+    // `this` and this list), so Clear() disarms+drops them all by iteration and
+    // a map cannot be declared without being registered.
+    TVector<IDbRefMap*> DbRefMaps;
+
+    TDbRefMap<TTableInfo::TPtr> Tables{"Tables", this, DbRefMaps};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -294,11 +304,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
-    THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
-    THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
-    THashMap<TPathId, TReplicationInfo::TPtr> Replications;
-    THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
+    TDbRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, DbRefMaps};
+    TDbRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, DbRefMaps};
+    TDbRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, DbRefMaps};
+    TDbRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, DbRefMaps};
+    TDbRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, DbRefMaps};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -306,24 +316,25 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TTopicInfo::TPtr> Topics;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
-    THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
-    THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
-    THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
-    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    THashMap<TPathId, TViewInfo::TPtr> Views;
-    THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
-    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
-    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
-    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
-    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
+    TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
+    TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
+    TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
+    // Also mutated untracked in armed propose in a few places (extsubdomain dual-tracking).
+    TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
+    TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
+    TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
+    TDbRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, DbRefMaps};
+    TDbRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, DbRefMaps};
+    TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
+    TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
+    TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
+    TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
+    TDbRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, DbRefMaps};
+    TDbRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, DbRefMaps};
+    TDbRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, DbRefMaps};
+    TDbRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, DbRefMaps};
     THashSet<TPathId> TableInBackupCollections;
-    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
+    TDbRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, DbRefMaps};
 
     TTempDirsState TempDirsState;
 
@@ -336,6 +347,7 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore
@@ -518,7 +530,7 @@ public:
         return pId == RootPathId();
     }
 
-    bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
+    bool IsServerlessDomain(const TSubDomainInfo::TConstPtr& domainInfo) const {
         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
     }
@@ -801,8 +813,13 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
+    void AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason);
+    void ReleaseOwnDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // Debug-only: assert every self-ref map is consistent with PathsById.
+    void DebugCheckDbRefIntegrity() const;
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
@@ -826,7 +843,7 @@ public:
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo);
+    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo);
 
     // cdc stream
     void PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -1325,14 +1342,14 @@ public:
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
-    void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
+    void DescribeTableIndex(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
     void DescribeCdcStream(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TCdcStreamDescription& desc);
-    void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
+    void DescribeCdcStream(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TCdcStreamInfo>& info, NKikimrSchemeOp::TCdcStreamDescription& desc);
     void DescribeSequence(const TPathId& pathId, const TString& name,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
-    void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
+    void DescribeSequence(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TSequenceInfo>& info,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
@@ -2244,6 +2261,7 @@ public:
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TSchemeShard();
 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }
     TTabletId SelfTabletId() const { return TTabletId(ITablet::TabletID()); }

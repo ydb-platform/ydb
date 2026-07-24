@@ -35,7 +35,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
 
-    TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+    auto table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
 
     auto operation = transaction.MutableAlterTable();

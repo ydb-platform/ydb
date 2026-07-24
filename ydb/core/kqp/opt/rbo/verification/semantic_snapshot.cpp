@@ -4908,9 +4908,46 @@ struct TOlapColumn {
     TString Output;
     TString Type;
     bool Nullable = false;
+    bool Ambiguous = false;
 };
 
 using TOlapColumnMap = THashMap<TString, TOlapColumn>;
+
+void AddOlapColumnReference(
+    TOlapColumnMap& columns,
+    TStringBuf reference,
+    const TOlapColumn& column)
+{
+    if (reference.empty()) {
+        Unsupported("OLAP read column reference is empty");
+    }
+    const auto [it, inserted] =
+        columns.emplace(TString(reference), column);
+    if (!inserted &&
+        (it->second.Output != column.Output ||
+         it->second.Type != column.Type ||
+         it->second.Nullable != column.Nullable))
+    {
+        it->second.Ambiguous = true;
+    }
+}
+
+const TOlapColumn* ResolveOlapColumn(
+    TStringBuf reference,
+    const TOlapColumnMap& columns)
+{
+    const auto* column = columns.FindPtr(TString(reference));
+    if (!column) {
+        Unsupported(TStringBuilder()
+            << "OLAP predicate references unavailable read column "
+            << reference);
+    }
+    if (column->Ambiguous) {
+        Unsupported(TStringBuilder()
+            << "Ambiguous OLAP read column reference " << reference);
+    }
+    return column;
+}
 
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
@@ -4921,15 +4958,10 @@ NJson::TJsonValue ExportOlapScalar(
     size_t sourceDepth);
 
 NJson::TJsonValue OlapColumnExpr(
-    TStringBuf physicalName,
+    TStringBuf reference,
     const TOlapColumnMap& columns)
 {
-    const auto* column = columns.FindPtr(TString(physicalName));
-    if (!column) {
-        Unsupported(TStringBuilder()
-            << "OLAP predicate references unavailable physical column "
-            << physicalName);
-    }
+    const auto* column = ResolveOlapColumn(reference, columns);
     return ColumnExpr(column->Output);
 }
 
@@ -5002,14 +5034,9 @@ NJson::TJsonValue ExportOlapBinary(
         const auto& right = operation.Right().Ref();
         if (!left.IsAtom()) {
             Unsupported(
-                "OLAP String predicate left operand must be a physical column");
+                "OLAP String predicate left operand must be a read column");
         }
-        const auto* column = columns.FindPtr(TString(left.Content()));
-        if (!column) {
-            Unsupported(TStringBuilder()
-                << "OLAP predicate references unavailable physical column "
-                << left.Content());
-        }
+        const auto* column = ResolveOlapColumn(left.Content(), columns);
         if (column->Type != "String" || !column->Nullable) {
             Unsupported(
                 "OLAP String predicate requires an Optional<String> column");
@@ -7103,17 +7130,23 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Read column mapping for " << table.Path);
                     }
-                    if (!olapColumns.emplace(
-                            read.Columns[index],
-                            TOlapColumn{
-                                output,
-                                (*catalogColumn)->Type,
-                                (*catalogColumn)->Nullable,
-                            }).second)
-                    {
-                        Unsupported(TStringBuilder()
-                            << "Ambiguous OLAP physical column " << read.Columns[index]);
-                    }
+                    const TOlapColumn olapColumn{
+                        output,
+                        (*catalogColumn)->Type,
+                        (*catalogColumn)->Nullable,
+                    };
+                    AddOlapColumnReference(
+                        olapColumns,
+                        read.Columns[index],
+                        olapColumn);
+                    AddOlapColumnReference(
+                        olapColumns,
+                        read.OutputIUs[index].GetFullName(),
+                        olapColumn);
+                    AddOlapColumnReference(
+                        olapColumns,
+                        read.OutputIUs[index].GetColumnName(),
+                        olapColumn);
                     auto column = JsonMap();
                     column["source"] = read.Columns[index];
                     column["output"] = output;

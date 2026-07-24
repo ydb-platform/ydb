@@ -12864,6 +12864,138 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"].GetIntegerSafe(), 30);
     }
 
+    Y_UNIT_TEST(OlapFilterResolvesExactReadOutputNames) {
+        const auto check = [](TString output, TString reference) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/A",
+                {{"k", "Int32", true}});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            read->OutputIUs = {TInfoUnit(output)};
+            SetOutputType(
+                ctx,
+                *read,
+                {{output, NUdf::EDataSlot::Int32}});
+            read->OlapFilterLambda = MakeOlapComparisonProcess(
+                ctx,
+                "eq",
+                reference,
+                "1");
+            TOpRoot root(read, TPositionHandle(), {output});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+
+            const auto snapshot =
+                ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["left"]["column"].GetStringSafe(),
+                output);
+        };
+
+        check("projected.renamed", "projected.renamed");
+        check("projected.renamed", "renamed");
+        check("__kqp_rbo_ignore_arg_149", "__kqp_rbo_ignore_arg_149");
+    }
+
+    Y_UNIT_TEST(AmbiguousOlapReadColumnNamesFailClosed) {
+        const auto check = [](
+            const TVector<TString>& outputs,
+            TString reference)
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"left", "Int32", true},
+                {"right", "Int32", true},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"left", "right"},
+                NYql::EStorageType::ColumnStorage);
+            read->OutputIUs = {
+                TInfoUnit(outputs[0]),
+                TInfoUnit(outputs[1]),
+            };
+            SetOutputType(ctx, *read, {
+                {outputs[0], NUdf::EDataSlot::Int32},
+                {outputs[1], NUdf::EDataSlot::Int32},
+            });
+            read->OlapFilterLambda = MakeOlapComparisonProcess(
+                ctx,
+                "eq",
+                reference,
+                "1");
+            TOpRoot root(
+                read,
+                TPositionHandle(),
+                {outputs[0], outputs[1]});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                TStringBuilder()
+                    << "Ambiguous OLAP read column reference "
+                    << reference);
+        };
+
+        check({"right", "other"}, "right");
+        check({"first.shared", "second.shared"}, "shared");
+    }
+
+    Y_UNIT_TEST(UnusedAmbiguousOlapReadColumnNamesAreAccepted) {
+        const auto check = [](bool withPredicate) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"left", "Int32", true},
+                {"right", "Int32", true},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"left", "right"},
+                NYql::EStorageType::ColumnStorage);
+            read->OutputIUs = {
+                TInfoUnit("first.shared"),
+                TInfoUnit("second.shared"),
+            };
+            SetOutputType(ctx, *read, {
+                {"first.shared", NUdf::EDataSlot::Int32},
+                {"second.shared", NUdf::EDataSlot::Int32},
+            });
+            if (withPredicate) {
+                read->OlapFilterLambda = MakeOlapComparisonProcess(
+                    ctx,
+                    "eq",
+                    "left",
+                    "1");
+            }
+            TOpRoot root(
+                read,
+                TPositionHandle(),
+                {"first.shared", "second.shared"});
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+                NYql::EStorageType::ColumnStorage);
+
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        };
+
+        check(false);
+        check(true);
+    }
+
     Y_UNIT_TEST(OlapCoalesceTracksPositiveFilterContext) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
@@ -13299,7 +13431,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             NYql::EStorageType::ColumnStorage);
         result = ExportSemanticSnapshotV1(missingColumnRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable physical column missing");
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable read column missing");
 
         auto identity = makeRead();
         const auto pos = TPositionHandle();
@@ -13349,7 +13481,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             NYql::EStorageType::ColumnStorage);
         result = ExportSemanticSnapshotV1(missingUnaryColumnRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable physical column missing");
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unavailable read column missing");
 
         auto nonAtomUnaryOperator = makeRead();
         nonAtomUnaryOperator->OlapFilterLambda = MakeOlapFilterProcess(

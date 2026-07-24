@@ -2826,6 +2826,11 @@ bool IsStringDateSafeCastCandidate(const TExprNode& node) {
     return resultType == "Date" && IsStringType(sourceType);
 }
 
+bool IsProvenPresentStaticSqlInDateSafeCast(const TExprNode& node) {
+    return IsStringDateSafeCastCandidate(node) &&
+        ParseDateSafeCast(node).has_value();
+}
+
 i32 ParseIntervalFromDays(const TExprNode& node) {
     CheckReviewedDateTimeApply(
         node,
@@ -4627,6 +4632,7 @@ NJson::TJsonValue ExportExprNode(
         }
         TVector<TString> annotatedItemTypes;
         annotatedItemTypes.reserve(collection.ChildrenSize());
+        TVector<bool> provenPresentItems(collection.ChildrenSize(), false);
         if (collection.IsList()) {
             if (collection.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple) {
                 Unsupported("SqlIn raw static collection is not typed as a tuple");
@@ -4635,11 +4641,18 @@ NJson::TJsonValue ExportExprNode(
             if (tupleType->GetSize() != collection.ChildrenSize()) {
                 Unsupported("SqlIn static tuple annotation has the wrong size");
             }
-            for (const auto* itemType : tupleType->GetItems()) {
+            for (size_t index = 0; index < tupleType->GetSize(); ++index) {
+                const auto* itemType = tupleType->GetItems()[index];
                 bool nullable = false;
                 const TString type = TypeName(itemType, &nullable);
                 if (nullable) {
-                    Unsupported("SqlIn static tuple item annotation is nullable");
+                    provenPresentItems[index] =
+                        type == "Date" &&
+                        IsProvenPresentStaticSqlInDateSafeCast(
+                            *collection.Child(index));
+                    if (!provenPresentItems[index]) {
+                        Unsupported("SqlIn static tuple item annotation is nullable");
+                    }
                 }
                 if (!StaticSqlInEqualityCompatible(lookupType, type)) {
                     Unsupported("SqlIn static tuple item is not equality-compatible with its lookup");
@@ -4674,7 +4687,7 @@ NJson::TJsonValue ExportExprNode(
             const auto& item = *collection.Child(index);
             bool nullable = false;
             const TString type = ScalarTypeName(item, &nullable);
-            if (nullable) {
+            if (nullable && !provenPresentItems[index]) {
                 Unsupported("SqlIn item is nullable");
             }
             if (type != annotatedItemTypes[index]) {

@@ -24,7 +24,7 @@ class SmtError(ValueError):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class Term:
     sort: str
     operation: str
@@ -44,6 +44,31 @@ class Term:
 
     def __hash__(self) -> int:
         return self._hash
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Term) or other.__class__ is not self.__class__:
+            return NotImplemented
+
+        pending = [(self, other)]
+        seen: set[tuple[int, int]] = set()
+        while pending:
+            left, right = pending.pop()
+            if left is right:
+                continue
+            identity = (id(left), id(right))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if (
+                left.__class__ is not right.__class__
+                or left.sort != right.sort
+                or left.operation != right.operation
+                or left.atom != right.atom
+                or len(left.arguments) != len(right.arguments)
+            ):
+                return False
+            pending.extend(zip(left.arguments, right.arguments))
+        return True
 
     def render(self) -> str:
         if self.operation == "symbol":

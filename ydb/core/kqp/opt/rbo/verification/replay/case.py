@@ -221,7 +221,10 @@ def _validate_trace_comparison(
         for column in before.output_schema()
     ]
     unique_results: dict[str, Any] = {}
-    expected_mismatches: dict[tuple[str, int], tuple[tuple[str, int], ...]] = {}
+    expected_mismatches: dict[
+        tuple[str, int],
+        tuple[tuple[tuple[str, int], ...], tuple[tuple[int, int], ...]],
+    ] = {}
     for side in ("before", "after"):
         family_value = require_mapping(comparison.get(side), f"trace comparison {side}")
         if set(family_value) != {"columns", "disabled_outcome_count", "outcomes"}:
@@ -256,9 +259,16 @@ def _validate_trace_comparison(
             outcome_value = require_mapping(
                 outcome, f"trace comparison {side}.outcomes[{position}]"
             )
-            expected_mismatches[(side, index)] = _trace_decisions(
-                outcome_value.get("decisions"),
-                f"trace comparison {side}.outcomes[{position}].decisions",
+            outcome_path = f"trace comparison {side}.outcomes[{position}]"
+            expected_mismatches[(side, index)] = (
+                _trace_decisions(
+                    outcome_value.get("decisions"),
+                    f"{outcome_path}.decisions",
+                ),
+                _trace_choices(
+                    outcome_value.get("choices"),
+                    f"{outcome_path}.choices",
+                ),
             )
         distinct = set(rendered)
         if len(distinct) != 1:
@@ -277,7 +287,13 @@ def _validate_trace_comparison(
     for position, mismatch_value in enumerate(mismatches):
         path = f"trace.mismatches[{position}]"
         mismatch = require_mapping(mismatch_value, path)
-        if set(mismatch) != {"source", "outcome", "decisions", "matching_outcomes"}:
+        if set(mismatch) != {
+            "source",
+            "outcome",
+            "decisions",
+            "choices",
+            "matching_outcomes",
+        }:
             raise ReplayError(f"{path} has unknown or missing fields")
         source = mismatch.get("source")
         outcome = mismatch.get("outcome")
@@ -287,8 +303,11 @@ def _validate_trace_comparison(
         if key not in expected_mismatches or key in seen:
             raise ReplayError(f"{path} does not identify one unique enabled root outcome")
         decisions = _trace_decisions(mismatch.get("decisions"), f"{path}.decisions")
-        if decisions != expected_mismatches[key]:
+        choices = _trace_choices(mismatch.get("choices"), f"{path}.choices")
+        if decisions != expected_mismatches[key][0]:
             raise ReplayError(f"{path} decisions differ from the root outcome")
+        if choices != expected_mismatches[key][1]:
+            raise ReplayError(f"{path} choices differ from the root outcome")
         if mismatch.get("matching_outcomes") != []:
             raise ReplayError(f"{path}.matching_outcomes is not empty")
         seen.add(key)
@@ -303,7 +322,7 @@ def _trace_outcome(
     path: str,
 ) -> Any:
     outcome = require_mapping(value, path)
-    required = {"index", "decisions", "sequence", "order", "rows"}
+    required = {"index", "decisions", "choices", "sequence", "order", "rows"}
     if set(outcome) not in (required, required | {"status"}):
         raise ReplayError(f"{path} has unknown or missing fields")
     status = outcome.get("status", "success")
@@ -316,6 +335,7 @@ def _trace_outcome(
     if outcome.get("sequence") is not ordered:
         raise ReplayError(f"{path} outcome has inconsistent sequence semantics")
     _trace_decisions(outcome.get("decisions"), f"{path}.decisions")
+    _trace_choices(outcome.get("choices"), f"{path}.choices")
     if outcome.get("order") is not None and not isinstance(outcome.get("order"), list):
         raise ReplayError(f"{path}.order is neither null nor an array")
     rows = outcome.get("rows")
@@ -376,6 +396,28 @@ def _trace_decisions(value: Any, path: str) -> tuple[tuple[str, int], ...]:
         result.append((identity, choice))
     if result != sorted(set(result)):
         raise ReplayError(f"{path} is not canonical and unique")
+    return tuple(result)
+
+
+def _trace_choices(value: Any, path: str) -> tuple[tuple[int, int], ...]:
+    if not isinstance(value, list):
+        raise ReplayError(f"{path} is not an array")
+    result: list[tuple[int, int]] = []
+    for index, raw_choice in enumerate(value):
+        choice_path = f"{path}[{index}]"
+        choice = require_mapping(raw_choice, choice_path)
+        if set(choice) != {"value", "bound"}:
+            raise ReplayError(f"{choice_path} has unknown or missing fields")
+        selected = choice.get("value")
+        bound = choice.get("bound")
+        if (
+            type(selected) is not int
+            or type(bound) is not int
+            or bound <= 0
+            or not 0 <= selected < bound
+        ):
+            raise ReplayError(f"{choice_path} is invalid")
+        result.append((selected, bound))
     return tuple(result)
 
 

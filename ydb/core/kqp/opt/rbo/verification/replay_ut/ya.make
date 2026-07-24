@@ -9,4 +9,8 @@ PEERDIR(
     ydb/core/kqp/opt/rbo/verification/replay
 )
 
+DEPENDS(
+    contrib/tools/z3
+)
+
 END()

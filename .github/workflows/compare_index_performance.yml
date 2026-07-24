@@ -33,10 +33,9 @@ on:
         required: false
         type: choice
         options:
-          - all
           - vector
           - fulltext
-        default: all
+        default: vector
       rows:
         description: 'Number of rows in generated database'
         required: false
@@ -74,6 +73,46 @@ on:
         required: false
         type: boolean
         default: true
+      vector_clusters:
+        description: 'Number of clusters in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      vector_levels:
+        description: 'Number of levels in kmeans tree for vector index (empty = server auto-detect)'
+        required: false
+        default: ''
+      dataset_source:
+        description: 'Source of the test dataset: generate (random data) or s3 (import fixed dataset from S3)'
+        required: false
+        type: choice
+        options:
+          - generate
+          - s3
+        default: generate
+      s3_endpoint:
+        description: 'S3 endpoint for dataset import (required when dataset_source=s3)'
+        required: false
+        default: 'https://storage.yandexcloud.net'
+      s3_bucket:
+        description: 'S3 bucket for dataset import (required when dataset_source=s3)'
+        required: false
+        default: 'vector-index'
+      s3_source:
+        description: 'S3 object key prefix for dataset import (required when dataset_source=s3)'
+        required: false
+        default: ''
+      s3_destination:
+        description: 'Database destination path for dataset import (required when dataset_source=s3)'
+        required: false
+        default: '/Root/testdb/wikipedia'
+      s3_query_source:
+        description: 'S3 object key prefix for pre-computed queries table (optional when dataset_source=s3)'
+        required: false
+        default: ''
+      s3_query_destination:
+        description: 'Database destination path for queries table (optional, used with s3_query_source)'
+        required: false
+        default: ''
 
 jobs:
   compare:
@@ -125,10 +164,17 @@ jobs:
           BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
         run: |
+          # Self-hosted runners reuse the workspace, so a ../baseline worktree
+          # (and its .git/worktrees admin entry) may linger from a prior run and
+          # make `git worktree add` fail with "'../baseline' already exists".
+          # Clean any stale copy first so the step is idempotent.
+          git worktree remove --force ../baseline 2>/dev/null || true
+          rm -rf ../baseline
+          git worktree prune
           git fetch --depth=1 origin "$BASELINE_SHA"
           git worktree add ../baseline "$BASELINE_SHA"
           cd ../baseline
-          ./ya make --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
           BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
           BINARY=$(realpath "$BINARY")
           echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
@@ -151,14 +197,42 @@ jobs:
           INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
           INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
+          INPUT_VECTOR_CLUSTERS: ${{ inputs.vector_clusters || '' }}
+          INPUT_VECTOR_LEVELS: ${{ inputs.vector_levels || '' }}
+          INPUT_DATASET_SOURCE: ${{ inputs.dataset_source || 'generate' }}
+          INPUT_S3_ENDPOINT: ${{ inputs.s3_endpoint || '' }}
+          INPUT_S3_BUCKET: ${{ inputs.s3_bucket || '' }}
+          INPUT_S3_SOURCE: ${{ inputs.s3_source || '' }}
+          INPUT_S3_DESTINATION: ${{ inputs.s3_destination || '' }}
+          INPUT_S3_QUERY_SOURCE: ${{ inputs.s3_query_source || '' }}
+          INPUT_S3_QUERY_DESTINATION: ${{ inputs.s3_query_destination || '' }}
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
           EXTRA_PARAMS=""
           if [[ -n "$INPUT_BASELINE_YDBD" ]]; then
-            EXTRA_PARAMS="--test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
           fi
-          ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+          if [[ -n "$INPUT_VECTOR_CLUSTERS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_clusters=$INPUT_VECTOR_CLUSTERS"
+          fi
+          if [[ -n "$INPUT_VECTOR_LEVELS" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_levels=$INPUT_VECTOR_LEVELS"
+          fi
+          if [[ "$INPUT_DATASET_SOURCE" == "s3" ]]; then
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_dataset_source=s3"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_endpoint=$INPUT_S3_ENDPOINT"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_bucket=$INPUT_S3_BUCKET"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_source=$INPUT_S3_SOURCE"
+            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_destination=$INPUT_S3_DESTINATION"
+            if [[ -n "$INPUT_S3_QUERY_SOURCE" ]]; then
+              EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_query_source=$INPUT_S3_QUERY_SOURCE"
+              if [[ -n "$INPUT_S3_QUERY_DESTINATION" ]]; then
+                EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_s3_query_destination=$INPUT_S3_QUERY_DESTINATION"
+              fi
+            fi
+          fi
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \
@@ -175,7 +249,7 @@ jobs:
             --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
             --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
             --test-param compare_current_sha="$INPUT_CURRENT_SHA" \
-            $EXTRA_PARAMS
+            $EXTRA_PARAMS 2>&1 | tee ya_make.log; exit "${PIPESTATUS[0]}"
 
       - name: Post results to job summary
         if: always()
@@ -191,6 +265,15 @@ jobs:
             done
           else
             echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
+            if [[ -f ya_make.log ]]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "<details><summary>Build/test log (last 50 lines)</summary>" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -50 ya_make.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Post results to pull request
@@ -214,6 +297,15 @@ jobs:
               done
             else
               echo "No report generated."
+              if [[ -f ya_make.log ]]; then
+                echo ""
+                echo "<details><summary>Build/test log (last 50 lines)</summary>"
+                echo ""
+                echo '```'
+                tail -50 ya_make.log
+                echo '```'
+                echo "</details>"
+              fi
             fi
             echo "[Workflow run](${run_url})"
           } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp

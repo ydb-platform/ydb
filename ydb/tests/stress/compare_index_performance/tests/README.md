@@ -73,6 +73,13 @@ sanity check) or two different refs — **without a local build**.
 | `compare_flamegraph` | `` | `1`/`true` → collect CPU flamegraphs (see below) |
 | `compare_perf_sudo` | `` | `1`/`true` → run `perf` under `sudo` |
 | `compare_perf_freq` | `50` | `perf record -F` sampling frequency |
+| `compare_dataset_source` | `generate` | `generate` (random data) or `s3` (import fixed dataset from S3) |
+| `compare_s3_endpoint` | `` | S3 endpoint URL (required when `dataset_source=s3`) |
+| `compare_s3_bucket` | `` | S3 bucket name (required when `dataset_source=s3`) |
+| `compare_s3_source` | `` | S3 object key prefix to import (required when `dataset_source=s3`) |
+| `compare_s3_destination` | `` | Database destination path for import (required when `dataset_source=s3`) |
+| `compare_s3_query_source` | `` | S3 object key prefix for a pre-computed queries table (optional, skips dynamic creation) |
+| `compare_s3_query_destination` | `` | Database destination path for the queries table (optional, defaults to `{database}/vector_query_table`)
 
 `table_service_config` values like `enable_vector_index_read=true` are parsed
 into booleans; everything else is kept as a string. Feature flags are appended
@@ -131,6 +138,31 @@ the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
   --test-param compare_current_table_service_config=enable_vector_index_read=true \
   --test-param compare_flamegraph=1 \
   --test-param compare_perf_sudo=1
+
+# Import data from S3 instead of auto-generating (uses a fixed dataset).
+./ya make --build relwithdebinfo -tA \
+  ydb/tests/stress/compare_index_performance/tests \
+  --test-param compare_dataset_source=s3 \
+  --test-param compare_s3_endpoint=https://storage.yandexcloud.net \
+  --test-param compare_s3_bucket=vector-index \
+  --test-param compare_s3_source=wikipedia \
+  --test-param compare_s3_destination=/Root/testdb/wikipedia \
+  --test-param compare_iterations=3 \
+  --test-param compare_duration=60
+
+# Import both dataset and pre-computed queries table from S3 (exact query
+# vectors are reused across iterations and across sides for perfect reproducibility).
+./ya make --build relwithdebinfo -tA \
+  ydb/tests/stress/compare_index_performance/tests \
+  --test-param compare_dataset_source=s3 \
+  --test-param compare_s3_endpoint=https://storage.yandexcloud.net \
+  --test-param compare_s3_bucket=vector-index \
+  --test-param compare_s3_source=wikipedia \
+  --test-param compare_s3_destination=/Root/testdb/wikipedia \
+  --test-param compare_s3_query_source=wikipedia_queries \
+  --test-param compare_s3_query_destination=/Root/vector_query_table \
+  --test-param compare_iterations=3 \
+  --test-param compare_duration=60
 ```
 
 ## Results

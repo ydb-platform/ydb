@@ -59,8 +59,7 @@ ENDIF()
 
 IF (OS_DARWIN)
     LDFLAGS(
-        -framework
-        SystemConfiguration
+        "-framework SystemConfiguration"
     )
 ENDIF()
 

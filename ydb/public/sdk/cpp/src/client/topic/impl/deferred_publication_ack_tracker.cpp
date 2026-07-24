@@ -128,6 +128,9 @@ void TDeferredPublicationAckState::OnUnackedAbort(ui64 unackedCount) {
     std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
     TStatus statusToSet = MakeDeferredFinalizeAbortedError();
     with_lock (Lock_) {
+        // >= (not ==): AckState is shared across handle copies / write sessions
+        // (e.g. multi-partition writes). unackedCount is only this session's
+        // remaining WrittenInDeferred entries; other sessions may still hold writes.
         Y_ABORT_UNLESS(WriteCount_ >= AckCount_ + unackedCount);
         if (WaitCalled_) {
             promiseToComplete = AllAcksReceived_;

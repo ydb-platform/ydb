@@ -59,6 +59,24 @@ class SmtTest(unittest.TestCase):
                 with self.assertRaisesRegex(smt.SmtError, "must be int"):
                     smt.int_value(value)
 
+    def test_distinct_is_typed_compact_and_constant_folded(self):
+        left = smt.symbol("left", smt.INT)
+        right = smt.symbol("right", smt.INT)
+
+        self.assertIs(smt.distinct(), smt.TRUE)
+        self.assertIs(smt.distinct(left), smt.TRUE)
+        self.assertIs(smt.distinct(left, left), smt.FALSE)
+        self.assertIs(
+            smt.distinct(smt.int_value(1), smt.int_value(2)),
+            smt.TRUE,
+        )
+        self.assertEqual(
+            smt.distinct(left, right).render(),
+            "(distinct left right)",
+        )
+        with self.assertRaisesRegex(smt.SmtError, "expected Int, got Bool"):
+            smt.distinct(left, smt.TRUE)
+
     def test_script_is_typed_and_deterministic(self):
         script = smt.Script(timeout_ms=100)
         value = script.fresh_constant("ignored user hint", smt.INT)
@@ -179,6 +197,23 @@ class SmtTest(unittest.TestCase):
         reverse.assert_global(smt.lt(later_function(later_choice), smt.int_value(10)))
         with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
             reverse.register_quantified_choice(later_choice, 2)
+
+    def test_quantified_choice_batch_preserves_reverse_dependency_audit(self):
+        script = smt.Script()
+        first = script.fresh_constant("first", smt.INT)
+        second = script.fresh_constant("second", smt.INT)
+        script.register_quantified_choices(((first, 2), (second, 3)))
+        self.assertEqual(script.quantified_choice_bound(first), 2)
+        self.assertEqual(script.quantified_choice_bound(second), 3)
+
+        reverse = smt.Script()
+        dependent = reverse.fresh_constant("dependent", smt.INT)
+        independent = reverse.fresh_constant("independent", smt.INT)
+        reverse.assert_global(smt.lt(dependent, smt.int_value(2)))
+        with self.assertRaisesRegex(smt.SmtError, "global invariant.*quantified"):
+            reverse.register_quantified_choices(
+                ((dependent, 2), (independent, 2))
+            )
 
     def test_choice_invariant_is_universally_guarded_by_registered_bounds(self):
         script = smt.Script()

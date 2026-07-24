@@ -7,7 +7,7 @@ from itertools import combinations, permutations
 from math import factorial
 from typing import Callable, Iterator, Mapping, TypeAlias
 
-from . import decimal, smt
+from . import decimal, smt, sort_network
 from .ir import (
     Aggregate,
     AggregateTrait,
@@ -74,6 +74,7 @@ class Relation:
     sequence: bool = False
     order: tuple[SortOrder, ...] | None = None
     ordinals: tuple[smt.Term, ...] | None = None
+    present_prefix: bool = False
 
     def __post_init__(self) -> None:
         _require_relation_rows(len(self.rows), "relation")
@@ -82,6 +83,12 @@ class Relation:
                 raise ValueError("relation ordinals must align with rows")
             if any(ordinal.sort != smt.INT for ordinal in self.ordinals):
                 raise ValueError("relation ordinals must be SMT integers")
+        if self.present_prefix and (
+            not self.sequence or self.ordinals is not None
+        ):
+            raise ValueError(
+                "present-prefix relations require a fixed sequence without ordinals"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +284,10 @@ MAX_OUTCOME_COMPARISONS = 4096
 MAX_ENUMERATED_SEQUENCE_ROWS = 3
 MAX_RELATION_ROWS = 4096
 MAX_RELATION_ROW_PAIRS = 16384
+MAX_SORT_NETWORK_COMPARATORS = 32768
+# Comparator/column pairs are a stable, representation-level construction
+# budget; each pair expands into the coherent value/null/state row swap below.
+MAX_SORT_NETWORK_COMPARATOR_CELLS = 131072
 
 
 def _require_relation_rows(count: int, operation: str) -> None:
@@ -292,6 +303,22 @@ def _require_relation_row_pairs(count: int, operation: str) -> None:
         raise RelationError(
             f"{operation} requires {count} candidate-row pairs, exceeding "
             f"the {MAX_RELATION_ROW_PAIRS} pair construction audit bound"
+        )
+
+
+def _require_sort_construction_capacity(
+    pair_count: int,
+    network_count: int,
+    network_cells: int,
+) -> None:
+    if pair_count > MAX_RELATION_ROW_PAIRS:
+        raise RelationError(
+            f"sort construction requires {pair_count} candidate-row pairs, "
+            f"exceeding the {MAX_RELATION_ROW_PAIRS} pair construction audit "
+            f"bound; its exact sorting network requires {network_count} "
+            f"comparators and {network_cells} comparator-column pairs, with "
+            f"limits {MAX_SORT_NETWORK_COMPARATORS} and "
+            f"{MAX_SORT_NETWORK_COMPARATOR_CELLS}"
         )
 
 
@@ -498,6 +525,7 @@ class Evaluator:
                 sequence=relation.sequence,
                 order=_retained_order(relation.order, output),
                 ordinals=relation.ordinals,
+                present_prefix=relation.present_prefix,
             ),
         )
 
@@ -586,6 +614,7 @@ class Evaluator:
                     sequence=relation.sequence,
                     order=relation.order,
                     ordinals=relation.ordinals,
+                    present_prefix=relation.present_prefix,
                 ),
             )
 
@@ -615,6 +644,7 @@ class Evaluator:
                     sequence=relation.sequence,
                     order=_projected_order(relation.order, node),
                     ordinals=relation.ordinals,
+                    present_prefix=relation.present_prefix,
                 ),
             )
 
@@ -664,6 +694,10 @@ class Evaluator:
                 node.order,
                 self.scalar.script,
                 f"{self.choice_scope}:sort:{node.id}",
+                compact_prefix=(
+                    node.limit is not None
+                    and node.phase == "intermediate"
+                ),
             )
             if node.limit is not None:
                 family = limit_family(
@@ -2089,13 +2123,18 @@ def sort_family(
     order: tuple[SortOrder, ...],
     script: smt.Script,
     decision: str,
+    *,
+    compact_prefix: bool = False,
 ) -> RelationFamily:
     """Represent every tie-respecting Sort sequence exactly.
 
     A single-outcome family with at most three candidate rows stays
-    quantifier-free for solver performance.  Once the input already has
-    alternatives, bounded ordinal choices preserve the same sequence language
-    without multiplying those outcomes.
+    quantifier-free for solver performance.  Moderate full sorts use bounded
+    ordinal choices.  Larger sorts, and TopSort inputs whose selected prefix
+    must be compacted before a downstream Merge, use a fixed compare-exchange
+    network with finite tie ranks.  Each representation denotes the same exact
+    tie-respecting sequence language and is selected under explicit
+    construction budgets.
     """
 
     if not order:
@@ -2125,12 +2164,48 @@ def sort_family(
                 )
             )
         return RelationFamily(tuple(outcomes))
-    _require_relation_row_pairs(
-        sum(
-            _unordered_row_pairs(_live_row_count(outcome.relation))
-            for outcome in source.outcomes
-        ),
-        "sort construction",
+    pair_count = sum(
+        _unordered_row_pairs(_live_row_count(outcome.relation))
+        for outcome in source.outcomes
+    )
+    network_count = sum(
+        _sorting_network_cost(_live_row_count(outcome.relation))
+        for outcome in source.outcomes
+    )
+    network_cells = network_count * len(source.columns)
+    network_fits = (
+        network_count <= MAX_SORT_NETWORK_COMPARATORS
+        and network_cells <= MAX_SORT_NETWORK_COMPARATOR_CELLS
+    )
+    if (
+        network_fits
+        and (
+            pair_count > MAX_RELATION_ROW_PAIRS
+            or (
+                compact_prefix
+                and any(
+                    # The v1 StageGraph has two symbolic producer tasks.
+                    # Compact only when retaining their shaped local slots
+                    # would make the downstream Merge exceed the pair cap.
+                    _unordered_row_pairs(
+                        2 * _live_row_count(outcome.relation)
+                    )
+                    > MAX_RELATION_ROW_PAIRS
+                    for outcome in source.outcomes
+                )
+            )
+        )
+    ):
+        return _sorting_network_family(
+            source,
+            order,
+            script,
+            decision,
+        )
+    _require_sort_construction_capacity(
+        pair_count,
+        network_count,
+        network_cells,
     )
     if len(source.outcomes) == 1 and _use_enumerated_sequences(source):
         return _enumerated_sort_family(source, order, decision)
@@ -2220,6 +2295,309 @@ def _enumerated_sort_family(
     return RelationFamily(tuple(outcomes))
 
 
+@dataclass(frozen=True, slots=True)
+class _SortingNetworkItem:
+    row: Row
+    tie_rank: smt.Term
+
+
+def _sorting_network_cost(row_count: int) -> int:
+    return (
+        0
+        if row_count <= 1
+        else sort_network.comparator_count(row_count)
+    )
+
+
+def _sorting_network_family(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+    script: smt.Script,
+    decision: str,
+    producer_groups: tuple[tuple[int, ...], ...] | None = None,
+) -> RelationFamily:
+    """Sort exactly with a compact, fixed-topology compare-exchange network.
+
+    One finite permutation rank travels with each candidate row. SQL keys
+    dominate that rank; the rank only chooses among exact ties. Therefore all
+    and only tie-respecting sequences are represented. Present rows dominate
+    absent rows, so the fixed output slots form a present prefix that ordered
+    Limit can slice without constructing every row pair.
+
+    Merge additionally orders the ranks along each producer's concrete
+    semantic sequence. Those chains leave precisely the legal cross-producer
+    interleavings.
+    """
+
+    outcomes: list[Outcome] = []
+    for outcome_index, source_outcome in enumerate(source.outcomes):
+        relation = source_outcome.relation
+        columns = {column.name for column in relation.columns}
+        missing = [item.column for item in order if item.column not in columns]
+        if missing:
+            raise RelationError(f"sort columns are absent: {', '.join(missing)}")
+
+        live_indices = _live_row_indices(relation.rows)
+        rows = tuple(relation.rows[index] for index in live_indices)
+        if not rows:
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        (),
+                        sequence=True,
+                        order=order,
+                        present_prefix=True,
+                    ),
+                    source_outcome.error,
+                    source_outcome.decisions,
+                    source_outcome.choices,
+                )
+            )
+            continue
+
+        compact_index = {
+            source_index: index
+            for index, source_index in enumerate(live_indices)
+        }
+        tie_ranks: list[smt.Term] = []
+        tie_choices: list[BoundedChoice] = []
+        for row_index in range(len(rows)):
+            rank = script.fresh_constant(
+                f"{decision}:network:{outcome_index}:tie:{row_index}",
+                smt.INT,
+            )
+            tie_ranks.append(rank)
+            tie_choices.append(BoundedChoice(rank, len(rows)))
+        script.register_quantified_choices(
+            (rank, len(rows))
+            for rank in tie_ranks
+        )
+
+        constraints = [smt.distinct(*tie_ranks)]
+        if producer_groups is not None:
+            input_ordinals = relation.ordinals
+            if input_ordinals is None:
+                raise RelationError(
+                    "merge network requires concrete producer input ordinals"
+                )
+            for group in producer_groups:
+                members = tuple(
+                    index
+                    for index in group
+                    if index in compact_index
+                )
+                if any(
+                    input_ordinals[index].operation != "int"
+                    for index in members
+                ):
+                    raise RelationError(
+                        "merge network requires concrete producer input ordinals"
+                    )
+                ordered = tuple(sorted(
+                    members,
+                    key=lambda index: input_ordinals[index].atom,
+                ))
+                ordinal_values = tuple(
+                    input_ordinals[index].atom
+                    for index in ordered
+                )
+                if len(set(ordinal_values)) != len(ordinal_values):
+                    raise RelationError(
+                        "merge producer input ordinals must be distinct"
+                    )
+                constraints.extend(
+                    smt.lt(
+                        tie_ranks[compact_index[left]],
+                        tie_ranks[compact_index[right]],
+                    )
+                    for left, right in zip(ordered, ordered[1:])
+                )
+
+        items = [
+            _SortingNetworkItem(row, rank)
+            for row, rank in zip(rows, tie_ranks)
+        ]
+        padded_size = sort_network.padded_size(len(items))
+        padding = _SortingNetworkItem(
+            Row(smt.FALSE, rows[0].values),
+            smt.ZERO,
+        )
+        items.extend(padding for _ in range(padded_size - len(items)))
+        for left_index, right_index, ascending in sort_network.comparators(
+            len(rows)
+        ):
+            left = items[left_index]
+            right = items[right_index]
+            swap = (
+                _sorting_network_before(right, left, order)
+                if ascending
+                else _sorting_network_before(left, right, order)
+            )
+            items[left_index] = _select_sorting_network_item(
+                swap,
+                right,
+                left,
+                relation.columns,
+            )
+            items[right_index] = _select_sorting_network_item(
+                swap,
+                left,
+                right,
+                relation.columns,
+            )
+
+        outcomes.append(
+            Outcome(
+                smt.and_(source_outcome.enabled, *constraints),
+                Relation(
+                    relation.columns,
+                    tuple(item.row for item in items[: len(rows)]),
+                    sequence=True,
+                    order=order,
+                    present_prefix=True,
+                ),
+                source_outcome.error,
+                source_outcome.decisions,
+                _merge_choices(
+                    source_outcome.choices,
+                    tuple(tie_choices),
+                ),
+            )
+        )
+    if not outcomes:
+        raise RelationError("sorting network produced no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
+def _sorting_network_before(
+    left: _SortingNetworkItem,
+    right: _SortingNetworkItem,
+    order: tuple[SortOrder, ...],
+) -> smt.Term:
+    """Whether one candidate precedes another in the network's total order."""
+
+    both_present = smt.and_(left.row.present, right.row.present)
+    return smt.or_(
+        smt.and_(left.row.present, smt.not_(right.row.present)),
+        smt.and_(
+            both_present,
+            smt.or_(
+                _row_less(left.row, right.row, order),
+                smt.and_(
+                    _sort_keys_equal(left.row, right.row, order),
+                    smt.lt(left.tie_rank, right.tie_rank),
+                ),
+            ),
+        ),
+    )
+
+
+def _sort_keys_equal(
+    left: Row,
+    right: Row,
+    order: tuple[SortOrder, ...],
+) -> smt.Term:
+    return smt.and_(
+        *(
+            ScalarEncoder.not_distinct(
+                left.values[item.column],
+                right.values[item.column],
+            )
+            for item in order
+        )
+    )
+
+
+def _select_sorting_network_item(
+    condition: smt.Term,
+    when_true: _SortingNetworkItem,
+    when_false: _SortingNetworkItem,
+    columns: tuple[Column, ...],
+) -> _SortingNetworkItem:
+    if condition == smt.TRUE:
+        return when_true
+    if condition == smt.FALSE:
+        return when_false
+    return _SortingNetworkItem(
+        Row(
+            smt.ite(
+                condition,
+                when_true.row.present,
+                when_false.row.present,
+            ),
+            {
+                column.name: _select_sorting_network_value(
+                    condition,
+                    when_true.row.values[column.name],
+                    when_false.row.values[column.name],
+                )
+                for column in columns
+            },
+            (
+                when_true.row.occurrence
+                if when_true.row.occurrence == when_false.row.occurrence
+                else None
+            ),
+            when_true.row.partition_facts.intersection(
+                when_false.row.partition_facts
+            ),
+        ),
+        smt.ite(condition, when_true.tie_rank, when_false.tie_rank),
+    )
+
+
+def _select_sorting_network_value(
+    condition: smt.Term,
+    when_true: Value,
+    when_false: Value,
+) -> Value:
+    if when_true.type != when_false.type:
+        raise RelationError("sorting network mixed scalar value types")
+    true_state = when_true.decimal_average_state
+    false_state = when_false.decimal_average_state
+    average_state = None
+    if true_state is not None or false_state is not None:
+        if (
+            true_state is None
+            or false_state is None
+            or true_state.sum_type != false_state.sum_type
+        ):
+            raise RelationError(
+                "sorting network mixed Decimal avg state and scalar values"
+            )
+        average_state = DecimalAverageState(
+            sum_type=true_state.sum_type,
+            sum=smt.ite(condition, true_state.sum, false_state.sum),
+            count=smt.ite(condition, true_state.count, false_state.count),
+            finite_abs_bound=max(
+                true_state.finite_abs_bound,
+                false_state.finite_abs_bound,
+            ),
+            count_bound=max(
+                true_state.count_bound,
+                false_state.count_bound,
+            ),
+        )
+    bounds = (
+        when_true.decimal_finite_abs_bound,
+        when_false.decimal_finite_abs_bound,
+    )
+    finite_abs_bound = (
+        None
+        if any(bound is None for bound in bounds)
+        else max(bound for bound in bounds if bound is not None)
+    )
+    return Value(
+        when_true.type,
+        smt.ite(condition, when_true.is_null, when_false.is_null),
+        smt.ite(condition, when_true.value, when_false.value),
+        finite_abs_bound,
+        average_state,
+    )
+
+
 def merge_family(
     source: RelationFamily,
     order: tuple[SortOrder, ...],
@@ -2233,16 +2611,50 @@ def merge_family(
     row_count = len(source.outcomes[0].relation.rows) if source.outcomes else 0
     if sorted(indices) != list(range(row_count)):
         raise RelationError("merge producer groups do not partition the input rows")
-    _require_relation_row_pairs(
-        max(
-            (
-                _unordered_row_pairs(_live_row_count(outcome.relation))
-                for outcome in source.outcomes
-            ),
-            default=0,
+    if any(
+        len(outcome.relation.rows) != row_count
+        for outcome in source.outcomes
+    ):
+        raise RelationError("merge outcomes have different row shapes")
+    pair_count = max(
+        (
+            _unordered_row_pairs(_live_row_count(outcome.relation))
+            for outcome in source.outcomes
         ),
-        "merge construction",
+        default=0,
     )
+    network_count = sum(
+        _sorting_network_cost(_live_row_count(outcome.relation))
+        for outcome in source.outcomes
+    )
+    network_cells = network_count * len(source.columns)
+    network_fits = (
+        network_count <= MAX_SORT_NETWORK_COMPARATORS
+        and network_cells <= MAX_SORT_NETWORK_COMPARATOR_CELLS
+    )
+    concrete_input_ordinals = all(
+        outcome.relation.ordinals is not None
+        and all(
+            ordinal.operation == "int"
+            for ordinal in outcome.relation.ordinals
+        )
+        for outcome in source.outcomes
+    )
+
+    def use_network() -> RelationFamily:
+        return _sorting_network_family(
+            source,
+            order,
+            script,
+            decision,
+            groups,
+        )
+
+    if pair_count > MAX_RELATION_ROW_PAIRS:
+        if network_fits and concrete_input_ordinals:
+            return use_network()
+        _require_relation_row_pairs(pair_count, "merge construction")
+
     interleavings = factorial(row_count)
     for group in groups:
         interleavings //= factorial(len(group))
@@ -2260,19 +2672,26 @@ def merge_family(
     ):
         return _enumerated_merge_family(source, order, groups, decision)
 
+    ordinal_pair_count = sum(
+        _unordered_row_pairs(_live_row_count(outcome.relation))
+        + sum(
+            (live := sum(
+                outcome.relation.rows[index].present != smt.FALSE
+                for index in group
+            ))
+            * (live - 1)
+            for group in groups
+        )
+        for outcome in source.outcomes
+    )
+    if (
+        ordinal_pair_count > MAX_RELATION_ROW_PAIRS
+        and network_fits
+        and concrete_input_ordinals
+    ):
+        return use_network()
     _require_relation_row_pairs(
-        sum(
-            _unordered_row_pairs(_live_row_count(outcome.relation))
-            + sum(
-                (live := sum(
-                    outcome.relation.rows[index].present != smt.FALSE
-                    for index in group
-                ))
-                * (live - 1)
-                for group in groups
-            )
-            for outcome in source.outcomes
-        ),
+        ordinal_pair_count,
         "merge ordinal construction",
     )
 
@@ -2648,6 +3067,15 @@ def _ordered_limit_family(
     )
 
     def take(relation: Relation) -> Relation:
+        if relation.present_prefix:
+            return Relation(
+                relation.columns,
+                relation.rows[offset : offset + count],
+                sequence=True,
+                order=relation.order,
+                present_prefix=True,
+            )
+
         rows: list[Row] = []
         for index, row in enumerate(relation.rows):
             if count == 0 or offset >= len(relation.rows):

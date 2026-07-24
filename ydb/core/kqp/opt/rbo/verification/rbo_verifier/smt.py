@@ -48,6 +48,8 @@ class Term:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Term) or other.__class__ is not self.__class__:
             return NotImplemented
+        if self._hash != other._hash:
+            return False
 
         pending = [(self, other)]
         seen: set[tuple[int, int]] = set()
@@ -377,6 +379,23 @@ def eq(left: Term, right: Term) -> Term:
     if left.operation in {"bool", "int"} and right.operation == left.operation:
         return bool_value(left.atom == right.atom)
     return Term(BOOL, "=", (left, right))
+
+
+def distinct(*terms: Term) -> Term:
+    """Require one finite tuple of same-sort terms to be pairwise distinct."""
+
+    if not terms:
+        return TRUE
+    sort = terms[0].sort
+    for term in terms:
+        _require(term, sort)
+    if len(terms) == 1:
+        return TRUE
+    if len(set(terms)) != len(terms):
+        return FALSE
+    if all(term.operation in {"bool", "int"} for term in terms):
+        return TRUE
+    return Term(BOOL, "distinct", tuple(terms))
 
 
 def lt(left: Term, right: Term) -> Term:
@@ -780,37 +799,49 @@ class Script:
     def register_quantified_choice(self, term: Term, bound: int) -> None:
         """Record one finite symbol that family comparison may quantify."""
 
-        _require(term, INT)
-        if term.operation != "symbol" or term.arguments:
-            raise SmtError("quantified choice must be a named constant")
-        if type(bound) is not int or bound <= 0:
-            raise SmtError("quantified choice bound must be a positive integer")
-        key = _symbol_key(term)
-        previous = self._quantified_choices.get(key)
-        if previous is not None:
-            if previous[1] != bound:
-                raise SmtError("quantified choice has inconsistent bounds")
+        self.register_quantified_choices(((term, bound),))
+
+    def register_quantified_choices(
+        self,
+        choices: Iterable[tuple[Term, int]],
+    ) -> None:
+        """Record finite symbols, auditing existing roots once for the batch."""
+
+        pending: dict[SymbolKey, tuple[Term, int]] = {}
+        for term, bound in choices:
+            _require(term, INT)
+            if term.operation != "symbol" or term.arguments:
+                raise SmtError("quantified choice must be a named constant")
+            if type(bound) is not int or bound <= 0:
+                raise SmtError(
+                    "quantified choice bound must be a positive integer"
+                )
+            key = _symbol_key(term)
+            previous = self._quantified_choices.get(key, pending.get(key))
+            if previous is not None:
+                if previous[1] != bound:
+                    raise SmtError(
+                        "quantified choice has inconsistent bounds"
+                    )
+                continue
+            pending[key] = (term, bound)
+        if not pending:
             return
+        keys = set(pending)
         if (
             self._string_universe is not None
-            and any(
-                _depends_on(value, {key})
-                for value in self._string_terms.values()
-            )
+            and _dependencies_many(self._string_terms.values(), keys)
         ):
             raise SmtError(
                 "cannot register a quantified choice after a dependent "
                 "string order universe is sealed"
             )
-        if any(
-            _depends_on(assertion, {key})
-            for assertion in self._global_assertions
-        ):
+        if _dependencies_many(self._global_assertions, keys):
             raise SmtError(
                 "global invariant depends on a quantified plan choice; "
                 "that plan shape is not modeled"
             )
-        self._quantified_choices[key] = (term, bound)
+        self._quantified_choices.update(pending)
 
     def quantified_choice_bound(self, term: Term) -> int:
         """Return the immutable bound of a registered choice symbol."""

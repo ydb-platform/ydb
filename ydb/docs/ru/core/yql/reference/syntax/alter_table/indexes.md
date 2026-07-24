@@ -19,6 +19,12 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+{% if backend_name == "YDB" and oss == true %}
+
+Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
+
+{% endif %}
+
 Параметры для всех типов индексов:
 
 * `parallel` - максимальное число параллельных обработчиков на основе [партиций](../../../../concepts/glossary.md#partition), задействованных в построении индекса (целое число между `1` и `MaxBuildIndexShardsInFlight` из `SchemeShardConfig`).
@@ -48,12 +54,6 @@ ALTER TABLE `<table_name>`
 ### Параметры локального min_max-индекса {#local-min-max}
 
 {% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
-
-{% if backend_name == "YDB" and oss == true %}
-
-Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
-
-{% endif %}
 
 ### Ограничения
 

@@ -27,18 +27,15 @@ class TIncrementalRestoreScan
     using TBuffer = NStreamScan::TBuffer;
     using TChange = IDataShardChangeCollector::TChange;
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TIncrementalRestoreScan]"
-                << "[" << TxId << "]"
-                << SourcePathId
-                << TargetPathId
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TIncrementalRestoreScan"},
+            {"txId", TxId},
+            {"sourcePathId", SourcePathId},
+            {"targetPathId", TargetPathId},
+            {"selfId", SelfId()});
     }
+
 public:
     explicit TIncrementalRestoreScan(
             TActorId parent,
@@ -95,7 +92,12 @@ public:
     }
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
+<<<<<<< HEAD
         LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+=======
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvServe",
+            {"ev", ev->Get()->ToString()});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         // Store/update the actorId on each command receipt (handles SchemeShard restarts)
         OperatorActorId = ev->Sender;
@@ -104,7 +106,12 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
+<<<<<<< HEAD
         LOG_D("Handle " << ev->Get()->ToString());
+=======
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -118,7 +125,12 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
+<<<<<<< HEAD
         LOG_D("Handle " << ev->Get()->ToString());
+=======
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
@@ -128,12 +140,19 @@ public:
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
+<<<<<<< HEAD
         LOG_D("Handle TEvIncrementalRestoreScan::TEvFinished " << ev->Get()->ToString());
+=======
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvFinished",
+            {"ev", ev->Get()->ToString()});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         Driver->Touch(EScan::Final);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvIncrementalRestoreScan::TEvServe, Start);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
@@ -151,7 +170,11 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64) override {
+<<<<<<< HEAD
         LOG_D("Seek");
+=======
+        YDB_LOG_DEBUG("Seek");
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         if (LastKey) {
             lead.To(ValueTags, LastKey->GetCells(), ESeek::Upper);
@@ -179,7 +202,11 @@ public:
     }
 
     EScan Exhausted() override {
+<<<<<<< HEAD
         LOG_D("Exhausted");
+=======
+        YDB_LOG_DEBUG("Exhausted");
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         NoMoreData = true;
 
@@ -192,15 +219,26 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
+<<<<<<< HEAD
         LOG_D("Finish " << status);
+=======
+        YDB_LOG_DEBUG("Finish",
+            {"status", status});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
 
         const bool success = IsScanSuccess(status);
         const auto endStatus = MapScanStatus(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
             // DS classifies cause (EndStatus); SS owns retry policy.
+<<<<<<< HEAD
             LOG_E("IncrementalRestoreScan finished with error status: " << status
                   << " endStatus=" << static_cast<int>(endStatus));
+=======
+            YDB_LOG_ERROR("IncrementalRestoreScan finished with error",
+                {"status", status},
+                {"endStatus", static_cast<int>(endStatus)});
+>>>>>>> 268ed01a698 ([YDB_LOG] Migrate ydb/core/tx/datashard/cdc+changes (#47001))
         }
 
         TString errorMsg;

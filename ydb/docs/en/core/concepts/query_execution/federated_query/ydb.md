@@ -4,11 +4,7 @@
 
 To connect to an external {{ ydb-short-name }} database from another {{ ydb-short-name }} database acting as the federated query engine, the following steps need to be performed on the latter:
 
-<<<<<<< HEAD:ydb/docs/en/core/concepts/federated_query/ydb.md
-1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method  is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
-=======
 1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../../datamodel/secrets.md):
->>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225)):ydb/docs/en/core/concepts/query_execution/federated_query/ydb.md
 
     ```yql
     CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
@@ -55,9 +51,6 @@ SELECT * FROM ydb_datasource.<table_name>
 There are several limitations when working with external {{ ydb-short-name }} data sources:
 
 1. {% include [!](_includes/supported_requests.md) %}
-<<<<<<< HEAD:ydb/docs/en/core/concepts/federated_query/ydb.md
-1. {% include [!](_includes/predicate_pushdown.md) %}
-=======
 1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
 
     |Description|Example|Limitation|
@@ -71,7 +64,6 @@ There are several limitations when working with external {{ ydb-short-name }} da
     When using other types of filters, pushdown to the data source is not performed: filtering of the external table rows will be executed by the federated {{ ydb-short-name }}, which means that {{ ydb-short-name }} will perform a full scan of the external table when processing the query.
 
     Supported data types for the filter pushdown:
->>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225)):ydb/docs/en/core/concepts/query_execution/federated_query/ydb.md
 
     |{{ ydb-short-name }} Data Type|
     |----|

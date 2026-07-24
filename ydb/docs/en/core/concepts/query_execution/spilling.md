@@ -75,16 +75,6 @@ The data transfer system continuously monitors its state:
 
 ## Interaction with Memory Controller
 
-<<<<<<< HEAD:ydb/docs/en/core/concepts/spilling.md
-When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../reference/configuration/index.md#memory-controller). To continue fitting within this limit as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../reference/configuration/table_service_config.md#memory-management).
-
-## See Also
-
-- [Spilling Service](../contributor/spilling-service.md)
-- [Spilling configuration](../reference/configuration/table_service_config.md)
-- [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
-- [Performance diagnostics](../troubleshooting/performance/index.md)
-=======
 When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/memory_controller_config.md). To continue fitting within this limit as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../../reference/configuration/table_service_config.md#memory-management).
 
 ## See Also
@@ -93,4 +83,3 @@ When executing queries, {{ ydb-short-name }} tries to stay within the memory lim
 - [Spilling configuration](../../reference/configuration/table_service_config.md)
 - [{{ ydb-short-name }} monitoring](../../devops/observability/monitoring.md)
 - [Performance diagnostics](../../troubleshooting/performance/index.md)
->>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225)):ydb/docs/en/core/concepts/query_execution/spilling.md

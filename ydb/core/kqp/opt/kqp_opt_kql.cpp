@@ -217,6 +217,17 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
     return {writeData, columnList};
 }
 
+struct TGeneratedColumnMembers {
+    TVector<TCoAtom> Names;
+    TVector<TExprBase> Members;
+};
+
+struct TBuildWriteInputResult {
+    TExprBase Input;
+    TCoAtomList Columns;
+    bool EmittedStreamLookup = false;
+};
+
 TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikimrTableDescription& table) {
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
@@ -247,6 +258,36 @@ TVector<TString> GetMissingStoredGeneratedDeps(const TVector<const TKikimrColumn
 
     TVector<TString> result(missing.begin(), missing.end());
     std::ranges::sort(result);
+    return result;
+}
+
+TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
+    const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
+{
+    TGeneratedColumnMembers result;
+    result.Names.reserve(generatedColumns.size());
+    result.Members.reserve(generatedColumns.size());
+
+    for (const auto* colMeta : generatedColumns) {
+        YQL_ENSURE(colMeta->DefaultExpression.Defined(), "STORED generated column " << colMeta->Name
+            << " has no expression metadata");
+        YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
+            << " has no compiled expression");
+
+        auto value = Build<TExprApplier>(ctx, pos)
+            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+            .With(0, depRow)
+            .Done();
+
+        auto nameAtom = TCoAtom(ctx.NewAtom(pos, colMeta->Name));
+        result.Names.push_back(nameAtom);
+        result.Members.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(nameAtom)
+                .Value(value)
+                .Done());
+    }
+
     return result;
 }
 
@@ -319,22 +360,12 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
                 .Done());
     }
 
-    for (const auto* colMeta : generatedColumns) {
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
-            << " has no compiled expression");
-
-        auto value = Build<TExprApplier>(ctx, pos)
-            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
-            .With(0, generatedInputRow)
-            .Done();
-
-        auto nameAtom = TCoAtom(ctx.NewAtom(pos, colMeta->Name));
-        allColumns.push_back(nameAtom);
-        allMembers.push_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name(nameAtom)
-                .Value(value)
-                .Done());
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, generatedInputRow, pos, ctx);
+    for (auto& name : std::move(genColumnNames)) {
+        allColumns.push_back(std::move(name));
+    }
+    for (auto& member : std::move(genColumnMembers)) {
+        allMembers.push_back(std::move(member));
     }
 
     auto writeData = Build<TCoMap>(ctx, pos)
@@ -490,22 +521,12 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Done());
     }
 
-    for (const auto* colMeta : generatedColumns) {
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
-            << " has no compiled expression");
-
-        auto value = Build<TExprApplier>(ctx, pos)
-            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
-            .With(0, mergedRow)
-            .Done();
-
-        auto nameAtom = TCoAtom(ctx.NewAtom(pos, colMeta->Name));
-        allColumns.push_back(nameAtom);
-        allMembers.push_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name(nameAtom)
-                .Value(value)
-                .Done());
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, mergedRow, pos, ctx);
+    for (auto& name : std::move(genColumnNames)) {
+        allColumns.push_back(std::move(name));
+    }
+    for (auto& member : std::move(genColumnMembers)) {
+        allMembers.push_back(std::move(member));
     }
 
     auto writeData = Build<TCoMap>(ctx, pos)
@@ -529,12 +550,12 @@ bool GeneratedDepsComeFromTable(TYdbOperation op) {
     return op == TYdbOperation::Upsert || op == TYdbOperation::UpdateOn;
 }
 
-std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
+TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx, bool generatedLookup)
 {
     auto generatedColumns = CollectStoredGeneratedColumns(table);
     if (generatedColumns.empty()) {
-        return { input, inputColumns };
+        return { .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
     }
 
     THashSet<TStringBuf> inputColumnsSet;
@@ -542,32 +563,34 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithStoredGeneratedColumns(cons
         inputColumnsSet.insert(col.Value());
     }
 
-    if (generatedLookup && GeneratedDepsComeFromTable(GetTableOp(write))) {
-        auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet);
-        if (!missingDeps.empty()) {
-            return BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns, missingDeps, table, pos, ctx);
+    const bool depsComeFromTable = GeneratedDepsComeFromTable(GetTableOp(write));
+
+    if (depsComeFromTable) {
+        TVector<const TKikimrColumnMetadata*> touched;
+        touched.reserve(generatedColumns.size());
+        for (const auto* colMeta : generatedColumns) {
+            const auto& deps = colMeta->DefaultExpression->Dependencies;
+            if (std::ranges::any_of(deps, [&](const TString& dep) { return inputColumnsSet.contains(dep); })) {
+                touched.push_back(colMeta);
+            }
+        }
+        generatedColumns.swap(touched);
+        if (generatedColumns.empty()) {
+            return { .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
         }
     }
 
-    return BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
-}
-
-bool NeedsGeneratedStreamLookup(const TKiWriteTable& write, const TKikimrTableDescription& table, const TCoAtomList& inputColumns) {
-    if (!GeneratedDepsComeFromTable(GetTableOp(write))) {
-        return false;
+    if (generatedLookup && depsComeFromTable) {
+        auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet);
+        if (!missingDeps.empty()) {
+            auto [rewritten, columns] =
+                BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns, missingDeps, table, pos, ctx);
+            return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=true };
+        }
     }
 
-    auto generatedColumns = CollectStoredGeneratedColumns(table);
-    if (generatedColumns.empty()) {
-        return false;
-    }
-
-    THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& col : inputColumns) {
-        inputColumnsSet.insert(col.Value());
-    }
-
-    return !GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet).empty();
+    auto [rewritten, columns] = BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
+    return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
 }
 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData, bool useStreamIndex) {
@@ -756,7 +779,7 @@ TCoAtomList BuildUpsertInputColumns(const TCoAtomList& inputColumns,
         .Done();
 }
 
-std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, const TKikimrTableDescription& table,
+TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimrTableDescription& table,
     const TCoAtomList& inputColumns, const TCoAtomList& autoIncrement,
     TPositionHandle pos, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, bool generatedLookup)
 {
@@ -799,14 +822,14 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
     YQL_ENSURE(inputCols.has_value());
 
     std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols.value(), table, write.Pos(), ctx, kqpCtx);
-    std::tie(input, inputCols) = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx, generatedLookup);
+    auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx, generatedLookup);
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
-        .Input(input)
+        .Input(generatedRewrite.Input)
         .Columns(GetPgNotNullColumns(table, pos, ctx))
         .Done();
 
-    return {baseInput, inputCols.value()};
+    return {.Input=baseInput, .Columns=generatedRewrite.Columns, .EmittedStreamLookup=generatedRewrite.EmittedStreamLookup};
 }
 
 
@@ -856,12 +879,12 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         settings = AddSetting(*settings, write.Pos(), "AllowInconsistentWrites", nullptr, ctx);
     }
 
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ true);
+    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
     // A partial UPSERT of a table with STORED generated columns reads the current dependency values
     // back via a streaming lookup-join on the same table
-    if (NeedsGeneratedStreamLookup(write, table, inputColumns)) {
+    if (needsGeneratedLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 
@@ -895,12 +918,12 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ true);
+    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
     // A partial UPSERT of a table with STORED generated columns reads the current dependency values
     // back via a streaming lookup-join on the same table
-    if (NeedsGeneratedStreamLookup(write, table, inputColumns)) {
+    if (needsGeneratedLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 
@@ -954,8 +977,8 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("replace").Done().Ptr(), ctx);
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ false);
+    const auto [input, columns, _] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ false);
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
@@ -975,8 +998,8 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("replace").Done().Ptr(), ctx);
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ false);
+    const auto [input, columns, _] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ false);
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
@@ -996,8 +1019,8 @@ TExprBase BuildInsertTable(const TKiWriteTable& write, bool abort, const TCoAtom
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("insert").Done().Ptr(), ctx);
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ false);
+    const auto [input, columns, _] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ false);
     auto effect = Build<TKqlInsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
@@ -1018,8 +1041,8 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("insert").Done().Ptr(), ctx);
-    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx, kqpCtx,
-        /* generatedLookup */ false);
+    const auto [input, columns, _] = BuildWriteInput(write, table, inputColumns, autoincrement,
+        write.Pos(), ctx, kqpCtx, /* generatedLookup */ false);
     return Build<TKqlInsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
@@ -1035,8 +1058,10 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
 TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
-    const auto [input, columns] = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
+    const auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
         tableData, write.Pos(), ctx, /* generatedLookup */ true);
+    const auto& input = generatedRewrite.Input;
+    const auto& columns = generatedRewrite.Columns;
 
     return Build<TKqlUpdateRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
@@ -1058,8 +1083,10 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
             return BuildTableMeta(meta, pos, ctx);
         });
 
-    const auto [input, columns] = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
+    const auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, write.Input(), inputColumns,
         tableData, write.Pos(), ctx, /* generatedLookup */ true);
+    const auto& input = generatedRewrite.Input;
+    const auto& columns = generatedRewrite.Columns;
 
     THashSet<TStringBuf> inputColumnsSet;
     for (const auto& column : columns) {
@@ -1289,20 +1316,9 @@ TVector<TExprBase> BuildUpdatedRowMembers(const TKikimrTableDescription& tableDa
     if (!generatedColumns.empty()) {
         auto dependencyRow = BuildGeneratedDependencyRow(generatedColumns, updateStructType, updateStruct, rowArg, pos, ctx);
 
-        for (const auto* colMeta : generatedColumns) {
-            YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
-                << " has no compiled expression");
-
-            auto value = Build<TExprApplier>(ctx, pos)
-                .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
-                .With(0, dependencyRow)
-                .Done();
-
-            members.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(TCoAtom(ctx.NewAtom(pos, colMeta->Name)))
-                    .Value(value)
-                    .Done());
+        auto generated = BuildGeneratedColumnMembers(generatedColumns, dependencyRow, pos, ctx);
+        for (auto& member : generated.Members) {
+            members.push_back(member);
         }
     }
 

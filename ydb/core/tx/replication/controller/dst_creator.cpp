@@ -58,7 +58,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& entry = response->ResultSet.front();
 
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()},
             {"entry", entry});
 
@@ -67,7 +66,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             break;
         default:
             YDB_LOG_WARN("Unexpected status",
-                {"logPrefix", LogPrefix},
                 {"entry", entry});
             return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
         }
@@ -75,7 +73,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (!DomainKey) {
             if (!entry.DomainInfo) {
                 YDB_LOG_ERROR("Empty domain info",
-                    {"logPrefix", LogPrefix},
                     {"entry", entry});
                 return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
             }
@@ -97,8 +94,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void GetTableProfiles() {
-        YDB_LOG_TRACE("Get table profiles",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_TRACE("Get table profiles");
 
         using namespace NKikimrConsole;
         auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
@@ -120,7 +116,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
         DescribeSrcPath();
@@ -176,7 +171,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
@@ -271,7 +265,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
@@ -305,7 +298,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
@@ -333,14 +325,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void SubscribeTx(ui64 txId) {
         YDB_LOG_DEBUG("Subscribe tx",
-            {"logPrefix", LogPrefix},
             {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         if (NeedToCheck) {
@@ -368,7 +358,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->GetRecord();
 
@@ -576,7 +565,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         switch (Kind) {
@@ -591,7 +579,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& desc = ev->Get()->DescribeSchemeResult;
@@ -610,7 +597,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId != ev->Get()->TabletId) {
@@ -622,7 +608,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         Retry();
     }
@@ -630,7 +615,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Success() {
         Y_ABORT_UNLESS(DstPathId);
         YDB_LOG_INFO("Success",
-            {"logPrefix", LogPrefix},
             {"dstPathId", DstPathId});
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
@@ -639,7 +623,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
         YDB_LOG_ERROR("Error",
-            {"logPrefix", LogPrefix},
             {"status", status},
             {"reason", error});
 
@@ -648,8 +631,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Retry() {
-        YDB_LOG_DEBUG("Retry",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 

@@ -28,22 +28,19 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
 }
 
 void TController::OnDetach(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "OnDetach",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE_CTX(ctx, "OnDetach");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "OnTabletDead",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE_CTX(ctx, "OnTabletDead");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnActivateExecutor(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "OnActivateExecutor",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE_CTX(ctx, "OnActivateExecutor");
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     RunTxInitSchema(ctx);
 }
@@ -130,15 +127,13 @@ void TController::Cleanup(const TActorContext& ctx) {
 }
 
 void TController::SwitchToDatabaseResolve(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "SwitchToDatabaseResolve",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE_CTX(ctx, "SwitchToDatabaseResolve");
 
     Become(&TThis::StateDatabaseResolve);
 }
 
 void TController::SwitchToWork(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "SwitchToWork",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE_CTX(ctx, "SwitchToWork");
 
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
@@ -157,7 +152,6 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         if (tenant) {
             if (!NodesManager.HasTenant(tenant)) {
                 YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
-                    {"logPrefix", LogPrefix},
                     {"tenant", tenant});
                 NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
             }
@@ -184,56 +178,48 @@ void TController::Reset() {
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxCreateReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxAlterReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDropReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDropReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDiscoveryTargetsResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxAssignStreamName(ev, ctx);
 }
@@ -260,7 +246,6 @@ void TController::ProcessDropStreamQueue(const TActorContext& ctx) {
 
 void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     RequestedCreateStream.push_back(ev->Sender);
@@ -269,7 +254,6 @@ void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TAc
 
 void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     InflightCreateStream.erase(ev->Sender);
@@ -279,7 +263,6 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
 
 void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     RequestedDropStream.push_back(ev->Sender);
@@ -288,7 +271,6 @@ void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActo
 
 void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     InflightDropStream.erase(ev->Sender);
@@ -298,49 +280,42 @@ void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActor
 
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxCreateDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxAlterDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxDropDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxResolveSecretResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxResolveResourceIdResult(ev, ctx);
 }
 
 void TController::HandleDatabaseResolve(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     RunTxResolveDatabaseResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto rid = ev->Get()->ReplicationId;
@@ -349,26 +324,22 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
     auto replication = Find(rid);
     if (!replication) {
         YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-            {"logPrefix", LogPrefix},
             {"rid", rid});
         return;
     }
 
     if (ev->Get()->IsSuccess()) {
         YDB_LOG_NOTICE_CTX(ctx, "Database resolved",
-            {"logPrefix", LogPrefix},
             {"rid", rid},
             {"database", tenant});
 
         if (!NodesManager.HasTenant(tenant)) {
             YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
-                {"logPrefix", LogPrefix},
                 {"tenant", tenant});
             NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
         }
     } else {
         YDB_LOG_ERROR_CTX(ctx, "Resolve database error",
-            {"logPrefix", LogPrefix},
             {"rid", rid});
         Y_ABORT_UNLESS(!tenant);
     }
@@ -379,13 +350,11 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
 
 void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto& tenant = ev->Get()->Tenant;
     if (NodesManager.HasTenant(tenant)) {
         YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
-            {"logPrefix", LogPrefix},
             {"tenant", tenant});
         NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
     }
@@ -393,7 +362,6 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     auto result = NodesManager.ProcessResponse(ev, ctx);
@@ -413,14 +381,12 @@ void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorC
 
 void TController::Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     NodesManager.ProcessResponse(ev, ctx);
 }
 
 void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Create session",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId});
     TabletCounters->Cumulative()[COUNTER_CREATE_SESSION] += 1;
 
@@ -439,7 +405,6 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 
 void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Delete session",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId});
     TabletCounters->Cumulative()[COUNTER_DELETE_SESSION] += 1;
 
@@ -469,7 +434,6 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
 
 void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Close session",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId});
 
     if (SelfId().NodeId() != nodeId) {
@@ -479,7 +443,6 @@ void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
 
 void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
@@ -515,7 +478,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
 void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
@@ -558,7 +520,6 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         break;
     default:
         YDB_LOG_WARN_CTX(ctx, "Unknown worker status",
-            {"logPrefix", LogPrefix},
             {"value", static_cast<int>(record.GetStatus())});
         break;
     }
@@ -612,7 +573,6 @@ void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorker
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     auto& record = ev->Get()->Record;
@@ -637,7 +597,6 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
 
 void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
@@ -665,7 +624,6 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
         if (!target) {
             Y_VERIFY_DEBUG(target);
             YDB_LOG_ERROR_CTX(ctx, "Resolve target error",
-                {"logPrefix", LogPrefix},
                 {"targetId", id.TargetId()},
                 {"ev", ev->Get()->ToString()});
             return;
@@ -734,7 +692,6 @@ void TController::ScheduleProcessQueues() {
 
 void TController::Handle(TEvPrivate::TEvProcessQueues::TPtr&, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Process queues",
-        {"logPrefix", LogPrefix},
         {"boot", BootQueue.size()},
         {"stop", StopQueue.size()});
 
@@ -792,7 +749,6 @@ void TController::ProcessBootQueue(const TActorContext&) {
 
 void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
     YDB_LOG_DEBUG("Boot worker",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId},
         {"workerId", id});
 
@@ -833,7 +789,6 @@ void TController::ProcessStopQueue(const TActorContext& ctx) {
 
 void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     YDB_LOG_DEBUG("Stop worker",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId},
         {"workerId", id});
 
@@ -854,7 +809,6 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto& id = ev->Get()->Id;
@@ -876,7 +830,6 @@ void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorCont
 
 void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Remove worker",
-        {"logPrefix", LogPrefix},
         {"workerId", id});
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
@@ -910,7 +863,6 @@ bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ct
 
 void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
@@ -920,8 +872,7 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
 
     auto replication = GetSingle();
     if (!replication) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: ambiguous replication instance",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: ambiguous replication instance");
         return;
     }
 
@@ -930,8 +881,7 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
     case NKikimrReplication::TConsistencySettings::kGlobal:
         break;
     default:
-        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: consistency level is not global",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: consistency level is not global");
         return;
     }
 
@@ -948,7 +898,6 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
 
 void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
@@ -969,7 +918,6 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
     const ui32 nodeId = ev->Get()->NodeId;
 
     YDB_LOG_INFO_CTX(ctx, "Node disconnected",
-        {"logPrefix", LogPrefix},
         {"nodeId", nodeId});
 
     if (Sessions.contains(nodeId)) {

@@ -19,13 +19,11 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe succeeded",
-                {"logPrefix", LogPrefix},
                 {"path", Database});
 
             for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
@@ -37,7 +35,6 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
             Reply(false, "Cannot resolve RESOURCE_ID");
         } else {
             YDB_LOG_ERROR("Describe failed",
-                {"logPrefix", LogPrefix},
                 {"path", Database},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()},

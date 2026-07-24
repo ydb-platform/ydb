@@ -30,7 +30,6 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         const auto& entry = response->ResultSet.front();
 
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()},
             {"entry", entry});
 
@@ -39,7 +38,6 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             break;
         default:
             YDB_LOG_WARN("Unexpected status",
-                {"logPrefix", LogPrefix},
                 {"entry", entry});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }

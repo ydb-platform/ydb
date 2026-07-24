@@ -33,7 +33,6 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
@@ -73,7 +72,6 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
@@ -97,21 +95,18 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void SubscribeTx(ui64 txId) {
         YDB_LOG_DEBUG("Subscribe tx",
-            {"logPrefix", LogPrefix},
             {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId == ev->Get()->TabletId) {
@@ -123,14 +118,12 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
-        YDB_LOG_INFO("Success",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_INFO("Success");
 
         Send(Parent, new TEvPrivate::TEvDropDstResult(ReplicationId, TargetId));
         PassAway();
@@ -138,7 +131,6 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
         YDB_LOG_ERROR("Error",
-            {"logPrefix", LogPrefix},
             {"status", status},
             {"reason", error});
 
@@ -147,8 +139,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void Retry() {
-        YDB_LOG_DEBUG("Retry",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 

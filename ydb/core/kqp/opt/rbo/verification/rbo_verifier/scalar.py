@@ -208,18 +208,34 @@ class Encoder:
         if expression.kind == "cast_decimal":
             assert expression.result_type is not None
             argument = self._evaluate(expression.args[0], row, bindings)
-            return Value(
-                expression.result_type,
-                smt.FALSE,
-                decimal.cast_integral(
+            if family(argument.type) == "int":
+                value = decimal.cast_integral(
                     argument.value,
                     argument.type,
                     expression.result_type,
-                ),
-                _integral_decimal_cast_finite_abs_bound(
+                )
+                finite_abs_bound = _integral_decimal_cast_finite_abs_bound(
                     argument.type,
                     expression.result_type,
-                ),
+                )
+            else:
+                value = decimal.widen_same_scale(
+                    argument.value,
+                    argument.type,
+                    expression.result_type,
+                )
+                source_type = decimal.parse_type(argument.type)
+                assert source_type is not None
+                finite_abs_bound = (
+                    argument.decimal_finite_abs_bound
+                    if argument.decimal_finite_abs_bound is not None
+                    else 10**source_type.precision - 1
+                )
+            return Value(
+                expression.result_type,
+                argument.is_null,
+                value,
+                finite_abs_bound,
             )
 
         if expression.kind == "cast_integral":

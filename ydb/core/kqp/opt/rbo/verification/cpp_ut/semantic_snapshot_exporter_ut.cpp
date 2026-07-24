@@ -2140,6 +2140,50 @@ TSemanticSnapshotExportResult ExportMapExpressionResult(
         nullableInput);
 }
 
+TSemanticSnapshotExportResult ExportTypedMapExpressionResult(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TStringBuf sourceType,
+    bool sourceNullable,
+    TExprNode::TPtr expression)
+{
+    const auto& table = AddTable(ctx, "/Root/TypedExpression", {
+        {"x", TString(sourceType), !sourceNullable},
+    });
+    auto read = MakeRead(ctx, table, alias, {"x"});
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            TExpression(
+                std::move(expression),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
+NJson::TJsonValue ExportTypedMapExpression(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TStringBuf sourceType,
+    bool sourceNullable,
+    TExprNode::TPtr expression)
+{
+    const auto snapshot = ParseSupported(ExportTypedMapExpressionResult(
+        ctx,
+        alias,
+        sourceType,
+        sourceNullable,
+        std::move(expression)));
+
+    const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(columns.back()["output"].GetStringSafe(), "result");
+    return columns.back()["expression"];
+}
+
 NJson::TJsonValue ExportMapExpression(
     TExportTestContext& ctx,
     const TString& alias,
@@ -7841,7 +7885,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!castResult.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             castResult.UnsupportedReason,
-            "Integral Decimal SafeCast must have a non-nullable canonical Decimal result");
+            "target does not match its result");
     }
 
     Y_UNIT_TEST(MalformedDecimalTypeDescriptorsFailClosed) {
@@ -8347,11 +8391,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         for (const auto slot : slots) {
             TExportTestContext ctx;
+            const TString sourceName(NUdf::GetDataTypeInfo(slot).Name);
             const auto* sourceType = ScalarType(ctx, slot);
             const auto* decimalType = DecimalType(ctx, "35", "4");
-            const auto expression = ExportMapExpression(
+            const auto expression = ExportTypedMapExpression(
                 ctx,
                 "a",
+                sourceName,
+                false,
                 TypedCallable(
                     ctx,
                     "SafeCast",
@@ -8361,13 +8408,101 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     },
                     decimalType));
 
-            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "cast_decimal");
             UNIT_ASSERT_VALUES_EQUAL(expression["arg"]["kind"].GetStringSafe(), "column");
             UNIT_ASSERT_VALUES_EQUAL(expression["arg"]["column"].GetStringSafe(), "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["source_type"].GetStringSafe(),
+                sourceName);
             UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Decimal(35,4)");
             UNIT_ASSERT_VALUES_EQUAL(expression["nullable"].GetBooleanSafe(), false);
         }
+    }
+
+    Y_UNIT_TEST(ExportsNullableIntegralAndDecimalWideningSafeCastsExactly) {
+        for (const bool decimalSource : {false, true}) {
+            TExportTestContext ctx;
+            const auto* sourceType = decimalSource
+                ? DecimalType(ctx, "7", "2", true)
+                : ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const TString sourceName = decimalSource
+                ? "Decimal(7,2)"
+                : "Int64";
+            const auto* targetType = DecimalType(ctx, "12", "2");
+            const auto* optionalTargetType = DecimalType(ctx, "12", "2", true);
+            const auto expression = ExportTypedMapExpression(
+                ctx,
+                "a",
+                sourceName,
+                true,
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        OptionalDecimalDataTypeDescriptor(
+                            ctx,
+                            "12",
+                            "2",
+                            targetType,
+                            optionalTargetType),
+                    },
+                    optionalTargetType));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "cast_decimal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["arg"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["arg"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["source_type"].GetStringSafe(),
+                sourceName);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Decimal(12,2)");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+    }
+
+    Y_UNIT_TEST(ExportsNonNullableDecimalWideningSafeCastExactly) {
+        TExportTestContext ctx;
+        const auto* sourceType = DecimalType(ctx, "7", "2");
+        const auto* targetType = DecimalType(ctx, "12", "2");
+        const auto expression = ExportTypedMapExpression(
+            ctx,
+            "a",
+            "Decimal(7,2)",
+            false,
+            TypedCallable(
+                ctx,
+                "SafeCast",
+                {
+                    TypedMember(ctx, "a.x", sourceType),
+                    DecimalDataTypeDescriptor(
+                        ctx,
+                        "12",
+                        "2",
+                        targetType),
+                },
+                targetType));
+
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["kind"].GetStringSafe(),
+            "cast_decimal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["source_type"].GetStringSafe(),
+            "Decimal(7,2)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["type"].GetStringSafe(),
+            "Decimal(12,2)");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
     }
 
     Y_UNIT_TEST(IncompleteIntegralSafeCastLiteralsRemainExplicit) {
@@ -8405,11 +8540,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     },
                     decimalType));
 
-            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "cast_decimal");
             UNIT_ASSERT_VALUES_EQUAL(expression["arg"]["kind"].GetStringSafe(), "literal");
             UNIT_ASSERT_VALUES_EQUAL(
                 expression["arg"]["type"].GetStringSafe(),
+                test.SourceType);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["source_type"].GetStringSafe(),
                 test.SourceType);
             if (test.SourceSlot == NUdf::EDataSlot::Uint64) {
                 UNIT_ASSERT_VALUES_EQUAL(
@@ -8467,7 +8605,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "source must be a non-nullable exact integer");
+                "result nullability must match its source");
         }
 
         {
@@ -8494,34 +8632,35 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "non-nullable canonical Decimal result");
+                "result nullability must match its source");
         }
 
-        {
+        struct TDecimalShape {
+            TStringBuf SourcePrecision;
+            TStringBuf SourceScale;
+            TStringBuf TargetPrecision;
+            TStringBuf TargetScale;
+        };
+        const TVector<TDecimalShape> decimalNearMisses = {
+            {"13", "2", "12", "2"},
+            {"7", "2", "12", "3"},
+        };
+        for (const auto& test : decimalNearMisses) {
             TExportTestContext ctx;
-            const auto* sourceType = DecimalType(ctx, "5", "2");
-            const auto* targetType = DecimalType(ctx, "12", "2");
-            const auto result = ExportMapExpressionResult(
+            const auto* sourceType = DecimalType(
                 ctx,
-                "a",
-                TypedCallable(
-                    ctx,
-                    "SafeCast",
-                    {
-                        TypedDecimalLiteral(ctx, "1", "5", "2", sourceType),
-                        DecimalDataTypeDescriptor(ctx, "12", "2", targetType),
-                    },
-                    targetType));
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                "source must be a non-nullable exact integer");
-        }
-
-        {
-            TExportTestContext ctx;
-            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Bool);
-            const auto* targetType = DecimalType(ctx, "12", "2");
+                test.SourcePrecision,
+                test.SourceScale,
+                true);
+            const auto* targetType = DecimalType(
+                ctx,
+                test.TargetPrecision,
+                test.TargetScale);
+            const auto* optionalTargetType = DecimalType(
+                ctx,
+                test.TargetPrecision,
+                test.TargetScale,
+                true);
             const auto result = ExportMapExpressionResult(
                 ctx,
                 "a",
@@ -8530,13 +8669,88 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     "SafeCast",
                     {
                         TypedMember(ctx, "a.x", sourceType),
-                        DecimalDataTypeDescriptor(ctx, "12", "2", targetType),
+                        OptionalDecimalDataTypeDescriptor(
+                            ctx,
+                            test.TargetPrecision,
+                            test.TargetScale,
+                            targetType,
+                            optionalTargetType),
                     },
-                    targetType));
+                    optionalTargetType),
+                true);
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "source must be a non-nullable exact integer");
+                "same-scale widening");
+        }
+
+        for (const bool corruptItemAnnotation : {false, true}) {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int64,
+                true);
+            const auto* targetType = DecimalType(ctx, "12", "2");
+            const auto* optionalTargetType = DecimalType(ctx, "12", "2", true);
+            auto target = OptionalDecimalDataTypeDescriptor(
+                ctx,
+                "12",
+                "2",
+                targetType,
+                optionalTargetType);
+            if (corruptItemAnnotation) {
+                target->Child(0)->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(
+                    DecimalType(ctx, "13", "2")));
+            } else {
+                target->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(
+                    DecimalType(ctx, "13", "2", true)));
+            }
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        std::move(target),
+                    },
+                    optionalTargetType),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                corruptItemAnnotation
+                    ? "item annotation disagrees with its descriptor"
+                    : "target annotation disagrees with its descriptor");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* sourceType = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+            const auto* targetType = DecimalType(ctx, "12", "2");
+            const auto* optionalTargetType = DecimalType(ctx, "12", "2", true);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", sourceType),
+                        OptionalDecimalDataTypeDescriptor(
+                            ctx,
+                            "12",
+                            "2",
+                            targetType,
+                            optionalTargetType),
+                    },
+                    optionalTargetType),
+                true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "source must be an integer or Decimal");
         }
 
         {
@@ -8579,7 +8793,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "target does not match its non-nullable result");
+                "target does not match its result");
         }
 
         {
@@ -8655,7 +8869,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "target does not match its non-nullable result");
+                "target does not match its result");
         }
 
         {

@@ -120,9 +120,13 @@ def render_expression(expression: ir.Expr) -> str:
         nullable = _required(expression.nullable, "nullable")
         if not isinstance(nullable, bool):
             raise InspectionError("expression field 'nullable' is not Boolean")
+        argument = f"arg={render_expression(expression.args[0])}"
+        if kind == "cast_decimal":
+            source_type = str(_required(expression.source_type, "source_type"))
+            argument += f", source_type={_quote(source_type)}"
         return (
-            f"{kind}(arg={render_expression(expression.args[0])}, "
-            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
+            f"{kind}({argument}, type={_quote(scalar_type)}, "
+            f"nullable={_boolean(nullable)})"
         )
     if kind == "if":
         if len(expression.args) != 3:

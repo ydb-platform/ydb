@@ -21,7 +21,9 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     basic_usage_ut.cpp
     describe_topic_ut.cpp
+    deferred_publication_ack_state_ut.cpp
     local_partition_ut.cpp
+    topic_deferred_publish_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
     write_session_size_ut.cpp

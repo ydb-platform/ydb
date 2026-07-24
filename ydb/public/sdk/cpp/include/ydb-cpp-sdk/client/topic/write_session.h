@@ -2,6 +2,7 @@
 
 #include "codecs.h"
 #include "counters.h"
+#include "deferred_publication_limits.h"
 #include "executor.h"
 #include "retry_policy.h"
 #include "write_events.h"
@@ -11,6 +12,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
+
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -198,6 +203,52 @@ concept Serializable =
         { Serialize(t) } -> std::convertible_to<std::string>;
     };
 
+class TDeferredPublicationAckState;
+
+//! Deferred publication for StreamWrite and deferred-publish control RPCs.
+//! Each handle owns ack-tracking state (shared on copy, transferred on move).
+//! Publish/Cancel wait for acks only when this handle's state recorded writes.
+//! Move leaves the source with IntPublicationId=0, no ExtPublicationId, and a fresh empty ack state.
+//! On Write, ExtPublicationId is optional and informational (omit / "" / any string); only the
+//! MaxExtPublicationIdLength cap applies. BeginPublication still requires a non-empty ext id.
+struct TDeferredPublication {
+    //! SDK-internal hatch to private AckState_. Not part of the public contract:
+    //! keeps AckState_ hidden from users while write-session / Publish / Cancel can reach it
+    //! without a public getter (and without friending every call site).
+    struct TAccess;
+
+    static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
+
+    uint64_t IntPublicationId = 0;
+    std::optional<std::string> ExtPublicationId;
+
+    TDeferredPublication();
+
+    explicit TDeferredPublication(uint64_t intPublicationId);
+
+    TDeferredPublication(uint64_t intPublicationId, std::string extPublicationId);
+
+    TDeferredPublication(const TDeferredPublication& other);
+
+    TDeferredPublication(TDeferredPublication&& other) noexcept;
+
+    TDeferredPublication& operator=(const TDeferredPublication& other);
+
+    TDeferredPublication& operator=(TDeferredPublication&& other) noexcept;
+
+    bool operator==(const TDeferredPublication& other) const {
+        return IntPublicationId == other.IntPublicationId
+            && ExtPublicationId == other.ExtPublicationId;
+    }
+
+    bool operator!=(const TDeferredPublication& other) const {
+        return !(*this == other);
+    }
+
+private:
+    std::shared_ptr<TDeferredPublicationAckState> AckState_;
+};
+
 //! Contains the message to write and all the options.
 struct TWriteMessage {
     using TSelf = TWriteMessage;
@@ -231,6 +282,7 @@ public:
         , CreateTimestamp_(other.CreateTimestamp_)
         , MessageMeta_(other.MessageMeta_)
         , Tx_(other.Tx_)
+        , DeferredPublication_(other.DeferredPublication_)
         , Key(other.Key)
         , Partition(other.Partition)
     {}
@@ -244,6 +296,7 @@ public:
         , CreateTimestamp_(std::move(other.CreateTimestamp_))
         , MessageMeta_(std::move(other.MessageMeta_))
         , Tx_(std::move(other.Tx_))
+        , DeferredPublication_(std::move(other.DeferredPublication_))
         , Key(std::move(other.Key))
         , Partition(std::move(other.Partition))
     {}
@@ -263,6 +316,7 @@ public:
         Key = other.Key;
         Partition = other.Partition;
         Tx_ = other.Tx_;
+        DeferredPublication_ = other.DeferredPublication_;
 
         return *this;
     }
@@ -282,6 +336,7 @@ public:
         Key = std::move(other.Key);
         Partition = std::move(other.Partition);
         Tx_ = std::move(other.Tx_);
+        DeferredPublication_ = std::move(other.DeferredPublication_);
 
         return *this;
     }
@@ -325,6 +380,9 @@ public:
 
     //! Transaction id
     FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
+
+    //! Deferred publication identity. Incompatible with Tx.
+    FLUENT_SETTING_OPTIONAL(TDeferredPublication, DeferredPublication);
 
     TTransactionBase* GetTxPtr() const
     {

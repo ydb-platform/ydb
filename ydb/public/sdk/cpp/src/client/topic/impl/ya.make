@@ -24,6 +24,9 @@ SRCS(
     write_session_impl.cpp
     write_session.h
     write_session.cpp
+    deferred_publication_ack_tracker.h
+    deferred_publication_ack_tracker.cpp
+    deferred_publications.cpp
 )
 
 PEERDIR(

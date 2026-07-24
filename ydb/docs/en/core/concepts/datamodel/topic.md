@@ -189,3 +189,7 @@ During transactional writes to a topic, data is stored outside the partition unt
 There are no additional constraints when working with topics within a transaction. It is possible to write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
 
 However, it is recommended to consider that data is published only at transaction commit. Therefore, if a transaction is long-running, the data will become visible only after a significant delay.
+
+## YQL queries to topics {#yql-topics}
+
+To work with topics, you can use [YQL queries](../query_execution/topics.md) with familiar constructs: [SELECT](../../yql/reference/syntax/select/index.md) for reading messages from a topic and [INSERT](../../yql/reference/syntax/insert_into.md) for writing messages to a topic.

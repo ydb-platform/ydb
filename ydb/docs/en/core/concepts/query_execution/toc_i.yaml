@@ -19,3 +19,5 @@ items:
     href: spilling.md
   - name: Scan queries
     href: scan_query.md
+  - name: YQL queries to topics
+    href: topics.md

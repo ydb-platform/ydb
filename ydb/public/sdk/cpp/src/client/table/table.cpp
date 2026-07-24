@@ -3025,6 +3025,8 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
             return ETokenizer::Standard;
         case Ydb::Table::FulltextIndexSettings::KEYWORD:
             return ETokenizer::Keyword;
+        case Ydb::Table::FulltextIndexSettings::ALPHANUMERIC:
+            return ETokenizer::Alphanumeric;
         default:
             return ETokenizer::Unspecified;
         }
@@ -3078,6 +3080,8 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
             return Ydb::Table::FulltextIndexSettings::STANDARD;
         case ETokenizer::Keyword:
             return Ydb::Table::FulltextIndexSettings::KEYWORD;
+        case ETokenizer::Alphanumeric:
+            return Ydb::Table::FulltextIndexSettings::ALPHANUMERIC;
         case ETokenizer::Unspecified:
             return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
         }

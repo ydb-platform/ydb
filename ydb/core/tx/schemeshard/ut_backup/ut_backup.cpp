@@ -399,6 +399,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             }
         )", pathSchema.c_str(), port, ToString(Codec).c_str()));
         env.TestWaitNotification(runtime, txId);
+    }
 
     Y_UNIT_TEST(ShouldRejectBackupOfTableWithGeneratedColumn) {
         TTestBasicRuntime runtime;

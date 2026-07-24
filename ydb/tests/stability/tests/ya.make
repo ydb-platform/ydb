@@ -50,6 +50,7 @@ PY3TEST()
             ydb/tests/stress/min_max_workload
             ydb/tests/stress/result_set_format
             ydb/tests/stress/system_tablet_backup
+            ydb/tests/stress/tpcc
         )
     ENDIF()
 

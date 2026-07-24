@@ -146,6 +146,28 @@ def _init_stress_utils():
                      "--mon-endpoint", "http://{node_host}:8765"],
             'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
         },
+        'Tpcc': {
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "run",
+                "--tx-mode", "mixed",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "clean",
+            ],
+            'local_path': 'ydb/tests/stress/tpcc/workload_tpcc'
+        },
     }
 
     for table_type in ['row', 'column']:
@@ -231,6 +253,10 @@ def get_stress_util(name, common_args):
     """
     workload_copy = deepcopy(_all_stress_utils[name])
     workload_copy['args'] += common_args
+    if 'pre_nemesis_args' in workload_copy:
+        workload_copy['pre_nemesis_args'] += common_args
+    if 'post_nemesis_args' in workload_copy:
+        workload_copy['post_nemesis_args'] += common_args
     return workload_copy
 
 
@@ -250,4 +276,8 @@ def get_all_stress_utils(common_args):
     workload_copy = deepcopy(_all_stress_utils)
     for wl, arg in workload_copy.items():
         arg['args'] += common_args
+        if 'pre_nemesis_args' in arg:
+            arg['pre_nemesis_args'] += common_args
+        if 'post_nemesis_args' in arg:
+            arg['post_nemesis_args'] += common_args
     return workload_copy

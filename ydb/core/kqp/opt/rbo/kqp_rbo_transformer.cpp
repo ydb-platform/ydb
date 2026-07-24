@@ -500,6 +500,11 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     pruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(pruneKeyColumnsEarly));
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Pruning I", std::move(pruningStageRules)));
 
+    // Index selection.
+    TVector<std::unique_ptr<IRule>> indexSelectionRules;
+    indexSelectionRules.emplace_back(std::make_unique<TSelectIndexRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Select indexes", std::move(indexSelectionRules)));
+
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
     physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());

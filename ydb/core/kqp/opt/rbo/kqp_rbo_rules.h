@@ -283,6 +283,17 @@ class TPushRangesRule : public ISimplifiedRule {
 };
 
 /**
+ * Retarget a filtered read to the impl table of the secondary index.
+ */
+class TSelectIndexRule : public ISimplifiedRule {
+  public:
+      TSelectIndexRule() : ISimplifiedRule("Select index", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Push down filter to olap read.
  */
 class TPushOlapFilterRule : public ISimplifiedRule {

@@ -144,6 +144,9 @@ namespace NActors {
             FlagDebugTrackReceive = 1 << 6,
             FlagFailFastWhenDisconnected = 1 << 7,
             FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
+            // System messages are handled by the actor runtime and must never
+            // reach actor awaiters or the user state function.
+            FlagSystemMessage = 1 << 9,
         };
         using TEventFlags = ui32;
 

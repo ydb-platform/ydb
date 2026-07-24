@@ -754,6 +754,176 @@ Y_UNIT_TEST_SUITE(TestAliases) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TestActorLiveness) {
+    struct TTargetActor : TActorBootstrapped<TTargetActor> {
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+        }
+
+        STRICT_STFUNC(StateWork,
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+    };
+
+    struct TProbeActor : TActorBootstrapped<TProbeActor> {
+        static constexpr ui64 AliveCookie = 1;
+        static constexpr ui64 DeadCookie = 2;
+
+        TProbeActor(
+                TActorId target,
+                TThreadParkPad* donePad,
+                std::atomic<bool>* doneFlag)
+            : Target(target)
+            , DonePad(donePad)
+            , DoneFlag(doneFlag)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            CheckActorLiveness(AliveCookie);
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvents::TEvActorAlive, Handle)
+            hFunc(TEvents::TEvActorDead, Handle)
+        )
+
+        void Handle(TEvents::TEvActorAlive::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == AliveCookie);
+
+            Send(Target, new TEvents::TEvPoison());
+            CheckActorLiveness(DeadCookie);
+        }
+
+        void Handle(TEvents::TEvActorDead::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == DeadCookie);
+
+            if (DoneFlag) {
+                DoneFlag->store(true, std::memory_order_release);
+            }
+            if (DonePad) {
+                DonePad->Unpark();
+            }
+            PassAway();
+        }
+
+        void CheckActorLiveness(ui64 cookie) {
+            Send(new IEventHandle(
+                TEvents::TSystem::CheckActorLiveness,
+                TEvents::TEvCheckActorLiveness::RequestFlags,
+                Target,
+                SelfId(),
+                nullptr,
+                cookie));
+        }
+
+        const TActorId Target;
+        TThreadParkPad* const DonePad;
+        std::atomic<bool>* const DoneFlag;
+    };
+
+    struct TRemoteProbeActor : TActorBootstrapped<TRemoteProbeActor> {
+        static constexpr ui64 Cookie = 1;
+
+        TRemoteProbeActor(TActorId target, TThreadParkPad& done)
+            : Target(target)
+            , Done(done)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            Send(new IEventHandle(
+                TEvents::TSystem::CheckActorLiveness,
+                TEvents::TEvCheckActorLiveness::RequestFlags,
+                Target,
+                SelfId(),
+                nullptr,
+                Cookie));
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvents::TEvActorLivenessUnsure, Handle)
+        )
+
+        void Handle(TEvents::TEvActorLivenessUnsure::TPtr& ev) {
+            Y_ABORT_UNLESS(!ev->HasEvent());
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Y_ABORT_UNLESS(ev->Cookie == Cookie);
+            Done.Unpark();
+            PassAway();
+        }
+
+        const TActorId Target;
+        TThreadParkPad& Done;
+    };
+
+    Y_UNIT_TEST(ActorSystemHandlesLivenessCheck) {
+        using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const TActorId target = actorSystem.Register(
+            new TTargetActor(),
+            TMailboxType::HTSwap,
+            0);
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TProbeActor(target, &done, nullptr),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ActorSystemReportsRemoteLivenessAsUnsure) {
+        using TActorBenchmark = NActors::NTests::TActorBenchmark<>;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const TActorId remoteTarget(2, 0, 1, 0);
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TRemoteProbeActor(remoteTarget, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(TestRuntimeHandlesLivenessCheck) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        const TActorId target = runtime.Register(new TTargetActor());
+        std::atomic<bool> done = false;
+        runtime.Register(new TProbeActor(target, nullptr, &done));
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return done.load(std::memory_order_acquire);
+        };
+        runtime.DispatchEvents(options);
+
+        UNIT_ASSERT(done.load(std::memory_order_acquire));
+    }
+}
+
 Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
     using namespace NThreading;
 

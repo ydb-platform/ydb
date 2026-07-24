@@ -2192,6 +2192,93 @@ struct TCorrelatedScalarExportFixture {
     TIntrusivePtr<TOpFilter> Consumer;
 };
 
+struct TInSubplanExportFixture {
+    TInSubplanExportFixture()
+        : Int32(ScalarType(Ctx, NUdf::EDataSlot::Int32))
+        , OptionalInt32(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Int32,
+              true))
+        , Int64(ScalarType(Ctx, NUdf::EDataSlot::Int64))
+        , Bool(ScalarType(Ctx, NUdf::EDataSlot::Bool))
+        , OptionalBool(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Bool,
+              true))
+    {
+        const auto& outerTable = AddTable(
+            Ctx,
+            "/Root/InOuter",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            Ctx,
+            "/Root/InInner",
+            {
+                {"k", "Int32", true},
+                {"other", "Int32", true},
+            });
+        OuterRead = MakeRead(Ctx, outerTable, "outer", {"k"});
+        InnerRead = MakeRead(Ctx, innerTable, "inner", {"k"});
+        WideInnerRead = MakeRead(
+            Ctx,
+            innerTable,
+            "wide",
+            {"k", "other"});
+        SetExactOutputType(Ctx, *OuterRead, {{"outer.k", Int32}});
+        SetExactOutputType(Ctx, *InnerRead, {{"inner.k", Int32}});
+        SetExactOutputType(Ctx, *WideInnerRead, {
+            {"wide.k", Int32},
+            {"wide.other", Int32},
+        });
+
+        Root = std::make_unique<TOpRoot>(
+            OuterRead,
+            Pos,
+            TVector<TString>{"outer.k"});
+        Root->PlanProps.Subplans.Add(
+            Binding,
+            TSubplanEntry{
+                InnerRead,
+                {Lookup},
+                ESubplanType::IN_SUBPLAN,
+                Binding,
+                {}});
+
+        BindingValue = MakeColumnAccess(
+            Binding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(BindingValue, Bool);
+        Consumer = MakeIntrusive<TOpFilter>(
+            OuterRead,
+            Pos,
+            BindingValue);
+        SetExactOutputType(Ctx, *Consumer, {{"outer.k", Int32}});
+        Root->SetInput(Consumer);
+    }
+
+    TSubplanEntry& Entry() {
+        return Root->PlanProps.Subplans.PlanMap.at(Binding);
+    }
+
+    TExportTestContext Ctx;
+    const TPositionHandle Pos;
+    const TTypeAnnotationNode* const Int32;
+    const TTypeAnnotationNode* const OptionalInt32;
+    const TTypeAnnotationNode* const Int64;
+    const TTypeAnnotationNode* const Bool;
+    const TTypeAnnotationNode* const OptionalBool;
+    const TInfoUnit Binding{"_rbo_in", true};
+    const TInfoUnit Lookup{"outer.k"};
+    TIntrusivePtr<TOpRead> OuterRead;
+    TIntrusivePtr<TOpRead> InnerRead;
+    TIntrusivePtr<TOpRead> WideInnerRead;
+    std::unique_ptr<TOpRoot> Root;
+    TExpression BindingValue;
+    TIntrusivePtr<TOpFilter> Consumer;
+};
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -12068,6 +12155,272 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "Exact scalar expression exceeds the node audit limit");
     }
 
+    Y_UNIT_TEST(ExportsExactUncorrelatedNonNullIntegralInSubplan) {
+        TInSubplanExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog));
+        const auto& descriptor =
+            snapshot["plan"]["subplans"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(descriptor.GetMapSafe().size(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["binding"].GetStringSafe(),
+            "_rbo_in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["kind"].GetStringSafe(),
+            "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["type"].GetStringSafe(),
+            "Bool");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT(descriptor["dependencies"].GetArraySafe().empty());
+        UNIT_ASSERT(!descriptor.Has("predicate"));
+
+        const auto& lookup = descriptor["lookup"];
+        UNIT_ASSERT_VALUES_EQUAL(lookup.GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            lookup["column"].GetStringSafe(),
+            "outer.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            lookup["type"].GetStringSafe(),
+            "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(
+            lookup["nullable"].GetBooleanSafe(),
+            false);
+
+        const auto& output = descriptor["output"];
+        UNIT_ASSERT_VALUES_EQUAL(output.GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            output["column"].GetStringSafe(),
+            "inner.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            output["type"].GetStringSafe(),
+            "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(
+            output["nullable"].GetBooleanSafe(),
+            false);
+
+        const auto& consumers = descriptor["consumers"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            consumers[0].GetStringSafe(),
+            FindNode(snapshot, "filter")["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(snapshot, "filter")["predicate"]["column"]
+                .GetStringSafe(),
+            "_rbo_in");
+
+        auto one = MakeConstant(
+            "Uint64",
+            "1",
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx);
+        auto limit = MakeIntrusive<TOpLimit>(
+            fixture.InnerRead,
+            fixture.Pos,
+            one,
+            EOpPhase::Undefined);
+        SetExactOutputType(
+            fixture.Ctx,
+            *limit,
+            {{"inner.k", fixture.Int32}});
+        fixture.Entry().Plan = limit;
+        auto wrapped = ParseSupported(ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(wrapped, "limit")["id"].GetStringSafe(),
+            wrapped["plan"]["subplans"][0]["root"].GetStringSafe());
+
+        auto sort = MakeIntrusive<TOpSort>(
+            fixture.InnerRead,
+            fixture.Pos,
+            TVector<TSortElement>{TSortElement(
+                TInfoUnit("inner.k"),
+                true,
+                false)});
+        SetExactOutputType(
+            fixture.Ctx,
+            *sort,
+            {{"inner.k", fixture.Int32}});
+        fixture.Entry().Plan = sort;
+        wrapped = ParseSupported(ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(wrapped, "sort")["id"].GetStringSafe(),
+            wrapped["plan"]["subplans"][0]["root"].GetStringSafe());
+        fixture.Entry().Plan = fixture.InnerRead;
+    }
+
+    Y_UNIT_TEST(InSubplanContractsFailClosed) {
+        TInSubplanExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+        auto& entry = fixture.Entry();
+
+        entry.Tuple.clear();
+        reject("exactly one tuple input");
+        entry.Tuple = {
+            fixture.Lookup,
+            TInfoUnit("outer.other"),
+        };
+        reject("exactly one tuple input");
+        entry.Tuple = {fixture.Lookup};
+
+        entry.DependentIUs.push_back(fixture.Lookup);
+        reject("must be uncorrelated");
+        entry.DependentIUs.clear();
+
+        entry.Tuple = {TInfoUnit("outer.missing")};
+        reject("lookup column is absent");
+        entry.Tuple = {fixture.Lookup};
+
+        entry.Plan = fixture.WideInnerRead;
+        reject("exactly one result column");
+        entry.Plan = fixture.InnerRead;
+
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.OptionalInt32},
+        });
+        reject("result must be a non-null fixed-width integer");
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.Int32},
+        });
+
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.Int64},
+        });
+        reject("lookup and result must have the same");
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.Int32},
+        });
+
+        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+            {"outer.k", fixture.OptionalInt32},
+        });
+        reject("lookup and result must have the same");
+        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+            {"outer.k", fixture.Int32},
+        });
+
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.Bool},
+        });
+        reject("result must be a non-null fixed-width integer");
+        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+            {"inner.k", fixture.Int32},
+        });
+
+        auto residualOuterBind = MakeIntrusive<TOpAddDependencies>(
+            fixture.InnerRead,
+            fixture.Pos,
+            TVector<std::pair<
+                TInfoUnit,
+                const TTypeAnnotationNode*>>{{
+                fixture.Lookup,
+                fixture.Int32,
+            }});
+        SetExactOutputType(fixture.Ctx, *residualOuterBind, {
+            {"inner.k", fixture.Int32},
+            {"outer.k", fixture.Int32},
+        });
+        entry.Plan = residualOuterBind;
+        reject("residual AddDependencies");
+        entry.Plan = fixture.InnerRead;
+
+        auto checkedLimit = MakeIntrusive<TOpLimit>(
+            fixture.InnerRead,
+            fixture.Pos,
+            MakeConstant(
+                "Uint64",
+                "1",
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx),
+            EOpPhase::Undefined);
+        checkedLimit->Props.EnsureAtMostOne = true;
+        SetExactOutputType(fixture.Ctx, *checkedLimit, {
+            {"inner.k", fixture.Int32},
+        });
+        entry.Plan = checkedLimit;
+        reject("error-bearing cardinality check");
+        entry.Plan = fixture.InnerRead;
+
+        AnnotateExpression(
+            fixture.BindingValue,
+            fixture.OptionalBool);
+        reject("subplan Member _rbo_in must be Bool");
+        AnnotateExpression(fixture.BindingValue, fixture.Bool);
+
+        auto mapBindingValue = MakeColumnAccess(
+            fixture.Binding,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(mapBindingValue, fixture.Bool);
+        auto mapConsumer = MakeIntrusive<TOpMap>(
+            fixture.OuterRead,
+            fixture.Pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("in.value"),
+                mapBindingValue)});
+        SetExactOutputType(fixture.Ctx, *mapConsumer, {
+            {"outer.k", fixture.Int32},
+            {"in.value", fixture.Bool},
+        });
+        fixture.Root->SetInput(mapConsumer);
+        reject("cannot consume an IN subplan binding");
+        fixture.Root->SetInput(fixture.Consumer);
+
+        auto secondBindingValue = MakeColumnAccess(
+            fixture.Binding,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(secondBindingValue, fixture.Bool);
+        auto secondConsumer = MakeIntrusive<TOpFilter>(
+            fixture.Consumer,
+            fixture.Pos,
+            secondBindingValue);
+        SetExactOutputType(
+            fixture.Ctx,
+            *secondConsumer,
+            {{"outer.k", fixture.Int32}});
+        fixture.Root->SetInput(secondConsumer);
+        reject("exactly one Filter consumer");
+        fixture.Root->SetInput(fixture.Consumer);
+
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "restored IN subplan must remain supported");
+    }
+
     Y_UNIT_TEST(ExportsExactEqualityCorrelatedScalarSubplan) {
         TCorrelatedScalarExportFixture fixture;
         const auto snapshot = ParseSupported(
@@ -12843,7 +13196,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         auto& entry = root.PlanProps.Subplans.PlanMap.at(binding);
 
         entry.Type = ESubplanType::IN_SUBPLAN;
-        reject("unsupported IN_SUBPLAN semantics");
+        reject("exactly one tuple input");
         entry.Type = static_cast<ESubplanType>(-1);
         reject("unknown subplan type");
         entry.Type = ESubplanType::EXISTS;

@@ -17,7 +17,8 @@ DEPENDS(
 PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/ut/common
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
 )
 
 DATA(

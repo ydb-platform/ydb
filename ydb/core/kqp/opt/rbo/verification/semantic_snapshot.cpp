@@ -4939,6 +4939,7 @@ private:
     enum class ESubplanKind {
         Scalar,
         Exists,
+        In,
     };
 
     struct TScalarSubplanDetails {
@@ -4963,13 +4964,22 @@ private:
         std::optional<TExistsCorrelation> Correlation;
     };
 
+    struct TInSubplanDetails {
+        TString LookupColumn;
+        TString OutputColumn;
+        TString ColumnType;
+    };
+
     struct TSubplanDescriptor {
         TString Binding;
         // RegistryRoot retains optimizer topology for nesting audits.
         // ExportedRoot is the closed relation actually serialized.
         TIntrusivePtr<IOperator> RegistryRoot;
         TIntrusivePtr<IOperator> ExportedRoot;
-        std::variant<TScalarSubplanDetails, TExistsSubplanDetails> Details;
+        std::variant<
+            TScalarSubplanDetails,
+            TExistsSubplanDetails,
+            TInSubplanDetails> Details;
         TVector<IOperator*> Consumers;
     };
 
@@ -5056,13 +5066,22 @@ private:
         if (std::get_if<TExistsSubplanDetails>(&subplan.Details)) {
             return ESubplanKind::Exists;
         }
+        if (std::get_if<TInSubplanDetails>(&subplan.Details)) {
+            return ESubplanKind::In;
+        }
         Unsupported("Subplan descriptor has invalid details");
     }
 
     static TString KindName(const TSubplanDescriptor& subplan) {
-        return SubplanKind(subplan) == ESubplanKind::Scalar
-            ? TString("Scalar")
-            : TString("EXISTS");
+        switch (SubplanKind(subplan)) {
+            case ESubplanKind::Scalar:
+                return "Scalar";
+            case ESubplanKind::Exists:
+                return "EXISTS";
+            case ESubplanKind::In:
+                return "IN";
+        }
+        Unsupported("Subplan descriptor has invalid kind");
     }
 
     static const TScalarSubplanDetails& ScalarDetails(
@@ -5083,13 +5102,24 @@ private:
         return *result;
     }
 
+    static const TInSubplanDetails& InDetails(
+        const TSubplanDescriptor& subplan)
+    {
+        const auto* result =
+            std::get_if<TInSubplanDetails>(&subplan.Details);
+        Y_ENSURE(result, "IN subplan descriptor has invalid details");
+        return *result;
+    }
+
     static const TString& SubplanType(const TSubplanDescriptor& subplan) {
         if (const auto* scalar =
                 std::get_if<TScalarSubplanDetails>(&subplan.Details))
         {
             return scalar->Type;
         }
-        if (std::get_if<TExistsSubplanDetails>(&subplan.Details)) {
+        if (std::get_if<TExistsSubplanDetails>(&subplan.Details) ||
+            std::get_if<TInSubplanDetails>(&subplan.Details))
+        {
             static const TString BoolType = "Bool";
             return BoolType;
         }
@@ -5554,6 +5584,74 @@ private:
         };
     }
 
+    TSubplanDescriptor PrepareInSubplan(
+        const TString& binding,
+        const TSubplanEntry& entry,
+        const TIntrusivePtr<IOperator>& plan)
+    {
+        if (entry.Tuple.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " must have exactly one tuple input");
+        }
+        if (!entry.DependentIUs.empty()) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " must be uncorrelated");
+        }
+
+        const TString lookup = entry.Tuple.front().GetFullName();
+        if (lookup.empty()) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " has an empty lookup column");
+        }
+        THashSet<const IOperator*> nodes;
+        VisitOperators(plan, nodes, [&](IOperator& op) {
+            if (op.GetKind() == EOperator::AddDependencies) {
+                Unsupported(TStringBuilder()
+                    << "IN subplan binding " << binding
+                    << " has residual AddDependencies");
+            }
+            if (op.Props.EnsureAtMostOne) {
+                Unsupported(TStringBuilder()
+                    << "IN subplan binding " << binding
+                    << " has an error-bearing cardinality check");
+            }
+        });
+
+        const auto resultIUs = GetSubplanResultIUs(plan);
+        if (resultIUs.size() != 1) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " must have exactly one result column");
+        }
+        const TString output = resultIUs.front().GetFullName();
+        const auto outputNames = OutputNames(*plan);
+        if (output.empty() || !outputNames.contains(output)) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " has an invalid result column " << output);
+        }
+
+        const auto outputType = ExactType(OutputType(*plan, output));
+        if (outputType.Nullable || !IsIntegerType(outputType.Name)) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << binding
+                << " result must be a non-null fixed-width integer");
+        }
+        return {
+            .Binding = binding,
+            .RegistryRoot = plan,
+            .ExportedRoot = plan,
+            .Details = TInSubplanDetails{
+                .LookupColumn = lookup,
+                .OutputColumn = output,
+                .ColumnType = outputType.Name,
+            },
+        };
+    }
+
     void ValidatePeeledExistsMap(TOpMap& map, const TString& binding) {
         CheckSnapshotProperties(map, false);
         const auto inputNames = OutputNames(*map.GetInput());
@@ -5796,6 +5894,28 @@ private:
         }
     }
 
+    void ValidateInConsumer(const TSubplanDescriptor& subplan) {
+        Y_ENSURE(subplan.Consumers.size() == 1);
+        const auto& details = InDetails(subplan);
+        auto& input = *subplan.Consumers.front()->GetChildren().front();
+        const auto inputNames = OutputNames(input);
+        if (!inputNames.contains(details.LookupColumn)) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << subplan.Binding
+                << " lookup column is absent from its Filter input");
+        }
+        const auto lookupType =
+            ExactType(OutputType(input, details.LookupColumn));
+        if (lookupType.Nullable ||
+            lookupType.Name != details.ColumnType)
+        {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << subplan.Binding
+                << " lookup and result must have the same non-null "
+                   "fixed-width integer type");
+        }
+    }
+
     void RegisterSubplans(
         const TVector<TIntrusivePtr<IOperator>>& roots)
     {
@@ -5825,9 +5945,9 @@ private:
                         PrepareExistsSubplan(binding, entry, roots[index]));
                     break;
                 case ESubplanType::IN_SUBPLAN:
-                    Unsupported(TStringBuilder()
-                        << "Subplan binding " << binding
-                        << " has unsupported IN_SUBPLAN semantics");
+                    Subplans.push_back(
+                        PrepareInSubplan(binding, entry, roots[index]));
+                    break;
                 default:
                     Unsupported(TStringBuilder()
                         << "Subplan binding " << binding
@@ -5946,7 +6066,9 @@ private:
                             << " output collides with "
                             << (kind == ESubplanKind::Scalar
                                 ? "scalar"
-                                : "EXISTS")
+                                : kind == ESubplanKind::Exists
+                                    ? "EXISTS"
+                                    : "IN")
                             << " subplan binding " << subplan.Binding);
                     }
                 }
@@ -5973,7 +6095,9 @@ private:
                             << op.GetExplainName() << " cannot consume "
                             << (kind == ESubplanKind::Scalar
                                 ? "a scalar"
-                                : "an EXISTS")
+                                : kind == ESubplanKind::Exists
+                                    ? "an EXISTS"
+                                    : "an IN")
                             << " subplan binding");
                     }
                     if (inputNames.contains(binding)) {
@@ -5998,25 +6122,37 @@ private:
                     << " subplan binding " << subplan.Binding
                     << " has no consumer");
             }
-            if (SubplanKind(subplan) == ESubplanKind::Scalar) {
-                const auto& scalar = ScalarDetails(subplan);
-                if (scalar.Correlation) {
+            switch (SubplanKind(subplan)) {
+                case ESubplanKind::Scalar: {
+                    const auto& scalar = ScalarDetails(subplan);
+                    if (scalar.Correlation) {
+                        if (subplan.Consumers.size() != 1) {
+                            Unsupported(TStringBuilder()
+                                << "Correlated scalar subplan binding "
+                                << subplan.Binding
+                                << " must have exactly one Project or Filter "
+                                   "consumer");
+                        }
+                        ValidateScalarConsumer(subplan);
+                    }
+                    break;
+                }
+                case ESubplanKind::Exists:
                     if (subplan.Consumers.size() != 1) {
                         Unsupported(TStringBuilder()
-                            << "Correlated scalar subplan binding "
-                            << subplan.Binding
-                            << " must have exactly one Project or Filter "
-                               "consumer");
+                            << "EXISTS subplan binding " << subplan.Binding
+                            << " must have exactly one Filter consumer");
                     }
-                    ValidateScalarConsumer(subplan);
-                }
-            } else {
-                if (subplan.Consumers.size() != 1) {
-                    Unsupported(TStringBuilder()
-                        << "EXISTS subplan binding " << subplan.Binding
-                        << " must have exactly one Filter consumer");
-                }
-                ValidateExistsConsumer(subplan);
+                    ValidateExistsConsumer(subplan);
+                    break;
+                case ESubplanKind::In:
+                    if (subplan.Consumers.size() != 1) {
+                        Unsupported(TStringBuilder()
+                            << "IN subplan binding " << subplan.Binding
+                            << " must have exactly one Filter consumer");
+                    }
+                    ValidateInConsumer(subplan);
+                    break;
             }
         }
     }
@@ -6132,7 +6268,7 @@ private:
                     dependencies.AppendValue(
                         scalar.Correlation->Dependency);
                 }
-            } else {
+            } else if (kind == ESubplanKind::Exists) {
                 const auto& exists = ExistsDetails(subplan);
                 if (exists.Correlation) {
                     dependencies.AppendValue(
@@ -6166,12 +6302,26 @@ private:
                 descriptor["kind"] = "scalar";
                 descriptor["output"] = std::move(output);
                 descriptor["nullable"] = true;
-            } else {
+            } else if (kind == ESubplanKind::Exists) {
                 const auto& exists = ExistsDetails(subplan);
                 descriptor["kind"] = "exists";
                 descriptor["predicate"] = exists.Correlation
                     ? exists.Correlation->Predicate
                     : NJson::TJsonValue(NJson::JSON_NULL);
+                descriptor["nullable"] = false;
+            } else {
+                const auto& in = InDetails(subplan);
+                auto lookup = JsonMap();
+                lookup["column"] = in.LookupColumn;
+                lookup["type"] = in.ColumnType;
+                lookup["nullable"] = false;
+                auto output = JsonMap();
+                output["column"] = in.OutputColumn;
+                output["type"] = in.ColumnType;
+                output["nullable"] = false;
+                descriptor["kind"] = "in";
+                descriptor["lookup"] = std::move(lookup);
+                descriptor["output"] = std::move(output);
                 descriptor["nullable"] = false;
             }
             result.AppendValue(std::move(descriptor));

@@ -25,6 +25,7 @@ explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
 and eager inherited errors, exact one-equality-correlated scalar aggregate
 subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
+exact uncorrelated single-column dynamic `IN`,
 exact row-level `DistinctAll` aggregation, plus the benchmark-dashboard parts
 of M4. The reviewed exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
@@ -44,17 +45,20 @@ raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
-The latest complete formula-only measurements reran both suites on 2026-07-23
+The latest complete formula-only measurements reran both suites on 2026-07-24
 after the correlated-COUNT repair, exact `DistinctAll` support, and restoration
-of the production PostgreSQL parser/runtime in the benchmark host. They
+of the production PostgreSQL parser/runtime in the benchmark host, then added
+the exact uncorrelated dynamic-`IN` slice. They
 establish formula construction for TPCH q1, q3, q4, q5, q6, q10, q11, q12,
-q14, q15, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19, q25, q29, q37,
+q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19, q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
-q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 46/121 workload
-queries (38.0%). TPCH has twelve formulas, eight unsupported queries, and two
+q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 47/121 workload
+queries (38.8%). TPCH has thirteen formulas, seven unsupported queries, and two
 optimizer failures; TPC-DS has thirty-four formulas, thirty-nine unsupported
-queries, and twenty-six optimizer failures. Across both suites that is 47
+queries, and twenty-six optimizer failures. Across both suites that is 46
 unsupported queries and 28 optimizer failures.
+Of the 93 queries that reach verifier classification rather than failing
+during optimizer preparation, 47 construct formulas (50.5%).
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -73,11 +77,35 @@ bridge but still reaches unsupported scalar `Map` in both snapshots. A small
 real-host column-store fixture containing both String predicates is
 `VERIFIED_BOUNDED`. These focused results leave formula coverage at 46/121.
 
-The complete TPCH run spent 2,781/7,810 ms in preparation/verifier work and
+The following exact dynamic-`IN` slice raises that floor by one. Its descriptor
+records one typed lookup column and one typed subplan-result column. Both must
+have the same non-null fixed-width integral type; the binding itself must be
+non-null `Bool` and
+uncorrelated, virtual, and consumed by exactly one Filter, with no `OuterBind`,
+`AddDependencies`, or observable `EnsureAtMostOne`. Evaluation is existential
+membership: an outer row matches when any present inner row has an equal
+value. Duplicates collapse, an empty inner input is false, and `NOT IN` remains
+ordinary scalar negation. Repeated uses share one cached subplan family,
+inherited root errors remain eager, and one cumulative construction budget
+admits at most 16,384 outer/inner membership pairs across alternatives and
+nested evaluation.
+
+TPCH q18 now emits a complete formula and a focused two-row/two-task solver
+experiment returned `VERIFIED_BOUNDED` after about 155/3,035 ms of
+preparation/verification. TPCH q16 and TPC-DS q95 pass the new binding gate but
+stop at later unrelated blockers. Dynamic-`IN` bindings with nullable,
+`String`, or `Date` lookup/result columns continue to fail closed. A real-host
+fixture captures uncorrelated `IN` in the initial plan and an ordinary
+`left_semi` join in the final plan, then proves the normal bounded obligation.
+That integration target links production PostgreSQL support because the dummy
+provider failed preparation for this valid query shape.
+
+The final policy-checked TPCH run spent 2,800/21,080 ms in
+preparation/verifier work and
 produced report SHA-256
-`dcc802b3dbd51ef04fdd179dbd90db6690b38892ead687d5849962ddd87cf0d1`;
-TPC-DS spent 64,206/189,264 ms and produced
-`d8c88141b6e6dccc3bf7596024b6033a297c267e8a1d05511206ea930fd7d763`.
+`65a38cf551f99ced8df28708b0bd6f58bdd4d280cd44cf1b6581826ccd813907`;
+TPC-DS spent 63,783/187,195 ms and produced
+`bc89dca6db0f32f3b0793f270b5d69e6feff03ca9e2094da6ada314f9d063840`.
 TPC-DS q6 itself emitted its formula after 347/11,882 ms. The preceding
 milestone reports and their timings/hashes remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
@@ -87,13 +115,17 @@ with explicit permutation multiplication. A 60-second solver experiment
 returned `UNKNOWN` after 327/72,599 ms, with the global deadline exhausted
 before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
-constructed; it is not a solver proof. The checked-in solver policy still
-requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q19, and
-q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: eighteen
-obligations (14.9% of the workload). The post-correlation proof-floor rerun is
-green: TPCH passes 9/9 and TPC-DS passes 9/9, all `VERIFIED_BOUNDED`. The
-preceding retained canonical-first exact-branch TPCH run spent 1,145/56,389 ms
+constructed; it is not a solver proof. The checked-in solver policy now
+requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19,
+and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: nineteen
+obligations (15.7% of the workload). The expanded proof-floor gate is green
+and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after 1,140/59,310 ms
 and produced report SHA-256
+`bf9b6e149aba25afed999781cb2138002829b9111f7ab35d54229cee02a1969c`;
+TPC-DS passes 9/9 after 1,388/35,706 ms and produced
+`f943c791f20bbb2acdc4d3875e4cab049f618b761aa28da4b8627a3f87f90894`.
+The preceding retained eighteen-query canonical-first exact-branch TPCH run
+spent 1,145/56,389 ms and produced report SHA-256
 `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
 the TPC-DS run spent 1,446/36,036 ms and produced
 `136deef295abfe9c1fa8b4c7d8b01fe8e5131a76886ec998c0a90cbd8b778846`.
@@ -108,7 +140,7 @@ an exact cover containing the two result-language-absence predicates and
 one guarded unmatched predicate per source outcome in either direction.
 Canonical `UNSAT`, or `UNSAT` for every branch, proves the same bounded theorem;
 any unknown or untried branch prevents a proof. This restored all eighteen
-policy proofs after branch-only solving exposed a TPCH q15 regression.
+then-policy proofs after branch-only solving exposed a TPCH q15 regression.
 Focused q42 returned `VERIFIED_BOUNDED` after 106 ms of preparation and 15,904
 ms of verification. q50 emits a formula but its solver experiment reached the
 65.0-second external process deadline; q71 did likewise, and TPC-DS q15, q61,
@@ -137,8 +169,9 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The eighteen-obligation proof floor is confirmed after the correlation and
-`DistinctAll` slices; formula coverage is 46/121 (38.0%).
+The complete nineteen-obligation proof floor is confirmed after the dynamic
+`IN` slice: 19/121 workload queries (15.7%) are `VERIFIED_BOUNDED` at two rows
+and two tasks. Formula coverage is 47/121 (38.8%).
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -821,15 +854,33 @@ admissible. Evaluation preflights at most 16,384 outer/inner row pairs. The
 optimized side remains the ordinary final StageGraph, with no subplan-specific
 equivalence shortcut.
 
-Focused `EXISTS` gates pass 11/11 in Python, 4/4 in the C++ exporter, and 4/4
-through the real host. Current full validation passes 472/472 verifier,
-177/177 C++ exporter/rule tests, 45/45 inspector, 37/37 replay, and 29/29
-real-host integration tests. Dynamic `IN`, multiple dependencies, broader
-correlations, range reads, and other OLAP pushdowns remain separate extensions.
+Focused `EXISTS` gates passed 11/11 in Python, 4/4 in the C++ exporter, and 4/4
+through the real host at that milestone. Dynamic `IN` is now exact for one
+narrow uncorrelated relational shape. The typed descriptor names one lookup
+column from the sole Filter consumer and one result column from the inner root.
+They must have the same non-null fixed-width integral type. The binding has no
+dependency, `OuterBind`, `AddDependencies`, observable `EnsureAtMostOne`,
+nesting, staging, or additional consumer.
+
+For every present consumer row, dynamic `IN` ORs equality with every present
+inner row. This is exact existential membership: duplicates do not multiply
+the outer row, empty inner input is false, and consumer `NOT` supplies the
+anti-membership form. The cached subplan family is shared by repeated binding
+references, while an error inherited from the inner root remains eager even
+when the outer input is empty. The evaluator rejects more than 16,384
+outer/inner membership pairs cumulatively before construction. Nullable
+values, tuples, coercions, `String`/`Date`, correlations, multiple consumers,
+and malformed lookup/output mappings fail closed.
+
+Focused dynamic-`IN` checks pass 74/74 in the Python subplan matrix, 13/13 in
+the broader C++ subplan matrix, and 1/1 through the real host. The integration
+case proves initial `IN` equivalent to final `left_semi` at two rows and two
+tasks. Multiple dependencies, broader correlations, range reads, and other
+OLAP pushdowns remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
-`ebcfdbb1263`, and `4b7f27d492e`. The next semantic milestone is exact
-dynamic `IN` and broader correlation support. The post-correlation
-eighteen-query proof-floor gate remains unchanged.
+`ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy now adds
+TPCH q18 as its nineteenth obligation; the complete 10/10 TPCH and 9/9 TPC-DS
+gate is `VERIFIED_BOUNDED`.
 
 The audit has found eight production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -1332,7 +1383,10 @@ raw `unittest` command above still supports lightweight development outside the
 compatible executable.
 
 The real-host integration tests construct a new-RBO `IKqpHost` and send each
-captured initial/final pair through the normal CLI. One test covers an explicit
+captured initial/final pair through the normal CLI. This target links the
+production PostgreSQL translator/runtime: the dummy provider failed to prepare
+the valid dynamic-`IN` fixture and is not a faithful host for this boundary.
+One test covers an explicit
 `LIMIT 1` and its split intermediate/final form. The ordered test covers
 `ORDER BY A DESC, B ASC LIMIT 1`: it checks the initial Sort+Limit, final
 per-task intermediate TopSort, exact Merge metadata (including NULL placement),
@@ -1347,7 +1401,10 @@ checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
 solver budget. Nullable `String IN ('first', 'second')` and
 `Int64 IN (Int32...)` expressions exercise both static-membership type gates
-through the real host and prove the normal obligation. A separate
+through the real host and prove the normal obligation. A separate uncorrelated
+dynamic-`IN` fixture captures a typed non-null integral lookup/result
+descriptor initially and an ordinary `left_semi` join finally, then proves the
+two-row/two-task obligation. A separate
 `COUNT(*) > 1` query captures ordinary `Uint64 > Int32` comparison at both
 real-host boundaries and returns `VERIFIED_BOUNDED` at two rows and two tasks.
 A native Decimal column filter likewise checks exact tagged literals and

@@ -297,18 +297,21 @@ def _column(column: ir.Column) -> str:
 
 
 def _subplan(subplan: ir.Subplan) -> str:
-    if isinstance(subplan, ir.ScalarSubplan):
-        output = (
-            f"{{column={_quote(subplan.output.column)}, "
-            f"type={_quote(subplan.output.type)}, "
-            f"nullable={_boolean(subplan.output.nullable)}}}"
+    def column_metadata(column: ir.SubplanOutput) -> str:
+        return (
+            f"{{column={_quote(column.column)}, "
+            f"type={_quote(column.type)}, "
+            f"nullable={_boolean(column.nullable)}}}"
         )
+
+    if isinstance(subplan, ir.ScalarSubplan):
         dependencies = (
             () if subplan.dependency is None else (subplan.dependency,)
         )
         return (
             f"subplan binding={_quote(subplan.binding)} kind=scalar "
-            f"root={_quote(subplan.root)} output={output} "
+            f"root={_quote(subplan.root)} "
+            f"output={column_metadata(subplan.output)} "
             f"type={_quote(subplan.output.type)} nullable=true "
             f"dependencies={_list(dependencies, _quote)} "
             f"consumers={_list(subplan.consumers, _quote)}"
@@ -323,6 +326,15 @@ def _subplan(subplan: ir.Subplan) -> str:
             f"predicate={_optional(subplan.predicate, render_expression)} "
             f"type={_quote(ir.BOOL)} nullable=false "
             f"dependencies={_list(dependencies, _quote)} "
+            f"consumers={_list(subplan.consumers, _quote)}"
+        )
+    if isinstance(subplan, ir.InSubplan):
+        return (
+            f"subplan binding={_quote(subplan.binding)} kind=in "
+            f"root={_quote(subplan.root)} "
+            f"lookup={column_metadata(subplan.lookup)} "
+            f"output={column_metadata(subplan.output)} "
+            f"type={_quote(ir.BOOL)} nullable=false dependencies=[] "
             f"consumers={_list(subplan.consumers, _quote)}"
         )
     raise InspectionError(

@@ -1,8 +1,14 @@
 import copy
+import os
 import unittest
 from dataclasses import replace
 from itertools import product
 from unittest import mock
+
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
@@ -20,9 +26,19 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder as ScalarEncoder,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
+    build_logical_kernel_problem_for_tests,
+    solve,
+)
 
 
 BINDING = "$scalar"
+IN_BINDING = "$in"
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 def _literal(scalar_type, value):
@@ -295,6 +311,115 @@ def _exists_snapshot(
         },
         "stage_graph": None,
     }
+
+
+def _in_snapshot(*, negate=False, repeat_binding=False):
+    binding_expr = {"kind": "column", "column": IN_BINDING}
+    if repeat_binding:
+        binding_expr = {
+            "kind": "or",
+            "args": [binding_expr, copy.deepcopy(binding_expr)],
+        }
+    if negate:
+        binding_expr = {"kind": "not", "arg": binding_expr}
+    return {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "Outer",
+                    "columns": [
+                        {"name": "k", "type": "Int32", "nullable": False},
+                    ],
+                    "unique_keys": [],
+                },
+                {
+                    "name": "Inner",
+                    "columns": [
+                        {"name": "k", "type": "Int32", "nullable": False},
+                    ],
+                    "unique_keys": [],
+                },
+            ]
+        },
+        "plan": {
+            "nodes": [
+                {
+                    "id": "outer_scan",
+                    "op": "scan",
+                    "table": "Outer",
+                    "columns": [{"source": "k", "output": "outer.k"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "inner_scan",
+                    "op": "scan",
+                    "table": "Inner",
+                    "columns": [{"source": "k", "output": "inner.k"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "main_filter",
+                    "op": "filter",
+                    "input": "outer_scan",
+                    "predicate": binding_expr,
+                },
+            ],
+            "root": "main_filter",
+            "output": ["outer.k"],
+            "subplans": [
+                {
+                    "binding": IN_BINDING,
+                    "kind": "in",
+                    "root": "inner_scan",
+                    "lookup": {
+                        "column": "outer.k",
+                        "type": "Int32",
+                        "nullable": False,
+                    },
+                    "output": {
+                        "column": "inner.k",
+                        "type": "Int32",
+                        "nullable": False,
+                    },
+                    "type": "Bool",
+                    "nullable": False,
+                    "dependencies": [],
+                    "consumers": ["main_filter"],
+                }
+            ],
+        },
+        "stage_graph": None,
+    }
+
+
+def _lower_in_snapshot(raw, join_kind):
+    result = copy.deepcopy(raw)
+    descriptor = result["plan"]["subplans"][0]
+    consumer = next(
+        node
+        for node in result["plan"]["nodes"]
+        if node["id"] == "main_filter"
+    )
+    consumer.clear()
+    consumer.update(
+        {
+            "id": "main_filter",
+            "op": "join",
+            "left": "outer_scan",
+            "right": descriptor["root"],
+            "kind": join_kind,
+            "predicate": _equality(
+                descriptor["lookup"]["column"],
+                descriptor["output"]["column"],
+            ),
+        }
+    )
+    result["plan"]["subplans"] = []
+    return result
 
 
 def _correlated_scalar_snapshot(function="count"):
@@ -707,6 +832,33 @@ def _exists_constants(database, outer, inner):
             cell = row.cells[name]
             constants[cell.is_null.atom] = value is None
             constants[cell.value.atom] = 0 if value is None else value
+    return constants
+
+
+def _in_constants(
+    database,
+    outer,
+    inner,
+    *,
+    outer_present=None,
+    inner_present=None,
+):
+    if outer_present is None:
+        outer_present = (True,) * len(outer)
+    if inner_present is None:
+        inner_present = (True,) * len(inner)
+    constants = {}
+    for table, values, present in (
+        ("Outer", outer, outer_present),
+        ("Inner", inner, inner_present),
+    ):
+        for row, value, is_present in zip(
+            database.witness[table],
+            values,
+            present,
+        ):
+            constants[row.present.atom] = is_present
+            constants[row.cells["k"].value.atom] = value
     return constants
 
 
@@ -2206,9 +2358,216 @@ class ExistsSubplanEvaluationTest(unittest.TestCase):
     def test_exists_row_pair_construction_is_bounded(self):
         with self.assertRaisesRegex(
             RelationError,
-            "EXISTS evaluation requires 16641 candidate-row pairs",
+            "Boolean subplan evaluation requires 16641 candidate-row pairs",
         ):
             self._evaluate(_exists_snapshot(), row_bound=129)
+
+
+class InSubplanEvaluationTest(unittest.TestCase):
+    @staticmethod
+    def _evaluate(raw, row_bound=3, observer=None):
+        snapshot = parse_snapshot(raw)
+        script = smt.Script()
+        database = Database(snapshot, row_bound, script)
+        evaluator = Evaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+            node_observer=observer,
+        )
+        return evaluator, database, evaluator.root()
+
+    @staticmethod
+    def _present_values(relation, constants):
+        return [
+            _ground(row.values["outer.k"].value, constants)
+            for row in relation.rows
+            if _ground(row.present, constants)
+        ]
+
+    def test_exact_membership_handles_duplicates_empty_not_and_repeated_use(self):
+        cases = (
+            (_in_snapshot(), (True, True, True), [2]),
+            (_in_snapshot(), (False, False, False), []),
+            (_in_snapshot(negate=True), (True, True, True), [1, 3]),
+            (
+                _in_snapshot(repeat_binding=True),
+                (True, True, True),
+                [2],
+            ),
+        )
+        for raw, inner_present, expected in cases:
+            with self.subTest(expected=expected):
+                observed = []
+                evaluator, database, family = self._evaluate(
+                    raw,
+                    observer=lambda scope, node, value: observed.append(node),
+                )
+                constants = _in_constants(
+                    database,
+                    (1, 2, 3),
+                    (2, 2, 9),
+                    inner_present=inner_present,
+                )
+                self.assertEqual(
+                    self._present_values(family.certain(), constants),
+                    expected,
+                )
+                self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
+                self.assertEqual(observed.count("inner_scan"), 1)
+
+    def test_in_and_not_in_match_semi_and_anti_join(self):
+        for negate, join_kind in ((False, "left_semi"), (True, "left_anti")):
+            with self.subTest(join_kind=join_kind):
+                raw = _in_snapshot(negate=negate)
+                before = parse_snapshot(raw)
+                after = parse_snapshot(_lower_in_snapshot(raw, join_kind))
+                script = smt.Script()
+                database = Database(before, 3, script)
+                scalar = ScalarEncoder(script)
+                equality = family_equal(
+                    Evaluator(before, database, scalar).root(),
+                    Evaluator(after, database, scalar).root(),
+                    scalar,
+                )
+                for inner_present in (
+                    (False, False, False),
+                    (True, False, True),
+                    (True, True, True),
+                ):
+                    constants = _in_constants(
+                        database,
+                        (1, 2, 3),
+                        (2, 2, 9),
+                        inner_present=inner_present,
+                    )
+                    self.assertTrue(_ground(equality, constants))
+
+    def test_declared_lookup_mapping_is_semantically_observable(self):
+        raw = _in_snapshot()
+        raw["schema"]["tables"][0]["columns"].append(
+            {"name": "other", "type": "Int32", "nullable": False}
+        )
+        raw["plan"]["nodes"][0]["columns"].append(
+            {"source": "other", "output": "outer.other"}
+        )
+        raw["plan"]["subplans"][0]["lookup"]["column"] = "outer.other"
+
+        lowered = copy.deepcopy(raw)
+        consumer = lowered["plan"]["nodes"][2]
+        consumer.clear()
+        consumer.update(
+            {
+                "id": "main_filter",
+                "op": "join",
+                "left": "outer_scan",
+                "right": "inner_scan",
+                "kind": "left_semi",
+                "predicate": _equality("outer.k", "inner.k"),
+            }
+        )
+        lowered["plan"]["subplans"] = []
+
+        before = parse_snapshot(raw)
+        after = parse_snapshot(lowered)
+        script = smt.Script()
+        database = Database(before, 1, script)
+        scalar = ScalarEncoder(script)
+        equality = family_equal(
+            Evaluator(before, database, scalar).root(),
+            Evaluator(after, database, scalar).root(),
+            scalar,
+        )
+        constants = _in_constants(database, (1,), (1,))
+        constants[
+            database.witness["Outer"][0].cells["other"].value.atom
+        ] = 2
+        self.assertFalse(_ground(equality, constants))
+
+    def test_inner_errors_are_inherited_even_for_an_empty_outer_relation(self):
+        snapshot = parse_snapshot(_in_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 0, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        inner = evaluator.node("inner_scan")
+        self.assertEqual(len(inner.outcomes), 1)
+        evaluator.cache["inner_scan"] = RelationFamily(
+            (replace(inner.outcomes[0], error=smt.TRUE),)
+        )
+
+        outcome = evaluator.root().outcomes[0]
+
+        self.assertEqual(outcome.error, smt.TRUE)
+
+    def test_in_row_pair_construction_is_bounded(self):
+        with self.assertRaisesRegex(
+            RelationError,
+            "Boolean subplan evaluation requires 16641 candidate-row pairs",
+        ):
+            self._evaluate(_in_snapshot(), row_bound=129)
+
+    def test_in_row_pair_construction_is_cumulative_across_outcomes(self):
+        snapshot = parse_snapshot(_in_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 91, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        inner = evaluator.node("inner_scan")
+        evaluator.cache["inner_scan"] = RelationFamily(
+            (inner.outcomes[0], inner.outcomes[0])
+        )
+
+        with self.assertRaisesRegex(
+            RelationError,
+            "Boolean subplan evaluation requires 16562 candidate-row pairs",
+        ):
+            evaluator.root()
+
+
+@unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
+class InSubplanSolverTest(unittest.TestCase):
+    @staticmethod
+    def _solve(before, after, row_bound=2):
+        problem = build_logical_kernel_problem_for_tests(
+            parse_snapshot(before),
+            parse_snapshot(after),
+            row_bound,
+            10_000,
+        )
+        return solve(problem, SOLVER, row_bound, 10_000)
+
+    def test_in_is_bounded_equivalent_to_left_semi(self):
+        raw = _in_snapshot()
+
+        result = self._solve(raw, _lower_in_snapshot(raw, "left_semi"))
+
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_not_in_is_bounded_equivalent_to_left_anti(self):
+        raw = _in_snapshot(negate=True)
+
+        result = self._solve(raw, _lower_in_snapshot(raw, "left_anti"))
+
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_wrong_lookup_lowering_has_a_solver_counterexample(self):
+        raw = _in_snapshot()
+        raw["schema"]["tables"][0]["columns"].append(
+            {"name": "other", "type": "Int32", "nullable": False}
+        )
+        raw["plan"]["nodes"][0]["columns"].append(
+            {"source": "other", "output": "outer.other"}
+        )
+        raw["plan"]["subplans"][0]["lookup"]["column"] = "outer.other"
+        lowered = _lower_in_snapshot(raw, "left_semi")
+        lowered["plan"]["nodes"][2]["predicate"] = _equality(
+            "outer.k",
+            "inner.k",
+        )
+
+        result = self._solve(raw, lowered, row_bound=1)
+
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertIsNotNone(result.witness)
 
 
 class ScalarSubplanValidationTest(unittest.TestCase):
@@ -2757,6 +3116,194 @@ class ExistsSubplanValidationTest(unittest.TestCase):
             )
         )
         parse_snapshot(with_sort(_exists_snapshot(), limit=None))
+
+
+class InSubplanValidationTest(unittest.TestCase):
+    def test_descriptor_and_column_objects_are_strict_and_single_column(self):
+        for target in ("descriptor", "lookup", "output"):
+            with self.subTest(target=target):
+                raw = _in_snapshot()
+                descriptor = raw["plan"]["subplans"][0]
+                obj = descriptor if target == "descriptor" else descriptor[target]
+                obj["surprise"] = True
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "unknown fields: surprise",
+                ):
+                    parse_snapshot(raw)
+
+        raw = _in_snapshot()
+        raw["plan"]["subplans"][0]["lookup"] = [
+            raw["plan"]["subplans"][0]["lookup"],
+        ]
+        with self.assertRaisesRegex(SnapshotError, "expected an object"):
+            parse_snapshot(raw)
+
+    def test_descriptor_is_bool_nonnullable_and_uncorrelated(self):
+        for field, value, message in (
+            ("type", "Int32", "IN binding must have type 'Bool'"),
+            ("nullable", True, "IN binding must be non-nullable"),
+            (
+                "dependencies",
+                ["outer.k"],
+                "IN binding must be uncorrelated",
+            ),
+        ):
+            with self.subTest(field=field):
+                raw = _in_snapshot()
+                raw["plan"]["subplans"][0][field] = value
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_lookup_and_output_require_the_same_nonnullable_integral_type(self):
+        mutations = (
+            ("lookup", "nullable", True, "requires non-null"),
+            ("output", "nullable", True, "requires non-null"),
+            ("output", "type", "Int64", "types must match exactly"),
+        )
+        for target, field, value, message in mutations:
+            with self.subTest(target=target, field=field):
+                raw = _in_snapshot()
+                raw["plan"]["subplans"][0][target][field] = value
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+        for scalar_type in ("Bool", "String", "Date", "Decimal(7,2)"):
+            with self.subTest(scalar_type=scalar_type):
+                raw = _in_snapshot()
+                for target in ("lookup", "output"):
+                    raw["plan"]["subplans"][0][target]["type"] = scalar_type
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "only fixed-width integral",
+                ):
+                    parse_snapshot(raw)
+
+    def test_declared_columns_must_match_both_relation_scopes_exactly(self):
+        mutations = (
+            (
+                lambda raw: raw["plan"]["subplans"][0]["lookup"].update(
+                    column="missing"
+                ),
+                "lookup column is not available",
+            ),
+            (
+                lambda raw: raw["schema"]["tables"][0]["columns"][0].update(
+                    nullable=True
+                ),
+                "lookup schema does not match",
+            ),
+            (
+                lambda raw: raw["plan"]["subplans"][0]["output"].update(
+                    column="missing"
+                ),
+                "output column is not produced",
+            ),
+            (
+                lambda raw: raw["schema"]["tables"][1]["columns"][0].update(
+                    type="Int64"
+                ),
+                "output schema does not match",
+            ),
+        )
+        for mutate, message in mutations:
+            with self.subTest(message=message):
+                raw = _in_snapshot()
+                mutate(raw)
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_consumer_must_be_one_referencing_filter(self):
+        raw = _in_snapshot()
+        raw["plan"]["subplans"][0]["consumers"] = []
+        with self.assertRaisesRegex(SnapshotError, "binding is unused"):
+            parse_snapshot(raw)
+
+        raw = _in_snapshot()
+        raw["plan"]["nodes"][2]["predicate"] = _literal("Bool", True)
+        with self.assertRaisesRegex(SnapshotError, "does not reference binding"):
+            parse_snapshot(raw)
+
+        raw = _in_snapshot()
+        raw["plan"]["nodes"][2] = {
+            "id": "main_filter",
+            "op": "project",
+            "input": "outer_scan",
+            "ordered": False,
+            "columns": [
+                {
+                    "output": "outer.k",
+                    "expression": {
+                        "kind": "column",
+                        "column": "outer.k",
+                    },
+                },
+                {
+                    "output": "probe",
+                    "expression": {
+                        "kind": "column",
+                        "column": IN_BINDING,
+                    },
+                },
+            ],
+        }
+        with self.assertRaisesRegex(SnapshotError, "IN consumer must be a Filter"):
+            parse_snapshot(raw)
+
+        raw = _in_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "second_filter",
+                "op": "filter",
+                "input": "main_filter",
+                "predicate": {
+                    "kind": "column",
+                    "column": IN_BINDING,
+                },
+            }
+        )
+        raw["plan"]["root"] = "second_filter"
+        raw["plan"]["subplans"][0]["consumers"].append("second_filter")
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "exactly one Filter consumer",
+        ):
+            parse_snapshot(raw)
+
+    def test_correlated_and_error_bearing_roots_fail_closed(self):
+        raw = _in_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "inner_bind",
+                "op": "outer_bind",
+                "input": "inner_scan",
+                "dependency": "outer.k",
+                "type": "Int32",
+                "nullable": False,
+            }
+        )
+        raw["plan"]["subplans"][0]["root"] = "inner_bind"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "uncorrelated IN root may not contain outer_bind",
+        ):
+            parse_snapshot(raw)
+
+        raw = _in_snapshot()
+        raw["plan"]["nodes"].append(
+            {
+                "id": "inner_checked",
+                "op": "limit",
+                "input": "inner_scan",
+                "count": _literal("Uint64", 2),
+                "offset": None,
+                "phase": "undefined",
+                "ensure_at_most_one": True,
+            }
+        )
+        raw["plan"]["subplans"][0]["root"] = "inner_checked"
+        with self.assertRaisesRegex(SnapshotError, "observable error outcomes"):
+            parse_snapshot(raw)
 
 
 if __name__ == "__main__":

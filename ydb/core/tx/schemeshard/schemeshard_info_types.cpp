@@ -1045,6 +1045,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
             return nullptr;
         }
+        if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            errStr = Sprintf("Generated column '%s' cannot be part of the primary key", keyName.data());
+            return nullptr;
+        }
         column.KeyOrder = keyOrder;
         keyColIds.push_back(colId);
         ++keyOrder;

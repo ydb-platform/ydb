@@ -1896,6 +1896,44 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         UNIT_ASSERT_VALUES_EQUAL_C(fromIndex, fromTable,
             "non-deterministic generated value diverged between the base table and the covering index");
     }
+
+    Y_UNIT_TEST(GeneratedInPrimaryKeyRejected) {
+        // A generated column cannot be part of the primary key
+        CheckGeneratedColumnsRejected({
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    g Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                    PRIMARY KEY (g)
+                );
+            )", "cannot be part of the primary key"},
+        });
+    }
+
+    Y_UNIT_TEST(IndexOnGeneratedKeyUpdatesEntry) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                g Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_g GLOBAL SYNC ON (g)
+            );
+        )");
+
+        // New row: g = 10 + 1 = 11, present in the index
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 10);");
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 11;", "[[1;[11]]]");
+        fixture.Check("SELECT g FROM TestTable VIEW idx_g ORDER BY g;", "[[[11]]]");
+
+        // Update the dependency so the generated index key changes: g = 20 + 1 = 21
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 20);");
+
+        // The stale key is gone, the new key is present, and the index holds exactly one row
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 11;", "[]");
+        fixture.Check("SELECT k, g FROM TestTable VIEW idx_g WHERE g = 21;", "[[1;[21]]]");
+        fixture.Check("SELECT g FROM TestTable VIEW idx_g ORDER BY g;", "[[[21]]]");
+    }
 }
 
 Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {

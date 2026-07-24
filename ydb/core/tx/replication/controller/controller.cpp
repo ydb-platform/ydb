@@ -51,13 +51,13 @@ void TController::DefaultSignalTabletActive(const TActorContext&) {
 
 STFUNC(TController::StateInit) {
     YDB_LOG_CREATE_CONTEXT(LogPrefix,
-        {"actorState", ""});
+        {"actorState", "StateInit"});
     StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TController::StateDatabaseResolve) {
     YDB_LOG_CREATE_CONTEXT(LogPrefix,
-        {"actorState", ""});
+        {"actorState", "StateDatabaseResolve"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvResolveTenantResult, HandleDatabaseResolve);
     default:
@@ -67,7 +67,7 @@ STFUNC(TController::StateDatabaseResolve) {
 
 STFUNC(TController::StateWork) {
     YDB_LOG_CREATE_CONTEXT(LogPrefix,
-        {"actorState", ""});
+        {"actorState", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvAlterReplication, Handle);

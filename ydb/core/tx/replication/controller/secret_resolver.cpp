@@ -138,7 +138,7 @@ public:
 
     STATEFN(StateWork) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);

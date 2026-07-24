@@ -51,7 +51,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     STATEFN(StateRequestPermission) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateRequestPermission"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAllowCreateStream, Handle);
         default:
@@ -81,7 +81,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     STATEFN(StateCreateStream) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateCreateStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, CreateStream);
@@ -136,7 +136,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     STATEFN(StateCreateConsumer) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateCreateConsumer"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, CreateConsumer);
@@ -179,7 +179,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     STATEFN(StateCheckConsumerExists) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateCheckConsumerExists"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, CheckConsumerExists);
@@ -271,7 +271,7 @@ public:
 
     STATEFN(StateBase) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
         }

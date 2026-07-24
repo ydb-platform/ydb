@@ -23,7 +23,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     STATEFN(StateAllocateTxId) {
                YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState","StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -63,7 +63,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     STATEFN(StateAlterDst) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateAlterDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -188,7 +188,7 @@ public:
 
     STATEFN(StateBase) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState",""});
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);

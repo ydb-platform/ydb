@@ -59,6 +59,17 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
+    // Dropping a column table is currently incompatible with move-table (KIKIMR-22715).
+    if (dstPath.IsResolved()
+            && !dstPath.IsDeleted()
+            && dstPath.Base()->IsColumnTable()
+            && dstPath.IsUnderDeleting()
+            && !AppData()->FeatureFlags.GetEnableMoveWithColumnTableReplace())
+    {
+        return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off")};
+    }
+
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
 
     for (auto& child: srcPath.Base()->GetChildren()) {

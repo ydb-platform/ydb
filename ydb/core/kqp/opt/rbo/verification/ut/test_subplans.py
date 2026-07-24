@@ -34,6 +34,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
 
 BINDING = "$scalar"
 IN_BINDING = "$in"
+NESTED_IN_BINDING = "$nested_in"
 SOLVER = (
     yatest_common.binary_path("contrib/tools/z3/z3")
     if yatest_common is not None
@@ -530,6 +531,229 @@ def _nested_scalar_in_snapshot():
     return raw
 
 
+def _nested_in_snapshot(
+    *,
+    nested_lookup_nullable=False,
+    nested_output_nullable=False,
+    repeat_nested_binding=False,
+):
+    raw = _in_snapshot()
+    raw["schema"]["tables"][1]["columns"].append(
+        {
+            "name": "group",
+            "type": "Int32",
+            "nullable": nested_lookup_nullable,
+        }
+    )
+    raw["schema"]["tables"].append(
+        {
+            "name": "Nested",
+            "columns": [
+                {
+                    "name": "group",
+                    "type": "Int32",
+                    "nullable": nested_output_nullable,
+                }
+            ],
+            "unique_keys": [],
+        }
+    )
+    raw["plan"]["nodes"][1]["columns"].append(
+        {"source": "group", "output": "inner.group"}
+    )
+    nested_binding = {
+        "kind": "column",
+        "column": NESTED_IN_BINDING,
+    }
+    if repeat_nested_binding:
+        nested_binding = {
+            "kind": "or",
+            "args": [
+                nested_binding,
+                copy.deepcopy(nested_binding),
+            ],
+        }
+    raw["plan"]["nodes"].extend(
+        (
+            {
+                "id": "nested_scan",
+                "op": "scan",
+                "table": "Nested",
+                "columns": [
+                    {"source": "group", "output": "nested.group"}
+                ],
+                "predicate": None,
+                "pushed_limit": None,
+            },
+            {
+                "id": "inner_filter",
+                "op": "filter",
+                "input": "inner_scan",
+                "predicate": nested_binding,
+            },
+        )
+    )
+    raw["plan"]["subplans"][0]["root"] = "inner_filter"
+    raw["plan"]["subplans"].append(
+        {
+            "binding": NESTED_IN_BINDING,
+            "kind": "in",
+            "root": "nested_scan",
+            "lookup": {
+                "column": "inner.group",
+                "type": "Int32",
+                "nullable": nested_lookup_nullable,
+            },
+            "output": {
+                "column": "nested.group",
+                "type": "Int32",
+                "nullable": nested_output_nullable,
+            },
+            "type": "Bool",
+            "nullable": False,
+            "dependencies": [],
+            "consumers": ["inner_filter"],
+        }
+    )
+    return raw
+
+
+def _three_level_in_snapshot():
+    raw = _nested_in_snapshot()
+    raw["schema"]["tables"][2]["columns"].append(
+        {"name": "tag", "type": "Int32", "nullable": False}
+    )
+    raw["schema"]["tables"].append(
+        {
+            "name": "Deep",
+            "columns": [
+                {"name": "tag", "type": "Int32", "nullable": False}
+            ],
+            "unique_keys": [],
+        }
+    )
+    nested_scan = next(
+        node
+        for node in raw["plan"]["nodes"]
+        if node["id"] == "nested_scan"
+    )
+    nested_scan["columns"].append(
+        {"source": "tag", "output": "nested.tag"}
+    )
+    raw["plan"]["nodes"].extend(
+        (
+            {
+                "id": "deep_scan",
+                "op": "scan",
+                "table": "Deep",
+                "columns": [{"source": "tag", "output": "deep.tag"}],
+                "predicate": None,
+                "pushed_limit": None,
+            },
+            {
+                "id": "nested_filter",
+                "op": "filter",
+                "input": "nested_scan",
+                "predicate": {
+                    "kind": "column",
+                    "column": "$deep_in",
+                },
+            },
+        )
+    )
+    raw["plan"]["subplans"][1]["root"] = "nested_filter"
+    raw["plan"]["subplans"].append(
+        {
+            "binding": "$deep_in",
+            "kind": "in",
+            "root": "deep_scan",
+            "lookup": {
+                "column": "nested.tag",
+                "type": "Int32",
+                "nullable": False,
+            },
+            "output": {
+                "column": "deep.tag",
+                "type": "Int32",
+                "nullable": False,
+            },
+            "type": "Bool",
+            "nullable": False,
+            "dependencies": [],
+            "consumers": ["nested_filter"],
+        }
+    )
+    return raw
+
+
+def _ambiguous_nested_in_owner_snapshot():
+    raw = _nested_in_snapshot()
+    raw["plan"]["nodes"].extend(
+        (
+            {
+                "id": "first_in_root",
+                "op": "project",
+                "input": "inner_filter",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "inner.k",
+                        "expression": {
+                            "kind": "column",
+                            "column": "inner.k",
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "second_in_root",
+                "op": "project",
+                "input": "inner_filter",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "second.k",
+                        "expression": {
+                            "kind": "column",
+                            "column": "inner.k",
+                        },
+                    }
+                ],
+            },
+        )
+    )
+    raw["plan"]["subplans"][0]["root"] = "first_in_root"
+    raw["plan"]["subplans"].append(
+        {
+            "binding": "$second_in",
+            "kind": "in",
+            "root": "second_in_root",
+            "lookup": {
+                "column": "outer.k",
+                "type": "Int32",
+                "nullable": False,
+            },
+            "output": {
+                "column": "second.k",
+                "type": "Int32",
+                "nullable": False,
+            },
+            "type": "Bool",
+            "nullable": False,
+            "dependencies": [],
+            "consumers": ["main_filter"],
+        }
+    )
+    raw["plan"]["nodes"][2]["predicate"] = {
+        "kind": "and",
+        "args": [
+            {"kind": "column", "column": IN_BINDING},
+            {"kind": "column", "column": "$second_in"},
+        ],
+    }
+    return raw
+
+
 def _lower_in_snapshot(raw, join_kind):
     result = copy.deepcopy(raw)
     descriptor = result["plan"]["subplans"][0]
@@ -555,6 +779,79 @@ def _lower_in_snapshot(raw, join_kind):
             "predicate": _literal("Bool", True),
         }
     )
+    result["plan"]["subplans"] = []
+    return result
+
+
+def _lower_nested_in_snapshot(raw, *, omit_inner_membership=False):
+    result = copy.deepcopy(raw)
+    outer = next(
+        subplan
+        for subplan in result["plan"]["subplans"]
+        if subplan["binding"] == IN_BINDING
+    )
+    nested = next(
+        subplan
+        for subplan in result["plan"]["subplans"]
+        if subplan["binding"] == NESTED_IN_BINDING
+    )
+    inner_consumer = next(
+        node
+        for node in result["plan"]["nodes"]
+        if node["id"] == "inner_filter"
+    )
+    inner_consumer.clear()
+    inner_consumer.update(
+        {
+            "id": "inner_filter",
+            "op": "filter",
+            "input": "inner_scan",
+            "predicate": _literal("Bool", True),
+        }
+        if omit_inner_membership
+        else {
+            "id": "inner_filter",
+            "op": "join",
+            "left": "inner_scan",
+            "right": nested["root"],
+            "kind": "left_semi",
+            "keys": [
+                {
+                    "left": nested["lookup"]["column"],
+                    "right": nested["output"]["column"],
+                }
+            ],
+            "predicate": _literal("Bool", True),
+        }
+    )
+    main_consumer = next(
+        node
+        for node in result["plan"]["nodes"]
+        if node["id"] == "main_filter"
+    )
+    main_consumer.clear()
+    main_consumer.update(
+        {
+            "id": "main_filter",
+            "op": "join",
+            "left": "outer_scan",
+            "right": "inner_filter",
+            "kind": "left_semi",
+            "keys": [
+                {
+                    "left": outer["lookup"]["column"],
+                    "right": outer["output"]["column"],
+                }
+            ],
+            "predicate": _literal("Bool", True),
+        }
+    )
+    if omit_inner_membership:
+        result["plan"]["nodes"] = [
+            node
+            for node in result["plan"]["nodes"]
+            if node["id"] != nested["root"]
+        ]
     result["plan"]["subplans"] = []
     return result
 
@@ -1055,6 +1352,57 @@ def _nested_scalar_in_constants(
     ):
         constants[row.present.atom] = present
         constants[row.cells["value"].value.atom] = value
+    return constants
+
+
+def _nested_in_constants(
+    database,
+    outer,
+    inner_keys,
+    inner_groups,
+    nested_groups,
+    *,
+    outer_present=None,
+    inner_present=None,
+    nested_present=None,
+):
+    if outer_present is None:
+        outer_present = (True,) * len(outer)
+    if inner_present is None:
+        inner_present = (True,) * len(inner_keys)
+    if nested_present is None:
+        nested_present = (True,) * len(nested_groups)
+    constants = {}
+
+    def bind(cell, value):
+        if cell.is_null.operation == "symbol":
+            constants[cell.is_null.atom] = value is None
+        if cell.value.operation == "symbol":
+            constants[cell.value.atom] = 0 if value is None else value
+
+    for row, value, present in zip(
+        database.witness["Outer"],
+        outer,
+        outer_present,
+    ):
+        constants[row.present.atom] = present
+        bind(row.cells["k"], value)
+    for row, key, group, present in zip(
+        database.witness["Inner"],
+        inner_keys,
+        inner_groups,
+        inner_present,
+    ):
+        constants[row.present.atom] = present
+        bind(row.cells["k"], key)
+        bind(row.cells["group"], group)
+    for row, group, present in zip(
+        database.witness["Nested"],
+        nested_groups,
+        nested_present,
+    ):
+        constants[row.present.atom] = present
+        bind(row.cells["group"], group)
     return constants
 
 
@@ -2815,6 +3163,111 @@ class InSubplanEvaluationTest(unittest.TestCase):
         self.assertFalse(_ground(outcome.error, not_demanded))
         self.assertTrue(_ground(outcome.error, empty_main))
 
+    def test_nested_in_matches_the_finite_reference_and_is_cached(self):
+        observed = []
+        evaluator, database, family = self._evaluate(
+            _nested_in_snapshot(repeat_nested_binding=True),
+            row_bound=2,
+            observer=lambda scope, node, value: observed.append(node),
+        )
+        outcome = family.certain()
+        values = (0, 1)
+        inner_value_pairs = tuple(product(values, repeat=2))
+        presence_vectors = tuple(product((False, True), repeat=2))
+
+        for inner_rows in product(inner_value_pairs, repeat=2):
+            inner_keys = tuple(row[0] for row in inner_rows)
+            inner_groups = tuple(row[1] for row in inner_rows)
+            for nested_groups in product(values, repeat=2):
+                for outer_present in presence_vectors:
+                    for inner_present in presence_vectors:
+                        for nested_present in presence_vectors:
+                            constants = _nested_in_constants(
+                                database,
+                                values,
+                                inner_keys,
+                                inner_groups,
+                                nested_groups,
+                                outer_present=outer_present,
+                                inner_present=inner_present,
+                                nested_present=nested_present,
+                            )
+                            expected = [
+                                outer_key
+                                for outer_key, is_outer_present in zip(
+                                    values,
+                                    outer_present,
+                                )
+                                if is_outer_present
+                                and any(
+                                    is_inner_present
+                                    and inner_key == outer_key
+                                    and any(
+                                        is_nested_present
+                                        and nested_group == inner_group
+                                        for nested_group, is_nested_present in zip(
+                                            nested_groups,
+                                            nested_present,
+                                        )
+                                    )
+                                    for (
+                                        inner_key,
+                                        inner_group,
+                                        is_inner_present,
+                                    ) in zip(
+                                        inner_keys,
+                                        inner_groups,
+                                        inner_present,
+                                    )
+                                )
+                            ]
+                            self.assertEqual(
+                                self._present_values(outcome, constants),
+                                expected,
+                            )
+
+        evaluator.root()
+        self.assertEqual(
+            set(evaluator.subplan_families),
+            {IN_BINDING, NESTED_IN_BINDING},
+        )
+        self.assertEqual(observed.count("nested_scan"), 1)
+        self.assertEqual(observed.count("inner_filter"), 1)
+
+    def test_nested_nullable_in_keeps_positive_filter_truth(self):
+        _evaluator, database, family = self._evaluate(
+            _nested_in_snapshot(
+                nested_lookup_nullable=True,
+                nested_output_nullable=True,
+            )
+        )
+        constants = _nested_in_constants(
+            database,
+            outer=(1, 2, 3),
+            inner_keys=(1, 2, 3),
+            inner_groups=(None, 7, 8),
+            nested_groups=(None, 8, 8),
+        )
+
+        self.assertEqual(
+            self._present_values(family.certain(), constants),
+            [3],
+        )
+
+    def test_nested_in_errors_remain_eager_with_empty_outer_inputs(self):
+        snapshot = parse_snapshot(_nested_in_snapshot())
+        script = smt.Script()
+        database = Database(snapshot, 0, script)
+        evaluator = Evaluator(snapshot, database, ScalarEncoder(script))
+        nested = evaluator.node("nested_scan")
+        evaluator.cache["nested_scan"] = RelationFamily(
+            (replace(nested.outcomes[0], error=smt.TRUE),)
+        )
+
+        outcome = evaluator.root().outcomes[0]
+
+        self.assertEqual(outcome.error, smt.TRUE)
+
     def test_nullable_fixed_width_membership_is_positive_filter_truth(self):
         cases = (
             (
@@ -3083,6 +3536,13 @@ class InSubplanEvaluationTest(unittest.TestCase):
         ):
             evaluator.root()
 
+    def test_nested_in_row_pair_construction_is_cumulative_across_levels(self):
+        with self.assertRaisesRegex(
+            RelationError,
+            "Boolean subplan evaluation requires 16562 candidate-row pairs",
+        ):
+            self._evaluate(_nested_in_snapshot(), row_bound=91)
+
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class InSubplanSolverTest(unittest.TestCase):
@@ -3107,6 +3567,28 @@ class InSubplanSolverTest(unittest.TestCase):
                 )
 
                 self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_nested_in_matches_two_sequential_left_semi_joins(self):
+        raw = _nested_in_snapshot()
+
+        result = self._solve(raw, _lower_nested_in_snapshot(raw))
+
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_omitting_nested_membership_has_a_solver_counterexample(self):
+        raw = _nested_in_snapshot()
+
+        result = self._solve(
+            raw,
+            _lower_nested_in_snapshot(
+                raw,
+                omit_inner_membership=True,
+            ),
+            row_bound=1,
+        )
+
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertIsNotNone(result.witness)
 
     def test_nullable_fixed_width_in_is_bounded_equivalent_to_left_semi(self):
         for scalar_type in ("Int32", "Date"):
@@ -3416,48 +3898,17 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         raw["plan"]["subplans"][0]["consumers"].append("sub_value")
         with self.assertRaisesRegex(
             SnapshotError,
-            "only an uncorrelated scalar binding",
+            "only an uncorrelated scalar or a one-level closed IN binding",
         ):
             parse_snapshot(raw)
 
-    def test_only_uncorrelated_scalar_may_be_nested_inside_in(self):
-        parse_snapshot(_nested_scalar_in_snapshot())
-        reordered = _nested_scalar_in_snapshot()
-        reordered["plan"]["subplans"].reverse()
-        parse_snapshot(reordered)
-
-        raw = _nested_scalar_in_snapshot()
-        nested = raw["plan"]["subplans"][1]
-        nested.clear()
-        nested.update(
-            {
-                "binding": BINDING,
-                "kind": "in",
-                "root": "scalar_scan",
-                "lookup": {
-                    "column": "inner.group",
-                    "type": "Int32",
-                    "nullable": False,
-                },
-                "output": {
-                    "column": "scalar.value",
-                    "type": "Int32",
-                    "nullable": False,
-                },
-                "type": "Bool",
-                "nullable": False,
-                "dependencies": [],
-                "consumers": ["inner_filter"],
-            }
-        )
-        raw["plan"]["nodes"][-1]["predicate"] = {
-            "kind": "column",
-            "column": BINDING,
-        }
-        with self.assertRaisesRegex(
-            SnapshotError,
-            "only an uncorrelated scalar binding",
+    def test_exact_closed_bindings_may_be_nested_inside_in(self):
+        for raw in (
+            _nested_scalar_in_snapshot(),
+            _nested_in_snapshot(),
         ):
+            parse_snapshot(raw)
+            raw["plan"]["subplans"].reverse()
             parse_snapshot(raw)
 
     def test_general_scalar_shapes_pass_schema_validation(self):
@@ -3983,6 +4434,106 @@ class InSubplanValidationTest(unittest.TestCase):
         ]
         with self.assertRaisesRegex(SnapshotError, "expected an object"):
             parse_snapshot(raw)
+
+    def test_nested_in_is_uncorrelated_and_keeps_nullable_gates(self):
+        parse_snapshot(
+            _nested_in_snapshot(
+                nested_lookup_nullable=True,
+                nested_output_nullable=True,
+            )
+        )
+
+        raw = _nested_in_snapshot()
+        raw["plan"]["subplans"][1]["dependencies"] = ["inner.group"]
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "IN binding must be uncorrelated",
+        ):
+            parse_snapshot(raw)
+
+        raw = _nested_in_snapshot(
+            nested_lookup_nullable=True,
+            nested_output_nullable=True,
+        )
+        inner_filter = next(
+            node
+            for node in raw["plan"]["nodes"]
+            if node["id"] == "inner_filter"
+        )
+        inner_filter["predicate"] = {
+            "kind": "not",
+            "arg": {
+                "kind": "column",
+                "column": NESTED_IN_BINDING,
+            },
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "direct positive Filter conjunct",
+        ):
+            parse_snapshot(raw)
+
+        raw = _nested_in_snapshot()
+        raw["plan"]["subplans"][1]["output"]["type"] = "Int64"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "types must match exactly",
+        ):
+            parse_snapshot(raw)
+
+    def test_nested_in_must_be_a_leaf_and_acyclic(self):
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "nested IN binding must be closed",
+        ):
+            parse_snapshot(_three_level_in_snapshot())
+
+        raw = _nested_in_snapshot()
+        inner_filter = next(
+            node
+            for node in raw["plan"]["nodes"]
+            if node["id"] == "inner_filter"
+        )
+        inner_filter["predicate"] = _literal("Bool", True)
+        raw["plan"]["nodes"].append(
+            {
+                "id": "self_filter",
+                "op": "filter",
+                "input": "nested_scan",
+                "predicate": {
+                    "kind": "column",
+                    "column": NESTED_IN_BINDING,
+                },
+            }
+        )
+        nested = raw["plan"]["subplans"][1]
+        nested["root"] = "self_filter"
+        nested["lookup"]["column"] = "nested.group"
+        nested["consumers"] = ["self_filter"]
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "nested IN binding must be closed",
+        ):
+            parse_snapshot(raw)
+
+    def test_nested_in_requires_one_in_owner(self):
+        raw = _nested_in_snapshot()
+        owner = raw["plan"]["subplans"][0]
+        del owner["lookup"]
+        del owner["output"]
+        owner["kind"] = "exists"
+        owner["predicate"] = None
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "only an uncorrelated scalar or a one-level closed IN binding",
+        ):
+            parse_snapshot(raw)
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "consumer must belong to exactly one plan root",
+        ):
+            parse_snapshot(_ambiguous_nested_in_owner_snapshot())
 
     def test_descriptor_is_bool_nonnullable_and_uncorrelated(self):
         for field, value, message in (

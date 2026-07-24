@@ -17,8 +17,8 @@ namespace NActors {
         public:
             TActorLivenessChecker(
                     TVector<TActorLivenessCheckTarget> targets,
-                    TActorLivenessCheckerCallbacks callbacks)
-                : Callbacks(std::move(callbacks))
+                    const TActorId& notify)
+                : Notify(notify)
             {
                 for (const auto& target : targets) {
                     PendingTargets.emplace(target.ActorId, target.Cookie);
@@ -41,7 +41,7 @@ namespace NActors {
                         actorId,
                         SelfId(),
                         nullptr,
-                        0));
+                        cookie));
                 }
             }
 
@@ -57,15 +57,8 @@ namespace NActors {
             }
 
             void Handle(TEvents::TEvActorDead::TPtr& ev) {
-                if (const auto it = PendingTargets.find(ev->Sender); it != PendingTargets.end()) {
-                    DeadTargets.push_back({
-                        .ActorId = it->first,
-                        .Cookie = it->second,
-                    });
-                    PendingTargets.erase(it);
-                    if (Callbacks.OnActorDead) {
-                        Callbacks.OnActorDead(DeadTargets.back());
-                    }
+                if (PendingTargets.erase(ev->Sender)) {
+                    TActivationContext::Send(ev->Forward(Notify));
                     CompleteIfDone();
                 }
             }
@@ -87,24 +80,21 @@ namespace NActors {
             }
 
             void Complete() {
-                if (Callbacks.OnComplete) {
-                    Callbacks.OnComplete(DeadTargets);
-                }
+                Send(Notify, new TEvents::TEvGone);
                 PassAway();
             }
 
         private:
-            const TActorLivenessCheckerCallbacks Callbacks;
+            const TActorId Notify;
             THashMap<TActorId, ui64> PendingTargets;
-            TVector<TActorLivenessCheckTarget> DeadTargets;
         };
 
     }
 
     IActor* CreateActorLivenessChecker(
             TVector<TActorLivenessCheckTarget> targets,
-            TActorLivenessCheckerCallbacks callbacks) {
-        return new TActorLivenessChecker(std::move(targets), std::move(callbacks));
+            const TActorId& notify) {
+        return new TActorLivenessChecker(std::move(targets), notify);
     }
 
 }

@@ -8,7 +8,7 @@
 
 namespace NActors {
 
-    void RegisterSubscriberLivenessChecker(
+    IActor* CreateSubscriberLivenessChecker(
         const TActorId& subscriptionOwner,
         TVector<TActorLivenessCheckTarget> subscribers);
 
@@ -28,7 +28,9 @@ namespace NActors {
                 .Cookie = item.second.ActivityIndex,
             });
         }
-        RegisterSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberInfos));
+        TActivationContext::Register(
+            CreateSubscriberLivenessChecker(subscriptionOwner, std::move(subscriberInfos)),
+            subscriptionOwner);
     }
 
 }

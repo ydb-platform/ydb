@@ -4,8 +4,6 @@
 
 #include <util/generic/vector.h>
 
-#include <functional>
-
 namespace NActors {
 
     struct TActorLivenessCheckTarget {
@@ -13,15 +11,11 @@ namespace NActors {
         ui64 Cookie = 0;
     };
 
-    struct TActorLivenessCheckerCallbacks {
-        // Callbacks run synchronously in the checker actor context.
-        std::function<void(const TActorLivenessCheckTarget&)> OnActorDead;
-        // Called exactly once after every target has produced a liveness response.
-        std::function<void(const TVector<TActorLivenessCheckTarget>&)> OnComplete;
-    };
-
+    // Forwards TEvActorDead to notify for each target confirmed dead, preserving
+    // the target as event sender and Cookie as event cookie. Sends TEvGone after
+    // every target has produced a liveness response.
     IActor* CreateActorLivenessChecker(
         TVector<TActorLivenessCheckTarget> targets,
-        TActorLivenessCheckerCallbacks callbacks = {});
+        const TActorId& notify);
 
 }

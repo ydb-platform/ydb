@@ -79,12 +79,12 @@ A defect in these files can turn inequivalent supported plans into
 | `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
-| `rbo_verifier/smt.py` | Typed immutable SMT terms, declarations, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
+| `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, exact Sort/Merge representations, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
@@ -99,6 +99,18 @@ a verifier limit. The cache changes the cost of repeated routing-fact and set
 lookups, not the formula or proof obligation. Deep independently constructed
 shared-DAG regressions check both equal-key coalescing and separation of unequal
 terms with deliberately colliding hashes.
+
+The packed-row declaration substrate remains deliberately narrower than a
+general SMT datatype or macro facility. A product has exactly one constructor,
+contains only the verifier's existing `Bool` and `Int` lane sorts, and can be
+packed or selected only through its script-owned handles. An exact defined
+function may use those owned products and built-in sorts, but its body must be
+quantifier-free and may contain no free constant, nullary declaration capture,
+or declaration from another script. Deterministic rendering emits the
+constructor/selectors and definition directly as SMT-LIB; there is no
+production-side beta reducer whose behavior must be trusted. Solver-backed
+constructor/selector and comparator tests plus malformed ownership/capture
+tests independently exercise this boundary.
 
 The equality-correlated scalar slice adds one explicit typed `outer_bind`
 relational node. Its independently checked accepted path is
@@ -142,7 +154,7 @@ order-sensitive inspector digests, an omitted-second-correlation
 `COUNTEREXAMPLE`, and a real-host two-dependency capture. Focused TPCH q21 and
 TPC-DS q16/q94 all return `VERIFIED_BOUNDED` at two rows per table and two
 tasks. The current complete policy gate independently returns 11/11 TPCH and
-14/14 TPC-DS `VERIFIED_BOUNDED`, confirming all 25/25 curated obligations.
+15/15 TPC-DS `VERIFIED_BOUNDED`, confirming all 26/26 curated obligations.
 These results extend the bounded proof floor; they do not establish unbounded
 SQL equivalence.
 
@@ -286,7 +298,9 @@ never referenced is accepted because it cannot change the decoded predicate.
 Focused exporter tests cover all three spellings, same-output aliases,
 referenced collisions, and unused collisions. The complete benchmark
 dashboards independently move TPC-DS q2/q97 to formulas and q59 to the
-verifier's exact construction cap; none of these results is a bounded proof.
+verifier's exact construction cap at that checkpoint. The later packed
+sorting-network carrier moves q59 through formula construction. None of q2,
+q97, or q59 is a bounded proof.
 
 The exact sorting-network slice crosses `sort_network.py`, `smt.py`,
 `relation.py`, and the row-preserving paths in `stages.py`. The topology module
@@ -295,10 +309,19 @@ schedule. For each syntactically live candidate, `relation.py` allocates one
 bounded finite rank; global distinctness makes the ranks a permutation. SQL
 key comparison dominates rank comparison, so ranks choose exactly the
 otherwise-unobservable order of equal keys. Present rows compare before absent
-rows, power-of-two padding is always absent, and every comparator moves the
-complete `Row` plus its rank under one shared condition. Nullable values,
-Decimal finite bounds, and hidden AVG sum/count state therefore cannot split
-across candidate identities.
+rows and power-of-two padding is always absent.
+
+For each nontrivial network outcome, `relation.py` validates one common row
+layout and uses `smt.py` to declare one one-constructor product datatype. The
+payload contains presence, every NULL/value lane, and every hidden Decimal AVG
+sum/count lane. One closed quantifier-free `define-fun` contains the exact SQL
+key comparison over two payloads and their tie ranks. Every comparator then
+selects each of its two output payloads under one `ite` and each output rank
+under one `ite`; selectors recover the row only after the network. Nullable
+values, Decimal finite bounds, and AVG state therefore cannot split across
+candidate identities. Malformed lane sorts, mixed AVG layouts, invalid state
+bounds, or foreign declarations fail closed. Zero- and one-live-row outcomes
+require no datatype or definition.
 
 The fixed output slots have a present-prefix invariant. Only root wrapping,
 OuterBind, Project, and one-input Stage gather preserve it; Filter, source
@@ -307,18 +330,37 @@ statically slices slots only while the invariant is present. Merge additionally
 requires concrete semantic input ordinals and adds unconditional adjacent rank
 edges in each producer's ordinal order. Every legal order of present rows
 extends to a full rank permutation including absent holes, so those chains
-denote precisely the sorted producer-order-preserving interleavings.
+denote precisely the sorted producer-order-preserving interleavings. When both
+compared sequences have the fixed present-prefix invariant, equality checks
+aligned presence/value slots and requires every unmatched suffix slot to be
+absent. That is exactly compressed-sequence equality and avoids the ordinary
+quadratic compressed-rank matrix.
 
 Selection is fail-closed: ordinary pair construction remains capped at 16,384;
-the network is separately capped at 32,768 comparators and 131,072
-comparator/column row transports. Intermediate TopSort compacts only when the
-uncompacted shaped slots from both fixed verifier tasks would make the
-downstream Merge exceed the pair cap. Exhaustive topology, NULL/direction,
-tie/duplicate, presence-prefix, offset, producer-hole/reversed-ordinal,
-mixed-key Merge, Decimal-AVG-state, and cap-fallback tests are the independent
-evidence. The complete TPCH dashboard moves q2 to a formula; q59/q78 remain
-outside the network budget. This slice adds no equivalence axiom and no bounded
-proof.
+the network is separately capped at 32,768 comparators, 131,072 logical packed
+payload cells, and 64 ordering columns. The payload charge is live input rows
+times scalar lanes. It is an auditable logical-width gate, not an estimate of
+Python memory, rendered formula bytes, constructors, selectors, or downstream
+equality terms. Intermediate TopSort compacts only when the uncompacted shaped
+slots from both fixed verifier tasks would make the downstream Merge exceed the
+pair cap. Exhaustive topology, NULL/direction, tie/duplicate, present-prefix,
+offset, producer-hole/reversed-ordinal, mixed-key Merge, Decimal-AVG-state,
+layout, declaration-ownership, formula-structure, and cap-fallback tests are
+the independent evidence.
+
+The complete policy dashboards move TPCH q2 and TPC-DS q59/q78 to formulas.
+Focused production-host obligations for q59 and q78 contain four and three
+product/comparator definition pairs respectively. Those focused formulas are
+116,879,360 and 202,469,546 bytes and have SHA-256
+`3a140fcb1b5d6a5145c4aa30cbcd817167a27f21bed94d85ef969223dce73c8e`
+and
+`fb0eaebb95ea9bdfb3b0f815f5078a70d1c2e3765ed5d6675be1c4f06b8249c4`.
+The policy-valid complete TPC-DS report independently confirms both formula
+rows and has SHA-256
+`44254733785284105840e269653f3cae79384db985cf13260906df57cf1deaa6`.
+Neither obligation was solved, so this slice adds no bounded proof and reveals
+no optimizer correctness bug. The complete hermetic verifier target passes
+564/564 tests, and the updated coverage-policy target passes 14/14.
 
 The nullable Date-year bridge likewise changes only `semantic_snapshot.cpp`.
 It admits one direct visible `Optional<Date>` member, a complete cast to
@@ -387,18 +429,18 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-sorting-network 2026-07-24 physical-line audit records
-implementation, test, and diagnostic rows at source `d84b3ee7a0a`;
-documentation includes this evidence update:
+The post-packed-carrier 2026-07-24 physical-line audit records implementation,
+test, and diagnostic rows at source `4fc711fd585`; documentation includes this
+evidence update:
 
 | Area | Physical lines |
 |---|---:|
-| Ten trusted Python semantic modules | 11,623 |
+| Ten trusted Python semantic modules | 12,150 |
 | C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,354 |
-| **Proof-producing code total** | **20,977** |
-| Tests, outside the TCB | 52,016 |
+| **Proof-producing code total** | **21,504** |
+| Tests, outside the TCB | 52,686 |
 | Diagnostic/orchestration tools, outside the TCB | 5,230 |
-| Documentation, outside the TCB | 7,285 |
+| Documentation, outside the TCB | 7,396 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
@@ -410,6 +452,15 @@ coverage policy) is excluded. These figures are a review baseline, not a
 generated invariant. The trusted core is a medium-sized verification
 subsystem, so it should be audited by vertical semantic slice rather than
 treated as one small script.
+
+Relative to the preceding `d84b3ee7a0a` baseline, this milestone adds 527
+physical trusted Python lines and 670 test lines; it changes neither the C++
+exporter nor diagnostic tooling. The trusted addition is material, but its
+review surface is split into three explicit seams: the restricted product and
+definition API in `smt.py`, the row layout/codec plus comparator transport in
+`relation.py`, and the present-prefix equality fast path in `relation.py`.
+There is no new query-specific equivalence axiom or production-side declaration
+interpreter.
 
 ## External assumptions
 
@@ -530,8 +581,8 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, and exact Decimal weak-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
-| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; focused concrete differential tests |
+| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
-| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
+| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

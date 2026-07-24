@@ -3173,8 +3173,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             if constexpr (std::is_same_v<std::monostate, T>) {
                 return TString{};
             } else {
-                TString str{v.SerializeAsString()};
-                Y_ENSURE(!str.empty());
+                TString str;
+                Y_ENSURE(v.SerializeToString(&str));
                 return str;
             }
         }, SpecializedIndexDescription);

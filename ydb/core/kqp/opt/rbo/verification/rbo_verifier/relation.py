@@ -285,9 +285,15 @@ MAX_ENUMERATED_SEQUENCE_ROWS = 3
 MAX_RELATION_ROWS = 4096
 MAX_RELATION_ROW_PAIRS = 16384
 MAX_SORT_NETWORK_COMPARATORS = 32768
-# Comparator/column pairs are a stable, representation-level construction
-# budget; each pair expands into the coherent value/null/state row swap below.
-MAX_SORT_NETWORK_COMPARATOR_CELLS = 131072
+# Stable logical-width budget for the packed representation: live input rows
+# times scalar payload lanes. It is not a Python-memory or final-formula byte
+# estimate; constructors, output selectors, and later relational comparison
+# still materialize terms. Compare-exchange cells themselves move one whole
+# row term independently of its width.
+MAX_SORT_NETWORK_PAYLOAD_CELLS = 131072
+# The exact lexicographic comparator is emitted once as a define-fun. Keeping
+# its key width bounded makes that shared definition easy to audit.
+MAX_SORT_NETWORK_KEY_COLUMNS = 64
 
 
 def _require_relation_rows(count: int, operation: str) -> None:
@@ -309,16 +315,19 @@ def _require_relation_row_pairs(count: int, operation: str) -> None:
 def _require_sort_construction_capacity(
     pair_count: int,
     network_count: int,
-    network_cells: int,
+    payload_cells: int,
+    key_columns: int,
 ) -> None:
     if pair_count > MAX_RELATION_ROW_PAIRS:
         raise RelationError(
             f"sort construction requires {pair_count} candidate-row pairs, "
             f"exceeding the {MAX_RELATION_ROW_PAIRS} pair construction audit "
             f"bound; its exact sorting network requires {network_count} "
-            f"comparators and {network_cells} comparator-column pairs, with "
-            f"limits {MAX_SORT_NETWORK_COMPARATORS} and "
-            f"{MAX_SORT_NETWORK_COMPARATOR_CELLS}"
+            f"comparators, {payload_cells} packed payload cells, and "
+            f"{key_columns} order columns, with limits "
+            f"{MAX_SORT_NETWORK_COMPARATORS}, "
+            f"{MAX_SORT_NETWORK_PAYLOAD_CELLS}, and "
+            f"{MAX_SORT_NETWORK_KEY_COLUMNS}"
         )
 
 
@@ -2172,10 +2181,14 @@ def sort_family(
         _sorting_network_cost(_live_row_count(outcome.relation))
         for outcome in source.outcomes
     )
-    network_cells = network_count * len(source.columns)
+    payload_cells = sum(
+        _sorting_network_payload_cells(outcome.relation)
+        for outcome in source.outcomes
+    )
     network_fits = (
         network_count <= MAX_SORT_NETWORK_COMPARATORS
-        and network_cells <= MAX_SORT_NETWORK_COMPARATOR_CELLS
+        and payload_cells <= MAX_SORT_NETWORK_PAYLOAD_CELLS
+        and len(order) <= MAX_SORT_NETWORK_KEY_COLUMNS
     )
     if (
         network_fits
@@ -2205,7 +2218,8 @@ def sort_family(
     _require_sort_construction_capacity(
         pair_count,
         network_count,
-        network_cells,
+        payload_cells,
+        len(order),
     )
     if len(source.outcomes) == 1 and _use_enumerated_sequences(source):
         return _enumerated_sort_family(source, order, decision)
@@ -2296,8 +2310,121 @@ def _enumerated_sort_family(
 
 
 @dataclass(frozen=True, slots=True)
+class _SortingNetworkColumnLayout:
+    column: Column
+    null_lane: int
+    value_lane: int
+    decimal_finite_abs_bound: int | None
+    average_sum_type: str | None = None
+    average_sum_lane: int | None = None
+    average_count_lane: int | None = None
+    average_finite_abs_bound: int | None = None
+    average_count_bound: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _SortingNetworkLayout:
+    lane_sorts: tuple[str, ...]
+    columns: tuple[_SortingNetworkColumnLayout, ...]
+    occurrence: Occurrence | None
+    partition_facts: frozenset[PartitionFact]
+
+
+@dataclass(frozen=True, slots=True)
+class _SortingNetworkRowCodec:
+    """Pack one complete semantic row into one exact SMT datatype value."""
+
+    layout: _SortingNetworkLayout
+    product: smt.ProductSort
+
+    @classmethod
+    def create(
+        cls,
+        relation: Relation,
+        script: smt.Script,
+        hint: str,
+    ) -> "_SortingNetworkRowCodec":
+        layout = _sorting_network_layout(relation)
+        return cls(
+            layout,
+            script.fresh_product_sort(hint, layout.lane_sorts),
+        )
+
+    def pack(self, row: Row) -> smt.Term:
+        lanes: list[smt.Term] = [row.present]
+        for column in self.layout.columns:
+            value = row.values[column.column.name]
+            lanes.extend((value.is_null, value.value))
+            if column.average_sum_lane is not None:
+                state = value.decimal_average_state
+                if state is None:
+                    raise RelationError(
+                        "sorting network row lost its Decimal avg state"
+                    )
+                lanes.extend((state.sum, state.count))
+        return self.product.pack(*lanes)
+
+    def present(self, payload: smt.Term) -> smt.Term:
+        return self.product.select(payload, 0)
+
+    def value(
+        self,
+        payload: smt.Term,
+        column: _SortingNetworkColumnLayout,
+    ) -> Value:
+        average_state = None
+        if column.average_sum_lane is not None:
+            assert column.average_sum_type is not None
+            assert column.average_count_lane is not None
+            assert column.average_finite_abs_bound is not None
+            assert column.average_count_bound is not None
+            average_state = DecimalAverageState(
+                sum_type=column.average_sum_type,
+                sum=self.product.select(payload, column.average_sum_lane),
+                count=self.product.select(payload, column.average_count_lane),
+                finite_abs_bound=column.average_finite_abs_bound,
+                count_bound=column.average_count_bound,
+            )
+        return Value(
+            column.column.type,
+            self.product.select(payload, column.null_lane),
+            self.product.select(payload, column.value_lane),
+            column.decimal_finite_abs_bound,
+            average_state,
+        )
+
+    def key_row(
+        self,
+        payload: smt.Term,
+        order: tuple[SortOrder, ...],
+    ) -> Row:
+        by_name = {
+            column.column.name: column
+            for column in self.layout.columns
+        }
+        return Row(
+            self.present(payload),
+            {
+                item.column: self.value(payload, by_name[item.column])
+                for item in order
+            },
+        )
+
+    def unpack(self, payload: smt.Term) -> Row:
+        return Row(
+            self.present(payload),
+            {
+                column.column.name: self.value(payload, column)
+                for column in self.layout.columns
+            },
+            self.layout.occurrence,
+            self.layout.partition_facts,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class _SortingNetworkItem:
-    row: Row
+    payload: smt.Term
     tie_rank: smt.Term
 
 
@@ -2306,6 +2433,138 @@ def _sorting_network_cost(row_count: int) -> int:
         0
         if row_count <= 1
         else sort_network.comparator_count(row_count)
+    )
+
+
+def _sorting_network_payload_cells(relation: Relation) -> int:
+    row_count = _live_row_count(relation)
+    if row_count <= 1:
+        return 0
+    try:
+        lane_count = len(_sorting_network_layout(relation).lane_sorts)
+    except RelationError:
+        # The ordinal encoding may still represent this relation exactly.
+        return MAX_SORT_NETWORK_PAYLOAD_CELLS + 1
+    return row_count * lane_count
+
+
+def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
+    rows = tuple(
+        relation.rows[index]
+        for index in _live_row_indices(relation.rows)
+    )
+    if not rows:
+        raise RelationError("sorting network row layout requires a live row")
+
+    lane_sorts: list[str] = [smt.BOOL]
+    columns: list[_SortingNetworkColumnLayout] = []
+    for column in relation.columns:
+        try:
+            values = tuple(row.values[column.name] for row in rows)
+        except KeyError as error:
+            raise RelationError(
+                f"sorting network row is missing column {column.name!r}"
+            ) from error
+        if any(value.type != column.type for value in values):
+            raise RelationError(
+                f"sorting network mixed scalar types for column {column.name!r}"
+            )
+        value_sort = smt_sort(column.type)
+        if any(
+            value.is_null.sort != smt.BOOL
+            or value.value.sort != value_sort
+            for value in values
+        ):
+            raise RelationError(
+                f"sorting network mixed SMT lane sorts for column {column.name!r}"
+            )
+
+        null_lane = len(lane_sorts)
+        value_lane = null_lane + 1
+        lane_sorts.extend((smt.BOOL, value_sort))
+        finite_bounds = tuple(
+            value.decimal_finite_abs_bound
+            for value in values
+        )
+        finite_abs_bound = (
+            None
+            if any(bound is None for bound in finite_bounds)
+            else max(
+                bound
+                for bound in finite_bounds
+                if bound is not None
+            )
+        )
+
+        states = tuple(value.decimal_average_state for value in values)
+        present_states = tuple(state for state in states if state is not None)
+        if present_states and len(present_states) != len(states):
+            raise RelationError(
+                "sorting network mixed Decimal avg state and scalar values"
+            )
+        if not present_states:
+            columns.append(
+                _SortingNetworkColumnLayout(
+                    column,
+                    null_lane,
+                    value_lane,
+                    finite_abs_bound,
+                )
+            )
+            continue
+
+        first_state = present_states[0]
+        if any(
+            state.sum_type != first_state.sum_type
+            or state.sum.sort != first_state.sum.sort
+            or state.count.sort != first_state.count.sort
+            for state in present_states[1:]
+        ):
+            raise RelationError(
+                "sorting network mixed Decimal avg state layouts"
+            )
+        if (
+            not is_decimal_type(first_state.sum_type)
+            or first_state.sum.sort != smt_sort(first_state.sum_type)
+            or first_state.count.sort != smt.INT
+            or any(
+                type(state.finite_abs_bound) is not int
+                or state.finite_abs_bound < 0
+                or type(state.count_bound) is not int
+                or state.count_bound < 0
+                for state in present_states
+            )
+        ):
+            raise RelationError(
+                "sorting network Decimal avg state has an invalid layout"
+            )
+        average_sum_lane = len(lane_sorts)
+        average_count_lane = average_sum_lane + 1
+        lane_sorts.extend((first_state.sum.sort, first_state.count.sort))
+        columns.append(
+            _SortingNetworkColumnLayout(
+                column,
+                null_lane,
+                value_lane,
+                finite_abs_bound,
+                first_state.sum_type,
+                average_sum_lane,
+                average_count_lane,
+                max(state.finite_abs_bound for state in present_states),
+                max(state.count_bound for state in present_states),
+            )
+        )
+
+    occurrence = (
+        rows[0].occurrence
+        if all(row.occurrence == rows[0].occurrence for row in rows[1:])
+        else None
+    )
+    return _SortingNetworkLayout(
+        tuple(lane_sorts),
+        tuple(columns),
+        occurrence,
+        _common_partition_facts(rows),
     )
 
 
@@ -2346,6 +2605,23 @@ def _sorting_network_family(
                     Relation(
                         relation.columns,
                         (),
+                        sequence=True,
+                        order=order,
+                        present_prefix=True,
+                    ),
+                    source_outcome.error,
+                    source_outcome.decisions,
+                    source_outcome.choices,
+                )
+            )
+            continue
+        if len(rows) == 1:
+            outcomes.append(
+                Outcome(
+                    source_outcome.enabled,
+                    Relation(
+                        relation.columns,
+                        rows,
                         sequence=True,
                         order=order,
                         present_prefix=True,
@@ -2415,13 +2691,35 @@ def _sorting_network_family(
                     for left, right in zip(ordered, ordered[1:])
                 )
 
+        codec = _SortingNetworkRowCodec.create(
+            relation,
+            script,
+            f"{decision}:network:{outcome_index}:row",
+        )
+        before = script.fresh_defined_function(
+            f"{decision}:network:{outcome_index}:before",
+            (
+                codec.product,
+                smt.INT,
+                codec.product,
+                smt.INT,
+            ),
+            smt.BOOL,
+            lambda parameters: _sorting_network_before(
+                codec.key_row(parameters[0], order),
+                parameters[1],
+                codec.key_row(parameters[2], order),
+                parameters[3],
+                order,
+            ),
+        )
         items = [
-            _SortingNetworkItem(row, rank)
+            _SortingNetworkItem(codec.pack(row), rank)
             for row, rank in zip(rows, tie_ranks)
         ]
         padded_size = sort_network.padded_size(len(items))
         padding = _SortingNetworkItem(
-            Row(smt.FALSE, rows[0].values),
+            codec.pack(Row(smt.FALSE, rows[0].values)),
             smt.ZERO,
         )
         items.extend(padding for _ in range(padded_size - len(items)))
@@ -2431,21 +2729,29 @@ def _sorting_network_family(
             left = items[left_index]
             right = items[right_index]
             swap = (
-                _sorting_network_before(right, left, order)
+                before(
+                    right.payload,
+                    right.tie_rank,
+                    left.payload,
+                    left.tie_rank,
+                )
                 if ascending
-                else _sorting_network_before(left, right, order)
+                else before(
+                    left.payload,
+                    left.tie_rank,
+                    right.payload,
+                    right.tie_rank,
+                )
             )
             items[left_index] = _select_sorting_network_item(
                 swap,
                 right,
                 left,
-                relation.columns,
             )
             items[right_index] = _select_sorting_network_item(
                 swap,
                 left,
                 right,
-                relation.columns,
             )
 
         outcomes.append(
@@ -2453,7 +2759,10 @@ def _sorting_network_family(
                 smt.and_(source_outcome.enabled, *constraints),
                 Relation(
                     relation.columns,
-                    tuple(item.row for item in items[: len(rows)]),
+                    tuple(
+                        codec.unpack(item.payload)
+                        for item in items[: len(rows)]
+                    ),
                     sequence=True,
                     order=order,
                     present_prefix=True,
@@ -2472,22 +2781,24 @@ def _sorting_network_family(
 
 
 def _sorting_network_before(
-    left: _SortingNetworkItem,
-    right: _SortingNetworkItem,
+    left: Row,
+    left_tie_rank: smt.Term,
+    right: Row,
+    right_tie_rank: smt.Term,
     order: tuple[SortOrder, ...],
 ) -> smt.Term:
     """Whether one candidate precedes another in the network's total order."""
 
-    both_present = smt.and_(left.row.present, right.row.present)
+    both_present = smt.and_(left.present, right.present)
     return smt.or_(
-        smt.and_(left.row.present, smt.not_(right.row.present)),
+        smt.and_(left.present, smt.not_(right.present)),
         smt.and_(
             both_present,
             smt.or_(
-                _row_less(left.row, right.row, order),
+                _row_less(left, right, order),
                 smt.and_(
-                    _sort_keys_equal(left.row, right.row, order),
-                    smt.lt(left.tie_rank, right.tie_rank),
+                    _sort_keys_equal(left, right, order),
+                    smt.lt(left_tie_rank, right_tie_rank),
                 ),
             ),
         ),
@@ -2514,87 +2825,18 @@ def _select_sorting_network_item(
     condition: smt.Term,
     when_true: _SortingNetworkItem,
     when_false: _SortingNetworkItem,
-    columns: tuple[Column, ...],
 ) -> _SortingNetworkItem:
     if condition == smt.TRUE:
         return when_true
     if condition == smt.FALSE:
         return when_false
     return _SortingNetworkItem(
-        Row(
-            smt.ite(
-                condition,
-                when_true.row.present,
-                when_false.row.present,
-            ),
-            {
-                column.name: _select_sorting_network_value(
-                    condition,
-                    when_true.row.values[column.name],
-                    when_false.row.values[column.name],
-                )
-                for column in columns
-            },
-            (
-                when_true.row.occurrence
-                if when_true.row.occurrence == when_false.row.occurrence
-                else None
-            ),
-            when_true.row.partition_facts.intersection(
-                when_false.row.partition_facts
-            ),
+        smt.ite(
+            condition,
+            when_true.payload,
+            when_false.payload,
         ),
         smt.ite(condition, when_true.tie_rank, when_false.tie_rank),
-    )
-
-
-def _select_sorting_network_value(
-    condition: smt.Term,
-    when_true: Value,
-    when_false: Value,
-) -> Value:
-    if when_true.type != when_false.type:
-        raise RelationError("sorting network mixed scalar value types")
-    true_state = when_true.decimal_average_state
-    false_state = when_false.decimal_average_state
-    average_state = None
-    if true_state is not None or false_state is not None:
-        if (
-            true_state is None
-            or false_state is None
-            or true_state.sum_type != false_state.sum_type
-        ):
-            raise RelationError(
-                "sorting network mixed Decimal avg state and scalar values"
-            )
-        average_state = DecimalAverageState(
-            sum_type=true_state.sum_type,
-            sum=smt.ite(condition, true_state.sum, false_state.sum),
-            count=smt.ite(condition, true_state.count, false_state.count),
-            finite_abs_bound=max(
-                true_state.finite_abs_bound,
-                false_state.finite_abs_bound,
-            ),
-            count_bound=max(
-                true_state.count_bound,
-                false_state.count_bound,
-            ),
-        )
-    bounds = (
-        when_true.decimal_finite_abs_bound,
-        when_false.decimal_finite_abs_bound,
-    )
-    finite_abs_bound = (
-        None
-        if any(bound is None for bound in bounds)
-        else max(bound for bound in bounds if bound is not None)
-    )
-    return Value(
-        when_true.type,
-        smt.ite(condition, when_true.is_null, when_false.is_null),
-        smt.ite(condition, when_true.value, when_false.value),
-        finite_abs_bound,
-        average_state,
     )
 
 
@@ -2627,10 +2869,14 @@ def merge_family(
         _sorting_network_cost(_live_row_count(outcome.relation))
         for outcome in source.outcomes
     )
-    network_cells = network_count * len(source.columns)
+    payload_cells = sum(
+        _sorting_network_payload_cells(outcome.relation)
+        for outcome in source.outcomes
+    )
     network_fits = (
         network_count <= MAX_SORT_NETWORK_COMPARATORS
-        and network_cells <= MAX_SORT_NETWORK_COMPARATOR_CELLS
+        and payload_cells <= MAX_SORT_NETWORK_PAYLOAD_CELLS
+        and len(order) <= MAX_SORT_NETWORK_KEY_COLUMNS
     )
     concrete_input_ordinals = all(
         outcome.relation.ordinals is not None
@@ -3596,6 +3842,35 @@ def sequence_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> sm
                 )
                 for left_name, right_name in zip(left_names, right_names)
             )
+        )
+
+    if left.present_prefix and right.present_prefix:
+        aligned = min(len(left.rows), len(right.rows))
+        return smt.and_(
+            *(
+                smt.and_(
+                    smt.eq(
+                        left.rows[index].present,
+                        right.rows[index].present,
+                    ),
+                    smt.or_(
+                        smt.not_(left.rows[index].present),
+                        values_equal(
+                            left.rows[index],
+                            right.rows[index],
+                        ),
+                    ),
+                )
+                for index in range(aligned)
+            ),
+            *(
+                smt.not_(row.present)
+                for row in left.rows[aligned:]
+            ),
+            *(
+                smt.not_(row.present)
+                for row in right.rows[aligned:]
+            ),
         )
 
     left_ranks = tuple(

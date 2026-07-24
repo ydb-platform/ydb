@@ -269,6 +269,26 @@ public:
             TStringBuilder() << "RETURNING disagrees with a subsequent SELECT for: " << update);
     }
 
+    TString ExplainAst(const std::string& query) {
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "explain failed: " << query << "\n" << result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats().has_value(), "no stats for: " << query);
+        const auto ast = result.GetStats()->GetAst();
+        UNIT_ASSERT_C(ast.has_value(), "no AST for: " << query);
+        return TString(*ast);
+    }
+
+    void CheckStreamLookup(const std::string& query, bool expected) {
+        const TString ast = ExplainAst(query);
+        const bool has = ast.Contains("KqpCnStreamLookup");
+        UNIT_ASSERT_C(has == expected,
+            "stream lookup expectation mismatch for: " << query
+                << "\n  expected stream lookup: " << (expected ? "yes" : "no")
+                << ", found: " << (has ? "yes" : "no")
+                << "\nAST:\n" << ast);
+    }
+
 private:
     TKikimrRunner Kikimr;
     NYdb::NQuery::TQueryClient Db;
@@ -1788,6 +1808,54 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             "REPLACE INTO TestTable (k, a, b, c, d) VALUES (1, 5, 6, 7, 8), (2, 9, 10, 11, 12) RETURNING k, g1, g2;",
             "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
             "[[1;[11];[67]];[2;[19];[111]]]");
+    }
+}
+
+Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
+    static constexpr const char* StreamLookupDDL = R"(
+        CREATE TABLE GcTable (
+            k Int32 NOT NULL,
+            a Int32,
+            b Int32,
+            g Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+            PRIMARY KEY (k)
+        );
+    )";
+
+    Y_UNIT_TEST(Insert) {
+        TTestFixture fixture(StreamLookupDDL);
+        // INSERT materializes a brand new row; missing dependencies default to NULL, never read back
+        fixture.CheckStreamLookup("INSERT INTO GcTable (k, a) VALUES (1, 2);", /* expected */ false);
+    }
+
+    Y_UNIT_TEST(Replace) {
+        TTestFixture fixture(StreamLookupDDL);
+        // REPLACE overwrites the whole row; omitted dependencies become NULL, never read back
+        fixture.CheckStreamLookup("REPLACE INTO GcTable (k, a) VALUES (1, 2);", /* expected */ false);
+    }
+
+    Y_UNIT_TEST(Upsert) {
+        TTestFixture fixture(StreamLookupDDL);
+        // Every dependency supplied -> generated value computed inline, no read-back
+        fixture.CheckStreamLookup("UPSERT INTO GcTable (k, a, b) VALUES (1, 2, 3);", /* expected */ false);
+        // Dependency b omitted -> its current value is read back via a stream lookup
+        fixture.CheckStreamLookup("UPSERT INTO GcTable (k, a) VALUES (1, 2);", /* expected */ true);
+    }
+
+    Y_UNIT_TEST(UpdateOn) {
+        TTestFixture fixture(StreamLookupDDL);
+        // Every dependency supplied -> generated value computed inline, no read-back
+        fixture.CheckStreamLookup("UPDATE GcTable ON (k, a, b) VALUES (1, 2, 3);", /* expected */ false);
+        // Dependency b omitted -> its current value is read back via a stream lookup
+        fixture.CheckStreamLookup("UPDATE GcTable ON (k, a) VALUES (1, 2);", /* expected */ true);
+    }
+
+    Y_UNIT_TEST(Update) {
+        TTestFixture fixture(StreamLookupDDL);
+        // UPDATE ... WHERE already reads the full row to apply the filter,
+        // so the generated column is recomputed inline from those values
+        fixture.CheckStreamLookup("UPDATE GcTable SET a = 2, b = 3 WHERE k = 1;", /* expected */ false);
+        fixture.CheckStreamLookup("UPDATE GcTable SET a = 2 WHERE k = 1;", /* expected */ false);
     }
 }
 

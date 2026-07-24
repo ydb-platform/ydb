@@ -589,7 +589,8 @@ namespace NActors {
         void UnregisterActorTask(TActorTask* task);
         void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
         void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
-        bool HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        void HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev);
+        void HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
         bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:

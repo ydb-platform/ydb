@@ -113,6 +113,10 @@ namespace NActors {
                 Wilson,
                 Preemption,
                 ResumeRunnable,
+                CheckActorLiveness,
+                ActorAlive,
+                ActorDead,
+                ActorLivenessUnsure,
                 End,
 
                 // Compatibility section
@@ -218,6 +222,28 @@ namespace NActors {
         struct TEvGone: public TEventLocal<TEvGone, TSystem::Gone> {
         };
 
+        struct TEvCheckActorLiveness
+            : public TEventSimpleNonLocal<TEvCheckActorLiveness, TSystem::CheckActorLiveness> {
+            static constexpr IEventHandle::TEventFlags RequestFlags =
+                IEventHandle::FlagTrackDelivery |
+                IEventHandle::FlagSystemMessage;
+        };
+
+        struct TEvActorAlive
+            : public TEventSimpleNonLocal<TEvActorAlive, TSystem::ActorAlive> {
+        };
+
+        // The actor registry confirmed that the requested actor does not exist.
+        struct TEvActorDead
+            : public TEventSimpleNonLocal<TEvActorDead, TSystem::ActorDead> {
+        };
+
+        // The target is remote and distributed liveness checks are not
+        // supported yet.
+        struct TEvActorLivenessUnsure
+            : public TEventSimpleNonLocal<TEvActorLivenessUnsure, TSystem::ActorLivenessUnsure> {
+        };
+
         struct TEvInvokeResult;
 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
@@ -235,6 +261,9 @@ namespace NActors {
          * be executed with the actor argument equal to nullptr.
          */
         struct TEvResumeRunnable: public TEventLocal<TEvResumeRunnable, TSystem::ResumeRunnable> {
+            static constexpr IEventHandle::TEventFlags EventFlags =
+                IEventHandle::FlagSystemMessage;
+
             TActorRunnableItem* Item; // or nullptr
 
             TEvResumeRunnable(TActorRunnableItem* item) : Item(item) {}

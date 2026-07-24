@@ -87,6 +87,17 @@ A defect in these files can turn inequivalent supported plans into
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
+`Term` caches its structural hash when the immutable SMT DAG node is
+constructed. The cached field is excluded from equality; equality still checks
+the complete `(sort, operation, arguments, atom)` structure, and Python
+dictionary and set lookup still resolves hash collisions with that equality.
+Equality uses an iterative identity-pair worklist, checks exact runtime classes
+and ordered arguments, and therefore does not turn Python recursion depth into
+a verifier limit. The cache changes the cost of repeated routing-fact and set
+lookups, not the formula or proof obligation. Deep independently constructed
+shared-DAG regressions check both equal-key coalescing and separation of unequal
+terms with deliberately colliding hashes.
+
 The equality-correlated scalar slice adds one explicit typed `outer_bind`
 relational node. Its independently checked accepted path is
 `Project* -> Aggregate -> Project* -> Filter -> outer_bind`, with exactly one
@@ -170,6 +181,26 @@ Filter gates, uses the existing bounded Date domain, and includes a real-host
 nullable-Date `IN`-to-`left_semi` bounded proof. A focused TPC-DS q58 run
 reaches the later nested-subplan rejection, so this slice changes neither the
 formula count nor the proof policy.
+
+The exact duplicate-source Map projection changes only
+`semantic_snapshot.cpp`; the existing Project IR and evaluator already copy a
+column expression independently into every declared output position. The
+exporter requires every rename source to be a visible input, but permits that
+same source in multiple Map elements. It suppresses the source once from the
+untouched pass-through set, appends every renamed output in Map-element order,
+and continues to require each output name to be nonempty and unique. Missing
+sources, duplicate outputs, empty outputs, and computed expressions outside the
+existing scalar grammar fail closed. C++ boundary mutations and a real-host
+pair that selects one column under two aliases cover the path; there is no
+Map-specific equivalence axiom.
+
+This exact projection lets TPC-DS q54 construct its complete 57,271,400-byte
+formula. Cached immutable `Term` hashes make that construction tractable
+without changing its semantics; the canonical formula SHA-256 is
+`3494295db496d95d32019eb5aa0d0b14e099ef38cdb42d646e7c2f07f0035f4e`.
+The formula-only result is `FORMULA_EMITTED`; a separate 60-second solver run
+is `UNKNOWN` after the global branch deadline, so q54 adds no bounded proof and
+does not change the 25/121 proof floor.
 
 The side-explicit Join-key slice crosses `semantic_snapshot.cpp`, `ir.py`,
 `scalar.py`, `relation.py`, and the ordinary `stages.py` execution path.
@@ -374,6 +405,9 @@ the SMT obligation itself:
   both reject the outer row; Date values obey the recorded bounded domain, and
   there is no hidden coercion, correlation,
   cardinality-error, or fanout semantics;
+- each accepted repeated-source Map rename copies the same runtime input value
+  into every declared distinct output, suppresses the original source once,
+  and preserves the recorded Map-element order without hidden computation;
 - each accepted side-explicit JoinKey names the actual left and right runtime
   values, each admitted shared-IU semi/anti join exposes only its selected
   side, and StageGraph occurrences with equal IU spellings remain distinct

@@ -118,7 +118,7 @@ or proof still satisfies every weaker floor. The
 formula-construction floor requires TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10,
 q15, q16, q18, q19, q25, q29, q33,
-q37, q38, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65,
+q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65,
 q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95,
 q96, q97, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof
@@ -187,13 +187,14 @@ execution divergence can coexist.
 
 ## Latest measured formula coverage
 
-The complete post-fix formula-only dashboards for the exact two-dependency
-correlated-`EXISTS` milestone were generated on 2026-07-24. They emit 62
+The complete post-fix formula-only dashboards for the exact duplicate-source
+Map-projection milestone were generated on 2026-07-24. They emit 63
 formulas, record an outcome for every workload entry, and meet both suite
 policies. The complete proof-floor gates confirm all twenty-five checked-in
 obligations as `VERIFIED_BOUNDED`: 11/11 TPCH and 14/14 TPC-DS at two rows per
 table and two tasks. Focused solver runs separately retain per-query evidence
-for the three newly added rows, TPCH q21 and TPC-DS q16/q94. The verifier-entry
+for the preceding three proof-floor additions, TPCH q21 and TPC-DS q16/q94.
+The verifier-entry
 floor remains TPCH q1 and TPC-DS q5, q59, q65, and q80; all except q59 satisfy
 the stronger formula floor, while q59 remains entry-only at its audited
 construction cap. `FORMULA_EMITTED` alone is not a solver proof.
@@ -211,17 +212,28 @@ The complete measured inventory is:
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 17 (q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q21, q22) | 3 | 2 | 22 |
-| TPCDS_YQL | 45 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 28 | 26 | 99 |
+| TPCDS_YQL | 46 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 27 | 26 | 99 |
 
-Eighteen TPCH and fifty-one TPC-DS queries pass both exporters and enter the
+Eighteen TPCH and fifty-two TPC-DS queries pass both exporters and enter the
 verifier.
 
-The current TPCH dashboard spent 3,046/34,378 ms in preparation/verifier work
+The current TPCH dashboard spent 3,245/50,777 ms in preparation/verifier work
 and produced report SHA-256
-`ec7b8ee1dc7c1a2ec621c31ae9303725fcf4183ee068c6564343c7913ada8e48`.
-Its TPC-DS counterpart spent 72,377/280,951 ms and produced
-`4a0de564872c9326b183f8132042f971399d7af6c94f9610cf289031af56aabc`.
-Both complete policy runs are green.
+`dc0b0269be9b508eb930b0cb646ce4ec0cf7febd826315c6accc6d6a5ae88aa1`.
+Its TPC-DS counterpart spent 66,495/356,670 ms and produced
+`aa28d105660d213add6957bbf192e21fd2300608fa2ec3062a30de541403de23`.
+Both complete formula policies are green.
+
+TPC-DS q54 now reaches `FORMULA_EMITTED` through an exact Map projection that
+copies one visible input into multiple distinct output columns. Its dashboard
+row spent 987/50,737 ms in preparation/verifier work at row bound two and task
+bound two. The canonical formula is 57,271,400 bytes with SHA-256
+`3494295db496d95d32019eb5aa0d0b14e099ef38cdb42d646e7c2f07f0035f4e`.
+A separate 60-second solver run returned `UNKNOWN` because the global deadline
+expired before branch 3/8 (`left_outcome_0_unmatched`). This is formula
+coverage, not a bounded proof, and q54 is not in the proof floor.
+The milestone passes 529/529 Python verifier tests, 205/205 C++ exporter
+tests, 39/39 real-host integration tests, and 12/12 coverage-policy tests.
 
 The current complete proof-floor gate is also policy-valid and green. TPCH
 passes 11/11 `VERIFIED_BOUNDED` after 1,445/67,977 ms of
@@ -302,16 +314,16 @@ canonical direct render is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation; a 60-second solver experiment
 remains `UNKNOWN`.
 
-The current complete formula slice is 62/121 queries (51.2%), with 31
-unsupported queries and 28 optimizer-preparation failures. Sixty-nine queries
-pass both snapshot exporters and enter the formula verifier, and 62/69 (89.9%)
+The current complete formula slice is 63/121 queries (52.1%), with 30
+unsupported queries and 28 optimizer-preparation failures. Seventy queries
+pass both snapshot exporters and enter the formula verifier, and 63/70 (90.0%)
 construct formulas.
 Relative to all 93 optimizer-successful queries, including snapshot-boundary
-failures, formula coverage is 62/93 (66.7%). This is a useful end-to-end
-pre-physical optimizer sample, not a claim about the remaining 59 workload
+failures, formula coverage is 63/93 (67.7%). This is a useful end-to-end
+pre-physical optimizer sample, not a claim about the remaining 58 workload
 entries or larger inputs. Formula construction is not a bounded proof.
-The 31 unsupported rows split into 22 initial-export, two final-export, and
-seven verifier results. In other words, the strict C++ boundary rejects 24 plan
+The 30 unsupported rows split into 21 initial-export, two final-export, and
+seven verifier results. In other words, the strict C++ boundary rejects 23 plan
 pairs before formula construction, while seven exported pairs fail closed in
 the verifier itself.
 
@@ -613,20 +625,18 @@ q30, q32, q36, q39, q41, q44, q47, q49, q51, q53, q57, q63, q67, q70, q81,
 q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
 aggregate shapes rejected by the general empty-row reconstruction gate.
 
-The exporter matrix below covers the recorded boundary failures among 22 of
-the 28 unsupported queries in the latest complete dashboard. It intentionally
-retains that dashboard's pre-Date-extension classifications; the focused q58
-delta above has no formula or policy effect and is not substituted for a full
-rerun. IDs can appear in both exporter columns or under more than one reason
-because both snapshots are audited independently. The six queries that pass
+The exporter matrix below covers the recorded boundary failures among 21 of
+the 27 unsupported queries in the latest complete dashboard. IDs can appear
+in both exporter columns or under more than one reason because both snapshots
+are audited independently. The six queries that pass
 export and fail closed inside the verifier are listed after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
-| Dynamic `IN` lookup/result types are outside the accepted exact identities | q58, q83 | - |
+| Dynamic `IN` lookup/result types are outside the accepted exact identities | q83 | - |
+| Dynamic `IN` binding contains a nested subplan reference | q58 | - |
 | Static `SqlIn` tuple item annotation is nullable | - | q83 |
 | Scalar callable `Map` | q24 | q24 |
-| Invalid Map rename source `_yql_source_5.segment` | q54 | - |
 | Read has range or ordering semantics | - | q9, q45 |
 | Unavailable read column `__kqp_rbo_ignore_arg_8` | - | q58 |
 | Unavailable read column `year` | - | q66 |
@@ -680,9 +690,13 @@ construction. q6 then failed at the deeper `DistinctAll` gate. None of those
 formula-only results was a bounded proof. The subsequent COUNT repair and
 `DistinctAll` rerun produced the then-current inventory, which later exact
 semantic slices extended.
-q9 remains unsupported on final Read range/ordering semantics, q24 reaches
-`Unsupported scalar callable Map` at both boundaries, and q54 fails initial
-export with `Invalid Map rename source _yql_source_5.segment`.
+q9 remains unsupported on final Read range/ordering semantics, and q24 reaches
+`Unsupported scalar callable Map` at both boundaries. At the preceding
+checkpoint q54 failed initial export because two Map outputs copied
+`_yql_source_5.segment`; the exporter incorrectly treated the second use as an
+invalid rename source. The exact duplicate-source projection fix retains both
+copies under their distinct output names, and q54 now constructs its complete
+formula.
 
 The integral dynamic-`IN` gate first moved q95 through initial export. The later
 side-explicit join-key and exact aggregate slice now carries it through formula
@@ -889,9 +903,10 @@ construction without changing the proof floor. The output-IU resolver adds
 TPC-DS q2/q97 to formula construction and pins q59 at verifier entry without
 changing the proof floor.
 The exact ordered two-dependency `EXISTS` slice then adds TPCH q21 and TPC-DS
-q16/q94 to both the formula and proof floors. The current complete inventory is
-17/22 TPCH and 45/99 TPC-DS formulas, or 62/121 (51.2%), with 31 unsupported
-and 28 optimizer-failure queries.
+q16/q94 to both the formula and proof floors. Exact duplicate-source Map
+projection then adds TPC-DS q54 to the formula floor without changing the proof
+floor. The current complete inventory is 17/22 TPCH and 46/99 TPC-DS formulas,
+or 63/121 (52.1%), with 30 unsupported and 28 optimizer-failure queries.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -1350,7 +1365,7 @@ preceding complete expanded run confirmed all twenty-two as
 `VERIFIED_BOUNDED`. The current policy additionally contains TPCH q21 and
 TPC-DS q16/q94; the current complete gate confirms all twenty-five.
 TPC-DS
-q5, q10, q19, q25, q29, q46, q56, q60, q65, q68, q77, q80, q91, and q99
+q5, q10, q19, q25, q29, q46, q54, q56, q60, q65, q68, q77, q80, q91, and q99
 construct formulas but return `UNKNOWN` in their latest solver runs. TPCH q1,
 q7, q8, and q9 also construct formulas and are `UNKNOWN` in their focused
 60-second runs.
@@ -1440,9 +1455,10 @@ StageGraph; no special equivalence path is introduced.
 At the original one-dependency milestone, focused gates passed 11/11 in Python,
 4/4 in C++, and 4/4 through the real host; full validation passed 472/472
 verifier, 177/177 C++, 45/45 inspector, 37/37 replay, and 29/29 integration
-tests. The two-dependency extension's focused gates pass 17/17 in Python, 6/6
-in C++, and 1/1 for its new real-host case; the complete verifier, exporter,
-and inspector suites pass 527/527, 203/203, and 46/46. The real-host targeted
+tests. At the two-dependency milestone, its focused gates passed 17/17 in
+Python, 6/6 in C++, and 1/1 for its new real-host case; the complete verifier,
+exporter, and inspector suites passed 527/527, 203/203, and 46/46. The
+real-host targeted
 two-dependency obligation returns `VERIFIED_BOUNDED`. Independent solver
 differentials prove the exact form equivalent to `left_semi` and its negation
 equivalent to `left_anti`; omitting the second correlation produces a

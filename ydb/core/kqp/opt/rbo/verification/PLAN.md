@@ -104,10 +104,16 @@ explicit Z3-compatible solver executable; it does not import ambient Python
 packages. Hermetic tests resolve the separately built, pinned Z3 executable;
 the solver is not linked into `ydbd`.
 
-SMT terms form an immutable DAG. The renderer gives each quantifier body its own
-scope and emits repeated compound terms once through hygienic, dependency-ordered
-SMT `let` bindings. It never lifts a term across a quantifier that binds one of
-its symbols. This preserves the direct mathematical obligation while avoiding
+SMT terms form an immutable DAG. Each node caches its complete structural hash
+once from the already-constructed child hashes; equality remains exact
+structural equality, so collisions are resolved by equality and the cache
+changes lookup cost only. Equality uses an iterative pair worklist with
+identity-pair sharing, preserving ordered structure and exact runtime classes
+without Python recursion depth becoming a verifier limit. The renderer gives
+each quantifier body its own scope
+and emits repeated compound terms once through hygienic, dependency-ordered SMT
+`let` bindings. It never lifts a term across a quantifier that binds one of its
+symbols. This preserves the direct mathematical obligation while avoiding
 textual duplication in large ordered queries; the sharing transformation is an
 exact rendering step, not a solver hint or semantic approximation. A separate
 iterative post-order interner assigns equal IDs exactly when complete SMT term
@@ -649,15 +655,24 @@ Implementation sequence:
 45. M4: exact uncorrelated same-type `Date` dynamic `IN`, with independent
     lookup/output nullability only at a direct positive top-level Filter
     conjunct;
-46. next: nested subplans exposed by TPC-DS q58, q83's static nullable-Date
+46. M4: exact Map projection when one source IU is copied to multiple distinct
+    output IUs;
+47. M4: cached immutable structural hashes for SMT terms without changing
+    structural equality;
+48. M4: stack-safe iterative exact equality for deep SMT DAGs, including
+    independently constructed equal terms and unequal hash collisions;
+49. next: nested subplans exposed by TPC-DS q58, q83's static nullable-Date
     `SqlIn`, more than two dependencies, broader correlations, coercing and
     nullable-String dynamic `IN`, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
-IUs pass through, and map targets are appended in operator order. Exporter tests
-cover that normalization before it enters the trusted path. The projection also
-records `TOpMap::Ordered`. Both values currently have the same sequence-preserving
+IUs pass through, and map targets are appended in operator order. Source
+removal is set-valued: one existing source may be copied to multiple distinct,
+nonempty targets, each receiving the same exact value, while missing sources
+and duplicate or empty target names fail closed. Exporter tests cover that
+normalization before it enters the trusted path. The projection also records
+`TOpMap::Ordered`. Both values currently have the same sequence-preserving
 runtime semantics because RBO lowers Map through its streaming WideMap builder;
 the field remains explicit so that contract cannot change silently.
 
@@ -1476,9 +1491,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   side has the same-name `Void`; unmatched dropped `Void` and `Void` join keys
   remain unsupported.
 
-  Focused coverage passes 17/17 Python `EXISTS` tests, 527/527 complete Python
-  verifier tests, 6/6 C++ `EXISTS` tests, 203/203 complete exporter tests,
-  46/46 inspector tests, and the new real-host case 1/1. Solver differentials
+  At the two-dependency milestone, focused coverage passed 17/17 Python
+  `EXISTS` tests, 527/527 complete Python verifier tests, 6/6 C++ `EXISTS`
+  tests, 203/203 complete exporter tests, 46/46 inspector tests, and the new
+  real-host case 1/1. Solver differentials
   return `VERIFIED_BOUNDED` for the exact `left_semi` and negated
   `left_anti` lowerings, while omitting the second correlation returns
   `COUNTEREXAMPLE`. TPCH q21 and TPC-DS q16/q94 now construct formulas and
@@ -1489,7 +1505,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q59, q65, and q80
-  must reach the verifier, the 62-query formula floor must keep constructing
+  must reach the verifier, the 63-query formula floor must keep constructing
   SMT, and the
   twenty-five-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A
   verifier-side `UNSUPPORTED` result satisfies only the first tier; later
@@ -1501,21 +1517,29 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   repeated-structure construction gates.
 
   The current complete policy-checked formula dashboards, generated on
-  2026-07-24, include TPCH q21 and TPC-DS q16/q94; focused solver evidence also
-  adds those three to the bounded proof floor. TPCH has 17 formulas, three
+  2026-07-24, include the repeated-source Map projection used by TPC-DS q54.
+  TPCH has 17 formulas, three
   unsupported queries, two optimizer failures, and 18 verifier entrants;
-  TPC-DS has 45 formulas, 28 unsupported queries, 26 optimizer failures, and 51
-  entrants. Across both suites, 62/121 queries construct formulas (51.2%), 62/93
-  optimizer-successful queries construct formulas (66.7%), and 62/69 verifier
-  entrants construct formulas (89.9%). The 31 unsupported rows split into 22
+  TPC-DS has 46 formulas, 27 unsupported queries, 26 optimizer failures, and 52
+  entrants. Across both suites, 63/121 queries construct formulas (52.1%), 63/93
+  optimizer-successful queries construct formulas (67.7%), and 63/70 verifier
+  entrants construct formulas (90.0%). The 30 unsupported rows split into 21
   initial-export, two final-export, and seven verifier results.
 
-  The complete TPCH formula dashboard spent 3,046/34,378 ms in
+  The complete TPCH formula dashboard spent 3,245/50,777 ms in
   preparation/verifier work and produced report SHA-256
-  `ec7b8ee1dc7c1a2ec621c31ae9303725fcf4183ee068c6564343c7913ada8e48`;
-  TPC-DS spent 72,377/280,951 ms and produced
-  `4a0de564872c9326b183f8132042f971399d7af6c94f9610cf289031af56aabc`.
+  `dc0b0269be9b508eb930b0cb646ce4ec0cf7febd826315c6accc6d6a5ae88aa1`;
+  TPC-DS spent 66,495/356,670 ms and produced
+  `aa28d105660d213add6957bbf192e21fd2300608fa2ec3062a30de541403de23`.
   Both complete formula-only policy runs are green.
+
+  q54's row spends 50,737 ms in verifier/formula-construction work. Its
+  separate 60-second solver experiment is `UNKNOWN`: the global deadline
+  expires before branch 3/8 (`left_outcome_0_unmatched`). This adds
+  two-row/two-task formula coverage only; the 25/121 (20.7%) bounded proof
+  floor remains unchanged. The milestone passes 529/529 Python verifier tests,
+  205/205 C++ exporter tests, 39/39 real-host integration tests, and 12/12
+  coverage-policy tests.
 
   The current complete proof-floor gate is also green and policy-valid. TPCH
   passed 11/11 `VERIFIED_BOUNDED` after 1,445/67,977 ms of
@@ -1926,8 +1950,12 @@ producer stages, and the evaluator checks it exactly after Skip/Take in each
 task. The focused `*AtMostOneMarker*` exporter matrix passes 3/3 for direct,
 multi-task-producer, and single-task-producer serialization.
 TPC-DS q24 still reaches the independent blocker, `Unsupported scalar callable
-Map`. In the fresh complete dashboard, q54 fails initial export with
-`Invalid Map rename source _yql_source_5.segment`; it does not emit a formula.
+Map`. TPC-DS q54 copies one Map source IU to two distinct output IUs; exact
+repeated-source projection now exports it and cached structural SMT hashes keep
+construction practical. The complete dashboard emits its two-row/two-task
+formula after 50,737 ms of verifier work. A separate 60-second solver attempt
+is `UNKNOWN` after the global deadline expires before branch 3/8
+(`left_outcome_0_unmatched`), so q54 is formula-covered rather than proved.
 
 Equality-correlated scalar aggregation now admits exactly one outer dependency
 and exactly one Project or Filter consumer. The subplan root is a no-fanout
@@ -1996,9 +2024,10 @@ that same `Void`. Unmatched dropped `Void` and `Void` join keys fail closed.
 The evaluator preflights at most 16,384 outer/inner pairs. The final side
 remains the normal StageGraph, with no `EXISTS`-specific equivalence shortcut.
 
-Current focused gates pass 17/17 for Python `EXISTS`, 6/6 for C++ `EXISTS`,
-and 1/1 for the new real-host case. The complete verifier, exporter, and
-inspector suites pass 527/527, 203/203, and 46/46. Exact `left_semi` and
+At the two-dependency milestone, focused gates passed 17/17 for Python
+`EXISTS`, 6/6 for C++ `EXISTS`, and 1/1 for the new real-host case. The
+complete verifier, exporter, and inspector suites passed 527/527, 203/203,
+and 46/46. Exact `left_semi` and
 negated `left_anti` solver differentials are `VERIFIED_BOUNDED`, while removing
 the second correlation produces a counterexample. Focused TPCH q21 and TPC-DS
 q16/q94 all return `VERIFIED_BOUNDED` at the declared two-row/two-task bound.
@@ -2258,7 +2287,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 62 formula-construction and twenty-five curated proof obligations have
+- The 63 formula-construction and twenty-five curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   twenty-five as `VERIFIED_BOUNDED`; the three focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

@@ -1268,6 +1268,19 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
                 if (CollectUserFacingTaskStats) {
+                    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+                        auto& agg = UserFacingStageAggs[taskStats.GetStageId()];
+                        ++agg.TasksByNode[nodeId];
+                        const ui64 durMs = taskDuration.MilliSeconds();
+                        if (durMs < agg.MinDurationMs) {
+                            agg.MinDurationMs = durMs;
+                            agg.MinDurationNode = nodeId;
+                        }
+                        if (durMs >= agg.MaxDurationMs) {
+                            agg.MaxDurationMs = durMs;
+                            agg.MaxDurationNode = nodeId;
+                        }
+                    }
                     auto& stageTasks = UserFacingTaskStats[taskStats.GetStageId()];
                     if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
                         taskIt->second = MakeUserFacingTaskSnapshot(taskStats);

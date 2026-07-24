@@ -5,6 +5,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
+#include <util/generic/utility.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
 
@@ -37,7 +38,7 @@ struct TUserFacingTaskSnapshot {
     ui64 WaitOutputTimeUs = 0;
     ui64 SpilledBytes = 0;
     ui32 ReadRetries = 0;
-    TVector<NKqpProto::TKqpShardReadStats> ShardReads; // profile level only; capped at source
+    TVector<NKqpProto::TKqpShardReadStats> ShardReads; // full-detail tier; capped at source
     ui32 ShardReadsTruncated = 0;
 
     ui64 DurationMs() const {
@@ -79,7 +80,7 @@ using TUserFacingTraceTaskStats = std::unordered_map<ui32, std::unordered_map<ui
 // bounds executer memory on wide OLAP stages, the stage span gets ydb.tasks_truncated when hit.
 constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
 
-// Cap on per-shard read entries a task exports at profile level (first-come); the task span
+// Cap on per-shard read entries a task exports at full stats level (first-come); the task span
 // gets ydb.shards_truncated when hit.
 constexpr size_t MaxUserFacingShardReadsPerTask = 64;
 
@@ -129,11 +130,22 @@ struct TUserFacingTraceTimeline {
     }
 };
 
-// Per-shard commit acknowledgements of a distributed commit (profile level only).
+// Per-shard commit acknowledgements of a distributed commit (full-detail tier only).
 struct TUserFacingShardCommitAck {
     ui64 ShardId = 0;
     TInstant PreparedAt;
     TInstant CommittedAt;
+};
+
+// Per-stage parallelism aggregates for the user-facing trace, accumulated by the executer over
+// final task reports: task placement across nodes and the nodes of the extreme-duration tasks
+// (the fastest task is not retained by the top-N snapshot cap, so its node is recorded here).
+struct TUserFacingStageAgg {
+    THashMap<ui32, ui32> TasksByNode; // nodeId -> finished task count
+    ui64 MinDurationMs = Max<ui64>();
+    ui32 MinDurationNode = 0;
+    ui64 MaxDurationMs = 0;
+    ui32 MaxDurationNode = 0;
 };
 
 // Presentation hint for one stage, captured by the executer from the tasks graph: exported
@@ -148,6 +160,7 @@ struct TUserFacingTraceExecutionData {
     TUserFacingTraceTimeline Timeline;
     TUserFacingTraceTaskStats TaskStats;
     THashMap<ui32, TUserFacingStageHint> StageHints; // by exported stage id
+    THashMap<ui32, TUserFacingStageAgg> StageAggs;   // by exported stage id
     TVector<TUserFacingShardCommitAck> ShardCommitAcks;
     // Stats exported at collection depth for the trace; the response's stats stay at the
     // client-requested mode and must not be used for rendering.

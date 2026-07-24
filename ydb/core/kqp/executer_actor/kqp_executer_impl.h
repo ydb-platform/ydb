@@ -1889,6 +1889,7 @@ protected:
                     }
                     Stats->ExportExecStats(UserFacingTraceData->ExecStats);
                     UserFacingTraceData->TaskStats = std::move(Stats->UserFacingTaskStats);
+                    UserFacingTraceData->StageAggs = std::move(Stats->UserFacingStageAggs);
                     ResponseEv->UserFacingTraceData = std::move(UserFacingTraceData);
                 }
 

@@ -456,6 +456,7 @@ public:
     // plan/SVG it feeds) keeps the longest-task-only behavior regardless.
     bool CollectUserFacingTaskStats = false;
     TUserFacingTraceTaskStats UserFacingTaskStats;
+    THashMap<ui32, TUserFacingStageAgg> UserFacingStageAggs;
 
     // exportMode overrides StatsMode (the collection mode) for this export — used to keep
     // client-facing stats at the client-requested depth when collection was escalated for tracing.

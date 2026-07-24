@@ -202,7 +202,7 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         if (task.ReadRetries > 0) {
             span.Attribute("ydb.read_retries", static_cast<i64>(task.ReadRetries));
         }
-        // Per-shard reads (collected only at profile level). Sub-ms reads render as
+        // Per-shard reads (collected at full stats level). Sub-ms reads render as
         // zero-length spans; the attributes still carry the detail.
         for (const auto& shard : task.ShardReads) {
             if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
@@ -282,15 +282,50 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
         if (signals.Skew > 0) {
             span.Attribute("ydb.task_skew", signals.Skew);
         }
-        // A wide finish spread next to a narrow start spread means stragglers.
+        // A wide finish spread next to a narrow start spread means stragglers. Averages are
+        // offsets from the earliest task start, so min/avg/max of both start and finish are
+        // readable together: start = [0, avg_offset, spread], finish likewise.
         if (stage.GetTotalTasksCount() > 1) {
             const auto& st = stage.GetStartTimeMs();
             const auto& fin = stage.GetFinishTimeMs();
             if (st.GetCnt() > 0 && st.GetMax() > st.GetMin()) {
                 span.Attribute("ydb.task_start_spread_us", static_cast<i64>((st.GetMax() - st.GetMin()) * 1000));
+                span.Attribute("ydb.task_start_avg_offset_us",
+                    static_cast<i64>((st.GetSum() / st.GetCnt() - st.GetMin()) * 1000));
             }
             if (fin.GetCnt() > 0 && fin.GetMax() > fin.GetMin()) {
                 span.Attribute("ydb.task_finish_spread_us", static_cast<i64>((fin.GetMax() - fin.GetMin()) * 1000));
+                if (st.GetCnt() > 0 && fin.GetSum() / fin.GetCnt() >= st.GetMin()) {
+                    span.Attribute("ydb.task_finish_avg_offset_us",
+                        static_cast<i64>((fin.GetSum() / fin.GetCnt() - st.GetMin()) * 1000));
+                }
+            }
+        }
+        // Task placement: which nodes ran this stage's tasks and how many each — placement skew
+        // is often the real cause of a wide finish spread. Extreme-task nodes point at the
+        // machine to look at; the fastest task is not retained by the top-N cap, only its node.
+        if (const auto* agg = trace.StageAggs.FindPtr(stage.GetStageId())) {
+            if (!agg->TasksByNode.empty()) {
+                TVector<std::pair<ui32, ui32>> nodes(agg->TasksByNode.begin(), agg->TasksByNode.end());
+                std::sort(nodes.begin(), nodes.end(),
+                    [](const auto& a, const auto& b) { return a.second > b.second; });
+                TStringBuilder byNode;
+                size_t shown = 0;
+                for (const auto& [nodeId, count] : nodes) {
+                    if (shown == 32) {
+                        byNode << ",+" << nodes.size() - shown << " nodes";
+                        break;
+                    }
+                    if (shown++ > 0) {
+                        byNode << ",";
+                    }
+                    byNode << nodeId << ":" << count;
+                }
+                span.Attribute("ydb.tasks_by_node", TString(byNode));
+            }
+            if (stage.GetTotalTasksCount() > 1 && agg->MaxDurationMs > 0) {
+                span.Attribute("ydb.slowest_task_node", static_cast<i64>(agg->MaxDurationNode));
+                span.Attribute("ydb.fastest_task_node", static_cast<i64>(agg->MinDurationNode));
             }
         }
         if (const auto stageTasksIt = taskStats.find(stage.GetStageId()); stageTasksIt != taskStats.end()) {
@@ -368,8 +403,8 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan.End();
     }
     if (const auto& commit = tl.Phase(EUserFacingTracePhase::Commit)) {
-        // Distributed-commit breakdown (empty on the immediate single-shard path). At profile
-        // level the prepare/apply windows carry per-shard children: each shard's span runs from
+        // Distributed-commit breakdown (empty on the immediate single-shard path). At the
+        // full-detail tier the prepare/apply windows carry per-shard children: each shard's span runs from
         // the phase start to that shard's acknowledgement, so stragglers stand out.
         if (NWilson::TSpan commitSpan = MakePhase(executeId, commit.Start, commit.End, "Commit")) {
             const auto& acks = trace.ShardCommitAcks;

@@ -424,6 +424,7 @@ bool TReadSession::Close(TDuration timeout) {
 
     auto timeoutContext = Connections->CreateContext();
     if (!timeoutContext) {
+        std::lock_guard guard(Lock);
         AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
         return false;
     }

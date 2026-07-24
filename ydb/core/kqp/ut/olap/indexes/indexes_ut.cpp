@@ -1,5 +1,6 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
@@ -10,14 +11,18 @@
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+
+#include <format>
 
 namespace NKikimr::NKqp {
 static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
@@ -2775,6 +2780,129 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteAddColumnWithIndexesScenario();
+    }
+
+    // https://github.com/ydb-platform/ydb/issues/26854: general compaction crashed on
+    // verification=checkRecordsCount == recordsCount because the ngramm index got no data for its column.
+    // The zero level compacts by portions_count_available and a 1s portions_live_duration instead of the
+    // ticket's 180s, which a test cannot wait for. `message` is added after the data is written: bulk upsert
+    // (that is what `ydb import file json` does) demands every column, so a column with no data in the
+    // merged portions can only appear through a schema change.
+    TString scriptCompactionWithoutIndexColumnDataHead = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/test_table_hang` (
+            timestamp Timestamp NOT NULL,
+            resource_type Utf8 NOT NULL,
+            resource_id Utf8 NOT NULL,
+            stream_name Utf8 NOT NULL,
+            partition Uint32 NOT NULL,
+            offset Uint64 NOT NULL,
+            index Uint32 NOT NULL,
+            level Int32,
+            json_payload JsonDocument,
+            ingested_at Timestamp,
+            saved_at Timestamp,
+            request_id Utf8,
+            PRIMARY KEY (timestamp, resource_type, resource_id, stream_name, partition, offset, index)
+        ) PARTITION BY HASH (timestamp, partition, offset, index)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/test_table_hang` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+           `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [
+           {"class_name": "Zero", "portions_count_limit": 20000000, "expected_blobs_size": 1048576, "portions_live_duration": "1s", "portions_count_available": 1},
+           {"class_name": "Zero", "portions_count_limit": 20000000, "expected_blobs_size": 1048576},
+           {"class_name": "Zero", "portions_count_limit": 20000000, "expected_blobs_size": 2097152}
+        ]}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/test_table_hang` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+        `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+        ------
+    )";
+
+    TString scriptCompactionWithoutIndexColumnDataTail = R"(
+        SCHEMA:
+        ALTER TABLE `/Root/test_table_hang` ADD COLUMN message Utf8;
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/test_table_hang` (TYPE TABLE)
+        SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_message, TYPE=BLOOM_NGRAMM_FILTER,
+             FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512,
+                        "records_count" : 3000, "case_sensitive" : false,
+                        "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/test_table_hang` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message,
+        `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT COUNT(*) FROM `/Root/test_table_hang` WHERE message LIKE '%abc%';
+        EXPECTED: [[0u]]
+        ------
+    )";
+
+    Y_UNIT_TEST(CompactionWithoutIndexColumnData) {
+        static constexpr ui64 MAX_ROW_CNT = 3;
+        static constexpr i64 BASE_TIMESTAMP_US = 1760449859000000;   // 2025-10-14T13:50:59Z, the ticket's crash time
+
+        const auto buildBatch = [](const ui64 offsetStart) {
+            NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+                { { "timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp) },
+                    { "resource_type", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) },
+                    { "resource_id", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) },
+                    { "stream_name", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) },
+                    { "partition", NScheme::TTypeInfo(NScheme::NTypeIds::Uint32) },
+                    { "offset", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) },
+                    { "index", NScheme::TTypeInfo(NScheme::NTypeIds::Uint32) },
+                    { "level", NScheme::TTypeInfo(NScheme::NTypeIds::Int32) },
+                    { "json_payload", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) },
+                    { "ingested_at", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp) },
+                    { "saved_at", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp) },
+                    { "request_id", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } },
+                { "timestamp", "resource_type", "resource_id", "stream_name", "partition", "offset", "index" }));
+            for (ui64 i = 0; i < MAX_ROW_CNT; ++i) {
+                const ui64 offset = offsetStart + i;
+                updates.AddRow()
+                    .Add<i64>(BASE_TIMESTAMP_US + offset)
+                    .Add("resource_type")
+                    .Add("resource_id")
+                    .Add("stream")
+                    .Add<ui32>(0)
+                    .Add<ui64>(offset)
+                    .Add<ui32>(0)
+                    .Add<i32>(1)
+                    .Add(R"({"a" : "b"})")
+                    .Add<i64>(BASE_TIMESTAMP_US)
+                    .Add<i64>(BASE_TIMESTAMP_US)
+                    .Add(std::string("request_") + std::to_string(offset));
+            }
+            return Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        };
+        const TString script = TStringBuilder() << scriptCompactionWithoutIndexColumnDataHead << std::format(R"(
+        BULK_UPSERT:
+            /Root/test_table_hang
+            {}
+            EXPECT_STATUS:SUCCESS
+        ------
+        BULK_UPSERT:
+            /Root/test_table_hang
+            {}
+            EXPECT_STATUS:SUCCESS
+        ------
+        )",
+                                                                    buildBatch(0).c_str(), buildBatch(MAX_ROW_CNT).c_str())
+                                                << scriptCompactionWithoutIndexColumnDataTail
+                                                << std::format(R"(
+        READ: SELECT COUNT(*) FROM `/Root/test_table_hang`;
+        EXPECTED: [[{}u]]
+        )",
+                                                       2 * MAX_ROW_CNT);
+        Variator::ToExecutor(Variator::SingleScript(script))
+            .Execute(TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true));
     }
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,

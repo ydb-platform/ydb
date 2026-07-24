@@ -2760,6 +2760,187 @@ struct TCorrelatedScalarExportFixture {
     TIntrusivePtr<TOpFilter> Consumer;
 };
 
+struct TTwoDependencyExistsExportFixture {
+    TTwoDependencyExistsExportFixture()
+        : Int32(ScalarType(Ctx, NUdf::EDataSlot::Int32))
+        , OptionalInt32(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Int32,
+              true))
+        , Bool(ScalarType(Ctx, NUdf::EDataSlot::Bool))
+        , OptionalBool(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::Bool,
+              true))
+    {
+        const auto& outerTable = AddTable(
+            Ctx,
+            "/Root/TwoDependencyExistsOuter",
+            {
+                {"order_key", "Int32", false},
+                {"warehouse_key", "Int32", false},
+            });
+        const auto& innerTable = AddTable(
+            Ctx,
+            "/Root/TwoDependencyExistsInner",
+            {
+                {"order_key", "Int32", false},
+                {"warehouse_key", "Int32", false},
+                {"flag", "Bool", true},
+            });
+        OuterRead = MakeRead(
+            Ctx,
+            outerTable,
+            "outer",
+            {"order_key", "warehouse_key"});
+        InnerRead = MakeRead(
+            Ctx,
+            innerTable,
+            "inner",
+            {"order_key", "warehouse_key", "flag"});
+        SetExactOutputType(Ctx, *OuterRead, {
+            {"outer.order_key", OptionalInt32},
+            {"outer.warehouse_key", OptionalInt32},
+        });
+        SetExactOutputType(Ctx, *InnerRead, {
+            {"inner.order_key", OptionalInt32},
+            {"inner.warehouse_key", OptionalInt32},
+            {"inner.flag", Bool},
+        });
+
+        Root = std::make_unique<TOpRoot>(
+            OuterRead,
+            Pos,
+            TVector<TString>{"outer.order_key"});
+        AddDependencies = MakeIntrusive<TOpAddDependencies>(
+            InnerRead,
+            Pos,
+            TVector<std::pair<
+                TInfoUnit,
+                const TTypeAnnotationNode*>>{
+                {OrderDependency, OptionalInt32},
+                {WarehouseDependency, OptionalInt32},
+            });
+        SetExactOutputType(Ctx, *AddDependencies, {
+            {"inner.order_key", OptionalInt32},
+            {"inner.warehouse_key", OptionalInt32},
+            {"inner.flag", Bool},
+            {"outer.order_key", OptionalInt32},
+            {"outer.warehouse_key", OptionalInt32},
+        });
+
+        Equality = Comparison(
+            "==",
+            TInfoUnit("inner.order_key"),
+            OrderDependency);
+        Inequality = Comparison(
+            "!=",
+            WarehouseDependency,
+            TInfoUnit("inner.warehouse_key"));
+        Residual = MakeColumnAccess(
+            TInfoUnit("inner.flag"),
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(Residual, Bool);
+        SetPredicate({Equality, Inequality, Residual});
+
+        Filter = MakeIntrusive<TOpFilter>(
+            AddDependencies,
+            Pos,
+            Predicate);
+        SetExactOutputType(Ctx, *Filter, {
+            {"inner.order_key", OptionalInt32},
+            {"inner.warehouse_key", OptionalInt32},
+            {"inner.flag", Bool},
+            {"outer.order_key", OptionalInt32},
+            {"outer.warehouse_key", OptionalInt32},
+        });
+        Root->PlanProps.Subplans.Add(
+            Binding,
+            TSubplanEntry{
+                Filter,
+                {},
+                ESubplanType::EXISTS,
+                Binding,
+                {OrderDependency, WarehouseDependency}});
+
+        BindingValue = MakeColumnAccess(
+            Binding,
+            Pos,
+            &Ctx.ExprCtx,
+            &Root->PlanProps);
+        AnnotateExpression(BindingValue, Bool);
+        Consumer = MakeIntrusive<TOpFilter>(
+            OuterRead,
+            Pos,
+            BindingValue);
+        SetExactOutputType(Ctx, *Consumer, {
+            {"outer.order_key", OptionalInt32},
+            {"outer.warehouse_key", OptionalInt32},
+        });
+        Root->SetInput(Consumer);
+    }
+
+    TExpression Comparison(
+        TStringBuf callable,
+        const TInfoUnit& left,
+        const TInfoUnit& right)
+    {
+        auto result = MakeBinaryPredicate(
+            TString(callable),
+            MakeColumnAccess(
+                left,
+                Pos,
+                &Ctx.ExprCtx,
+                &Root->PlanProps),
+            MakeColumnAccess(
+                right,
+                Pos,
+                &Ctx.ExprCtx,
+                &Root->PlanProps));
+        AnnotateBinaryExpression(
+            result,
+            OptionalInt32,
+            OptionalInt32,
+            OptionalBool);
+        return result;
+    }
+
+    void SetPredicate(const TVector<TExpression>& conjuncts) {
+        Predicate = MakeConjunction(conjuncts);
+        AnnotateExpression(Predicate, OptionalBool);
+        if (Filter) {
+            Filter->FilterExpr = Predicate;
+        }
+    }
+
+    TSubplanEntry& Entry() {
+        return Root->PlanProps.Subplans.PlanMap.at(Binding);
+    }
+
+    TExportTestContext Ctx;
+    const TPositionHandle Pos;
+    const TTypeAnnotationNode* const Int32;
+    const TTypeAnnotationNode* const OptionalInt32;
+    const TTypeAnnotationNode* const Bool;
+    const TTypeAnnotationNode* const OptionalBool;
+    const TInfoUnit Binding{"_rbo_exists_two_dependencies", true};
+    const TInfoUnit OrderDependency{"outer.order_key"};
+    const TInfoUnit WarehouseDependency{"outer.warehouse_key"};
+    TIntrusivePtr<TOpRead> OuterRead;
+    TIntrusivePtr<TOpRead> InnerRead;
+    std::unique_ptr<TOpRoot> Root;
+    TIntrusivePtr<TOpAddDependencies> AddDependencies;
+    TExpression Equality;
+    TExpression Inequality;
+    TExpression Residual;
+    TExpression Predicate;
+    TIntrusivePtr<TOpFilter> Filter;
+    TExpression BindingValue;
+    TIntrusivePtr<TOpFilter> Consumer;
+};
+
 enum class EInSubplanColumnKind {
     Int32,
     String,
@@ -15062,6 +15243,236 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         root.SetInput(consumer);
     }
 
+    Y_UNIT_TEST(ExportsExactTwoDependencyEqualityInequalityCorrelatedExists) {
+        TTwoDependencyExistsExportFixture fixture;
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx));
+
+        const auto& descriptors =
+            snapshot["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(descriptors.size(), 1);
+        const auto& descriptor = descriptors.front();
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["kind"].GetStringSafe(),
+            "exists");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(descriptor["dependencies"]),
+            TVector<TString>({
+                "outer.order_key",
+                "outer.warehouse_key",
+            }));
+
+        const auto& predicate = descriptor["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            predicate["kind"].GetStringSafe(),
+            "and");
+        const auto& conjuncts = predicate["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EqualityColumns(conjuncts[0]),
+            std::make_pair(
+                TString("inner.order_key"),
+                TString("outer.order_key")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            conjuncts[1]["kind"].GetStringSafe(),
+            "not");
+        UNIT_ASSERT_VALUES_EQUAL(
+            EqualityColumns(conjuncts[1]["arg"]),
+            std::make_pair(
+                TString("outer.warehouse_key"),
+                TString("inner.warehouse_key")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            conjuncts[2]["column"].GetStringSafe(),
+            "inner.flag");
+
+        const TString rootId = descriptor["root"].GetStringSafe();
+        bool foundRoot = false;
+        for (const auto& node :
+            snapshot["plan"]["nodes"].GetArraySafe())
+        {
+            UNIT_ASSERT_UNEQUAL(
+                node["op"].GetStringSafe(),
+                "outer_bind");
+            if (node["id"].GetStringSafe() == rootId) {
+                foundRoot = true;
+                UNIT_ASSERT_VALUES_EQUAL(
+                    node["op"].GetStringSafe(),
+                    "scan");
+            }
+        }
+        UNIT_ASSERT(foundRoot);
+    }
+
+    Y_UNIT_TEST(TwoDependencyCorrelatedExistsContractsFailClosed) {
+        TTwoDependencyExistsExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+        const auto supported = [&]() {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT_C(
+                result.IsSupported(),
+                result.UnsupportedReason);
+        };
+        supported();
+
+        auto& entry = fixture.Entry();
+        entry.DependentIUs.push_back(TInfoUnit("outer.third"));
+        reject("exactly two equality/inequality dependencies");
+        entry.DependentIUs.pop_back();
+
+        std::swap(
+            fixture.AddDependencies->Dependencies[0],
+            fixture.AddDependencies->Dependencies[1]);
+        reject("registry disagrees with AddDependencies");
+        std::swap(
+            fixture.AddDependencies->Dependencies[0],
+            fixture.AddDependencies->Dependencies[1]);
+
+        fixture.AddDependencies->Types[1] = nullptr;
+        reject("missing type");
+        fixture.AddDependencies->Types[1] = fixture.OptionalInt32;
+
+        auto warehouseEquality = fixture.Comparison(
+            "==",
+            fixture.WarehouseDependency,
+            TInfoUnit("inner.warehouse_key"));
+        fixture.SetPredicate({
+            fixture.Equality,
+            warehouseEquality,
+            fixture.Residual,
+        });
+        reject("exactly one strict column equality");
+
+        auto orderInequality = fixture.Comparison(
+            "!=",
+            TInfoUnit("inner.order_key"),
+            fixture.OrderDependency);
+        fixture.SetPredicate({
+            orderInequality,
+            fixture.Inequality,
+            fixture.Residual,
+        });
+        reject("exactly one strict column equality");
+
+        fixture.SetPredicate({
+            fixture.Equality,
+            fixture.Residual,
+        });
+        reject("exactly one strict column equality");
+
+        auto repeatedOrderDependency = fixture.Comparison(
+            "!=",
+            fixture.OrderDependency,
+            TInfoUnit("inner.warehouse_key"));
+        fixture.SetPredicate({
+            fixture.Equality,
+            repeatedOrderDependency,
+            fixture.Residual,
+        });
+        reject("references outer dependency outer.order_key in multiple conjuncts");
+
+        auto crossDependency = fixture.Comparison(
+            "==",
+            fixture.OrderDependency,
+            fixture.WarehouseDependency);
+        fixture.SetPredicate({
+            crossDependency,
+            fixture.Inequality,
+            fixture.Residual,
+        });
+        reject("must reference exactly one outer dependency");
+
+        auto repeatedInnerColumn = fixture.Comparison(
+            "!=",
+            fixture.WarehouseDependency,
+            TInfoUnit("inner.order_key"));
+        fixture.SetPredicate({
+            fixture.Equality,
+            repeatedInnerColumn,
+            fixture.Residual,
+        });
+        reject("must use distinct inner columns");
+
+        auto orderedComparison = fixture.Comparison(
+            "<",
+            fixture.WarehouseDependency,
+            TInfoUnit("inner.warehouse_key"));
+        fixture.SetPredicate({
+            fixture.Equality,
+            orderedComparison,
+            fixture.Residual,
+        });
+        reject("one strict column equality and one strict column inequality");
+
+        fixture.SetPredicate({
+            fixture.Equality,
+            fixture.Inequality,
+            fixture.Residual,
+        });
+        SetExactOutputType(
+            fixture.Ctx,
+            *fixture.AddDependencies,
+            {
+                {"inner.order_key", fixture.OptionalInt32},
+                {"inner.warehouse_key", fixture.OptionalInt32},
+                {"inner.flag", fixture.Bool},
+                {"outer.order_key", fixture.OptionalInt32},
+                {"outer.warehouse_key", fixture.Int32},
+            });
+        reject("dependency type or output order is inconsistent");
+        SetExactOutputType(
+            fixture.Ctx,
+            *fixture.AddDependencies,
+            {
+                {"inner.order_key", fixture.OptionalInt32},
+                {"inner.warehouse_key", fixture.OptionalInt32},
+                {"inner.flag", fixture.Bool},
+                {"outer.order_key", fixture.OptionalInt32},
+                {"outer.warehouse_key", fixture.OptionalInt32},
+            });
+
+        AnnotateBinaryExpression(
+            fixture.Inequality,
+            fixture.OptionalInt32,
+            fixture.Int32,
+            fixture.OptionalBool);
+        fixture.SetPredicate({
+            fixture.Equality,
+            fixture.Inequality,
+            fixture.Residual,
+        });
+        reject("inner comparison Member type disagrees");
+        AnnotateBinaryExpression(
+            fixture.Inequality,
+            fixture.OptionalInt32,
+            fixture.OptionalInt32,
+            fixture.OptionalBool);
+        fixture.SetPredicate({
+            fixture.Equality,
+            fixture.Inequality,
+            fixture.Residual,
+        });
+        supported();
+    }
+
     Y_UNIT_TEST(CorrelatedExistsContractsFailClosed) {
         TExportTestContext ctx;
         const auto& outerTable = AddTable(
@@ -15176,7 +15587,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         entry.Tuple.clear();
 
         entry.DependentIUs.push_back(TInfoUnit("outer.other"));
-        reject("exactly one outer dependency");
+        entry.DependentIUs.push_back(TInfoUnit("outer.third"));
+        reject("exactly two equality/inequality dependencies");
+        entry.DependentIUs.pop_back();
         entry.DependentIUs.pop_back();
 
         addDependencies->Dependencies.front() =
@@ -15258,6 +15671,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "1",
             pos,
             &ctx.ExprCtx);
+        innerRead->Limit = one.GetExpressionBody();
+        reject("per-invocation row-selection semantics");
+        innerRead->Limit.Reset();
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx, catalog.Catalog)
+                .IsSupported(),
+            "restored correlated scan without a pushed limit must remain supported");
+
         auto correlatedLimit = MakeIntrusive<TOpLimit>(
             innerRead,
             pos,
@@ -15314,15 +15735,23 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         subplanFilter->FilterExpr = equality;
 
         addDependencies->Types.front() = optionalInt32;
+        SetExactOutputType(ctx, *addDependencies, {
+            {"inner.k", int32},
+            {"outer.k", optionalInt32},
+        });
         reject("dependency Member type disagrees");
         addDependencies->Types.front() = int32;
+        SetExactOutputType(ctx, *addDependencies, {
+            {"inner.k", int32},
+            {"outer.k", int32},
+        });
 
         AnnotateBinaryExpression(
             equality,
             optionalInt32,
             int32,
             optionalBool);
-        reject("inner equality Member type disagrees");
+        reject("inner comparison Member type disagrees");
         AnnotateBinaryExpression(
             equality,
             int32,

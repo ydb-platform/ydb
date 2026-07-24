@@ -166,6 +166,61 @@ def count_star_snapshot():
     return value
 
 
+def shared_void_one_sided_count_snapshot(kind="left_semi"):
+    value = count_star_snapshot()
+    count_input = value["plan"]["nodes"][1]
+    count_input["columns"].append({
+        "output": "a.k",
+        "expression": {"kind": "column", "column": "a.k"},
+    })
+    branch = {
+        "id": "branch",
+        "op": "project",
+        "input": "count_input",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "_count_input",
+                "expression": {
+                    "kind": "column",
+                    "column": "_count_input",
+                },
+            },
+            {
+                "output": "branch.k",
+                "expression": {"kind": "column", "column": "a.k"},
+            },
+        ],
+    }
+    retained_on_left = kind in {"left_semi", "left_anti"}
+    join = {
+        "id": "join",
+        "op": "join",
+        "left": "count_input" if retained_on_left else "branch",
+        "right": "branch" if retained_on_left else "count_input",
+        "kind": kind,
+        "keys": [{
+            "left": "a.k" if retained_on_left else "branch.k",
+            "right": "branch.k" if retained_on_left else "a.k",
+        }],
+        "predicate": {
+            "kind": "literal",
+            "type": "Bool",
+            "value": True,
+        },
+    }
+    aggregate = value["plan"]["nodes"][2]
+    aggregate["input"] = "join"
+    value["plan"]["nodes"] = [
+        value["plan"]["nodes"][0],
+        count_input,
+        branch,
+        join,
+        aggregate,
+    ]
+    return value
+
+
 def count_distinct_int64_snapshot():
     value = minimal_snapshot()
     value["plan"]["nodes"] = [
@@ -2022,6 +2077,34 @@ class SnapshotTest(unittest.TestCase):
         })
         value["plan"]["nodes"][4]["input"] = "join"
         parse_snapshot(value)
+
+    def test_shared_void_may_be_discarded_by_a_one_sided_join(self):
+        for kind in ("left_semi", "left_anti", "right_semi", "right_anti"):
+            with self.subTest(kind=kind):
+                parse_snapshot(shared_void_one_sided_count_snapshot(kind))
+
+    def test_one_sided_join_rejects_an_unmatched_discarded_void(self):
+        value = shared_void_one_sided_count_snapshot()
+        value["plan"]["nodes"][2]["columns"][0]["output"] = (
+            "branch._count_input"
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "canonical count aggregate",
+        ):
+            parse_snapshot(value)
+
+    def test_join_key_may_not_inspect_void(self):
+        value = shared_void_one_sided_count_snapshot()
+        value["plan"]["nodes"][3]["keys"] = [{
+            "left": "_count_input",
+            "right": "_count_input",
+        }]
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "canonical count aggregate",
+        ):
+            parse_snapshot(value)
 
     def test_void_is_rejected_outside_a_canonical_count_input(self):
         root_void = count_star_snapshot()

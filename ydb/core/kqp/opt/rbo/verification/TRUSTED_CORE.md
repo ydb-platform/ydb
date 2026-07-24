@@ -100,6 +100,39 @@ per-invocation choice families fail closed. Every invocation shares one
 validated immutable plan context and one cumulative 16,384-pair construction
 budget.
 
+The relational `EXISTS` slice has no equivalence axiom or query-specific
+shortcut. An uncorrelated descriptor denotes Boolean root presence. The
+original correlated form has one outer dependency and one strict direct
+outer/inner equality conjunct. The exact two-dependency extension instead has
+two ordered, distinct outer dependencies, each in its own conjunct: exactly one
+strict direct equality and one strict direct inequality target distinct direct
+inner columns. Each pair has the same base type while nullability may differ;
+all residual conjuncts are inner-only. The C++ exporter normalizes source `!=`
+to JSON `not(eq)` and validates the exact `AddDependencies` output schema,
+order, and types. `ir.py` independently validates the serialized dependency
+order, types, and normalized predicate contract.
+
+`relation.py` binds every dependency from the same outer row and evaluates the
+complete predicate against each present inner row. It ORs only rows for which
+SQL Filter truth is true, so strict comparisons involving NULL do not match
+and duplicates collapse. Consumer negation supplies `NOT EXISTS`. Correlated
+Limit, TopSort, scan `pushed_limit`, observable `EnsureAtMostOne`, nesting,
+staging, fanout, and per-invocation choice families fail closed. A same-name
+`Void` may disappear from the unselected input of a one-sided witness join only
+when the selected input retains that `Void`; an unmatched dropped `Void` and
+every `Void` join key remain unsupported. One cumulative preflight rejects more
+than 16,384 outer/inner pairs.
+
+Independent evidence includes the C++ descriptor/shape mutation matrix, Python
+NULL/duplicate/ordering/cache/pair-cap and semi/anti differentials,
+order-sensitive inspector digests, an omitted-second-correlation
+`COUNTEREXAMPLE`, and a real-host two-dependency capture. Focused TPCH q21 and
+TPC-DS q16/q94 all return `VERIFIED_BOUNDED` at two rows per table and two
+tasks. The current complete policy gate independently returns 11/11 TPCH and
+14/14 TPC-DS `VERIFIED_BOUNDED`, confirming all 25/25 curated obligations.
+These results extend the bounded proof floor; they do not establish unbounded
+SQL equivalence.
+
 The dynamic-`IN` slice adds one explicit typed `in` subplan descriptor. C++ and
 Python independently require exactly one lookup column from the sole Filter
 consumer and one result column from the inner root, with exactly the same
@@ -324,6 +357,11 @@ the SMT obligation itself:
 - each accepted `outer_bind` represents one fresh correlated scalar invocation
   with no hidden row-selection, ordering, error, or nondeterministic choice
   semantics beyond the explicitly modeled root;
+- each accepted relational `EXISTS` descriptor represents one Boolean presence
+  test over the recorded inner root; its ordered dependency values come from
+  one outer row, its retained predicate has the strict comparison/NULL behavior
+  described above, and it has no hidden row selection, ordering, error,
+  coercion, correlation, or fanout beyond the admitted form;
 - each accepted dynamic-`IN` descriptor represents one uncorrelated
   existential membership test over the recorded lookup/result columns; for an
   independently nullable fixed-width-integral pair, the binding occurs only
@@ -419,7 +457,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, and exact Decimal weak-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap and positive-nullable-context checks, real-host Decimal-AVG, and non-null/nullable `IN`-to-`left_semi` cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

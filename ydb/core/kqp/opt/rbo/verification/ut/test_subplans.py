@@ -56,6 +56,13 @@ def _equality(left, right, *, null_safe=False):
     return expression
 
 
+def _inequality(left, right):
+    return {
+        "kind": "not",
+        "arg": _equality(left, right),
+    }
+
+
 def _base_snapshot(expression=None):
     expression = expression or _literal("Int64", 7)
     output_type = expression["type"]
@@ -311,6 +318,61 @@ def _exists_snapshot(
         },
         "stage_graph": None,
     }
+
+
+def _two_dependency_exists_snapshot(*, negate=False):
+    raw = _exists_snapshot(negate=negate)
+    table = raw["schema"]["tables"][0]
+    table["columns"].extend(
+        (
+            {"name": "outer_ne", "type": "Int64", "nullable": True},
+            {"name": "inner_ne", "type": "Int64", "nullable": True},
+        )
+    )
+    outer_scan, inner_scan = raw["plan"]["nodes"][:2]
+    outer_scan["columns"].append(
+        {"source": "outer_ne", "output": "outer.ne_key"}
+    )
+    inner_scan["columns"].append(
+        {"source": "inner_ne", "output": "inner.ne_key"}
+    )
+    descriptor = raw["plan"]["subplans"][0]
+    descriptor["predicate"] = {
+        "kind": "and",
+        "args": [
+            descriptor["predicate"],
+            _inequality("outer.ne_key", "inner.ne_key"),
+        ],
+    }
+    descriptor["dependencies"] = ["outer.x", "outer.ne_key"]
+    return raw
+
+
+def _lower_exists_snapshot(raw, join_kind, *, predicate=None):
+    result = copy.deepcopy(raw)
+    descriptor = result["plan"]["subplans"][0]
+    consumer = next(
+        node
+        for node in result["plan"]["nodes"]
+        if node["id"] == "main_filter"
+    )
+    consumer.clear()
+    consumer.update(
+        {
+            "id": "main_filter",
+            "op": "join",
+            "left": "outer_scan",
+            "right": descriptor["root"],
+            "kind": join_kind,
+            "predicate": (
+                descriptor["predicate"]
+                if predicate is None
+                else predicate
+            ),
+        }
+    )
+    result["plan"]["subplans"] = []
+    return result
 
 
 def _in_snapshot(
@@ -850,6 +912,29 @@ def _exists_constants(database, outer, inner):
             cell = row.cells[name]
             constants[cell.is_null.atom] = value is None
             constants[cell.value.atom] = 0 if value is None else value
+    return constants
+
+
+def _two_dependency_exists_constants(database, outer, inner):
+    constants = {}
+
+    def bind_cell(cell, value):
+        if cell.is_null.operation == "symbol":
+            constants[cell.is_null.atom] = value is None
+        if cell.value.operation == "symbol":
+            constants[cell.value.atom] = 0 if value is None else value
+
+    for row, outer_values, inner_values in zip(
+        database.witness["A"],
+        outer,
+        inner,
+    ):
+        constants[row.present.atom] = True
+        for name, value in zip(
+            ("x", "outer_ne", "y", "inner_ne"),
+            (*outer_values, *inner_values),
+        ):
+            bind_cell(row.cells[name], value)
     return constants
 
 
@@ -2283,6 +2368,62 @@ class ExistsSubplanEvaluationTest(unittest.TestCase):
         self.assertEqual(len(relation.rows), 2)
         self.assertEqual(set(evaluator.subplan_families), {"$exists"})
 
+    def test_two_dependency_exists_applies_equality_and_inequality_per_pair(self):
+        evaluator, database, family = self._evaluate(
+            _two_dependency_exists_snapshot()
+        )
+        relation = family.certain()
+        cases = (
+            (
+                ((1, 10), (2, 20)),
+                ((1, 10), (2, 30)),
+                [2],
+            ),
+            (
+                ((1, 10), (2, 20)),
+                ((1, 30), (1, 40)),
+                [1],
+            ),
+            (
+                ((1, None), (2, 20)),
+                ((1, 30), (2, None)),
+                [],
+            ),
+        )
+        for outer, inner, expected in cases:
+            with self.subTest(outer=outer, inner=inner):
+                constants = _two_dependency_exists_constants(
+                    database,
+                    outer,
+                    inner,
+                )
+                self.assertEqual(
+                    self._present_values(relation, constants),
+                    expected,
+                )
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(set(evaluator.subplan_families), {"$exists"})
+
+    def test_two_dependency_exists_retains_inner_only_residuals(self):
+        raw = _two_dependency_exists_snapshot()
+        raw["plan"]["subplans"][0]["predicate"]["args"].append(
+            {
+                "kind": "lt",
+                "left": {"kind": "column", "column": "inner.ne_key"},
+                "right": _literal("Int64", 35),
+            }
+        )
+        _, database, family = self._evaluate(raw)
+        constants = _two_dependency_exists_constants(
+            database,
+            ((1, 10), (2, 20)),
+            ((1, 30), (2, 40)),
+        )
+        self.assertEqual(
+            self._present_values(family.certain(), constants),
+            [1],
+        )
+
     def test_uncorrelated_empty_nonempty_not_and_repeated_binding(self):
         cases = (
             (_exists_snapshot(correlated=False), [1, 2]),
@@ -2306,33 +2447,11 @@ class ExistsSubplanEvaluationTest(unittest.TestCase):
                 )
 
     def test_exists_and_not_exists_match_semi_and_anti_join(self):
-        def lowered(raw, join_kind):
-            result = copy.deepcopy(raw)
-            descriptor = result["plan"]["subplans"][0]
-            consumer = next(
-                node
-                for node in result["plan"]["nodes"]
-                if node["id"] == "main_filter"
-            )
-            consumer.clear()
-            consumer.update(
-                {
-                    "id": "main_filter",
-                    "op": "join",
-                    "left": "outer_scan",
-                    "right": descriptor["root"],
-                    "kind": join_kind,
-                    "predicate": descriptor["predicate"],
-                }
-            )
-            result["plan"]["subplans"] = []
-            return result
-
         for negate, join_kind in ((False, "left_semi"), (True, "left_anti")):
             with self.subTest(join_kind=join_kind):
                 raw = _exists_snapshot(negate=negate)
                 before = parse_snapshot(raw)
-                after = parse_snapshot(lowered(raw, join_kind))
+                after = parse_snapshot(_lower_exists_snapshot(raw, join_kind))
                 script = smt.Script()
                 database = Database(before, 2, script)
                 scalar = ScalarEncoder(script)
@@ -2410,6 +2529,46 @@ class ExistsSubplanEvaluationTest(unittest.TestCase):
             "Boolean subplan evaluation requires 16641 candidate-row pairs",
         ):
             self._evaluate(_exists_snapshot(), row_bound=129)
+
+
+@unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
+class ExistsSubplanSolverTest(unittest.TestCase):
+    @staticmethod
+    def _solve(before, after, row_bound=2):
+        problem = build_logical_kernel_problem_for_tests(
+            parse_snapshot(before),
+            parse_snapshot(after),
+            row_bound,
+            10_000,
+        )
+        return solve(problem, SOLVER, row_bound, 10_000)
+
+    def test_two_dependency_exists_matches_semi_and_anti_join(self):
+        for negate, join_kind in (
+            (False, "left_semi"),
+            (True, "left_anti"),
+        ):
+            with self.subTest(join_kind=join_kind):
+                before = _two_dependency_exists_snapshot(negate=negate)
+                after = _lower_exists_snapshot(before, join_kind)
+
+                result = self._solve(before, after)
+
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_omitting_second_correlation_has_a_counterexample(self):
+        before = _two_dependency_exists_snapshot()
+        equality = before["plan"]["subplans"][0]["predicate"]["args"][0]
+        after = _lower_exists_snapshot(
+            before,
+            "left_semi",
+            predicate=equality,
+        )
+
+        result = self._solve(before, after, row_bound=1)
+
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertIsNotNone(result.witness)
 
 
 class InSubplanEvaluationTest(unittest.TestCase):
@@ -3266,9 +3425,9 @@ class ExistsSubplanValidationTest(unittest.TestCase):
                 "exactly when EXISTS is correlated",
             ),
             (
-                ["outer.x", "outer.y"],
+                ["outer.x", "outer.y", "outer.z"],
                 _literal("Bool", True),
-                "at most one outer dependency",
+                "at most two outer dependencies",
             ),
         ):
             with self.subTest(message=message):
@@ -3278,6 +3437,163 @@ class ExistsSubplanValidationTest(unittest.TestCase):
                 descriptor["predicate"] = predicate
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
+
+        raw = _two_dependency_exists_snapshot()
+        snapshot = parse_snapshot(raw)
+        self.assertEqual(
+            snapshot.plan.subplans[0].dependencies,
+            ("outer.x", "outer.ne_key"),
+        )
+
+        raw["plan"]["subplans"][0]["dependencies"][1] = "outer.x"
+        with self.assertRaisesRegex(SnapshotError, "duplicate name 'outer.x'"):
+            parse_snapshot(raw)
+
+    def test_two_dependency_correlation_shape_is_exact(self):
+        def mutation(mutator):
+            raw = _two_dependency_exists_snapshot()
+            descriptor = raw["plan"]["subplans"][0]
+            mutator(descriptor)
+            return raw
+
+        def keep_only_first(descriptor):
+            descriptor["predicate"] = descriptor["predicate"]["args"][0]
+
+        def repeat_second_dependency(descriptor):
+            descriptor["predicate"]["args"].append(
+                _equality("outer.ne_key", "inner.ne_key")
+            )
+
+        def use_two_equalities(descriptor):
+            descriptor["predicate"]["args"][1] = (
+                descriptor["predicate"]["args"][1]["arg"]
+            )
+
+        def use_two_inequalities(descriptor):
+            descriptor["predicate"]["args"][0] = {
+                "kind": "not",
+                "arg": descriptor["predicate"]["args"][0],
+            }
+
+        def reuse_inner_column(descriptor):
+            descriptor["predicate"]["args"][1]["arg"]["right"][
+                "column"
+            ] = "inner.x"
+
+        def make_inequality_null_safe(descriptor):
+            descriptor["predicate"]["args"][1]["arg"]["null_safe"] = True
+
+        def use_literal_operand(descriptor):
+            descriptor["predicate"]["args"][1]["arg"]["right"] = _literal(
+                "Int64",
+                1,
+            )
+
+        def use_computed_operand(descriptor):
+            descriptor["predicate"]["args"][1]["arg"]["right"] = {
+                "kind": "add",
+                "left": {
+                    "kind": "column",
+                    "column": "inner.ne_key",
+                },
+                "right": _literal("Int64", 1),
+                "type": "Int64",
+                "nullable": True,
+            }
+
+        def compare_dependencies_in_one_conjunct(descriptor):
+            descriptor["predicate"]["args"][0] = _equality(
+                "outer.x",
+                "outer.ne_key",
+            )
+
+        cases = (
+            (
+                keep_only_first,
+                "dependency-bearing conjunct",
+            ),
+            (
+                repeat_second_dependency,
+                "exactly one dependency-bearing conjunct",
+            ),
+            (
+                use_two_equalities,
+                "exactly one direct equality and one direct inequality",
+            ),
+            (
+                use_two_inequalities,
+                "exactly one direct equality and one direct inequality",
+            ),
+            (
+                reuse_inner_column,
+                "distinct inner columns",
+            ),
+            (
+                make_inequality_null_safe,
+                "direct non-null-safe column equality or inequality",
+            ),
+            (
+                use_literal_operand,
+                "direct non-null-safe column equality or inequality",
+            ),
+            (
+                use_computed_operand,
+                "direct non-null-safe column equality or inequality",
+            ),
+            (
+                compare_dependencies_in_one_conjunct,
+                "each outer dependency in a separate conjunct",
+            ),
+        )
+        for mutate, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation(mutate))
+
+    def test_two_dependency_correlation_schemas_are_exact(self):
+        raw = _two_dependency_exists_snapshot()
+        outer_scan = raw["plan"]["nodes"][0]
+        outer_scan["columns"] = outer_scan["columns"][:1] + outer_scan["columns"][2:]
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "outer column 'outer.ne_key' is not available",
+        ):
+            parse_snapshot(raw)
+
+        raw = _two_dependency_exists_snapshot()
+        inner_scan = raw["plan"]["nodes"][1]
+        inner_scan["columns"][1]["output"] = "outer.ne_key"
+        with self.assertRaisesRegex(SnapshotError, "collides with an inner column"):
+            parse_snapshot(raw)
+
+        raw = _two_dependency_exists_snapshot()
+        raw["plan"]["subplans"][0]["predicate"]["args"][1]["arg"]["right"][
+            "column"
+        ] = "inner.missing"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "is not produced by the subplan root",
+        ):
+            parse_snapshot(raw)
+
+        raw = _two_dependency_exists_snapshot()
+        inner_ne = next(
+            column
+            for column in raw["schema"]["tables"][0]["columns"]
+            if column["name"] == "inner_ne"
+        )
+        inner_ne["type"] = "Uint64"
+        with self.assertRaisesRegex(SnapshotError, "types must match exactly"):
+            parse_snapshot(raw)
+
+        raw = _two_dependency_exists_snapshot()
+        inner_ne = next(
+            column
+            for column in raw["schema"]["tables"][0]["columns"]
+            if column["name"] == "inner_ne"
+        )
+        inner_ne["nullable"] = False
+        parse_snapshot(raw)
 
     def test_correlation_requires_one_plain_outer_inner_column_equality(self):
         for predicate, message in (
@@ -3377,6 +3693,16 @@ class ExistsSubplanValidationTest(unittest.TestCase):
             "per-invocation row selection",
         ):
             parse_snapshot(with_sort(_exists_snapshot(), limit=1))
+        pushed_limit = _exists_snapshot()
+        pushed_limit["plan"]["nodes"][1]["pushed_limit"] = _literal(
+            "Uint64",
+            1,
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "per-invocation row selection",
+        ):
+            parse_snapshot(pushed_limit)
 
         parse_snapshot(_exists_snapshot(correlated=False, limit_inner=True))
         parse_snapshot(
@@ -3386,6 +3712,18 @@ class ExistsSubplanValidationTest(unittest.TestCase):
             )
         )
         parse_snapshot(with_sort(_exists_snapshot(), limit=None))
+        uncorrelated_pushed_limit = _exists_snapshot(correlated=False)
+        uncorrelated_pushed_limit["plan"]["nodes"][1][
+            "pushed_limit"
+        ] = _literal("Uint64", 1)
+        # The correlated row-selection gate must not claim this shape.  The
+        # independent StageGraph/source-storage gate still rejects pushed
+        # scans in this logical snapshot.
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "requires a column-storage source stage",
+        ):
+            parse_snapshot(uncorrelated_pushed_limit)
 
 
 class InSubplanValidationTest(unittest.TestCase):

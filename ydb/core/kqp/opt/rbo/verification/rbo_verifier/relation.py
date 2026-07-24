@@ -1240,13 +1240,15 @@ class Evaluator:
                 and subplan.dependency is not None
             )
         )
-        uncorrelated_subplans = tuple(
+        # These roots are closed and may be shared across outer rows.  An
+        # EXISTS predicate can still correlate the shared root with each row.
+        closed_subplans = tuple(
             subplan
             for subplan in subplans
             if subplan not in correlated_scalars
         )
         binding_families: list[SubplanFamily] = []
-        for subplan in uncorrelated_subplans:
+        for subplan in closed_subplans:
             family = self.subplan_families.get(subplan.binding)
             if family is None:
                 family = self._evaluate_subplan(subplan)
@@ -1329,7 +1331,7 @@ class Evaluator:
                 len(partial.relations[0].rows)
                 * len(partial.relations[index].rows)
                 for index, subplan in enumerate(
-                    uncorrelated_subplans,
+                    closed_subplans,
                     start=1,
                 )
                 if isinstance(subplan, (ExistsSubplan, InSubplan))
@@ -1346,7 +1348,7 @@ class Evaluator:
                         partial.relations[index],
                     )
                     for index, subplan in enumerate(
-                        uncorrelated_subplans,
+                        closed_subplans,
                         start=1,
                     )
                 }
@@ -1424,15 +1426,17 @@ class Evaluator:
                     smt.eq(outer_value.value, inner_value.value),
                 )
             elif subplan.predicate is not None:
-                assert subplan.dependency is not None
-                dependency = subplan.dependency
+                assert subplan.dependencies
+                outer_bindings = {
+                    dependency: outer_row.values[dependency]
+                    for dependency in subplan.dependencies
+                }
                 match = smt.and_(
                     match,
                     self.scalar.is_true(
                         self.scalar.evaluate(
                             subplan.predicate,
-                            {dependency: outer_row.values[dependency]}
-                            | dict(inner_row.values),
+                            outer_bindings | dict(inner_row.values),
                         )
                     ),
                 )

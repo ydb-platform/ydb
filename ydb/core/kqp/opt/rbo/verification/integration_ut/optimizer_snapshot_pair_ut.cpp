@@ -879,6 +879,56 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
     }
 
+    Y_UNIT_TEST(RealHostVerifiesTwoDependencyCorrelatedExists) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Id
+            FROM `/Root/RboExistsOuter` AS outer_row
+            WHERE EXISTS (
+                SELECT inner_row.Id
+                FROM `/Root/RboExistsInner` AS inner_row
+                WHERE inner_row.MatchKey == outer_row.MatchKey
+                  AND inner_row.Id != outer_row.Id
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "exists");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["dependencies"].GetArraySafe().size(),
+            2);
+        TVector<const NJson::TJsonValue*> conjuncts;
+        CollectConjuncts(subplan["predicate"], conjuncts);
+        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 2);
+        size_t equalityCount = 0;
+        size_t inequalityCount = 0;
+        for (const auto* conjunct : conjuncts) {
+            if ((*conjunct)["kind"].GetStringSafe() == "eq") {
+                ++equalityCount;
+            } else if (
+                (*conjunct)["kind"].GetStringSafe() == "not" &&
+                (*conjunct)["arg"]["kind"].GetStringSafe() == "eq")
+            {
+                ++inequalityCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(equalityCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(inequalityCount, 1);
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        size_t leftSemiCount = 0;
+        for (const auto* join : joins) {
+            leftSemiCount +=
+                (*join)["kind"].GetStringSafe() == "left_semi";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(leftSemiCount, 1);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesEqualityCorrelatedScalarAvgLeftJoin) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);

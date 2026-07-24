@@ -13678,6 +13678,129 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         fixture.Entry().Plan = fixture.InnerRead;
     }
 
+    Y_UNIT_TEST(ExportsNullableIntegralInOnlyAsPositiveFilterConjunct) {
+        TInSubplanExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto assertNullability = [&](
+            const TTypeAnnotationNode* lookupType,
+            const TTypeAnnotationNode* outputType,
+            bool lookupNullable,
+            bool outputNullable)
+        {
+            SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
+                {"outer.k", lookupType},
+            });
+            SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
+                {"inner.k", outputType},
+            });
+            SetExactOutputType(fixture.Ctx, *fixture.Consumer, {
+                {"outer.k", lookupType},
+            });
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(
+                    *fixture.Root,
+                    fixture.Ctx.RboCtx,
+                    catalog.Catalog));
+            const auto& descriptor =
+                snapshot["plan"]["subplans"].GetArraySafe()[0];
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["lookup"]["type"].GetStringSafe(),
+                "Int32");
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["lookup"]["nullable"].GetBooleanSafe(),
+                lookupNullable);
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["output"]["type"].GetStringSafe(),
+                "Int32");
+            UNIT_ASSERT_VALUES_EQUAL(
+                descriptor["output"]["nullable"].GetBooleanSafe(),
+                outputNullable);
+        };
+        assertNullability(
+            fixture.OptionalInt32,
+            fixture.Int32,
+            true,
+            false);
+        assertNullability(
+            fixture.Int32,
+            fixture.OptionalInt32,
+            false,
+            true);
+        assertNullability(
+            fixture.OptionalInt32,
+            fixture.OptionalInt32,
+            true,
+            true);
+
+        auto direct = fixture.BindingValue.GetExpressionBody();
+        fixture.Consumer->FilterExpr = TExpression(
+            TypedCallable(
+                fixture.Ctx,
+                "And",
+                {
+                    direct,
+                    TypedLiteral(
+                        fixture.Ctx,
+                        "Bool",
+                        "true",
+                        fixture.Bool),
+                },
+                fixture.Bool),
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "a direct positive nullable IN conjunct must remain supported");
+
+        fixture.Consumer->FilterExpr = TExpression(
+            TypedCallable(
+                fixture.Ctx,
+                "Not",
+                {direct},
+                fixture.Bool),
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        const auto negated = ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!negated.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            negated.UnsupportedReason,
+            "must be a direct positive Filter conjunct");
+
+        fixture.Consumer->FilterExpr = TExpression(
+            TypedCallable(
+                fixture.Ctx,
+                "Or",
+                {
+                    direct,
+                    TypedLiteral(
+                        fixture.Ctx,
+                        "Bool",
+                        "false",
+                        fixture.Bool),
+                },
+                fixture.Bool),
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        const auto disjoined = ExportSemanticSnapshotV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx,
+            catalog.Catalog);
+        UNIT_ASSERT(!disjoined.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            disjoined.UnsupportedReason,
+            "must be a direct positive Filter conjunct");
+    }
+
     Y_UNIT_TEST(ExportsExactUncorrelatedNonNullStringInSubplan) {
         TInSubplanExportFixture fixture(EInSubplanColumnKind::String);
         const auto catalog = CaptureSemanticSnapshotCatalogV1(
@@ -13754,23 +13877,23 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         };
 
         setResultType(fixture.OptionalString);
-        reject("result must be a non-null fixed-width integer or String");
+        reject("result must be a fixed-width integer or non-null String");
         setResultType(fixture.Utf8);
-        reject("result must be a non-null fixed-width integer or String");
+        reject("result must be a fixed-width integer or non-null String");
         setResultType(fixture.Bool);
-        reject("result must be a non-null fixed-width integer or String");
+        reject("result must be a fixed-width integer or non-null String");
         setResultType(fixture.Date);
-        reject("result must be a non-null fixed-width integer or String");
+        reject("result must be a fixed-width integer or non-null String");
         setResultType(DecimalType(fixture.Ctx, "12", "2"));
-        reject("result must be a non-null fixed-width integer or String");
+        reject("result must be a fixed-width integer or non-null String");
         setResultType(fixture.String);
 
         setLookupType(fixture.OptionalString);
-        reject("lookup and result must have the same supported non-null type");
+        reject("nullable lookup must be a fixed-width integer");
         setLookupType(fixture.Utf8);
-        reject("lookup and result must have the same supported non-null type");
+        reject("lookup and result must have the same supported type");
         setLookupType(fixture.Int32);
-        reject("lookup and result must have the same supported non-null type");
+        reject("lookup and result must have the same supported type");
         setLookupType(fixture.String);
 
         UNIT_ASSERT_C(
@@ -13821,14 +13944,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         entry.Plan = fixture.InnerRead;
 
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
-            {"inner.k", fixture.OptionalInt32},
-        });
-        reject("result must be a non-null fixed-width integer");
-        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
-            {"inner.k", fixture.Int32},
-        });
-
-        SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Int64},
         });
         reject("lookup and result must have the same");
@@ -13836,18 +13951,10 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {"inner.k", fixture.Int32},
         });
 
-        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
-            {"outer.k", fixture.OptionalInt32},
-        });
-        reject("lookup and result must have the same");
-        SetExactOutputType(fixture.Ctx, *fixture.OuterRead, {
-            {"outer.k", fixture.Int32},
-        });
-
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Bool},
         });
-        reject("result must be a non-null fixed-width integer");
+        reject("result must be a fixed-width integer or non-null String");
         SetExactOutputType(fixture.Ctx, *fixture.InnerRead, {
             {"inner.k", fixture.Int32},
         });

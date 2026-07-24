@@ -313,7 +313,14 @@ def _exists_snapshot(
     }
 
 
-def _in_snapshot(*, scalar_type="Int32", negate=False, repeat_binding=False):
+def _in_snapshot(
+    *,
+    scalar_type="Int32",
+    lookup_nullable=False,
+    output_nullable=False,
+    negate=False,
+    repeat_binding=False,
+):
     binding_expr = {"kind": "column", "column": IN_BINDING}
     if repeat_binding:
         binding_expr = {
@@ -330,14 +337,22 @@ def _in_snapshot(*, scalar_type="Int32", negate=False, repeat_binding=False):
                 {
                     "name": "Outer",
                     "columns": [
-                        {"name": "k", "type": scalar_type, "nullable": False},
+                        {
+                            "name": "k",
+                            "type": scalar_type,
+                            "nullable": lookup_nullable,
+                        },
                     ],
                     "unique_keys": [],
                 },
                 {
                     "name": "Inner",
                     "columns": [
-                        {"name": "k", "type": scalar_type, "nullable": False},
+                        {
+                            "name": "k",
+                            "type": scalar_type,
+                            "nullable": output_nullable,
+                        },
                     ],
                     "unique_keys": [],
                 },
@@ -378,12 +393,12 @@ def _in_snapshot(*, scalar_type="Int32", negate=False, repeat_binding=False):
                     "lookup": {
                         "column": "outer.k",
                         "type": scalar_type,
-                        "nullable": False,
+                        "nullable": lookup_nullable,
                     },
                     "output": {
                         "column": "inner.k",
                         "type": scalar_type,
-                        "nullable": False,
+                        "nullable": output_nullable,
                     },
                     "type": "Bool",
                     "nullable": False,
@@ -861,7 +876,11 @@ def _in_constants(
             present,
         ):
             constants[row.present.atom] = is_present
-            constants[row.cells["k"].value.atom] = value
+            cell = row.cells["k"]
+            if cell.is_null.operation == "symbol":
+                constants[cell.is_null.atom] = value is None
+            if cell.value.operation == "symbol":
+                constants[cell.value.atom] = 0 if value is None else value
     return constants
 
 
@@ -2473,6 +2492,75 @@ class InSubplanEvaluationTest(unittest.TestCase):
                     self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
                     self.assertEqual(observed.count("inner_scan"), 1)
 
+    def test_nullable_integral_membership_is_positive_filter_truth(self):
+        cases = (
+            (
+                True,
+                True,
+                (None, 2, 2),
+                (None, 2, 2),
+                (True, True, True),
+                [2, 2],
+            ),
+            (
+                True,
+                False,
+                (None, 2, 3),
+                (2, 2, 9),
+                (True, True, True),
+                [2],
+            ),
+            (
+                False,
+                True,
+                (1, 2, 3),
+                (None, 2, 2),
+                (True, True, True),
+                [2],
+            ),
+            (
+                True,
+                True,
+                (None, 2, 3),
+                (None, 2, 2),
+                (False, False, False),
+                [],
+            ),
+        )
+        for (
+            lookup_nullable,
+            output_nullable,
+            outer,
+            inner,
+            inner_present,
+            expected,
+        ) in cases:
+            with self.subTest(
+                lookup_nullable=lookup_nullable,
+                output_nullable=output_nullable,
+                outer=outer,
+                inner=inner,
+                inner_present=inner_present,
+            ):
+                evaluator, database, family = self._evaluate(
+                    _in_snapshot(
+                        lookup_nullable=lookup_nullable,
+                        output_nullable=output_nullable,
+                    )
+                )
+                constants = _in_constants(
+                    database,
+                    outer,
+                    inner,
+                    inner_present=inner_present,
+                )
+
+                self.assertEqual(
+                    self._present_values(family.certain(), constants),
+                    expected,
+                )
+                self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
+
     def test_string_membership_matches_the_finite_reference_exhaustively(self):
         values = ("a", "b", "c")
         presence_vectors = tuple(product((False, True), repeat=2))
@@ -2683,6 +2771,28 @@ class InSubplanSolverTest(unittest.TestCase):
         for scalar_type in ("Int32", "String"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
+
+                result = self._solve(
+                    raw,
+                    _lower_in_snapshot(raw, "left_semi"),
+                )
+
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_nullable_integral_in_is_bounded_equivalent_to_left_semi(self):
+        for lookup_nullable, output_nullable in (
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            with self.subTest(
+                lookup_nullable=lookup_nullable,
+                output_nullable=output_nullable,
+            ):
+                raw = _in_snapshot(
+                    lookup_nullable=lookup_nullable,
+                    output_nullable=output_nullable,
+                )
 
                 result = self._solve(
                     raw,
@@ -3315,20 +3425,57 @@ class InSubplanValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
 
-    def test_lookup_and_output_require_the_same_supported_nonnullable_type(self):
-        for scalar_type in ("Int32", "String"):
-            with self.subTest(scalar_type=scalar_type, accepted=True):
-                parse_snapshot(_in_snapshot(scalar_type=scalar_type))
-            for target in ("lookup", "output"):
+    def test_lookup_and_output_accept_independent_nullable_integral_types(self):
+        integral_types = (
+            "Int8",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Uint8",
+            "Uint16",
+            "Uint32",
+            "Uint64",
+        )
+        for scalar_type in integral_types:
+            for lookup_nullable, output_nullable in product(
+                (False, True),
+                repeat=2,
+            ):
                 with self.subTest(
                     scalar_type=scalar_type,
-                    target=target,
-                    nullable=True,
+                    lookup_nullable=lookup_nullable,
+                    output_nullable=output_nullable,
                 ):
-                    raw = _in_snapshot(scalar_type=scalar_type)
-                    raw["plan"]["subplans"][0][target]["nullable"] = True
-                    with self.assertRaisesRegex(SnapshotError, "requires non-null"):
-                        parse_snapshot(raw)
+                    parse_snapshot(
+                        _in_snapshot(
+                            scalar_type=scalar_type,
+                            lookup_nullable=lookup_nullable,
+                            output_nullable=output_nullable,
+                        )
+                    )
+
+        parse_snapshot(_in_snapshot(scalar_type="String"))
+        for lookup_nullable, output_nullable in (
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            with self.subTest(
+                scalar_type="String",
+                lookup_nullable=lookup_nullable,
+                output_nullable=output_nullable,
+            ):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "nullable.*fixed-width integral",
+                ):
+                    parse_snapshot(
+                        _in_snapshot(
+                            scalar_type="String",
+                            lookup_nullable=lookup_nullable,
+                            output_nullable=output_nullable,
+                        )
+                    )
 
         for lookup_type, output_type in (
             ("Int32", "Int64"),
@@ -3355,6 +3502,70 @@ class InSubplanValidationTest(unittest.TestCase):
                     "only fixed-width integral or String",
                 ):
                     parse_snapshot(raw)
+
+    def test_nullable_integral_binding_must_be_a_direct_positive_conjunct(self):
+        positive = _in_snapshot(
+            lookup_nullable=True,
+            output_nullable=True,
+        )
+        positive["plan"]["nodes"][2]["predicate"] = {
+            "kind": "and",
+            "args": [
+                _literal("Bool", True),
+                {"kind": "column", "column": IN_BINDING},
+            ],
+        }
+        parse_snapshot(positive)
+
+        embedded = _in_snapshot(
+            lookup_nullable=True,
+            output_nullable=True,
+        )
+        embedded["plan"]["nodes"][2]["predicate"] = {
+            "kind": "eq",
+            "left": {"kind": "column", "column": IN_BINDING},
+            "right": _literal("Bool", True),
+        }
+        for label, raw in (
+            (
+                "not",
+                _in_snapshot(
+                    lookup_nullable=True,
+                    output_nullable=True,
+                    negate=True,
+                ),
+            ),
+            (
+                "or",
+                _in_snapshot(
+                    lookup_nullable=True,
+                    output_nullable=True,
+                    repeat_binding=True,
+                ),
+            ),
+            ("embedded", embedded),
+        ):
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "direct positive Filter conjunct",
+                ):
+                    parse_snapshot(raw)
+
+    def test_nonnullable_binding_keeps_general_filter_boolean_contexts(self):
+        embedded = _in_snapshot()
+        embedded["plan"]["nodes"][2]["predicate"] = {
+            "kind": "eq",
+            "left": {"kind": "column", "column": IN_BINDING},
+            "right": _literal("Bool", True),
+        }
+        for label, raw in (
+            ("not", _in_snapshot(negate=True)),
+            ("or", _in_snapshot(repeat_binding=True)),
+            ("embedded", embedded),
+        ):
+            with self.subTest(label=label):
+                parse_snapshot(raw)
 
     def test_declared_columns_must_match_both_relation_scopes_exactly(self):
         mutations = (

@@ -1413,6 +1413,10 @@ class Evaluator:
             if isinstance(subplan, InSubplan):
                 outer_value = outer_row.values[subplan.lookup.column]
                 inner_value = inner_row.values[subplan.output.column]
+                # The nullable-column slice is accepted only as a direct
+                # positive Filter conjunct.  A SQL IN predicate makes that
+                # Filter true exactly when one present pair is non-NULL and
+                # equal; FALSE and UNKNOWN both reject the outer row.
                 match = smt.and_(
                     match,
                     smt.not_(outer_value.is_null),

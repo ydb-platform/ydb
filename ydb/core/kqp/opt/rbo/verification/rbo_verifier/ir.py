@@ -285,7 +285,7 @@ class ExistsSubplan:
 
 @dataclass(frozen=True, slots=True)
 class InSubplan:
-    """One exact uncorrelated non-null integral/String IN binding."""
+    """One exact uncorrelated integral/String IN binding used by a Filter."""
 
     binding: str
     root: str
@@ -1234,15 +1234,18 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
 
         lookup = _parse_subplan_output(obj["lookup"], f"{path}.lookup")
         output = _parse_subplan_output(obj["output"], f"{path}.output")
-        if lookup.nullable or output.nullable:
-            _fail(
-                path,
-                "this IN slice requires non-null lookup and output columns",
-            )
         if lookup.type != output.type:
             _fail(
                 path,
                 "IN lookup and output types must match exactly",
+            )
+        if (
+            (lookup.nullable or output.nullable)
+            and integer_bounds(lookup.type) is None
+        ):
+            _fail(
+                path,
+                "nullable-column IN supports only fixed-width integral columns",
             )
         if integer_bounds(lookup.type) is None and lookup.type != "String":
             _fail(
@@ -2166,6 +2169,32 @@ def _conjuncts(expression: Expr) -> tuple[Expr, ...]:
     )
 
 
+def _validate_positive_nullable_in_binding(
+    expression: Expr,
+    binding: str,
+    path: str,
+) -> None:
+    """Require a nullable-column IN result to be one positive Filter conjunct."""
+
+    found = False
+    for conjunct in _conjuncts(expression):
+        if binding not in _expression_columns(conjunct):
+            continue
+        if conjunct.kind != "column" or conjunct.column != binding:
+            _fail(
+                path,
+                "a nullable-column IN binding must be a direct positive "
+                "Filter conjunct",
+            )
+        found = True
+    if not found:
+        _fail(
+            path,
+            "a nullable-column IN binding is absent from its positive "
+            "Filter conjuncts",
+        )
+
+
 def _direct_correlation_inner_column(
     predicate: Expr,
     dependency: str,
@@ -2342,6 +2371,16 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"{path}.consumers",
                     f"node {consumer_id!r} does not reference binding "
                     f"{subplan.binding!r}",
+                )
+            if (
+                isinstance(subplan, InSubplan)
+                and (subplan.lookup.nullable or subplan.output.nullable)
+            ):
+                assert isinstance(consumer, Filter)
+                _validate_positive_nullable_in_binding(
+                    consumer.predicate,
+                    subplan.binding,
+                    f"{path}.consumers",
                 )
             value_type = (
                 ValueType(subplan.output.type, True)

@@ -19,7 +19,7 @@ interconnect_config:
 
 ## {{ ydb-short-name }} в роли сервера
 
-### gRPC
+### gRPC {#grpc}
 
 [Основной API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
 

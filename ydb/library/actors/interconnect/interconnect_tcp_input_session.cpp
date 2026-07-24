@@ -296,8 +296,8 @@ namespace NActors {
         return true;
     }
 
-    void TInterconnectSessionRdma::ToPreInitMode() noexcept {
-        Become(&TInterconnectSessionRdma::PreInitStateFunc);
+    void TInterconnectSessionRdma::ToTransitionMode() noexcept {
+        Become(&TInterconnectSessionRdma::TransitionStateFunc);
     }
 
     void TInterconnectSessionRdma::PassAway() {
@@ -318,10 +318,10 @@ namespace NActors {
 
     void TInterconnectSessionRdma::OnStartRecieveReady() {
         Become(&TInterconnectSessionRdma::TransitionStateFunc);
-        TActivationContext::Send(new IEventHandle(EvDrainEarlyRdmaRecvs, 0, SelfId(), {}, nullptr, 0));
+        TActivationContext::Send(new IEventHandle(EvProcessEarlyRdmaRecvs, 0, SelfId(), {}, nullptr, 0));
     }
 
-    void TInterconnectSessionRdma::DrainEarlyRdmaRecvs() {
+    void TInterconnectSessionRdma::ProcessEarlyRdmaRecvs() {
         while (!EarlyRdmaRecvs.empty()) {
             auto pending = std::move(EarlyRdmaRecvs.front());
             EarlyRdmaRecvs.pop_front();

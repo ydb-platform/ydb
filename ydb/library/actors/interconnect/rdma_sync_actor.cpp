@@ -168,13 +168,13 @@ namespace {
             TString> Res;
     };
 
-    class TSwitchToDataModeDelegate final : public NActors::TEvProxyCall {
+    class TSwitchToTransitionModeDelegate final : public NActors::TEvProxyCall {
     public:
-        TSwitchToDataModeDelegate(NActors::TInterconnectSessionRdma* session)
+        TSwitchToTransitionModeDelegate(NActors::TInterconnectSessionRdma* session)
             : Session(session)
         {}
         void virtual Call(TInterconnectProxyTCP* const /*proxy*/) override {
-            IActor::InvokeOtherActor(*Session, &TInterconnectSessionRdma::ToPreInitMode);
+            IActor::InvokeOtherActor(*Session, &TInterconnectSessionRdma::ToTransitionMode);
         }
         void virtual ReportError(TString error) override {
             Err = std::move(error);
@@ -330,7 +330,7 @@ namespace {
             }
             const ui64 rdmaRtt = (peerAckReceivedAt - rdmaStart).NanoSeconds();
 
-            if (!DoSwitchToDataMode(session.get(), error)) {
+            if (!DoSwitchToTransitionMode(session.get(), error)) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
                     "unable to switch RDMA session to data mode: %s", error.data());
                 Finish(std::move(error));
@@ -913,12 +913,13 @@ namespace {
             ::memcpy(ptr, &header, sizeof(header));
             ::memcpy(ptr + sizeof(header), data.data(), data.size());
 
-            auto cb = [actorId = SelfActorId](NActors::TActorSystem* as, TEvRdmaIoDone* ev) {
+            auto cb = [actorId = SelfActorId, sendBuf = *sendBuf](NActors::TActorSystem* as, TEvRdmaIoDone* ev) mutable {
                 as->Send(actorId, ev);
+                Y_UNUSED(sendBuf);
             };
 
             auto builder = CreateIbVerbsBuilder(1);
-            builder->AddSendVerb(std::move(*sendBuf), std::move(cb));
+            builder->AddSendVerb(*sendBuf, std::move(cb));
 
             if (Cq->DoWrBatchAsync(Qp, std::move(builder))) {
                 error = Sprintf("unable to post RDMA %s SEND work request", what);
@@ -1060,6 +1061,31 @@ namespace {
             return true;
         }
 
+        bool DoSwitchToTransitionMode(NActors::TInterconnectSessionRdma* session, TString& error) {
+            Send(GetActorSystem()->InterconnectProxy(PeerNodeId), new TSwitchToTransitionModeDelegate(session));
+
+            for (;;) {
+                auto ev = TActorCoroImpl::WaitForEvent();
+                if (!ev) {
+                    error = "unable to wait switch to transition mode result";
+                    return false;
+                }
+
+                if (ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+                    auto* result = static_cast<TSwitchToTransitionModeDelegate*>(ev->GetBase());
+                    if (const TString& switchError = result->GetError()) {
+                        error = switchError;
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (!HandleEvent(std::move(ev), error)) {
+                    return false;
+                }
+            }
+        }
+
         bool DoFin(ui64 peerAckSyncChecksum, ui64 rdmaRtt, TString& error) {
             return SendTcpProto(MakeFinSync(peerAckSyncChecksum, rdmaRtt), ESyncTcpMessageType::FinSync, "TRdmaFinSync", error);
         }
@@ -1083,25 +1109,6 @@ namespace {
 
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
                 "RDMA FinSync received, RdmaRtt# %" PRIu64, finSync.GetRdmaRtt());
-
-            return true;
-        }
-
-        bool DoSwitchToDataMode(NActors::TInterconnectSessionRdma* session, TString& error) {
-            Send(GetActorSystem()->InterconnectProxy(PeerNodeId), new TSwitchToDataModeDelegate(session));
-
-            auto ev = TActorCoroImpl::WaitForEvent();
-            if (!ev || ev->GetTypeRewrite() != TEvProxyCall::EventType) {
-                error = Sprintf("unexpected event while waiting for switch to data mode result: 0x%08" PRIx32,
-                    ev ? ev->GetTypeRewrite() : 0);
-                return false;
-            }
-
-            auto* result = static_cast<TSwitchToDataModeDelegate*>(ev->GetBase());
-            if (const TString& switchError = result->GetError()) {
-                error = switchError;
-                return false;
-            }
 
             return true;
         }

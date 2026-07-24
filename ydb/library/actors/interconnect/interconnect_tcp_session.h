@@ -231,7 +231,7 @@ namespace NActors {
         enum {
             EvCheckDeadPeer = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvResumeReceiveData,
-            EvDrainEarlyRdmaRecvs,
+            EvProcessEarlyRdmaRecvs,
         };
 
         struct TEvCheckDeadPeer : TEventLocal<TEvCheckDeadPeer, EvCheckDeadPeer> {};
@@ -888,8 +888,8 @@ namespace NActors {
     };
 
     class TInterconnectSessionRdma : public TInputSessionTCP {
-        struct TEvDrainEarlyRdmaRecvs
-            : TEventLocal<TEvDrainEarlyRdmaRecvs, EvDrainEarlyRdmaRecvs>
+        struct TEvProcessEarlyRdmaRecvs
+            : TEventLocal<TEvProcessEarlyRdmaRecvs, EvProcessEarlyRdmaRecvs>
         {};
 
     public:
@@ -899,29 +899,33 @@ namespace NActors {
             NInterconnect::NRdma::ICq::TPtr rdmaCq);
         // Must be called after registration as actor
         bool ToSyncMode(TActorId syncActor, NInterconnect::NRdma::ICq::TPtr& cq) noexcept;
-        void ToPreInitMode() noexcept;
+        void ToTransitionMode() noexcept;
         void AbortPreInit() noexcept;
     private:
+        // Initial state.
+        // In this state session forwards TEvRdmaIoReceiveDone events to sync actor
         STATEFN(SyncStateFunc) {
             STRICT_STFUNC_BODY(
                 hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, HandleSrqSyncState)
             )
         }
-        STATEFN(PreInitStateFunc) {
-            STRICT_STFUNC_BODY(
-                hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, HandleSrqTransitionState)
-            )
-        }
+        // Transition state
+        // In this state session collects TEvRdmaIoReceiveDone.
+        // It allows move to normal WorkingState after EvProcessEarlyRdmaRecvs
+        // which is triggered in StartRecieve.
+        // We need it to handle race because other side can send rdma events
+        // before our side processes StartRecieve
         STATEFN(TransitionStateFunc) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NInterconnect::NRdma::TEvRdmaIoReceiveDone, HandleSrqTransitionState)
-                cFunc(EvDrainEarlyRdmaRecvs, DrainEarlyRdmaRecvs)
+                cFunc(EvProcessEarlyRdmaRecvs, ProcessEarlyRdmaRecvs)
             default:
+                Y_ABORT_UNLESS(ReadyToReceive()); // We can handle WorkingState only after StartRecieve
                 TInputSessionTCP::WorkingState(ev);
             }
         }
         void OnStartRecieveReady() override;
-        void DrainEarlyRdmaRecvs();
+        void ProcessEarlyRdmaRecvs();
         void HandleSrqSyncState(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
         void HandleSrqTransitionState(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
         void PassAway() override;

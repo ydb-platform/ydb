@@ -8,7 +8,7 @@ When the user asks for an OLAP / Clickbench / Tpch / Tpcds / suites performance 
 
 Answer **what is red right now**, not historical dips:
 
-1. **Failing / slower** — last **3** suite runs vs previous **7**
+1. **Failing / slower** — **last completed** suite run vs previous **7**
 2. **Missing** — expected suite absent from latest **CiVersion × DbAlias** wave
 3. **Stale** — no fresh wave on a focus cluster
 
@@ -30,11 +30,12 @@ plain `yql`/`sql` often caps ~1000 rows. MCP truncates large results.
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.  
 Auth: `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` / `--sa-key-file`.
 
-Default lookback for history payload: from `--since` (e.g. `2026-06-08`).
+Default lookback: **last 30 days** (`--since` / `fetch_daily.py --days 30`).
 
-## 2. Per-query daily series (required for slow-query drill-down)
+## 2. Per-query run series (required for slow-query drill-down)
 
-SQL: `queries/fetch_olap_test_daily.sql` (excludes `Suite_not_runned` placeholders).
+SQL: `queries/fetch_olap_test_runs.sql` — **one point per launch** (datetime), not day AVG.
+Legacy day buckets: `fetch_olap_test_daily.sql` via `fetch_daily.py --mode daily`.
 
 **Do not use plain ydb CLI `yql`** — it truncates. Use scan via `ydb_wrapper`:
 
@@ -42,12 +43,13 @@ SQL: `queries/fetch_olap_test_daily.sql` (excludes `Suite_not_runned` placeholde
 cd ydb/tools/perfomance_tests_status/olap
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
-./.venv/bin/python fetch_daily.py --since 2026-06-08 -o out/raw_test_daily.json
+./.venv/bin/python fetch_daily.py -o out/raw_test_runs.json   # default: last 30d
 ```
 
 Also ok: `out/raw_tests.json` — fallback names without history.
 
-Daily is loaded only for hot suites (not embedded wholesale into HTML).
+Runs dump is loaded only for hot/ok suites (not embedded wholesale into HTML).
+Query Now alert = **last completed run** vs previous **7 runs** (same as suite).
 
 ## 3. Generate HTML
 
@@ -56,9 +58,9 @@ cd ydb/tools/perfomance_tests_status/olap
 python3 generate.py \
   --input out/raw.json \
   --tests-input out/raw_tests.json \
-  --tests-daily-input out/raw_test_daily.json \
-  --since YYYY-MM-DD \
+  --tests-daily-input out/raw_test_runs.json \
   --output out/olap-report.html --open
+# default --since = today-30d; override with --since YYYY-MM-DD
 ```
 
 ## 4. Deliver
@@ -71,10 +73,12 @@ python3 generate.py \
 
 | Signal | Rule |
 |--------|------|
-| Now | last 3 runs / slice |
+| Now | **last completed run** / slice (dive still shows last 3 for context) |
 | Baseline | previous 7 runs |
-| Slower | YdbSumMeans ≥ **+10%** vs baseline; **>3×** → broken |
-| Failing | last fail_rate ≥50%, or ≥2 of last 3 with ≥10% and elevated vs baseline |
+| Slower (hard) | thr=`max(+10%, 2×noise%)`; last run > base; hard if pct ≥ `max(+25%, thr)` → slow; soft (thr ≤ pct < hard) → **watch**; **>3×** → broken |
+| Noise | `noise% = pstdev(prev7) / median(prev7) · 100` |
+| Failing | last run fail_rate ≥50% → broken; ≥10% (elevated vs baseline) → fail/regression |
+| No data | per-query mart null-template (`Success=0` + `Color` NULL) → kind `nodata`, not fail |
 | Wave | `CiVersion × DbAlias` |
 | Expected suite | present in ≥50% of waves for that DbAlias over ~14d |
 | Missing | expected suite absent from last wave (if wave age ≥6h; else only dropouts vs previous wave) |

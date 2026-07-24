@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>OLAP Now</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   :root {
     --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
@@ -40,6 +41,7 @@
   .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
   .badge.in_progress { background: #ddf4ff; color: var(--info); }
   .badge.ok { background: #dafbe1; color: var(--ok); }
+  .badge.nodata { background: #f6f8fa; color: var(--muted); }
   .pill {
     display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
     background: #eaeef2; color: var(--muted); font-weight: 600;
@@ -60,6 +62,7 @@
   .counter.info .n { color: var(--info); }
   .counter.warn .n { color: var(--warn); }
   .counter.ok .n { color: var(--ok); }
+  .counter.nodata .n { color: var(--muted); }
 
   .heat-wrap {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
@@ -79,6 +82,7 @@
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell.nodata { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
   .cell .cnt { font-size: 11px; opacity: .85; }
   .heat-legend {
     display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
@@ -140,9 +144,12 @@
   }
   .run-card .t { font-weight: 650; margin-bottom: 4px; }
   .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .pill.slow { background: #fff8c5; color: var(--warn); }
+  /* soft vs hard: pale amber outline vs solid orange fill */
+  .pill.watch { background: #fffdf5; color: #9a6700; box-shadow: inset 0 0 0 1.5px #d4a72c; }
+  .pill.slow { background: #e8590c; color: #fff; }
   .pill.fail { background: #ffebe9; color: var(--bad); }
   .pill.qok { background: #dafbe1; color: var(--ok); }
+  .pill.nodata { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
   button.pill {
     border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600;
     padding: 2px 7px; border-radius: 999px;
@@ -159,6 +166,23 @@
   @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
   .empty { color: var(--muted); padding: 16px; text-align: center; }
   a { color: var(--info); }
+  .react-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 0 0 14px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .react-bar .lbl { font-size: 13px; color: var(--muted); margin-right: 4px; }
+  .react-btn {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
+    cursor: pointer;
+  }
+  .react-btn[aria-pressed="true"] { color: #fff; border-color: transparent; }
+  .react-btn[data-react="fail"][aria-pressed="true"] { background: var(--bad); }
+  .react-btn[data-react="hard"][aria-pressed="true"] { background: #e8590c; }
+  .react-btn[data-react="soft"][aria-pressed="true"] { background: #9a6700; }
+  .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
+  .react-btn:hover { filter: brightness(0.97); }
 </style>
 </head>
 <body>
@@ -166,9 +190,18 @@
   <h1>OLAP Now</h1>
   <div class="sub" id="subtitle"></div>
   <div class="note">
-    Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>.
+    Now = <b>последний завершённый</b> прогон vs предыдущие <b id="lblBase">7</b>.
     <b>Missing</b> = suite нет в <i>завершённой</i> волне.
-    <b>In progress</b> = волна ещё едет, suite просто не доехал (не алерт; серая точка на графике).
+    <b>In progress</b> = волна ещё едет (не алерт).
+  </div>
+
+  <div class="react-bar" id="reactBar">
+    <span class="lbl">Реагируем на:</span>
+    <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
+    <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard slow</button>
+    <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft slow</button>
+    <button type="button" class="react-btn" data-react="nodata" aria-pressed="false">no data</button>
+    <span class="muted" style="font-size:12px">по умолчанию только fail · missing/stale/in progress всегда</span>
   </div>
 
   <div class="filters" id="branchBar" style="margin-bottom:14px">
@@ -197,11 +230,12 @@
   <div class="heat-wrap">
     <div class="heat-legend">
       <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · hard fail / outlier</span>
-      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>regression · slower / elevated fail</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>hot · label = <b>slow N fail M</b></span>
       <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
       <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
       <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
       <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+      <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
     </div>
     <div id="heatmap"></div>
   </div>
@@ -211,7 +245,9 @@
     <label>Issue
       <select id="fIssue">
         <option value="">all hot</option>
-        <option value="ok">ok</option>
+        <option value="ok">ok / watch</option>
+        <option value="watch">watch (soft)</option>
+        <option value="nodata">no data</option>
         <option value="missing">missing</option>
         <option value="in_progress">in progress</option>
         <option value="failing">failing</option>
@@ -236,6 +272,33 @@ const charts = {};
 const UI = DATA.ui || {};
 let winFrom = UI.default_from || null;
 let winTo = UI.default_to || null;
+const REACT_KEY = 'olap_now_react_signals';
+function defaultReact() { return { fail: true, hard: false, soft: false, nodata: false }; }
+function loadReact() {
+  try {
+    const o = JSON.parse(localStorage.getItem(REACT_KEY) || '');
+    if (!o || typeof o !== 'object') return defaultReact();
+    return { fail: !!o.fail, hard: !!o.hard, soft: !!o.soft, nodata: !!o.nodata };
+  } catch (_) {
+    return defaultReact();
+  }
+}
+let reactState = loadReact();
+function reactSignals() { return reactState; }
+function syncReactButtons() {
+  const s = reactSignals();
+  document.querySelectorAll('#reactBar .react-btn').forEach(btn => {
+    const k = btn.dataset.react;
+    btn.setAttribute('aria-pressed', s[k] ? 'true' : 'false');
+  });
+}
+function setReact(key) {
+  reactState = { ...reactState, [key]: !reactState[key] };
+  try { localStorage.setItem(REACT_KEY, JSON.stringify(reactState)); } catch (_) {}
+  syncReactButtons();
+  destroyCharts();
+  renderAll();
+}
 
 function fmt(v) {
   if (v == null || Number.isNaN(v)) return '—';
@@ -291,63 +354,165 @@ function itemInWindow(r) {
   return days.some(d => dayInRange(d, winFrom, winTo));
 }
 function listedSlow(r) {
-  // union bad_queries ∪ slow_queries — badge Nq must match pills in dive
+  // prefer full catalog (same classification as pills); fallback to legacy lists
+  if ((r.queries || []).length) {
+    return r.queries
+      .filter(q => q && q.test && (q.kind === 'slow' || q.kind === 'both'))
+      .slice()
+      .sort((a, b) => (b.ydb_pct || 0) - (a.ydb_pct || 0));
+  }
   const by = new Map();
   for (const q of (r.bad_queries || [])) {
     if (!q || !q.test) continue;
-    if (q.kind === 'fail') continue;
-    if (q.kind === 'slow' || q.kind === 'both' || (q.ydb_pct != null && q.ydb_pct >= 10)) {
-      by.set(String(q.test), q);
-    }
+    if (q.kind === 'slow' || q.kind === 'both') by.set(String(q.test), q);
   }
   for (const q of (r.slow_queries || [])) {
     if (!q || !q.test) continue;
+    if (q.kind && q.kind !== 'slow' && q.kind !== 'both') continue;
     const prev = by.get(String(q.test)) || {};
     by.set(String(q.test), Object.assign({}, prev, q));
   }
   return [...by.values()].sort((a, b) => (b.ydb_pct || 0) - (a.ydb_pct || 0));
 }
 function listedFail(r) {
+  if ((r.queries || []).length) {
+    return r.queries.filter(q => q && q.test && (q.kind === 'fail' || q.kind === 'both'));
+  }
   return (r.bad_queries || []).filter(q => q && q.test && (q.kind === 'fail' || q.kind === 'both'));
 }
-function queryNames(r) {
-  const names = new Set();
-  for (const q of listedSlow(r)) names.add(String(q.test));
-  for (const q of listedFail(r)) names.add(String(q.test));
-  return names;
+function listedWatch(r) {
+  if ((r.queries || []).length) {
+    return r.queries.filter(q => q && q.test && q.kind === 'watch');
+  }
+  return [];
+}
+function listedNodata(r) {
+  if ((r.queries || []).length) {
+    return r.queries.filter(q => q && q.test && q.kind === 'nodata');
+  }
+  return [];
+}
+function rowKey(r) {
+  return r.id || `${r.branch || ''}|${r.db || ''}|${r.suite || ''}|${r.issue || ''}`;
+}
+function hasFailSignal(r) {
+  if (['failing', 'both'].includes(r.issue)) return true;
+  if (r.status === 'broken' && (r.fail_rate_now || 0) >= 0.1) return true;
+  return listedFail(r).length > 0;
+}
+function hasHardSlowSignal(r) {
+  if (['slower', 'both'].includes(r.issue)) return true;
+  return listedSlow(r).length > 0;
+}
+function hasSoftSlowSignal(r) {
+  if (r.issue === 'watch' || r.status === 'watch') return true;
+  return listedWatch(r).length > 0;
+}
+function hasNodataSignal(r) {
+  return listedNodata(r).length > 0;
+}
+function isInfraIssue(r) {
+  return ['missing', 'in_progress', 'stale'].includes(r.issue);
+}
+function rowMatchesReact(r) {
+  if (isInfraIssue(r)) return true;
+  const s = reactSignals();
+  if (s.fail && hasFailSignal(r)) return true;
+  if (s.hard && hasHardSlowSignal(r)) return true;
+  if (s.soft && hasSoftSlowSignal(r)) return true;
+  if (s.nodata && hasNodataSignal(r)) return true;
+  return false;
+}
+function querySplit(r) {
+  const fail = new Set();
+  const slow = new Set();
+  const soft = new Set();
+  const nodata = new Set();
+  for (const q of listedFail(r)) fail.add(String(q.test));
+  for (const q of listedSlow(r)) slow.add(String(q.test));
+  for (const q of listedWatch(r)) soft.add(String(q.test));
+  for (const q of listedNodata(r)) nodata.add(String(q.test));
+  return { fail, slow, soft, nodata };
+}
+function fmtFS(nFail, nSlow, nSoft, nNodata) {
+  const s = reactSignals();
+  const bits = [];
+  if (s.hard && nSlow) bits.push(`slow ${nSlow}`);
+  if (s.soft && nSoft) bits.push(`soft ${nSoft}`);
+  if (s.fail && nFail) bits.push(`fail ${nFail}`);
+  if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
+  return bits.join(' ');
+}
+function candidateRows() {
+  const rows = [...(DATA.inbox || [])];
+  const s = reactSignals();
+  if (!s.soft && !s.nodata) return rows;
+  const seen = new Set(rows.map(rowKey));
+  for (const r of (DATA.ok || [])) {
+    if (!(s.soft && hasSoftSlowSignal(r)) && !(s.nodata && hasNodataSignal(r))) continue;
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    rows.push(r);
+  }
+  return rows;
 }
 function liveCell(branch, db, fam) {
-  const rows = (DATA.inbox || []).filter(r => {
+  const s = reactSignals();
+  const rows = candidateRows().filter(r => {
     if (branch && r.branch !== branch) return false;
     if (r.db !== db || r.family !== fam) return false;
-    return itemInWindow(r);
+    if (!itemInWindow(r)) return false;
+    return rowMatchesReact(r);
   });
-  if (!rows.length) return { status: 'ok', n_hot: 0, n_queries: 0 };
+  if (!rows.length) return { status: 'ok', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 };
   const rank = {
-    broken: 6, missing: 5, regression: 4, both: 4,
-    failing: 3, slower: 3, stale: 2, in_progress: 1, ok: 0,
+    broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
+    failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0,
   };
   let best = null;
   for (const r of rows) {
-    const st = r.status || r.issue || 'ok';
+    let st = r.status || r.issue || 'ok';
+    // downgrade severity when that signal is off
+    if (!s.fail && (st === 'broken' || st === 'failing') && hasHardSlowSignal(r) && s.hard) st = 'regression';
+    if (!s.fail && !s.hard && s.soft && hasSoftSlowSignal(r)) st = 'watch';
+    if (!s.fail && !s.hard && !s.soft && s.nodata && hasNodataSignal(r)) st = 'nodata';
     if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
   }
   const hot = rows.filter(r => r.issue !== 'in_progress');
-  const qset = new Set();
+  const failSet = new Set();
+  const slowSet = new Set();
+  const softSet = new Set();
+  const nodataSet = new Set();
   for (const r of hot) {
-    if (!['broken', 'regression', 'failing', 'slower', 'both'].includes(r.status) &&
-        !['failing', 'slower', 'both'].includes(r.issue)) continue;
-    for (const n of queryNames(r)) qset.add(n);
+    const sp = querySplit(r);
+    if (s.fail) for (const n of sp.fail) failSet.add(n);
+    if (s.hard) for (const n of sp.slow) slowSet.add(n);
+    if (s.soft) for (const n of sp.soft) softSet.add(n);
+    if (s.nodata) for (const n of sp.nodata) nodataSet.add(n);
   }
-  return { status: best || 'ok', n_hot: hot.length, n_queries: qset.size };
+  return {
+    status: best || 'ok',
+    n_hot: hot.length,
+    n_fail: failSet.size,
+    n_slow: slowSet.size,
+    n_soft: softSet.size,
+    n_nodata: nodataSet.size,
+    n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
+  };
 }
 function cellLabel(st, live) {
-  if (st === 'regression' || st === 'broken') {
-    const nq = live.n_queries || 0;
-    if (nq > 0) return `${esc(st)} <span class="cnt">${nq}q</span>`;
-    // fallback: suite count if query list empty (infra / no drill-down yet)
+  if (st === 'regression' || st === 'watch' || st === 'nodata') {
+    const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
+    if (fs) return `<span class="cnt">${fs}</span>`;
     const ns = live.n_hot || 0;
-    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+    return ns ? `<span class="cnt">${ns} suites</span>` : (st === 'nodata' ? 'no data' : 'hot');
+  }
+  if (st === 'broken') {
+    const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
+    if (fs) return `broken <span class="cnt">${fs}</span>`;
+    const ns = live.n_hot || 0;
+    return ns ? `broken <span class="cnt">${ns}</span>` : 'broken';
   }
   if (st === 'missing' || st === 'stale' || st === 'in_progress') {
     const ns = live.n_hot || 0;
@@ -358,7 +523,10 @@ function cellLabel(st, live) {
 function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
   if (!winFrom && !winTo) return hist;
-  const out = { labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [], markers: [] };
+  const out = {
+    labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [], markers: [],
+    mode: hist.mode,
+  };
   for (let i = 0; i < hist.labels.length; i++) {
     const day = dayOf(hist.labels[i]);
     if (!dayInRange(day, winFrom, winTo)) continue;
@@ -396,22 +564,35 @@ function currentSummaryBase() {
   return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
 }
 function currentSummary() {
-  // live counters from filtered inbox (branch + dates + issue filters except issue itself)
+  // live counters from react-filtered candidates (branch + dates)
   const br = selectedBranch();
   const db = document.getElementById('fDb')?.value || '';
   const fam = document.getElementById('fFam')?.value || '';
-  const rows = (DATA.inbox || []).filter(r => {
+  const sReact = reactSignals();
+  const rows = candidateRows().filter(r => {
     if (br && r.branch !== br) return false;
     if (db && r.db !== db) return false;
     if (fam && r.family !== fam) return false;
     if (!itemInWindow(r)) return false;
-    return true;
+    return rowMatchesReact(r);
   });
   const s = summarizeRows(rows);
-  // preserve ok_slices/slices from precomputed branch summary
+  s.failing = sReact.fail
+    ? rows.filter(r => !isInfraIssue(r) && hasFailSignal(r)).length
+    : 0;
+  s.slower = sReact.hard
+    ? rows.filter(r => !isInfraIssue(r) && hasHardSlowSignal(r)).length
+    : 0;
+  s.soft = sReact.soft
+    ? rows.filter(r => !isInfraIssue(r) && hasSoftSlowSignal(r)).length
+    : 0;
+  s.nodata = sReact.nodata
+    ? rows.filter(r => !isInfraIssue(r) && hasNodataSignal(r)).length
+    : 0;
   const base = currentSummaryBase();
   s.ok_slices = base.ok_slices || 0;
   s.slices = base.slices || 0;
+  s.hot = rows.filter(r => r.issue !== 'in_progress').length;
   return s;
 }
 
@@ -419,20 +600,30 @@ function renderHeader() {
   const ui = DATA.ui || {};
   const s = currentSummary();
   const br = selectedBranch();
-  document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
+  const rs = reactSignals();
   document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
   document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
+  const reactBits = [];
+  if (rs.fail) reactBits.push('fail');
+  if (rs.hard) reactBits.push('hard slow');
+  if (rs.soft) reactBits.push('soft slow');
+  if (rs.nodata) reactBits.push('no data');
   document.getElementById('subtitle').innerHTML =
     `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
     `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
-    `branch <b>${esc(br || 'all')}</b> · hot ${s.hot || 0}`;
+    `branch <b>${esc(br || 'all')}</b> · react <b>${esc(reactBits.join(' + ') || 'infra only')}</b> · hot ${s.hot || 0}`;
 
+  const fifth = rs.nodata
+    ? `<div class="counter nodata"><div class="n">${s.nodata || 0}</div><div class="lbl">No data</div></div>`
+    : rs.soft
+      ? `<div class="counter warn"><div class="n">${s.soft || 0}</div><div class="lbl">Soft slow</div></div>`
+      : `<div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>`;
   document.getElementById('counters').innerHTML = `
     <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
     <div class="counter info"><div class="n">${s.in_progress || 0}</div><div class="lbl">In progress</div></div>
     <div class="counter hot"><div class="n">${s.failing || 0}</div><div class="lbl">Failing</div></div>
-    <div class="counter regress"><div class="n">${s.slower || 0}</div><div class="lbl">Slower</div></div>
-    <div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>
+    <div class="counter regress"><div class="n">${s.slower || 0}</div><div class="lbl">Hard slow</div></div>
+    ${fifth}
     <div class="counter ok"><div class="n">${s.ok_slices || 0}</div><div class="lbl">OK slices</div></div>
   `;
 }
@@ -502,7 +693,10 @@ function renderHeatmap() {
       for (const fam of h.families) {
         const live = liveCell(branch, db, fam);
         const st = live.status || 'ok';
-        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${st === 'regression' || st === 'broken' ? (live.n_queries || 0) + ' bad queries' : (live.n_hot || 0) + ' suites'}">${cellLabel(st, live)}</div></td>`;
+        const tip = (st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata')
+          ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data`
+          : `${live.n_hot || 0} suites`;
+        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
       }
       const w = waveFor(branch, db);
       html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(w)}</td></tr>`;
@@ -511,13 +705,15 @@ function renderHeatmap() {
   }
   const root = document.getElementById('heatmap');
   root.innerHTML = html || '<div class="empty">нет данных</div>';
-  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok').forEach(el => {
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.watch, .cell.nodata').forEach(el => {
     el.addEventListener('click', () => {
       if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
       document.getElementById('fDb').value = el.dataset.db || '';
       document.getElementById('fFam').value = el.dataset.fam || '';
-      // ok cell → show ok catalog; hot cells → all hot under db×family
-      document.getElementById('fIssue').value = el.classList.contains('ok') ? 'ok' : '';
+      // ok cell → show ok catalog; nodata → no data filter; hot cells → all hot
+      document.getElementById('fIssue').value = el.classList.contains('ok')
+        ? 'ok'
+        : (el.classList.contains('nodata') ? 'nodata' : '');
       renderAll();
       document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -529,8 +725,19 @@ function uiBranches() {
 }
 
 function inboxPool(issue) {
-  if (issue === 'ok') return DATA.ok || [];
-  return DATA.inbox || [];
+  if (issue === 'ok' || issue === 'watch') return DATA.ok || [];
+  if (issue === 'nodata') {
+    const seen = new Set();
+    const out = [];
+    for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+      const k = rowKey(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+    return out;
+  }
+  return candidateRows();
 }
 
 function filteredInbox() {
@@ -538,13 +745,22 @@ function filteredInbox() {
   const db = document.getElementById('fDb').value;
   const fam = document.getElementById('fFam').value;
   const br = selectedBranch();
+  const browseOk = issue === 'ok' || issue === 'watch' || issue === 'nodata';
   return inboxPool(issue).filter(r => {
     if (br && r.branch !== br) return false;
-    if (issue && issue !== 'ok' && r.issue !== issue) return false;
-    if (issue === 'ok' && r.issue !== 'ok') return false;
+    if (issue === 'ok') {
+      if (r.issue !== 'ok' && r.issue !== 'watch') return false;
+    } else if (issue === 'watch') {
+      if (r.issue !== 'watch' && !hasSoftSlowSignal(r)) return false;
+    } else if (issue === 'nodata') {
+      if (!hasNodataSignal(r)) return false;
+    } else if (issue && r.issue !== issue) {
+      return false;
+    }
     if (db && r.db !== db) return false;
     if (fam && r.family !== fam) return false;
     if (!itemInWindow(r)) return false;
+    if (!browseOk && !rowMatchesReact(r)) return false;
     return true;
   });
 }
@@ -663,7 +879,9 @@ function colorsVsMedianMavg(vals, win) {
     const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
     if (ref == null || ref <= 0) return '#5b8def';
     if (n > ref * 3) return '#8a1f1a';
-    if (n > ref * 1.1) return '#e5534b';
+    // chart softener vs alert: red only from +25% (hard floor), not +10%
+    if (n > ref * 1.25) return '#e5534b';
+    if (n > ref * 1.10) return '#d29922';
     if (n < ref * 0.93) return '#3fb950';
     return '#5b8def';
   });
@@ -690,7 +908,7 @@ function mountQueryHistory(item, diveId, testName) {
 
   if (!q || !(q.history && q.history.labels && q.history.labels.length)) {
     box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
-      <div class="muted">Нет daily history для этого запроса</div></div>`;
+      <div class="muted">Нет run history для этого запроса</div></div>`;
     return;
   }
   const hist = sliceHist(q.history);
@@ -714,31 +932,46 @@ function mountQueryHistory(item, diveId, testName) {
     mavgRef = medianOf((hist.ydb || []).slice(start, last.i));
   }
   const vsMavg = (last && mavgRef != null && mavgRef > 0)
-    ? `vs median mavg(${win}): ${pct(((last.v - mavgRef) / mavgRef) * 100)} (ref ${fmt(mavgRef)})`
+    ? `vs median mavg(${win} runs): ${pct(((last.v - mavgRef) / mavgRef) * 100)} (ref ${fmt(mavgRef)})`
     : null;
   const dod = (last && prev && prev.v > 0)
-    ? `Δ day: ${pct(((last.v - prev.v) / prev.v) * 100)}`
+    ? `Δ run: ${pct(((last.v - prev.v) / prev.v) * 100)}`
     : null;
+  const lastLbl = last ? String(last.label).replace('T', ' ').replace('Z', '').slice(0, 16) : '';
   const rawLine = last
-    ? `last <b>${esc(String(last.label).slice(0, 10))}</b>: <b>${fmt(last.v)}</b>` +
+    ? `last <b>${esc(lastLbl)}</b>: <b>${fmt(last.v)}</b>` +
       (vsMavg ? ` · ${vsMavg}` : '') +
       (dod ? ` · ${dod}` : '')
     : 'нет точек';
+  const thrBits = [];
+  if (q.dur_thr_pct != null) thrBits.push(`thr ${pct(q.dur_thr_pct)}`);
+  if (q.dur_noise_pct != null) thrBits.push(`noise ${pct(q.dur_noise_pct)}`);
+  if (q.dur_level) thrBits.push(q.dur_level);
   const alertLine = (q.ydb_base != null && q.ydb_now != null)
-    ? `alert (median last3 vs prev7): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}`
+    ? `alert (last run vs median prev7): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}` +
+      (thrBits.length ? ` · ${thrBits.join(' · ')}` : '')
     : null;
   const nReports = (hist.reports || []).filter(Boolean).length;
+  const histMode = hist.mode || q.history.mode || 'runs';
 
+  const kindCls = q.kind === 'nodata' ? 'nodata'
+    : (q.kind === 'fail' || q.kind === 'both') ? 'fail'
+    : (q.kind === 'slow' ? 'slow' : (q.kind === 'watch' ? 'watch' : 'qok'));
+  const kindLabel = q.kind === 'nodata' ? 'no data' : (q.kind || 'query');
   box.innerHTML = `<div class="qdetail">
-    <div class="ttl">${esc(testName)} <span class="pill">${esc(q.kind || 'query')}</span></div>
-    <div style="margin-bottom:4px">${rawLine}</div>
+    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span></div>
+    <div style="margin-bottom:4px">${
+      q.kind === 'nodata'
+        ? 'в последнем suite-run <b>нет данных</b> по этому query (mart placeholder, не fail)'
+        : rawLine
+    }</div>
     <div class="muted" style="margin-bottom:6px">
-      график = <b>дневной YdbSumMeans</b> (как Mean в sandbox) · цвет vs <b>median mavg(prev${win})</b> ·
-      клик по столбцу → report${nReports ? ` (${nReports})` : ''}
+      график = <b>каждый запуск</b> (YdbSumMeans) · ось X = datetime · цвет точки vs <b>median mavg(prev${win} runs)</b> ·
+      клик → report${nReports ? ` (${nReports})` : ''}
       ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
     </div>
     <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
-      <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7)
+      <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7 runs)
     </label>
     <div class="pair">
       <div class="chart-box"><canvas id="${diveId}_q_ydb"></canvas></div>
@@ -749,22 +982,58 @@ function mountQueryHistory(item, diveId, testName) {
   const reports = hist.reports || [];
   const alertBase = q.ydb_base;
   let showBase = false;
+  // time scale + parsing:false needs numeric timestamps (ISO strings break the axis → "today")
+  const toXY = (labels, vals) => {
+    const pts = [];
+    for (let i = 0; i < labels.length; i++) {
+      const t = Date.parse(labels[i]);
+      if (!Number.isFinite(t)) continue;
+      const y = vals[i] == null || vals[i] === '' ? null : Number(vals[i]);
+      pts.push({ x: t, y: Number.isFinite(y) ? y : null, i });
+    }
+    return pts;
+  };
 
   function paint() {
     destroyCharts(diveId + '_q_');
     const yColors = colorsVsMedianMavg(hist.ydb, win);
     const fColors = failColors(hist.fail_rate);
-    function bar(cid, vals, label, colors) {
+    function runChart(cid, vals, label, colors) {
       const el = document.getElementById(cid);
       if (!el) return;
+      const useTime = histMode === 'runs' || String(hist.labels[0] || '').includes('T');
+      const xy = useTime ? toXY(hist.labels, vals) : null;
+      const xyColors = useTime ? xy.map(p => colors[p.i] || '#5b8def') : colors;
+      const xBounds = useTime && xy.length ? {
+        min: Math.min(...xy.map(p => p.x)),
+        max: Math.max(...xy.map(p => p.x)),
+      } : null;
       charts[cid] = new Chart(el, {
         type: 'bar',
-        data: { labels: hist.labels, datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }] },
+        data: useTime ? {
+          datasets: [{
+            data: xy,
+            backgroundColor: xyColors,
+            borderSkipped: false,
+            barPercentage: 0.9,
+            categoryPercentage: 0.9,
+          }]
+        } : {
+          labels: hist.labels,
+          datasets: [{
+            data: vals,
+            backgroundColor: colors,
+            borderSkipped: false,
+            barPercentage: 0.9,
+          }]
+        },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
+          parsing: useTime ? false : true,
           onClick: (_e, els) => {
             if (!els.length) return;
-            const url = reports[els[0].index];
+            const idx = useTime ? (xy[els[0].index]?.i) : els[0].index;
+            const url = reports[idx];
             if (url) window.open(url, '_blank', 'noopener');
           },
           plugins: {
@@ -772,25 +1041,50 @@ function mountQueryHistory(item, diveId, testName) {
             title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
             tooltip: {
               callbacks: {
+                title: (items) => {
+                  const it = items[0];
+                  if (!it) return '';
+                  if (useTime) {
+                    const src = xy[it.dataIndex];
+                    const lab = src ? hist.labels[src.i] : it.label;
+                    return String(lab).replace('T', ' ').replace('Z', '').slice(0, 19);
+                  }
+                  return String(it.label).replace('T', ' ').replace('Z', '').slice(0, 19);
+                },
                 afterLabel: (it) => {
                   const bits = [];
+                  const i = useTime ? (xy[it.dataIndex]?.i) : it.dataIndex;
+                  if (i == null) return '';
                   if (cid.endsWith('_ydb')) {
-                    const i = it.dataIndex;
                     const cur = vals[i];
                     const start = Math.max(0, i - win);
                     const ref = medianOf(vals.slice(start, i));
                     if (cur != null && ref != null && ref > 0) {
-                      bits.push(`vs median mavg(${win}) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
+                      bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
                     }
                   }
-                  if (reports[it.dataIndex]) bits.push('клик → report');
+                  if (reports[i]) bits.push('клик → report');
                   return bits.join(' · ');
                 }
               }
             }
           },
           scales: {
-            x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+            x: useTime ? {
+              type: 'time',
+              min: xBounds ? xBounds.min : undefined,
+              max: xBounds ? xBounds.max : undefined,
+              offset: true,
+              time: {
+                tooltipFormat: 'yyyy-MM-dd HH:mm',
+                displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d', minute: 'HH:mm' },
+              },
+              ticks: { maxRotation: 45, font: { size: 9 }, color: '#656d76', autoSkip: true, maxTicksLimit: 10 },
+              grid: { display: false },
+            } : {
+              ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' },
+              grid: { display: false },
+            },
             y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
           }
         },
@@ -812,8 +1106,8 @@ function mountQueryHistory(item, diveId, testName) {
         }]
       });
     }
-    bar(diveId + '_q_ydb', hist.ydb, `${testName} · daily YdbSumMeans`, yColors);
-    bar(diveId + '_q_fail', hist.fail_rate, `${testName} · Fail rate %`, fColors);
+    runChart(diveId + '_q_ydb', hist.ydb, `${testName} · per-run YdbSumMeans`, yColors);
+    runChart(diveId + '_q_fail', hist.fail_rate, `${testName} · Fail (0/100 per run)`, fColors);
   }
 
   const chk = document.getElementById(diveId + '_q_base');
@@ -847,7 +1141,8 @@ function diveHtml(r, id) {
   const catalog = (r.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
   const qPill = (q, cls) =>
     `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
-      q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : '')
+      cls === 'nodata' ? ' · no data'
+        : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
     }${q.history ? '' : ' · no hist'}</button>`;
   const slowHtml = slow.length
     ? slow.map(q => qPill(q, 'slow')).join('')
@@ -858,7 +1153,9 @@ function diveHtml(r, id) {
   const catalogHtml = catalog.length
     ? catalog.map(q => {
         const cls = (q.kind === 'fail' || q.kind === 'both') ? 'fail'
-          : (q.kind === 'slow' ? 'slow' : 'qok');
+          : (q.kind === 'slow' ? 'slow'
+          : (q.kind === 'watch' ? 'watch'
+          : (q.kind === 'nodata' ? 'nodata' : 'qok')));
         return qPill(q, cls);
       }).join('')
     : '';
@@ -869,11 +1166,17 @@ function diveHtml(r, id) {
 
   const queryBlock = catalog.length
     ? `<div>
-        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история · зелёный=ok · жёлтый=slow · красный=fail</div>
+        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история ·
+          <span class="pill qok">ok</span>
+          <span class="pill watch">soft</span>
+          <span class="pill slow">hard slow</span>
+          <span class="pill fail">fail</span>
+          <span class="pill nodata">no data</span>
+        </div>
         <div class="qlist">${catalogHtml}</div>
       </div>`
     : `<div>
-        <div class="muted"><b>Slow queries</b> (клик = история запроса · last 3d vs prev 7d)</div>
+        <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>
         <div class="qlist">${slowHtml}</div>
       </div>
       <div>
@@ -913,17 +1216,36 @@ function renderInbox() {
     const fr = (r.fail_rate_now == null && r.issue === 'missing')
       ? '—'
       : `${fmtFail(r.fail_rate_base)} → <span class="${(r.fail_rate_now||0) >= 0.1 ? 'bad' : ''}">${fmtFail(r.fail_rate_now)}</span>`;
-    const nq = (r.status === 'regression' || r.status === 'broken') ? queryNames(r).size : 0;
-    const statusLbl = nq ? `${esc(r.status)} ${nq}q` : esc(r.status);
+    const sp = querySplit(r);
+    let statusLbl = esc(r.status);
+    let badgeCls = r.status || 'ok';
+    if (r.status === 'regression' || r.status === 'broken' || r.status === 'watch' || r.issue === 'watch') {
+      const fs = fmtFS(sp.fail.size, sp.slow.size, sp.soft.size, sp.nodata.size);
+      if (r.status === 'broken' && fs) statusLbl = `broken ${fs}`;
+      else if (fs) statusLbl = fs;
+      else if (r.status === 'regression') statusLbl = 'hot';
+    } else if (hasNodataSignal(r) && reactSignals().nodata && !hasFailSignal(r) && !hasHardSlowSignal(r)) {
+      badgeCls = 'nodata';
+      statusLbl = fmtFS(0, 0, 0, sp.nodata.size) || 'no data';
+    }
     return `
       <tr class="row" data-idx="${idx}" data-id="${id}">
-        <td><span class="badge ${esc(r.status)}">${statusLbl}</span>
+        <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span>
           <div class="pill" style="margin-top:4px">${esc(r.issue)}</div></td>
         <td><span class="cluster">${esc(r.db)}</span>
           <div class="muted">${esc(r.branch)}</div></td>
         <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
           <div class="muted mono">${esc(r.ci_version || r.wave || '')}</div>
-          ${(r.slow_queries || []).length ? `<div class="muted">slow: ${esc(r.slow_queries.slice(0,3).map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '))}</div>` : ''}
+          ${(() => {
+            const slow = listedSlow(r).slice(0, 3);
+            const fails = listedFail(r).slice(0, 3);
+            const nd = listedNodata(r);
+            const bits = [];
+            if (fails.length) bits.push('fail: ' + fails.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (slow.length) bits.push('slow: ' + slow.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (nd.length) bits.push('no data: ' + nd.length + 'q');
+            return bits.length ? `<div class="muted">${esc(bits.join(' · '))}</div>` : '';
+          })()}
         </td>
         <td class="num">${fr}</td>
         <td class="num">${fmt(r.ydb_base)} → ${fmt(r.ydb_now)}<div class="muted">${delta}</div></td>
@@ -1040,6 +1362,10 @@ function setupFilters() {
     fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
   refreshDbFilter();
   setupDateBar();
+  syncReactButtons();
+  document.querySelectorAll('#reactBar .react-btn').forEach(btn => {
+    btn.addEventListener('click', () => setReact(btn.dataset.react));
+  });
   ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       if (id === 'fBranch' || id === 'fIssue') refreshDbFilter();

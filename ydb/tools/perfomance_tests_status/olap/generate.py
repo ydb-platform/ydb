@@ -5,7 +5,7 @@ Focus: last 2–3 runs, missing suites in CiVersion waves, fail/slow alerts.
 History is attached only for hot slices (deep dive), not as the alert driver.
 
 Example:
-  python3 generate.py --input out/raw.json --since 2026-06-08 --output out/olap-report.html --open
+  python3 generate.py --input out/raw.json --output out/olap-report.html --open
 """
 
 from __future__ import annotations
@@ -22,18 +22,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "template.html"
 
-DUR_TOL = 0.10
+DUR_TOL = 0.10  # soft floor (%); quiet series
+DUR_HARD = 0.25  # hard regression floor (%) when above noise threshold
+NOISE_K = 2.0  # effective thr = max(DUR_TOL, NOISE_K * stdev(base)/median(base))
+SLOW_PERSIST_MIN = 1  # last completed run above baseline median
 OUTLIER_MULT = 3.0
-DEFAULT_WINDOW_DAYS = 60
+DEFAULT_WINDOW_DAYS = 30  # default fetch/report/chart window
 
-NOW_RUNS = 3
+NOW_RUNS = 1  # alert signal = last completed run (avoids green-last / red-prev confusion)
+DISPLAY_RUNS = 3  # dive cards: recent context
 BASELINE_RUNS = 7
 EXPECTED_LOOKBACK_DAYS = 14
 EXPECTED_MIN_SHARE = 0.50
 WAVE_COMPLETE_HOURS = 6
 WAVE_COVERAGE_DONE = 0.85  # expected suites present → wave considered complete
 STALE_HOURS = 36
-HISTORY_MAX_POINTS = 40
+HISTORY_MAX_POINTS = 100  # ~1 month of per-run points (2–4 runs/day)
 INBOX_LIMIT = 80
 INBOX_PER_KIND = {
     "missing": 20,
@@ -220,6 +224,107 @@ def pct(a, b):
     return (b - a) / a * 100
 
 
+def stdev(xs) -> float:
+    vs = [v for v in xs if v is not None]
+    if len(vs) < 2:
+        return 0.0
+    return float(statistics.pstdev(vs))
+
+
+def noise_pct(base_vals, ydb_base) -> float:
+    """Baseline noise as % of median (0 if unknown)."""
+    if ydb_base is None or ydb_base <= 0:
+        return 0.0
+    return stdev(base_vals) / ydb_base * 100.0
+
+
+def dur_threshold_pct(base_vals, ydb_base) -> float:
+    """Effective slow threshold % = max(DUR_TOL*100, NOISE_K * noise%)."""
+    return max(DUR_TOL * 100.0, NOISE_K * noise_pct(base_vals, ydb_base))
+
+
+def count_above_base(now_vals, ydb_base) -> int:
+    if ydb_base is None:
+        return 0
+    return sum(1 for v in now_vals if v is not None and v > ydb_base)
+
+
+def classify_duration(
+    ydb_pct: float | None,
+    ydb_now,
+    ydb_base,
+    now_vals: list,
+    base_vals: list,
+) -> dict:
+    """Soft/hard duration vs noisy baseline.
+
+    - hard (regression): pct ≥ max(DUR_HARD*100, thr) AND ≥SLOW_PERSIST_MIN runs > base
+    - soft (watch): thr ≤ pct < hard floor AND persist (quiet series only; thr usually 10%)
+    - broken: outlier > OUTLIER_MULT × base (unchanged)
+    """
+    thr = dur_threshold_pct(base_vals, ydb_base)
+    hard_floor = max(DUR_HARD * 100.0, thr)
+    n_above = count_above_base(now_vals, ydb_base)
+    persist = n_above >= SLOW_PERSIST_MIN
+    noise = noise_pct(base_vals, ydb_base)
+
+    if ydb_base is not None and ydb_now is not None and ydb_now > ydb_base * OUTLIER_MULT:
+        return {
+            "status": "broken",
+            "level": "hard",
+            "reasons": [f"dur outlier >{OUTLIER_MULT:.0f}×"],
+            "thr_pct": thr,
+            "noise_pct": noise,
+            "n_above": n_above,
+            "persist": persist,
+        }
+    if ydb_pct is None:
+        return {
+            "status": "ok",
+            "level": "ok",
+            "reasons": [],
+            "thr_pct": thr,
+            "noise_pct": noise,
+            "n_above": n_above,
+            "persist": persist,
+        }
+    if persist and ydb_pct >= hard_floor:
+        return {
+            "status": "regression",
+            "level": "hard",
+            "reasons": [
+                f"dur +{ydb_pct:.0f}% ≥ hard {hard_floor:.0f}% "
+                f"(thr {thr:.0f}% · noise {noise:.0f}% · {n_above}/{len(now_vals)} above base)"
+            ],
+            "thr_pct": thr,
+            "noise_pct": noise,
+            "n_above": n_above,
+            "persist": persist,
+        }
+    if persist and ydb_pct >= thr:
+        return {
+            "status": "watch",
+            "level": "soft",
+            "reasons": [
+                f"dur +{ydb_pct:.0f}% soft watch "
+                f"(thr {thr:.0f}% · < hard {hard_floor:.0f}% · {n_above}/{len(now_vals)} above base)"
+            ],
+            "thr_pct": thr,
+            "noise_pct": noise,
+            "n_above": n_above,
+            "persist": persist,
+        }
+    return {
+        "status": "ok",
+        "level": "ok",
+        "reasons": [],
+        "thr_pct": thr,
+        "noise_pct": noise,
+        "n_above": n_above,
+        "persist": persist,
+    }
+
+
 def worse(a, b):
     return a if STATUS_ORDER.get(a, 0) >= STATUS_ORDER.get(b, 0) else b
 
@@ -359,53 +464,56 @@ def wave_is_in_progress(age_h: float, present: set[str], expected: set[str]) -> 
 
 
 def classify_slice(pts: list[dict]) -> dict:
-    """Run-based Now classification for one (branch, db, suite)."""
+    """Now = last completed run; baseline = previous BASELINE_RUNS."""
     pts = sorted(pts, key=lambda p: p["ts"])
     now = pts[-NOW_RUNS:]
     base = pts[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or pts[: max(1, len(pts) // 2)]
+    display = pts[-DISPLAY_RUNS:]
 
-    ydb_now = median([p["ydb"] for p in now])
-    ydb_base = median([p["ydb"] for p in base])
+    now_ydbs = [p["ydb"] for p in now]
+    base_ydbs = [p["ydb"] for p in base]
+    ydb_now = median(now_ydbs)
+    ydb_base = median(base_ydbs)
     ydb_pct = pct(ydb_base, ydb_now)
 
     fr_now = avg([p["fail_rate"] for p in now]) or 0.0
     fr_base = avg([p["fail_rate"] for p in base]) or 0.0
-    hot_fail_runs = sum(1 for p in now if p["fail_rate"] >= FAIL_HOT)
     last_fr = now[-1]["fail_rate"] if now else 0.0
 
     fail_status = "ok"
     fail_reasons: list[str] = []
-    if last_fr >= FAIL_BROKEN or (hot_fail_runs >= 2 and fr_now >= FAIL_HOT):
+    if last_fr >= FAIL_BROKEN:
         fail_status = "broken"
-        fail_reasons.append(f"fail_rate now {fr_now:.0%} (last {last_fr:.0%})")
-    elif fr_now >= FAIL_HOT and fr_now >= fr_base + FAIL_RISE:
+        fail_reasons.append(f"last run fail_rate {last_fr:.0%}")
+    elif last_fr >= FAIL_HOT and last_fr >= fr_base + FAIL_RISE:
         fail_status = "regression"
-        fail_reasons.append(f"fail_rate {fr_base:.0%}→{fr_now:.0%}")
+        fail_reasons.append(f"fail_rate {fr_base:.0%}→{last_fr:.0%} (last run)")
     elif last_fr >= FAIL_HOT:
         fail_status = "regression"
         fail_reasons.append(f"last run fail_rate {last_fr:.0%}")
 
-    dur_status = "ok"
-    dur_reasons: list[str] = []
-    if ydb_base is not None and ydb_now is not None and ydb_now > ydb_base * OUTLIER_MULT:
-        dur_status = "broken"
-        dur_reasons.append(f"dur outlier >{OUTLIER_MULT:.0f}×")
-    elif ydb_pct is not None and ydb_pct >= DUR_TOL * 100:
-        dur_status = "regression"
-        dur_reasons.append(f"dur +{ydb_pct:.0f}% vs last {len(base)} runs")
+    dur = classify_duration(ydb_pct, ydb_now, ydb_base, now_ydbs, base_ydbs)
+    dur_status = dur["status"]
+    dur_reasons = list(dur["reasons"])
 
     status = worse(fail_status, dur_status)
+    # soft duration alone stays watch (not hot slower); fail + watch → failing
     kind = "ok"
-    if fail_status != "ok" and dur_status != "ok":
+    dur_hot = dur_status in ("regression", "broken")
+    fail_hot = fail_status != "ok"
+    if fail_hot and dur_hot:
         kind = "both"
-    elif fail_status != "ok":
+    elif fail_hot:
         kind = "failing"
-    elif dur_status != "ok":
+    elif dur_hot:
         kind = "slower"
+    elif dur_status == "watch":
+        kind = "watch"
 
     fail_tests = ""
     bad_queries = []
     seen = set()
+    # fail names from the last completed run only
     for p in reversed(now):
         if p["fail"] > 0 and p.get("fail_tests"):
             if not fail_tests:
@@ -423,11 +531,14 @@ def classify_slice(pts: list[dict]) -> dict:
         "ydb_base": ydb_base,
         "ydb_now": ydb_now,
         "ydb_pct": ydb_pct,
+        "dur_thr_pct": dur.get("thr_pct"),
+        "dur_noise_pct": dur.get("noise_pct"),
+        "dur_level": dur.get("level"),
         "fail_rate_base": fr_base,
         "fail_rate_now": fr_now,
         "fail_tests": fail_tests,
         "bad_queries": bad_queries,
-        "now_runs": [run_view(p) for p in now],
+        "now_runs": [run_view(p) for p in display],
         "n": len(pts),
         "last_ts": now[-1]["ts_iso"][:19] if now else None,
         "report": next((p["report"] for p in reversed(now) if p.get("report")), None),
@@ -522,9 +633,9 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             item["issue"] = info["kind"]  # failing | slower | both
             item["history"] = history_view(sorted(pts, key=lambda p: p["ts"]))
             inbox.append(item)
-        elif info["status"] == "ok":
+        elif info["status"] in ("ok", "watch"):
             item = dict(info)
-            item["issue"] = "ok"
+            item["issue"] = "watch" if info["status"] == "watch" else "ok"
             item["history"] = history_view(sorted(pts, key=lambda p: p["ts"]))
             ok_slices.append(item)
 
@@ -710,20 +821,29 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         if key in cells:
             cells[key]["n_queries"] = len(names)
 
-    def summarize(rows, ok_n=None, slices_n=None):
+    def summarize(rows, ok_n=None, slices_n=None, watch_n=None, branch=None):
         # hot = actionable alerts only (not in_progress)
         hot_rows = [r for r in rows if r.get("issue") != "in_progress"]
+
+        def _status_n(statuses):
+            return sum(
+                1
+                for (b, _, _), info in slice_status.items()
+                if info["status"] in statuses and (branch is None or b == branch)
+            )
+
         return {
             "missing": sum(1 for r in rows if r.get("issue") == "missing"),
             "in_progress": sum(1 for r in rows if r.get("issue") == "in_progress"),
             "failing": sum(1 for r in rows if r.get("issue") in ("failing", "both")),
             "slower": sum(1 for r in rows if r.get("issue") in ("slower", "both")),
             "stale": sum(1 for r in rows if r.get("issue") == "stale"),
-            "ok_slices": ok_n if ok_n is not None else sum(
-                1 for info in slice_status.values() if info["status"] == "ok"
-            ),
+            "ok_slices": ok_n if ok_n is not None else _status_n(("ok", "watch")),
+            "watch_slices": watch_n if watch_n is not None else _status_n(("watch",)),
             "hot": len(hot_rows),
-            "slices": slices_n if slices_n is not None else len(slice_status),
+            "slices": slices_n if slices_n is not None else (
+                sum(1 for (b, _, _) in slice_status if branch is None or b == branch)
+            ),
         }
 
     summary = summarize(all_hot)
@@ -731,10 +851,14 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     for br in branches:
         br_hot = [r for r in all_hot if r.get("branch") == br]
         br_ok = sum(
-            1 for (b, _, _), info in slice_status.items() if b == br and info["status"] == "ok"
+            1
+            for (b, _, _), info in slice_status.items()
+            if b == br and info["status"] in ("ok", "watch")
         )
         br_slices = sum(1 for (b, _, _) in slice_status if b == br)
-        by_branch_summary[br] = summarize(br_hot, ok_n=br_ok, slices_n=br_slices)
+        by_branch_summary[br] = summarize(
+            br_hot, ok_n=br_ok, slices_n=br_slices, branch=br
+        )
 
     # Balanced inbox per branch × kind
     picked: list[dict] = []
@@ -834,6 +958,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "source": "perfomance/olap/fast_results_siutes",
         "ui": {
             "now_runs": NOW_RUNS,
+            "display_runs": DISPLAY_RUNS,
             "baseline_runs": BASELINE_RUNS,
             "stale_hours": STALE_HOURS,
             "wave_complete_hours": WAVE_COMPLETE_HOURS,
@@ -859,9 +984,11 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "inbox": inbox,
         "ok": ok_slices,
         "rules": {
-            "now": f"last {NOW_RUNS} runs",
+            "now": f"last completed run",
             "baseline": f"previous {BASELINE_RUNS} runs",
-            "dur": f"+{int(DUR_TOL*100)}%",
+            "dur_soft": f"+{int(DUR_TOL*100)}% floor · thr=max(soft, {NOISE_K:g}×noise) · last run > base",
+            "dur_hard": f"+{int(DUR_HARD*100)}% (or thr if noisier) on last run → hard slow; soft → watch",
+            "dur": f"hard +{int(DUR_HARD*100)}% / soft +{int(DUR_TOL*100)}% · noise×{NOISE_K:g} · last run",
             "fail_broken": FAIL_BROKEN,
             "fail_hot": FAIL_HOT,
             "expected": f"suites in ≥{int(EXPECTED_MIN_SHARE*100)}% of CiVersion waves / {EXPECTED_LOOKBACK_DAYS}d",
@@ -902,11 +1029,21 @@ def _query_history(
 ) -> dict:
     tail = rows[-(max_points or HISTORY_MAX_POINTS) :]
     report_by_day = report_by_day or {}
+    labels = [r.get("ts") or r.get("day") for r in tail]
     return {
-        "labels": [r["day"] for r in tail],
-        "ydb": [r["ydb"] for r in tail],
-        "fail_rate": [round((r["fr"] or 0) * 100, 2) for r in tail],
-        "reports": [r.get("report") or report_by_day.get(r["day"]) for r in tail],
+        "labels": labels,
+        "ydb": [r.get("ydb") for r in tail],
+        "fail_rate": [
+            None
+            if r.get("nodata") or r.get("fr") is None
+            else round(float(r["fr"]) * 100, 2)
+            for r in tail
+        ],
+        "reports": [
+            r.get("report") or report_by_day.get(str(r.get("day") or "")[:10])
+            for r in tail
+        ],
+        "mode": "runs" if any(r.get("ts") and "T" in str(r.get("ts")) for r in tail) else "daily",
     }
 
 
@@ -971,11 +1108,20 @@ def attach_slow_queries_from_tests(data: dict, test_rows: list[dict]) -> None:
             _merge_query(item, q)
 
 
-def load_daily_points(path: Path, suite_keys: set[tuple[str, str, str]]) -> dict[tuple[str, str, str, str], list[dict]]:
-    """Load json-lines daily dump → (branch,db,suite,test) → [{day,ydb,fr}, ...] for selected suites."""
+def load_daily_points(
+    path: Path,
+    suite_keys: set[tuple[str, str, str]],
+    since: datetime | None = None,
+) -> dict[tuple[str, str, str, str], list[dict]]:
+    """Load json-lines query dump → (branch,db,suite,test) → [{ts,day,ydb,fr}, ...].
+
+    Supports per-run rows (Ts/ydb/Success) and legacy daily buckets (Day/n/fails/ydb).
+    If ``since`` is set, drops older points (default report window).
+    """
     out: dict[tuple[str, str, str, str], list[dict]] = defaultdict(list)
     if not path.exists() or not suite_keys:
         return out
+    since_day = since.date().isoformat() if since is not None else None
     with path.open() as f:
         for line in f:
             line = line.strip()
@@ -991,20 +1137,61 @@ def load_daily_points(path: Path, suite_keys: set[tuple[str, str, str]]) -> dict
             if (branch, db, suite) not in suite_keys:
                 continue
             test = o.get("Test") or "unknown"
+            ydb = o.get("ydb") if "ydb" in o else o.get("YdbSumMeans")
+            report = o.get("Report") or o.get("report")
+            ts_raw = o.get("Ts") or o.get("ts") or o.get("Run_start_timestamp")
+            if ts_raw is not None:
+                dt = parse_ts(ts_raw)
+                if dt is None:
+                    continue
+                if since is not None and dt < since:
+                    continue
+                ts = dt.isoformat().replace("+00:00", "Z")
+                day = dt.date().isoformat()
+                success = o.get("Success")
+                color = o.get("Color")
+                # mart null-templates: Success=0 + Color NULL + no ydb → not in this run
+                nodata = (
+                    success is not None
+                    and int(success) == 0
+                    and "Color" in o
+                    and not color
+                    and ydb is None
+                )
+                if nodata:
+                    fr = None
+                elif success is None:
+                    fr = float(o.get("fr") or 0.0)
+                else:
+                    fr = 0.0 if int(success) else 1.0
+                out[(branch, db, suite, test)].append(
+                    {
+                        "ts": ts,
+                        "day": day,
+                        "ydb": None if ydb is None else float(ydb),
+                        "fr": fr,
+                        "report": report,
+                        "nodata": nodata,
+                    }
+                )
+                continue
+            # legacy day bucket
             n = int(o.get("n") or 0)
             fails = int(o.get("fails") or 0)
-            ydb = o.get("ydb")
-            report = o.get("Report") or o.get("report")
+            day = str(o.get("Day") or "")
+            if since_day and day and day < since_day:
+                continue
             out[(branch, db, suite, test)].append(
                 {
-                    "day": str(o.get("Day")),
+                    "ts": day,
+                    "day": day,
                     "ydb": None if ydb is None else float(ydb),
                     "fr": (fails / n) if n else 0.0,
                     "report": report,
                 }
             )
     for key, rows in out.items():
-        rows.sort(key=lambda r: r["day"])
+        rows.sort(key=lambda r: r.get("ts") or r.get("day") or "")
     return out
 
 
@@ -1043,17 +1230,45 @@ def _sync_slow_query_lists(item: dict, slow_qs: list[dict] | None = None) -> Non
 
 
 def _query_metrics(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    # last point is mart null-template → query absent in that suite run
+    if rows[-1].get("nodata"):
+        real = [r for r in rows if not r.get("nodata")]
+        base = real[-BASELINE_RUNS:] if real else []
+        return {
+            "ydb_pct": None,
+            "ydb_base": median([r["ydb"] for r in base]),
+            "ydb_now": None,
+            "fail_rate_late": None,
+            "fail_rate_base": avg([r["fr"] for r in base]),
+            "kind": "nodata",
+            "is_fail": False,
+            "is_slow": False,
+            "is_watch": False,
+            "dur_thr_pct": None,
+            "dur_noise_pct": None,
+            "dur_level": None,
+        }
     if len(rows) < 2:
         return None
     now = rows[-NOW_RUNS:]
     base = rows[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or rows[: max(1, len(rows) // 2)]
-    ydb_now = median([r["ydb"] for r in now])
-    ydb_base = median([r["ydb"] for r in base])
+    now_ydbs = [r["ydb"] for r in now]
+    base_ydbs = [r["ydb"] for r in base]
+    ydb_now = median(now_ydbs)
+    ydb_base = median(base_ydbs)
     ydb_pct = pct(ydb_base, ydb_now)
     fr_now = avg([r["fr"] for r in now]) or 0.0
     fr_base = avg([r["fr"] for r in base]) or 0.0
-    is_fail = fr_now >= FAIL_HOT and (fr_now >= fr_base + FAIL_RISE or fr_now >= FAIL_BROKEN)
-    is_slow = ydb_pct is not None and ydb_pct >= DUR_TOL * 100
+    last_fr = (now[-1].get("fr") or 0.0) if now else 0.0
+    # last completed run only
+    is_fail = last_fr >= FAIL_BROKEN or (
+        last_fr >= FAIL_HOT and (last_fr >= fr_base + FAIL_RISE or last_fr >= FAIL_BROKEN)
+    )
+    dur = classify_duration(ydb_pct, ydb_now, ydb_base, now_ydbs, base_ydbs)
+    is_slow = dur["status"] in ("regression", "broken")  # hard only
+    is_watch = dur["status"] == "watch"
     kind = "ok"
     if is_fail and is_slow:
         kind = "both"
@@ -1061,6 +1276,8 @@ def _query_metrics(rows: list[dict]) -> dict | None:
         kind = "fail"
     elif is_slow:
         kind = "slow"
+    elif is_watch:
+        kind = "watch"
     return {
         "ydb_pct": ydb_pct,
         "ydb_base": ydb_base,
@@ -1070,17 +1287,23 @@ def _query_metrics(rows: list[dict]) -> dict | None:
         "kind": kind,
         "is_fail": is_fail,
         "is_slow": is_slow,
+        "is_watch": is_watch,
+        "dur_thr_pct": dur.get("thr_pct"),
+        "dur_noise_pct": dur.get("noise_pct"),
+        "dur_level": dur.get("level"),
     }
 
 
-def attach_now_query_regressions(data: dict, daily_path: Path) -> int:
-    """Now-based per-query slow/fail for hot suites from daily series (last 3 days vs prev 7)."""
+def attach_now_query_regressions(
+    data: dict, daily_path: Path, since: datetime | None = None
+) -> int:
+    """Now-based per-query slow/fail for hot suites (last run vs prev 7)."""
     suite_keys = {
         (r["branch"], r["db"], r["suite"])
         for r in data.get("inbox", [])
         if r.get("issue") in ("failing", "slower", "both")
     }
-    series = load_daily_points(daily_path, suite_keys)
+    series = load_daily_points(daily_path, suite_keys, since=since)
     by_suite: dict[tuple[str, str, str], list[tuple[str, list[dict]]]] = defaultdict(list)
     for (branch, db, suite, test), rows in series.items():
         by_suite[(branch, db, suite)].append((test, rows))
@@ -1104,6 +1327,9 @@ def attach_now_query_regressions(data: dict, daily_path: Path) -> int:
                 "ydb_now": m["ydb_now"],
                 "fail_rate_late": m["fail_rate_late"],
                 "fail_rate_base": m["fail_rate_base"],
+                "dur_thr_pct": m.get("dur_thr_pct"),
+                "dur_noise_pct": m.get("dur_noise_pct"),
+                "dur_level": m.get("dur_level"),
                 "history": _query_history(rows, report_by_day),
             }
             if m["is_slow"]:
@@ -1115,7 +1341,9 @@ def attach_now_query_regressions(data: dict, daily_path: Path) -> int:
     return n_slow
 
 
-def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]:
+def attach_suite_query_catalogs(
+    data: dict, daily_path: Path, since: datetime | None = None
+) -> tuple[int, int]:
     """Full per-query catalog (+ history) for OK and hot suites (incl. green queries)."""
     hot = [
         r
@@ -1125,7 +1353,7 @@ def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]
     ok = list(data.get("ok") or [])
     items = hot + ok
     suite_keys = {(r["branch"], r["db"], r["suite"]) for r in items}
-    series = load_daily_points(daily_path, suite_keys)
+    series = load_daily_points(daily_path, suite_keys, since=since)
     if not series:
         return 0, 0
     by_suite: dict[tuple[str, str, str], list[tuple[str, list[dict]]]] = defaultdict(list)
@@ -1145,10 +1373,10 @@ def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]
             m = _query_metrics(rows) or {
                 "ydb_pct": None,
                 "ydb_base": None,
-                "ydb_now": rows[-1].get("ydb"),
-                "fail_rate_late": rows[-1].get("fr") or 0.0,
+                "ydb_now": None if rows[-1].get("nodata") else rows[-1].get("ydb"),
+                "fail_rate_late": None if rows[-1].get("nodata") else (rows[-1].get("fr") or 0.0),
                 "fail_rate_base": None,
-                "kind": "ok",
+                "kind": "nodata" if rows[-1].get("nodata") else "ok",
             }
             qs.append(
                 {
@@ -1159,19 +1387,28 @@ def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]
                     "ydb_now": m.get("ydb_now"),
                     "fail_rate_late": m.get("fail_rate_late"),
                     "fail_rate_base": m.get("fail_rate_base"),
+                    "dur_thr_pct": m.get("dur_thr_pct"),
+                    "dur_noise_pct": m.get("dur_noise_pct"),
+                    "dur_level": m.get("dur_level"),
                     # slightly shorter history to keep HTML size reasonable
-                    "history": _query_history(rows, report_by_day, max_points=28),
+                    "history": _query_history(rows, report_by_day),
                 }
             )
         item["queries"] = qs
-        for q in qs:
-            if q.get("kind") in ("fail", "slow", "both"):
-                _merge_query(item, q)
-        _sync_slow_query_lists(
-            item,
-            [q for q in qs if q.get("kind") in ("slow", "both")],
-        )
-        # keep full catalog in query_map (sync only keeps slow/fail)
+        # rebuild hot lists from catalog — drop stale enrichments (old +65% etc.)
+        hot_qs = [q for q in qs if q.get("kind") in ("fail", "slow", "both")]
+        item["bad_queries"] = sorted(
+            hot_qs,
+            key=lambda q: (
+                0 if q.get("kind") in ("fail", "both") else 1,
+                -(q.get("fail_rate_late") or 0),
+                -(q.get("ydb_pct") or 0),
+            ),
+        )[:25]
+        item["slow_queries"] = sorted(
+            [q for q in hot_qs if q.get("kind") in ("slow", "both")],
+            key=lambda q: -(q.get("ydb_pct") or 0),
+        )[:25]
         item["query_map"] = {
             q["test"]: q for q in qs if q.get("test") and q.get("history")
         }
@@ -1180,6 +1417,55 @@ def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]
         else:
             n_ok_q += len(qs)
     return n_hot_q, n_ok_q
+
+
+def promote_ok_with_hot_queries(data: dict) -> int:
+    """Suite sum can be OK while individual queries are hard-slow/fail — promote those."""
+    stay: list[dict] = []
+    moved = 0
+    for item in data.get("ok") or []:
+        qs = item.get("queries") or []
+        n_fail = sum(1 for q in qs if q.get("kind") in ("fail", "both"))
+        n_slow = sum(1 for q in qs if q.get("kind") in ("slow", "both"))
+        if not n_fail and not n_slow:
+            stay.append(item)
+            continue
+        item = dict(item)
+        if n_fail and n_slow:
+            item["issue"] = "both"
+            item["kind"] = "both"
+        elif n_fail:
+            item["issue"] = "failing"
+            item["kind"] = "failing"
+        else:
+            item["issue"] = "slower"
+            item["kind"] = "slower"
+        item["status"] = "regression"
+        reasons = list(item.get("reasons") or [])
+        reasons.append(f"queries: fail {n_fail} · slow {n_slow} (suite sum not hot)")
+        item["reasons"] = reasons
+        data.setdefault("inbox", []).append(item)
+        moved += 1
+    data["ok"] = stay
+    return moved
+
+
+def refresh_summary_counts(data: dict) -> None:
+    """Recompute top-level summary after inbox/ok mutations."""
+    inbox = data.get("inbox") or []
+    ok = data.get("ok") or []
+    hot_rows = [r for r in inbox if r.get("issue") != "in_progress"]
+    data["summary"] = {
+        **(data.get("summary") or {}),
+        "missing": sum(1 for r in inbox if r.get("issue") == "missing"),
+        "in_progress": sum(1 for r in inbox if r.get("issue") == "in_progress"),
+        "failing": sum(1 for r in inbox if r.get("issue") in ("failing", "both")),
+        "slower": sum(1 for r in inbox if r.get("issue") in ("slower", "both")),
+        "stale": sum(1 for r in inbox if r.get("issue") == "stale"),
+        "ok_slices": len(ok),
+        "watch_slices": sum(1 for r in ok if r.get("issue") == "watch" or r.get("status") == "watch"),
+        "hot": len(hot_rows),
+    }
 
 
 def render_html(data: dict, output: Path) -> None:
@@ -1217,7 +1503,7 @@ def main():
     ap.add_argument(
         "--tests-daily-input",
         default=None,
-        help="Optional json-lines daily per-query dump for Now slow-query drill-down",
+        help="Optional json-lines per-query dump (per-run preferred; legacy daily ok)",
     )
     ap.add_argument(
         "--since",
@@ -1249,18 +1535,25 @@ def main():
     else:
         print(f"no tests dump at {tests_path} (optional)")
 
-    daily_path = (
-        Path(args.tests_daily_input)
-        if args.tests_daily_input
-        else (ROOT / "out" / "raw_test_daily.json")
-    )
-    if daily_path.exists():
-        n_slow = attach_now_query_regressions(data, daily_path)
-        print(f"now slow-queries from {daily_path}: {n_slow}")
-        n_hot_q, n_ok_q = attach_suite_query_catalogs(data, daily_path)
-        print(f"suite query catalogs from {daily_path}: hot={n_hot_q} ok={n_ok_q}")
+    daily_path = None
+    if args.tests_daily_input:
+        daily_path = Path(args.tests_daily_input)
     else:
-        print(f"no daily dump at {daily_path} (optional — per-query slowdowns limited)")
+        for cand in (ROOT / "out" / "raw_test_runs.json", ROOT / "out" / "raw_test_daily.json"):
+            if cand.exists():
+                daily_path = cand
+                break
+    if daily_path and daily_path.exists():
+        n_slow = attach_now_query_regressions(data, daily_path, since=since)
+        print(f"now slow-queries from {daily_path}: {n_slow}")
+        n_hot_q, n_ok_q = attach_suite_query_catalogs(data, daily_path, since=since)
+        print(f"suite query catalogs from {daily_path}: hot={n_hot_q} ok={n_ok_q}")
+        n_promo = promote_ok_with_hot_queries(data)
+        if n_promo:
+            refresh_summary_counts(data)
+            print(f"promoted ok→hot by query signal: {n_promo}")
+    else:
+        print("no per-query dump at out/raw_test_runs.json (optional — query drill-down limited)")
 
     out = Path(args.output)
     render_html(data, out)
@@ -1269,7 +1562,7 @@ def main():
         f"points={len(points)} inbox={s['hot']} "
         f"missing={s['missing']} in_progress={s.get('in_progress', 0)} "
         f"failing={s['failing']} slower={s['slower']} stale={s['stale']} "
-        f"ok_slices={s['ok_slices']}"
+        f"ok_slices={s['ok_slices']} watch={s.get('watch_slices', 0)}"
     )
     print(f"window={data['window']}")
     print(f"wrote {out}")

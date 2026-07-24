@@ -1,4 +1,4 @@
--- Daily per-query series for charts / date-window recompute.
+-- Per-run per-query series (datetime points — no day averaging).
 -- Replace {{SINCE}} e.g. 2026-06-08T00:00:00Z
 $base = (
     SELECT
@@ -14,17 +14,15 @@ $base = (
         DbAlias,
         Suite,
         Test,
-        CAST(DateTime::MakeDate(Run_start_timestamp) AS String) AS Day,
+        Run_start_timestamp AS Ts,
         YdbSumMeans,
         CAST(Success AS Int32) AS Success,
         Color,
-        CAST(errors AS Bool) AS IsError,
         CAST(Suite_not_runned AS Bool) AS SuiteNotRunned,
         Report
     FROM `perfomance/olap/fast_results`
     WHERE Run_start_timestamp >= Timestamp('{{SINCE}}')
       AND Test NOT IN ('_Verification', 'Sum')
-      -- skip mart placeholders (suite expected but not executed) — not real query fails
       AND COALESCE(CAST(Suite_not_runned AS Bool), false) = false
       AND (
           StartsWith(Suite, 'Clickbench')
@@ -49,12 +47,10 @@ SELECT
     DbAlias,
     Suite,
     Test,
-    Day,
-    COUNT(*) AS n,
-    -- real fails only: executed query with Success=0 (Color set); skip null-templates
-    COUNTIF(Success = 0 AND Color IS NOT NULL) AS fails,
-    AVG_IF(YdbSumMeans, YdbSumMeans IS NOT NULL) AS ydb,
-    MAX(Report) AS Report
+    Ts,
+    YdbSumMeans AS ydb,
+    Success,
+    Color,
+    Report
 FROM $base
-GROUP BY BranchNorm, DbAlias, Suite, Test, Day
-ORDER BY Day, DbAlias, Suite, Test;
+ORDER BY Ts, DbAlias, Suite, Test;

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Fetch OLAP per-query daily series via YDBWrapper scan query.
+"""Fetch OLAP per-query run series via YDBWrapper scan query.
+
+Default: one row per (suite, test, run) with datetime — no day averaging.
+Legacy `--mode daily` still available (day buckets).
 
 Uses streaming scan (same stack as `.github/scripts/analytics/ydb_wrapper.py`) —
 no ydb CLI ~1000-row cap.
@@ -9,7 +12,7 @@ Auth:
   # or pass --sa-key-file
 
 Example:
-  ./.venv/bin/python fetch_daily.py --since 2026-06-08 --output out/raw_test_daily.json
+  ./.venv/bin/python fetch_daily.py --output out/raw_test_runs.json
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -26,7 +29,11 @@ ROOT = Path(__file__).resolve().parent
 # olap → perfomance_tests_status → tools → ydb/ → <repo>
 REPO_ROOT = ROOT.parents[3]
 ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
-SQL_PATH = ROOT / "queries" / "fetch_olap_test_daily.sql"
+SQL_BY_MODE = {
+    "runs": ROOT / "queries" / "fetch_olap_test_runs.sql",
+    "daily": ROOT / "queries" / "fetch_olap_test_daily.sql",
+}
+DEFAULT_WINDOW_DAYS = 30
 
 
 def _setup_path() -> None:
@@ -55,10 +62,11 @@ def row_to_obj(row) -> dict:
     return {k: _jsonable(v) for k, v in d.items()}
 
 
-def build_sql(since: str) -> str:
-    sql = SQL_PATH.read_text()
+def build_sql(since: str, mode: str) -> str:
+    sql_path = SQL_BY_MODE[mode]
+    sql = sql_path.read_text()
     if "{{SINCE}}" not in sql:
-        raise SystemExit(f"{SQL_PATH} missing {{SINCE}} placeholder")
+        raise SystemExit(f"{sql_path} missing {{SINCE}} placeholder")
     sql = sql.replace("{{SINCE}}", f"{since}T00:00:00Z")
     # ORDER BY is useless for dump and expensive on scan
     lines = [ln for ln in sql.splitlines() if not ln.strip().upper().startswith("ORDER BY")]
@@ -67,8 +75,29 @@ def build_sql(since: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--since", default="2026-06-08", help="UTC day lower bound (YYYY-MM-DD)")
-    ap.add_argument("--output", "-o", default=str(ROOT / "out" / "raw_test_daily.json"))
+    ap.add_argument(
+        "--since",
+        default=None,
+        help=f"UTC day lower bound YYYY-MM-DD (default: last {DEFAULT_WINDOW_DAYS} days)",
+    )
+    ap.add_argument(
+        "--days",
+        type=int,
+        default=DEFAULT_WINDOW_DAYS,
+        help=f"Lookback days when --since omitted (default: {DEFAULT_WINDOW_DAYS})",
+    )
+    ap.add_argument(
+        "--mode",
+        choices=sorted(SQL_BY_MODE),
+        default="runs",
+        help="runs = one point per launch (default); daily = day buckets (legacy)",
+    )
+    ap.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Output jsonl (default: out/raw_test_runs.json or out/raw_test_daily.json)",
+    )
     ap.add_argument(
         "--sa-key-file",
         default=os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
@@ -95,11 +124,20 @@ def main() -> int:
     _setup_path()
     from ydb_wrapper import YDBWrapper  # noqa: E402
 
-    sql = build_sql(args.since)
-    out = Path(args.output)
+    since = args.since or (
+        datetime.now(timezone.utc).date() - timedelta(days=max(1, args.days))
+    ).isoformat()
+    sql = build_sql(since, args.mode)
+    out = Path(
+        args.output
+        or (
+            ROOT / "out" / ("raw_test_runs.json" if args.mode == "runs" else "raw_test_daily.json")
+        )
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"scan fetch since={args.since} → {out}", flush=True)
+    qname = f"fetch_olap_test_{args.mode}"
+    print(f"scan fetch mode={args.mode} since={since} → {out}", flush=True)
     with YDBWrapper(
         config_path=args.config,
         enable_statistics=False,
@@ -109,7 +147,7 @@ def main() -> int:
     ) as ydb_w:
         if not ydb_w.check_credentials():
             raise SystemExit("YDB credentials check failed")
-        rows = ydb_w.execute_scan_query(sql, query_name="fetch_olap_test_daily")
+        rows = ydb_w.execute_scan_query(sql, query_name=qname)
 
     n = 0
     with out.open("w") as f:

@@ -76,7 +76,7 @@ sanity check) or two different refs — **without a local build**.
 | `compare_dataset_source` | `generate` | `generate` (random data) or `s3` (import fixed dataset from S3) |
 | `compare_s3_endpoint` | `` | S3 endpoint URL (required when `dataset_source=s3`) |
 | `compare_s3_bucket` | `` | S3 bucket name (required when `dataset_source=s3`) |
-| `compare_s3_source` | `` | S3 object key prefix to import (required when `dataset_source=s3`) |
+| `compare_s3_query_destination` | `` | Database destination path for the queries table (optional, defaults to `{database}/vector_query_table`) |
 | `compare_s3_destination` | `` | Database destination path for import (required when `dataset_source=s3`) |
 | `compare_s3_query_source` | `` | S3 object key prefix for a pre-computed queries table (optional, skips dynamic creation) |
 | `compare_s3_query_destination` | `` | Database destination path for the queries table (optional, defaults to `{database}/vector_query_table`)

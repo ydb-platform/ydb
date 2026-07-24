@@ -4637,24 +4637,56 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
         UNIT_ASSERT_C(decompressor->GetFuncsCount() >= 1, "no decompression tasks planned");
 
-        // Synchronize both pop sites. A short timeout avoids deadlock when Cleanup takes the
-        // session lock (fixed code): StartDecompressionTasks holds the lock at the barrier while
-        // Cleanup waits for that lock. Without the lock both sides meet and race on Tasks.
-        std::atomic<int> arrivals{0};
+        // Rendezvous: Cleanup must reach the pop hook first (while the first task is still
+        // decompressing), then wait for StartDecompressionTasks. StartDecompressionTasks runs
+        // under session->Lock; if it waits before Cleanup has begun, Release/DeleteNotReadyTail
+        // cannot take that lock and Cleanup never starts.
+        //
+        // Fixed code (lock in Cleanup): Cleanup blocks on session->Lock while StartTasks waits
+        // here → StartTasks times out → no concurrent pop.
+        // Unfixed: both sides meet and race on Tasks (TSan / crash).
+        std::atomic<bool> cleanupWaiting{false};
+        std::atomic<bool> startTasksArrived{false};
+        std::atomic<bool> rendezvousDone{false};
         std::mutex mu;
         std::condition_variable cv;
-        constexpr int Parties = 2;
+        constexpr auto RendezvousTimeout = std::chrono::seconds(5);
 
-        auto barrier = [&] {
-            std::unique_lock lock(mu);
-            if (++arrivals == Parties) {
-                cv.notify_all();
+        auto beforeCleanupPop = [&] {
+            if (rendezvousDone.load(std::memory_order_acquire)) {
                 return;
             }
-            cv.wait_for(lock, std::chrono::milliseconds(200), [&] { return arrivals.load() >= Parties; });
+            {
+                std::lock_guard lock(mu);
+                cleanupWaiting.store(true, std::memory_order_release);
+            }
+            cv.notify_all();
+
+            std::unique_lock lock(mu);
+            cv.wait_for(lock, RendezvousTimeout, [&] {
+                return startTasksArrived.load(std::memory_order_acquire);
+            });
+            rendezvousDone.store(true, std::memory_order_release);
         };
 
-        NYdb::NTopic::NTesting::SetDecompressionTasksPopHooks(barrier, barrier);
+        auto beforeStartTasksPop = [&] {
+            if (rendezvousDone.load(std::memory_order_acquire)) {
+                return;
+            }
+            {
+                std::unique_lock lock(mu);
+                if (!cv.wait_for(lock, RendezvousTimeout, [&] {
+                        return cleanupWaiting.load(std::memory_order_acquire);
+                    }))
+                {
+                    return;
+                }
+                startTasksArrived.store(true, std::memory_order_release);
+            }
+            cv.notify_all();
+        };
+
+        NYdb::NTopic::NTesting::SetDecompressionTasksPopHooks(beforeCleanupPop, beforeStartTasksPop);
         Y_DEFER {
             NYdb::NTopic::NTesting::ClearDecompressionTasksPopHooks();
         };
@@ -4663,10 +4695,23 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             decompressor->StartFuncs({0});
         });
 
-        // Trigger Cleanup via DeleteNotReadyTail while the first decompression task is in flight.
+        // While the first task is still decompressing (Lock free), trigger Cleanup so it can
+        // wait at the hook before OnDataDecompressed → StartDecompressionTasks takes the lock.
         server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
 
+        {
+            std::unique_lock lock(mu);
+            UNIT_ASSERT_C(
+                cv.wait_for(lock, RendezvousTimeout, [&] {
+                    return cleanupWaiting.load(std::memory_order_acquire);
+                }),
+                "Cleanup did not reach pop hook before decompression finished");
+        }
+
         decompressThread.join();
+
+        UNIT_ASSERT_C(rendezvousDone.load(std::memory_order_acquire),
+                      "Cleanup/StartDecompressionTasks pop rendezvous did not happen");
 
         for (int i = 0; i < 20; ++i) {
             auto msg = reader->GetEvent(false, 1);

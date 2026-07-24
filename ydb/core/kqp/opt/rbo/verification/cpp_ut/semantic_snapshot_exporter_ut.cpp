@@ -4101,11 +4101,15 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto pos = TPositionHandle();
         auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
             TMapElement(TInfoUnit("out.k"), TInfoUnit("a.k"), pos, &ctx.ExprCtx, &ctx.ExpressionProps),
+            TMapElement(TInfoUnit("out.k_copy"), TInfoUnit("a.k"), pos, &ctx.ExprCtx, &ctx.ExpressionProps),
             TMapElement(
                 TInfoUnit("out.flag_copy"),
                 MakeColumnAccess(TInfoUnit("a.flag"), pos, &ctx.ExprCtx, &ctx.ExpressionProps)),
         });
-        TOpRoot root(map, pos, {"out.flag_copy", "out.k", "a.payload"});
+        TOpRoot root(
+            map,
+            pos,
+            {"out.flag_copy", "out.k", "out.k_copy", "a.payload"});
 
         const auto exported = ExportSemanticSnapshotV1(root, ctx.RboCtx);
         const auto snapshot = ParseSupported(exported);
@@ -4153,15 +4157,113 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(project["ordered"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(
             ProjectionOutputs(project),
-            (TVector<TString>{"a.flag", "a.payload", "out.k", "out.flag_copy"}));
+            (TVector<TString>{
+                "a.flag",
+                "a.payload",
+                "out.k",
+                "out.k_copy",
+                "out.flag_copy",
+            }));
         const auto& projections = project["columns"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(projections[0]["expression"]["column"].GetStringSafe(), "a.flag");
         UNIT_ASSERT_VALUES_EQUAL(projections[1]["expression"]["column"].GetStringSafe(), "a.payload");
         UNIT_ASSERT_VALUES_EQUAL(projections[2]["expression"]["column"].GetStringSafe(), "a.k");
-        UNIT_ASSERT_VALUES_EQUAL(projections[3]["expression"]["column"].GetStringSafe(), "a.flag");
+        UNIT_ASSERT_VALUES_EQUAL(projections[3]["expression"]["column"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(projections[4]["expression"]["column"].GetStringSafe(), "a.flag");
         UNIT_ASSERT_VALUES_EQUAL(
             Strings(snapshot["plan"]["output"]),
-            (TVector<TString>{"out.flag_copy", "out.k", "a.payload"}));
+            (TVector<TString>{
+                "out.flag_copy",
+                "out.k",
+                "out.k_copy",
+                "a.payload",
+            }));
+    }
+
+    Y_UNIT_TEST(MapRenameSourcesAndOutputsFailClosedIndependently) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/MapMissingSource",
+                {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            const auto pos = TPositionHandle();
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                pos,
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("out.k"),
+                    TInfoUnit("a.missing"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)});
+            TOpRoot root(map, pos, {"out.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Invalid Map rename source a.missing");
+        }
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/MapDuplicateOutput",
+                {{"k", "Int32", true}});
+            auto read = MakeRead(ctx, table, "a", {"k"});
+            const auto pos = TPositionHandle();
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                pos,
+                TVector<TMapElement>{
+                    TMapElement(
+                        TInfoUnit("out.k"),
+                        TInfoUnit("a.k"),
+                        pos,
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps),
+                    TMapElement(
+                        TInfoUnit("out.k"),
+                        TInfoUnit("a.k"),
+                        pos,
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps),
+                });
+            TOpRoot root(map, pos, {"out.k"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Duplicate or empty Map output out.k");
+        }
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/MapEmptyOutput", {
+                {"k", "Int32", true},
+                {"kept", "Int32", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"k", "kept"});
+            const auto pos = TPositionHandle();
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                pos,
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit(""),
+                    TInfoUnit("a.k"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)});
+            TOpRoot root(map, pos, {"a.kept"});
+
+            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Duplicate or empty Map output");
+        }
     }
 
     Y_UNIT_TEST(ExportsOrderedMapProjection) {

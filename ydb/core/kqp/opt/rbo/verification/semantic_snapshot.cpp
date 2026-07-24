@@ -7422,9 +7422,10 @@ private:
                         map);
                     if (element.IsRename()) {
                         const TString source = element.GetRename().GetFullName();
-                        if (!inputNames.contains(source) || !renameSources.insert(source).second) {
+                        if (!inputNames.contains(source)) {
                             Unsupported(TStringBuilder() << "Invalid Map rename source " << source);
                         }
+                        renameSources.insert(source);
                     }
                 }
 

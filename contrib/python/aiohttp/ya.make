@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.10.6)
+VERSION(3.10.11)
 
 LICENSE(Apache-2.0)
 
@@ -57,7 +57,6 @@ PY_SRCS(
     aiohttp/http_parser.py
     aiohttp/http_websocket.py
     aiohttp/http_writer.py
-    aiohttp/locks.py
     aiohttp/log.py
     aiohttp/multipart.py
     aiohttp/payload.py

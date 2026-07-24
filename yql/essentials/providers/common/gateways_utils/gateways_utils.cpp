@@ -94,6 +94,11 @@ void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashM
                     TString{YdbProviderName},
                     &clusterMapping);
     }
+    if (!gateways.HasYdb() && gateways.HasKikimr()) {
+        AddClusters(gateways.GetKikimr().GetClusterMapping(),
+                    TString{KikimrProviderName},
+                    &clusterMapping);
+    }
 }
 
 } // namespace NYql

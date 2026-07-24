@@ -7,8 +7,9 @@ import pytest
 
 
 def pytest_report_header(config):
-    import OpenSSL.SSL
     import cryptography
+
+    import OpenSSL.SSL
 
     return "OpenSSL: {openssl}\ncryptography: {cryptography}".format(
         openssl=OpenSSL.SSL.SSLeay_version(OpenSSL.SSL.SSLEAY_VERSION),

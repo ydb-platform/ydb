@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator, Sequence, TypeAlias
+from typing import Callable, Iterable, Iterator, Sequence, TypeAlias
 
 from .string_order import MAX_REPRESENTATIVES, StringOrderUniverse
 
@@ -24,12 +24,16 @@ class SmtError(ValueError):
     pass
 
 
+class _OwnerToken:
+    """Identity-only marker for declarations belonging to one SMT script."""
+
+
 @dataclass(frozen=True, slots=True, eq=False)
 class Term:
     sort: str
     operation: str
     arguments: tuple[Term, ...] = ()
-    atom: bool | int | str | None = None
+    atom: bool | int | str | _OwnerToken | None = None
     _hash: int = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -267,11 +271,21 @@ class Function:
     name: str
     arguments: tuple[str, ...]
     result: str
+    _owner: _OwnerToken | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __call__(self, *arguments: Term) -> Term:
         if tuple(argument.sort for argument in arguments) != self.arguments:
             raise SmtError(f"wrong argument sorts for {self.name}")
-        return Term(self.result, self.name, tuple(arguments))
+        return Term(
+            self.result,
+            self.name,
+            tuple(arguments),
+            self._owner,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +300,84 @@ class Declaration:
             f"; {self.name}: {json.dumps(self.hint, ensure_ascii=True)}\n"
             f"(declare-fun {self.name} ({' '.join(self.arguments)}) {self.result})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ProductSort:
+    """One exact finite-width record sort owned by an SMT script.
+
+    Product datatypes are intentionally narrower than a general custom-sort
+    API: every field is one of the verifier's two trusted scalar sorts, and
+    values can only be constructed or inspected through the generated
+    constructor and selectors.
+    """
+
+    sort: str
+    constructor: Function
+    selectors: tuple[Function, ...]
+    fields: tuple[str, ...]
+    _owner: _OwnerToken = field(repr=False, compare=False)
+
+    def pack(self, *fields: Term) -> Term:
+        return self.constructor(*fields)
+
+    def select(self, value: Term, index: int) -> Term:
+        if type(index) is not int or not 0 <= index < len(self.selectors):
+            raise SmtError(f"product field index {index!r} is out of range")
+        _require(value, self.sort)
+        return self.selectors[index](value)
+
+
+@dataclass(frozen=True, slots=True)
+class ProductDeclaration:
+    name: str
+    constructor: Function
+    selectors: tuple[Function, ...]
+    fields: tuple[str, ...]
+    hint: str
+
+    def render(self) -> str:
+        selector_fields = " ".join(
+            f"({selector.name} {sort})"
+            for selector, sort in zip(self.selectors, self.fields)
+        )
+        return (
+            f"; {self.name}: {json.dumps(self.hint, ensure_ascii=True)}\n"
+            "(declare-datatypes () "
+            f"(({self.name} ({self.constructor.name} {selector_fields}))))"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionDeclaration:
+    name: str
+    parameters: tuple[Term, ...]
+    result: str
+    body: Term
+    hint: str
+
+    def render(self) -> str:
+        names = tuple(
+            parameter.atom
+            for parameter in self.parameters
+            if isinstance(parameter.atom, str)
+        )
+        context = _RenderContext(names)
+        context.reserve(self.body)
+        bindings = " ".join(
+            f"({parameter.render()} {parameter.sort})"
+            for parameter in self.parameters
+        )
+        return (
+            f"; {self.name}: {json.dumps(self.hint, ensure_ascii=True)}\n"
+            f"(define-fun {self.name} ({bindings}) {self.result} "
+            f"{_render_scope(self.body, context)})"
+        )
+
+
+DeclarationRecord: TypeAlias = (
+    Declaration | ProductDeclaration | DefinitionDeclaration
+)
 
 
 def _check_sort(sort: str) -> str:
@@ -649,6 +741,42 @@ def _depends_on(root: Term, needles: set[SymbolKey]) -> bool:
     return bool(_dependencies(root, needles))
 
 
+def _free_symbols(
+    root: Term,
+    owner: _OwnerToken,
+) -> set[SymbolKey]:
+    """Collect constants in one quantifier-free, script-owned definition."""
+
+    result: set[SymbolKey] = set()
+    pending = [root]
+    seen: set[int] = set()
+    while pending:
+        term = pending.pop()
+        identity = id(term)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if term.operation == "symbol":
+            result.add(_symbol_key(term))
+            continue
+        if term.operation in {"forall", "exists"}:
+            raise SmtError(
+                "defined function body must be quantifier-free"
+            )
+        if isinstance(term.atom, _OwnerToken):
+            if term.atom is not owner:
+                raise SmtError(
+                    "defined function body uses a declaration from "
+                    "another SMT script"
+                )
+            if not term.arguments:
+                raise SmtError(
+                    "defined function body captures a nullary declaration"
+                )
+        pending.extend(term.arguments)
+    return result
+
+
 class Script:
     """Ordered declarations and assertions with deterministic symbol allocation."""
 
@@ -658,8 +786,9 @@ class Script:
         ):
             raise SmtError("script timeout must be a positive integer")
         self.timeout_ms = timeout_ms
+        self._owner = _OwnerToken()
         self._next_symbol = 0
-        self._declarations: list[Declaration] = []
+        self._declarations: list[DeclarationRecord] = []
         self._assertions: list[Term] = []
         self._ordinary_assertions: list[Term] = []
         self._global_assertions: list[Term] = []
@@ -682,7 +811,130 @@ class Script:
         checked_arguments = tuple(_check_sort(sort) for sort in arguments)
         checked_result = _check_sort(result)
         self._declarations.append(Declaration(name, checked_arguments, checked_result, hint))
-        return Function(name, checked_arguments, checked_result)
+        return Function(
+            name,
+            checked_arguments,
+            checked_result,
+            self._owner,
+        )
+
+    def fresh_product_sort(
+        self,
+        hint: str,
+        fields: Sequence[str],
+    ) -> ProductSort:
+        """Declare one constructor-only product over trusted scalar fields."""
+
+        checked_fields = tuple(_check_sort(sort) for sort in fields)
+        if not checked_fields:
+            raise SmtError("product datatype must have at least one field")
+        name = f"d_{self._next_symbol}"
+        self._next_symbol += 1
+        constructor = Function(
+            f"mk_{name}",
+            checked_fields,
+            name,
+            self._owner,
+        )
+        selectors = tuple(
+            Function(
+                f"{name}_f{index}",
+                (name,),
+                sort,
+                self._owner,
+            )
+            for index, sort in enumerate(checked_fields)
+        )
+        product = ProductSort(
+            sort=name,
+            constructor=constructor,
+            selectors=selectors,
+            fields=checked_fields,
+            _owner=self._owner,
+        )
+        self._declarations.append(
+            ProductDeclaration(
+                name=name,
+                constructor=constructor,
+                selectors=selectors,
+                fields=checked_fields,
+                hint=hint,
+            )
+        )
+        return product
+
+    def fresh_defined_function(
+        self,
+        hint: str,
+        arguments: Sequence[str | ProductSort],
+        result: str | ProductSort,
+        body_builder: Callable[[tuple[Term, ...]], Term],
+    ) -> Function:
+        """Define an exact, closed function over built-in or owned row sorts."""
+
+        checked_arguments = tuple(
+            self._check_declared_sort(sort)
+            for sort in arguments
+        )
+        checked_result = self._check_declared_sort(result)
+        if not callable(body_builder):
+            raise SmtError("defined function body builder must be callable")
+
+        name = f"df_{self._next_symbol}"
+        self._next_symbol += 1
+        parameters = tuple(
+            Term(
+                sort,
+                "symbol",
+                atom=f"{name}_p{index}",
+            )
+            for index, sort in enumerate(checked_arguments)
+        )
+        body = body_builder(parameters)
+        _require(body, checked_result)
+        allowed = {_symbol_key(parameter) for parameter in parameters}
+        unexpected = sorted(
+            _free_symbols(body, self._owner) - allowed,
+            key=lambda item: (item[1], item[0]),
+        )
+        if unexpected:
+            rendered = ", ".join(
+                f"{name}:{sort}"
+                for sort, name in unexpected
+            )
+            raise SmtError(
+                "defined function body contains free symbols outside its "
+                f"parameters: {rendered}"
+            )
+
+        declaration = DefinitionDeclaration(
+            name=name,
+            parameters=parameters,
+            result=checked_result,
+            body=body,
+            hint=hint,
+        )
+        self._declarations.append(declaration)
+        return Function(
+            name,
+            checked_arguments,
+            checked_result,
+            self._owner,
+        )
+
+    def _check_declared_sort(self, sort: str | ProductSort) -> str:
+        if isinstance(sort, ProductSort):
+            if sort._owner is not self._owner:
+                raise SmtError(
+                    "product datatype belongs to another SMT script"
+                )
+            return sort.sort
+        if sort in SORTS:
+            return sort
+        raise SmtError(
+            f"SMT sort {sort!r} is not built-in; pass its owning "
+            "ProductSort declaration"
+        )
 
     def assert_term(self, term: Term) -> None:
         _require(term, BOOL)

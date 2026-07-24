@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OLAP Now</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
+    --muted: #656d76; --bad: #cf222e; --warn: #bf8700; --ok: #1a7f37; --info: #0969da;
+    /* severity ladder: broken > missing > regression > stale > in_progress > ok */
+    --broken: #a40e26; --broken-bg: #ffd7d5;
+    --regress: #bc4c00; --regress-bg: #fff1e5;
+    --miss: #8250df; --miss-bg: #fbefff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 10px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .note {
+    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; color: #0550ae; margin: 0 0 14px;
+  }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 999px; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge.broken { background: var(--broken-bg); color: var(--broken); }
+  .badge.missing { background: var(--miss-bg); color: var(--miss); }
+  .badge.regression, .badge.both { background: var(--regress-bg); color: var(--regress); }
+  .badge.failing { background: #ffebe9; color: var(--bad); }
+  .badge.slower { background: #fff8c5; color: var(--warn); }
+  .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
+  .badge.in_progress { background: #ddf4ff; color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    background: #eaeef2; color: var(--muted); font-weight: 600;
+  }
+  .counters {
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px;
+  }
+  @media (max-width: 800px) { .counters { grid-template-columns: repeat(2, 1fr); } }
+  .counter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .counter .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .counter.hot .n { color: var(--broken); }
+  .counter.regress .n { color: var(--regress); }
+  .counter.miss .n { color: var(--miss); }
+  .counter.info .n { color: var(--info); }
+  .counter.warn .n { color: var(--warn); }
+  .counter.ok .n { color: var(--ok); }
+
+  .heat-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    overflow: auto; margin-bottom: 18px;
+  }
+  table.heat { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  table.heat th:first-child, table.heat td:first-child { text-align: left; position: sticky; left: 0; background: #fafbfc; }
+  table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+  .cell {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
+  }
+  .cell.ok { background: #dafbe1; color: var(--ok); }
+  .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
+  .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
+  .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
+  .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell .cnt { font-size: 11px; opacity: .85; }
+  .heat-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .heat-legend .swatch {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .heat-legend .dot {
+    width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto;
+  }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 0 0 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+  select, input[type="date"] {
+    min-width: 140px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; font: inherit;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .toolbar button, .btn {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
+    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
+
+  table.inbox { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table.inbox th {
+    text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
+  }
+  table.inbox td {
+    padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  table.inbox tr:last-child td { border-bottom: 0; }
+  table.inbox tr.row { cursor: pointer; }
+  table.inbox tr.row:hover { filter: brightness(0.985); }
+  table.inbox tr.row.open { background: #f6f8fa; }
+  table.inbox tr.detail td { background: #f6f8fa; padding: 12px 14px; }
+  table.inbox tr.detail.hidden { display: none; }
+  .cluster { font-weight: 700; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .bad { color: var(--bad); }
+  .num { text-align: right; }
+
+  .dive {
+    display: grid; gap: 12px;
+  }
+  .runs {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  }
+  @media (max-width: 800px) { .runs { grid-template-columns: 1fr; } }
+  .run-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  }
+  .run-card .t { font-weight: 650; margin-bottom: 4px; }
+  .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .pill.slow { background: #fff8c5; color: var(--warn); }
+  .pill.fail { background: #ffebe9; color: var(--bad); }
+  button.pill {
+    border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+  }
+  button.pill:hover { filter: brightness(0.95); box-shadow: inset 0 0 0 1px #0969da66; }
+  button.pill.active { box-shadow: inset 0 0 0 2px var(--info); }
+  .qdetail {
+    margin-top: 10px; background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .qdetail .ttl { font-weight: 650; margin-bottom: 6px; }
+  .chart-box { height: 220px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  a { color: var(--info); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OLAP Now</h1>
+  <div class="sub" id="subtitle"></div>
+  <div class="note">
+    Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>.
+    <b>Missing</b> = suite нет в <i>завершённой</i> волне.
+    <b>In progress</b> = волна ещё едет, suite просто не доехал (не алерт; серая точка на графике).
+  </div>
+
+  <div class="filters" id="branchBar" style="margin-bottom:14px">
+    <label>Branch
+      <select id="fBranch"></select>
+    </label>
+    <label>From
+      <input type="date" id="winFrom" />
+    </label>
+    <label>To
+      <input type="date" id="winTo" />
+    </label>
+    <div class="toolbar" style="margin:0;align-self:end">
+      <button type="button" id="winApply">Apply dates</button>
+      <button type="button" id="winReset">Reset</button>
+    </div>
+    <label class="muted" style="align-self:end;padding-bottom:6px">
+      ветка → только её DbAlias · даты режут inbox / last wave / графики
+      (<span id="lblAllBranches">all</span> = все ветки)
+    </label>
+  </div>
+
+  <div class="counters" id="counters"></div>
+
+  <h2>Heatmap · DbAlias × family</h2>
+  <div class="heat-wrap">
+    <div class="heat-legend">
+      <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · hard fail / outlier</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>regression · slower / elevated fail</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
+      <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
+      <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+    </div>
+    <div id="heatmap"></div>
+  </div>
+
+  <h2>Problem inbox</h2>
+  <div class="filters">
+    <label>Issue
+      <select id="fIssue">
+        <option value="">all hot</option>
+        <option value="missing">missing</option>
+        <option value="in_progress">in progress</option>
+        <option value="failing">failing</option>
+        <option value="slower">slower</option>
+        <option value="both">fail+slow</option>
+        <option value="stale">stale</option>
+      </select>
+    </label>
+    <label>DbAlias
+      <select id="fDb"><option value="">all</option></select>
+    </label>
+    <label>Family
+      <select id="fFam"><option value="">all</option></select>
+    </label>
+  </div>
+  <div id="inbox"></div>
+</div>
+
+<script>
+const DATA = __OLAP_REPORT_DATA__;
+const charts = {};
+const UI = DATA.ui || {};
+let winFrom = UI.default_from || null;
+let winTo = UI.default_to || null;
+
+function fmt(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function pct(v) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '+' : '';
+  return s + v.toFixed(0) + '%';
+}
+function fmtFail(r) {
+  if (r == null) return '—';
+  return (r * 100).toFixed(0) + '%';
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function destroyCharts(prefix) {
+  for (const k of Object.keys(charts)) {
+    if (!prefix || k.startsWith(prefix)) {
+      try { charts[k].destroy(); } catch (_) {}
+      delete charts[k];
+    }
+  }
+}
+
+function dayOf(ts) {
+  if (!ts) return null;
+  return String(ts).slice(0, 10);
+}
+function dayInRange(day, from, to) {
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+function itemInWindow(r) {
+  // keep if last activity / now-runs / history intersects [from, to]
+  const days = [dayOf(r.last_ts), dayOf(r.last_seen)].filter(Boolean);
+  for (const run of (r.now_runs || [])) {
+    if (run.day) days.push(run.day);
+    else if (run.ts) days.push(dayOf(run.ts));
+    else if (run.label) days.push(dayOf(run.label));
+  }
+  for (const lab of ((r.history && r.history.labels) || [])) {
+    days.push(dayOf(lab));
+  }
+  if (!days.length) return true;
+  return days.some(d => dayInRange(d, winFrom, winTo));
+}
+function listedSlow(r) {
+  // union bad_queries ∪ slow_queries — badge Nq must match pills in dive
+  const by = new Map();
+  for (const q of (r.bad_queries || [])) {
+    if (!q || !q.test) continue;
+    if (q.kind === 'fail') continue;
+    if (q.kind === 'slow' || q.kind === 'both' || (q.ydb_pct != null && q.ydb_pct >= 10)) {
+      by.set(String(q.test), q);
+    }
+  }
+  for (const q of (r.slow_queries || [])) {
+    if (!q || !q.test) continue;
+    const prev = by.get(String(q.test)) || {};
+    by.set(String(q.test), Object.assign({}, prev, q));
+  }
+  return [...by.values()].sort((a, b) => (b.ydb_pct || 0) - (a.ydb_pct || 0));
+}
+function listedFail(r) {
+  return (r.bad_queries || []).filter(q => q && q.test && (q.kind === 'fail' || q.kind === 'both'));
+}
+function queryNames(r) {
+  const names = new Set();
+  for (const q of listedSlow(r)) names.add(String(q.test));
+  for (const q of listedFail(r)) names.add(String(q.test));
+  return names;
+}
+function liveCell(branch, db, fam) {
+  const rows = (DATA.inbox || []).filter(r => {
+    if (branch && r.branch !== branch) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    return itemInWindow(r);
+  });
+  if (!rows.length) return { status: 'ok', n_hot: 0, n_queries: 0 };
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    failing: 3, slower: 3, stale: 2, in_progress: 1, ok: 0,
+  };
+  let best = null;
+  for (const r of rows) {
+    const st = r.status || r.issue || 'ok';
+    if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+  }
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  const qset = new Set();
+  for (const r of hot) {
+    if (!['broken', 'regression', 'failing', 'slower', 'both'].includes(r.status) &&
+        !['failing', 'slower', 'both'].includes(r.issue)) continue;
+    for (const n of queryNames(r)) qset.add(n);
+  }
+  return { status: best || 'ok', n_hot: hot.length, n_queries: qset.size };
+}
+function cellLabel(st, live) {
+  if (st === 'regression' || st === 'broken') {
+    const nq = live.n_queries || 0;
+    if (nq > 0) return `${esc(st)} <span class="cnt">${nq}q</span>`;
+    // fallback: suite count if query list empty (infra / no drill-down yet)
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  if (st === 'missing' || st === 'stale' || st === 'in_progress') {
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  return esc(st);
+}
+function sliceHist(hist) {
+  if (!hist || !(hist.labels || []).length) return hist;
+  if (!winFrom && !winTo) return hist;
+  const out = { labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [], markers: [] };
+  for (let i = 0; i < hist.labels.length; i++) {
+    const day = dayOf(hist.labels[i]);
+    if (!dayInRange(day, winFrom, winTo)) continue;
+    out.labels.push(hist.labels[i]);
+    out.ydb.push(hist.ydb ? hist.ydb[i] : null);
+    out.fail_rate.push(hist.fail_rate ? hist.fail_rate[i] : null);
+    out.reports.push(hist.reports ? hist.reports[i] : null);
+    out.versions.push(hist.versions ? hist.versions[i] : null);
+    out.ci_versions.push(hist.ci_versions ? hist.ci_versions[i] : null);
+    out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+  }
+  return out;
+}
+
+function selectedBranch() {
+  return document.getElementById('fBranch')?.value || '';
+}
+
+function summarizeRows(rows) {
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return {
+    missing: rows.filter(r => r.issue === 'missing').length,
+    in_progress: rows.filter(r => r.issue === 'in_progress').length,
+    failing: rows.filter(r => r.issue === 'failing' || r.issue === 'both').length,
+    slower: rows.filter(r => r.issue === 'slower' || r.issue === 'both').length,
+    stale: rows.filter(r => r.issue === 'stale').length,
+    ok_slices: (currentSummaryBase().ok_slices) || 0,
+    hot: hot.length,
+    slices: currentSummaryBase().slices || 0,
+  };
+}
+function currentSummaryBase() {
+  const br = selectedBranch();
+  if (!br) return DATA.summary || {};
+  return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
+}
+function currentSummary() {
+  // live counters from filtered inbox (branch + dates + issue filters except issue itself)
+  const br = selectedBranch();
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  const rows = (DATA.inbox || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+  const s = summarizeRows(rows);
+  // preserve ok_slices/slices from precomputed branch summary
+  const base = currentSummaryBase();
+  s.ok_slices = base.ok_slices || 0;
+  s.slices = base.slices || 0;
+  return s;
+}
+
+function renderHeader() {
+  const ui = DATA.ui || {};
+  const s = currentSummary();
+  const br = selectedBranch();
+  document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
+  document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
+  document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
+  document.getElementById('subtitle').innerHTML =
+    `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
+    `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
+    `branch <b>${esc(br || 'all')}</b> · hot ${s.hot || 0}`;
+
+  document.getElementById('counters').innerHTML = `
+    <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
+    <div class="counter info"><div class="n">${s.in_progress || 0}</div><div class="lbl">In progress</div></div>
+    <div class="counter hot"><div class="n">${s.failing || 0}</div><div class="lbl">Failing</div></div>
+    <div class="counter regress"><div class="n">${s.slower || 0}</div><div class="lbl">Slower</div></div>
+    <div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>
+    <div class="counter ok"><div class="n">${s.ok_slices || 0}</div><div class="lbl">OK slices</div></div>
+  `;
+}
+
+function formatWave(w) {
+  if (!w) return '—';
+  const day = w.day || String(w.max_ts || '').slice(0, 10) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : 'activity';
+  const age = (w.age_hours != null) ? `${w.age_hours}h` : '—';
+  const only = w.activity_only ? ' <span class="pill">no wave</span>' : '';
+  return `${esc(day)} · ${esc(w.ci_version)} · ${esc(cov)} · ${esc(age)}${only}`;
+}
+
+function waveInWindow(w) {
+  if (!w) return null;
+  const day = w.day || dayOf(w.max_ts);
+  if (!dayInRange(day, winFrom, winTo)) return null;
+  return w;
+}
+function waveFor(branch, db) {
+  // Only the selected branch — no cross-branch fallback
+  const waves = DATA.waves || {};
+  const act = DATA.last_activity || {};
+  let w = null;
+  if (branch && waves[`${branch}|${db}`]) w = waves[`${branch}|${db}`];
+  else if (branch && act[`${branch}|${db}`]) w = act[`${branch}|${db}`];
+  else if (!branch) {
+    const byDb = DATA.waves_by_db || {};
+    if (byDb[db]) w = byDb[db];
+    else if (act[db]) w = act[db];
+  }
+  return waveInWindow(w);
+}
+
+function dbsForBranch(branch) {
+  const h = DATA.heatmap || {};
+  const map = h.dbs_by_branch || (DATA.ui && DATA.ui.dbs_by_branch) || {};
+  if (branch && map[branch] && map[branch].length) return map[branch];
+  if (!branch) {
+    // union of all branch dbs
+    const all = new Set(h.dbs || []);
+    Object.values(map).forEach(list => (list || []).forEach(d => all.add(d)));
+    return [...all].sort();
+  }
+  return [];
+}
+
+function renderHeatmap() {
+  const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
+  let br = selectedBranch();
+  const branches = br ? [br] : (h.branches || uiBranches());
+  let html = '';
+  for (const branch of branches) {
+    const dbs = dbsForBranch(branch);
+    if (branches.length > 1) {
+      html += `<div class="muted" style="padding:10px 12px 0;font-weight:650">${esc(branch)} · ${dbs.length} clusters</div>`;
+    }
+    if (!dbs.length) {
+      html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
+      continue;
+    }
+    html += `<table class="heat"><thead><tr><th>DbAlias</th>`;
+    for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
+    html += `<th>Last wave</th></tr></thead><tbody>`;
+    for (const db of dbs) {
+      html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
+      for (const fam of h.families) {
+        const live = liveCell(branch, db, fam);
+        const st = live.status || 'ok';
+        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${st === 'regression' || st === 'broken' ? (live.n_queries || 0) + ' bad queries' : (live.n_hot || 0) + ' suites'}">${cellLabel(st, live)}</div></td>`;
+      }
+      const w = waveFor(branch, db);
+      html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(w)}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const root = document.getElementById('heatmap');
+  root.innerHTML = html || '<div class="empty">нет данных</div>';
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress').forEach(el => {
+    el.addEventListener('click', () => {
+      if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
+      document.getElementById('fDb').value = el.dataset.db || '';
+      document.getElementById('fFam').value = el.dataset.fam || '';
+      document.getElementById('fIssue').value = '';
+      renderAll();
+      document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
+function uiBranches() {
+  return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
+}
+
+function filteredInbox() {
+  const issue = document.getElementById('fIssue').value;
+  const db = document.getElementById('fDb').value;
+  const fam = document.getElementById('fFam').value;
+  const br = selectedBranch();
+  return (DATA.inbox || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (issue && r.issue !== issue) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+
+function mountHistory(item, id) {
+  const hist = sliceHist(item.history || {});
+  const box = document.getElementById(id + '_hist');
+  if (!box) return;
+  if (!(hist.labels || []).length) {
+    box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
+    return;
+  }
+  destroyCharts(id + '_');
+  box.innerHTML = `<div class="pair">
+    <div class="chart-box"><canvas id="${id}_ydb"></canvas></div>
+    <div class="chart-box"><canvas id="${id}_fail"></canvas></div>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Столбики = сырые прогоны (не median Now) · цвет vs предыдущий · клик → report ·
+    цвет vs median mavg(prev7) · синий = synthetic <b>in_progress</b> · оранжевый = synthetic <b>missing</b>
+  </div>`;
+
+  const markers = hist.markers || [];
+  function bar(cid, vals, label, colors) {
+    const el = document.getElementById(cid);
+    if (!el) return;
+    charts[cid] = new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: hist.labels,
+        datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        onClick: (_e, els) => {
+          if (!els.length) return;
+          const url = hist.reports[els[0].index];
+          if (url) window.open(url, '_blank', 'noopener');
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+          tooltip: {
+            callbacks: {
+              afterLabel: (it) => {
+                const m = markers[it.dataIndex];
+                if (m === 'in_progress') return 'SYNTHETIC · wave in progress';
+                if (m === 'missing') return 'SYNTHETIC · missing in completed wave';
+                return hist.reports[it.dataIndex] ? 'клик → report' : '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+          y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+        }
+      }
+    });
+  }
+  const y = hist.ydb || [];
+  // suite history: raw points; color vs trailing median mavg. synthetic markers win.
+  const yColors = colorsVsMedianMavg(y).map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    return c;
+  });
+  const f = hist.fail_rate || [];
+  const fColors = failColors(f).map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    return c;
+  });
+  // synthetic fail bar: small visible stub
+  const fPlot = f.map((v, i) => {
+    if (markers[i] === 'in_progress' || markers[i] === 'missing') return v == null ? 1 : v;
+    return v;
+  });
+  bar(id + '_ydb', y, 'YdbSumMeans · raw runs', yColors);
+  bar(id + '_fail', fPlot, 'Fail rate % · raw runs', fColors);
+}
+
+function findQuery(item, testName) {
+  if (item.query_map && item.query_map[testName]) return item.query_map[testName];
+  const all = [...(item.slow_queries || []), ...(item.bad_queries || [])];
+  return all.find(q => q.test === testName) || null;
+}
+
+/** Last non-null point in series (raw daily / run value). */
+function lastPoint(labels, vals) {
+  for (let i = (vals || []).length - 1; i >= 0; i--) {
+    if (vals[i] != null && Number.isFinite(Number(vals[i]))) {
+      return { i, label: labels[i], v: Number(vals[i]) };
+    }
+  }
+  return null;
+}
+function medianOf(nums) {
+  const a = nums.filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+/** Trailing median moving window (default = baseline_runs). Color bar vs that mavg. */
+function colorsVsMedianMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    // window: previous w points (exclude current) — fallback include current if too short
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n > ref * 3) return '#8a1f1a';
+    if (n > ref * 1.1) return '#e5534b';
+    if (n < ref * 0.93) return '#3fb950';
+    return '#5b8def';
+  });
+}
+function failColors(vals) {
+  return (vals || []).map(v => {
+    if (v == null) return '#8c959f';
+    if (v >= 50) return '#8a1f1a';
+    if (v >= 10) return '#e5534b';
+    if (v >= 3) return '#db6d28';
+    if (v > 0) return '#d29922';
+    return '#3fb950';
+  });
+}
+
+function mountQueryHistory(item, diveId, testName) {
+  const q = findQuery(item, testName);
+  const box = document.getElementById(diveId + '_qhist');
+  if (!box) return;
+  destroyCharts(diveId + '_q_');
+  box.closest('.dive')?.querySelectorAll('button.pill[data-qpick]').forEach(b => {
+    b.classList.toggle('active', b.dataset.test === testName);
+  });
+
+  if (!q || !(q.history && q.history.labels && q.history.labels.length)) {
+    box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
+      <div class="muted">Нет daily history для этого запроса</div></div>`;
+    return;
+  }
+  const hist = sliceHist(q.history);
+  if (!(hist.labels || []).length) {
+    box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
+      <div class="muted">Нет точек в выбранном интервале дат</div></div>`;
+    return;
+  }
+
+  const last = lastPoint(hist.labels, hist.ydb);
+  let prev = null;
+  if (last) {
+    for (let i = last.i - 1; i >= 0; i--) {
+      if (hist.ydb[i] != null) { prev = { label: hist.labels[i], v: Number(hist.ydb[i]) }; break; }
+    }
+  }
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  let mavgRef = null;
+  if (last) {
+    const start = Math.max(0, last.i - win);
+    mavgRef = medianOf((hist.ydb || []).slice(start, last.i));
+  }
+  const vsMavg = (last && mavgRef != null && mavgRef > 0)
+    ? `vs median mavg(${win}): ${pct(((last.v - mavgRef) / mavgRef) * 100)} (ref ${fmt(mavgRef)})`
+    : null;
+  const dod = (last && prev && prev.v > 0)
+    ? `Δ day: ${pct(((last.v - prev.v) / prev.v) * 100)}`
+    : null;
+  const rawLine = last
+    ? `last <b>${esc(String(last.label).slice(0, 10))}</b>: <b>${fmt(last.v)}</b>` +
+      (vsMavg ? ` · ${vsMavg}` : '') +
+      (dod ? ` · ${dod}` : '')
+    : 'нет точек';
+  const alertLine = (q.ydb_base != null && q.ydb_now != null)
+    ? `alert (median last3 vs prev7): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}`
+    : null;
+  const nReports = (hist.reports || []).filter(Boolean).length;
+
+  box.innerHTML = `<div class="qdetail">
+    <div class="ttl">${esc(testName)} <span class="pill">${esc(q.kind || 'query')}</span></div>
+    <div style="margin-bottom:4px">${rawLine}</div>
+    <div class="muted" style="margin-bottom:6px">
+      график = <b>дневной YdbSumMeans</b> (как Mean в sandbox) · цвет vs <b>median mavg(prev${win})</b> ·
+      клик по столбцу → report${nReports ? ` (${nReports})` : ''}
+      ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
+    </div>
+    <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7)
+    </label>
+    <div class="pair">
+      <div class="chart-box"><canvas id="${diveId}_q_ydb"></canvas></div>
+      <div class="chart-box"><canvas id="${diveId}_q_fail"></canvas></div>
+    </div>
+  </div>`;
+
+  const reports = hist.reports || [];
+  const alertBase = q.ydb_base;
+  let showBase = false;
+
+  function paint() {
+    destroyCharts(diveId + '_q_');
+    const yColors = colorsVsMedianMavg(hist.ydb, win);
+    const fColors = failColors(hist.fail_rate);
+    function bar(cid, vals, label, colors) {
+      const el = document.getElementById(cid);
+      if (!el) return;
+      charts[cid] = new Chart(el, {
+        type: 'bar',
+        data: { labels: hist.labels, datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          onClick: (_e, els) => {
+            if (!els.length) return;
+            const url = reports[els[0].index];
+            if (url) window.open(url, '_blank', 'noopener');
+          },
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+            tooltip: {
+              callbacks: {
+                afterLabel: (it) => {
+                  const bits = [];
+                  if (cid.endsWith('_ydb')) {
+                    const i = it.dataIndex;
+                    const cur = vals[i];
+                    const start = Math.max(0, i - win);
+                    const ref = medianOf(vals.slice(start, i));
+                    if (cur != null && ref != null && ref > 0) {
+                      bits.push(`vs median mavg(${win}) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
+                    }
+                  }
+                  if (reports[it.dataIndex]) bits.push('клик → report');
+                  return bits.join(' · ');
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+            y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+          }
+        },
+        plugins: [{
+          id: 'qbase',
+          afterDraw(chart) {
+            if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
+            const y = chart.scales.y.getPixelForValue(alertBase);
+            const { left, right, top, bottom } = chart.chartArea;
+            if (y < top || y > bottom) return;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
+            ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+            ctx.fillStyle = '#0969da'; ctx.font = '10px sans-serif';
+            ctx.fillText('alert baseline', left + 4, Math.max(top + 10, y - 4));
+            ctx.restore();
+          }
+        }]
+      });
+    }
+    bar(diveId + '_q_ydb', hist.ydb, `${testName} · daily YdbSumMeans`, yColors);
+    bar(diveId + '_q_fail', hist.fail_rate, `${testName} · Fail rate %`, fColors);
+  }
+
+  const chk = document.getElementById(diveId + '_q_base');
+  if (chk) {
+    chk.addEventListener('change', () => { showBase = chk.checked; paint(); });
+  }
+  paint();
+}
+
+function diveHtml(r, id) {
+  const runs = (r.now_runs || []).map(run => {
+    const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
+    return `<div class="run-card">
+      <div class="t">${esc(run.label)}</div>
+      <div>fail ${fmtFail(run.fail_rate)} · ydb ${fmt(run.ydb)}</div>
+      <div class="muted">${esc(run.ci_version || '')}</div>
+      <div>${link}</div>
+    </div>`;
+  }).join('') || `<div class="muted">${
+    r.issue === 'in_progress'
+      ? `Волна <code>${esc(r.ci_version || r.wave || '')}</code> ещё едет — данных по suite пока нет` +
+        (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+      : r.issue === 'missing'
+        ? `Нет в завершённой волне <code>${esc(r.ci_version || r.wave || '')}</code>` +
+          (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+        : 'Нет последних прогонов (missing/stale)'
+  }</div>`;
+
+  const slow = listedSlow(r);
+  const fails = listedFail(r);
+  const slowHtml = slow.length
+    ? slow.map(q => `<button type="button" class="pill slow" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}${q.history ? '' : ' · no hist'}</button>`).join('')
+    : '<span class="muted">нет (или нет daily dump)</span>';
+  const failHtml = fails.length
+    ? fails.map(q => `<button type="button" class="pill fail" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${q.history ? '' : ' · no hist'}</button>`).join('')
+    : '<span class="muted">—</span>';
+
+  const report = r.report
+    ? `<a href="${esc(r.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">latest report</a>`
+    : '—';
+
+  return `<div class="dive">
+    <div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>
+    <div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b></div>
+      <div class="runs">${runs}</div>
+    </div>
+    <div>
+      <div class="muted"><b>Slow queries</b> (клик = история запроса · last 3d vs prev 7d)</div>
+      <div class="qlist">${slowHtml}</div>
+    </div>
+    <div>
+      <div class="muted"><b>Failing queries</b> (клик = история)</div>
+      <div class="qlist">${failHtml}</div>
+    </div>
+    <div id="${id}_qhist"></div>
+    <div class="toolbar" style="margin:0">
+      <button type="button" class="btn" data-hist="${id}">Show suite history</button>
+    </div>
+    <div id="${id}_hist"></div>
+  </div>`;
+}
+
+function renderInbox() {
+  destroyCharts();
+  const rows = filteredInbox();
+  const root = document.getElementById('inbox');
+  if (!rows.length) {
+    root.innerHTML = '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
+    return;
+  }
+  const body = rows.map((r, idx) => {
+    const id = 'dive_' + idx;
+    const delta = r.ydb_pct == null ? '—' : `<span class="${r.ydb_pct > 10 ? 'bad' : ''}">${pct(r.ydb_pct)}</span>`;
+    const fr = (r.fail_rate_now == null && r.issue === 'missing')
+      ? '—'
+      : `${fmtFail(r.fail_rate_base)} → <span class="${(r.fail_rate_now||0) >= 0.1 ? 'bad' : ''}">${fmtFail(r.fail_rate_now)}</span>`;
+    const nq = (r.status === 'regression' || r.status === 'broken') ? queryNames(r).size : 0;
+    const statusLbl = nq ? `${esc(r.status)} ${nq}q` : esc(r.status);
+    return `
+      <tr class="row" data-idx="${idx}" data-id="${id}">
+        <td><span class="badge ${esc(r.status)}">${statusLbl}</span>
+          <div class="pill" style="margin-top:4px">${esc(r.issue)}</div></td>
+        <td><span class="cluster">${esc(r.db)}</span>
+          <div class="muted">${esc(r.branch)}</div></td>
+        <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
+          <div class="muted mono">${esc(r.ci_version || r.wave || '')}</div>
+          ${(r.slow_queries || []).length ? `<div class="muted">slow: ${esc(r.slow_queries.slice(0,3).map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '))}</div>` : ''}
+        </td>
+        <td class="num">${fr}</td>
+        <td class="num">${fmt(r.ydb_base)} → ${fmt(r.ydb_now)}<div class="muted">${delta}</div></td>
+        <td class="muted">${esc(r.last_ts || '—')}
+          ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
+        </td>
+      </tr>
+      <tr class="detail hidden" data-detail="${id}"><td colspan="6">${diveHtml(r, id)}</td></tr>`;
+  }).join('');
+
+  root.innerHTML = `<table class="inbox">
+    <thead><tr>
+      <th>Status</th><th>DbAlias</th><th>Suite</th>
+      <th class="num">Fail rate</th><th class="num">YdbSumMeans</th><th>Wave / last</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="muted" style="margin-top:8px">Показано ${rows.length} · клик = deep dive</div>`;
+
+  root.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.id;
+      const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      const open = tr.classList.toggle('open');
+      detail.classList.toggle('hidden', !open);
+      if (!open) destroyCharts(id + '_');
+      else {
+        const idx = Number(tr.dataset.idx);
+        const item = rows[idx];
+        // auto-show history for coverage issues so synthetic point is visible
+        if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
+          mountHistory(item, id);
+        }
+      }
+    });
+  });
+  root.querySelectorAll('button[data-hist]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.hist;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (item) mountHistory(item, id);
+    });
+  });
+  root.querySelectorAll('button[data-qpick]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.qpick;
+      const test = btn.dataset.test;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (item && test) mountQueryHistory(item, id, test);
+    });
+  });
+}
+
+function renderAll() {
+  renderHeader();
+  renderHeatmap();
+  renderInbox();
+}
+
+function setupDateBar() {
+  const fromEl = document.getElementById('winFrom');
+  const toEl = document.getElementById('winTo');
+  fromEl.value = winFrom || UI.default_from || '';
+  toEl.value = winTo || UI.default_to || '';
+  if (UI.default_from) {
+    fromEl.min = UI.default_from;
+    toEl.min = UI.default_from;
+  }
+  if (UI.default_to) {
+    fromEl.max = UI.default_to;
+    toEl.max = UI.default_to;
+  }
+  document.getElementById('winApply').addEventListener('click', () => {
+    let a = fromEl.value || null;
+    let b = toEl.value || null;
+    if (a && b && a > b) { const t = a; a = b; b = t; }
+    winFrom = a;
+    winTo = b;
+    fromEl.value = winFrom || '';
+    toEl.value = winTo || '';
+    destroyCharts();
+    renderAll();
+  });
+  document.getElementById('winReset').addEventListener('click', () => {
+    winFrom = UI.default_from || null;
+    winTo = UI.default_to || null;
+    fromEl.value = winFrom || '';
+    toEl.value = winTo || '';
+    destroyCharts();
+    renderAll();
+  });
+  [fromEl, toEl].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') document.getElementById('winApply').click();
+    });
+  });
+}
+
+function setupFilters() {
+  const ui = DATA.ui || {};
+  const branches = uiBranches();
+  const def = ui.default_branch || 'main';
+  document.getElementById('fBranch').innerHTML =
+    `<option value="">all</option>` +
+    branches.map(b => `<option value="${esc(b)}"${b === def ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  if (branches.includes(def)) document.getElementById('fBranch').value = def;
+
+  const fams = [...new Set((DATA.inbox || []).map(r => r.family).filter(Boolean))].sort();
+  document.getElementById('fFam').innerHTML = '<option value="">all</option>' +
+    fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  refreshDbFilter();
+  setupDateBar();
+  ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'fBranch') refreshDbFilter();
+      renderAll();
+    });
+  });
+}
+
+function refreshDbFilter() {
+  const br = selectedBranch();
+  const keep = document.getElementById('fDb').value;
+  const dbs = br
+    ? dbsForBranch(br)
+    : [...new Set((DATA.inbox || []).map(r => r.db).filter(Boolean))].sort();
+  document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
+    dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if (dbs.includes(keep)) document.getElementById('fDb').value = keep;
+}
+
+setupFilters();
+renderAll();
+</script>
+</body>
+</html>

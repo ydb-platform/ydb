@@ -52,6 +52,10 @@ For example, if you expect 10 million vectors, set `levels` to 3 and `clusters` 
 * Level 2: each level-1 cluster split into 50 clusters of 4,000 vectors each;
 * Level 3: each level-2 cluster split into 50 clusters of 80 vectors each.
 
+### Automatic parameter selection {#auto-settings}
+
+You can omit the `clusters` and `levels` parameters when creating an index. In that case {{ ydb-short-name }} selects them automatically based on the number of vectors in the table. Explicitly specified parameters are never overridden.
+
 ## Search recall tuning {#search-recall}
 
 If a cluster’s centroid is closest to the query, the vectors in that cluster are usually closer to the query than vectors in other clusters. For complex data topologies this may not hold, so {{ ydb-short-name }} allows scanning vectors in more than one cluster per level.
@@ -85,20 +89,15 @@ Filtering is built into the vector index because:
 
 ## Adaptive clusters {#adaptive-clusters}
 
-A filtered vector index builds a separate cluster tree for each distinct value of the filtering columns. Different values often contain very different numbers of vectors: some categories may have millions of vectors, others only a few dozen. A single fixed `clusters` value cannot be optimal for all of them at once:
+A filtered vector index builds a separate cluster tree for each distinct value of the filtering columns, and different values often contain very different numbers of vectors — from millions down to a few dozen. A single fixed `clusters` value cannot be optimal for all of them at once: a small value produces large leaf clusters that are slow to scan, while a large value produces many nearly empty clusters, which wastes space and can harm recall.
 
-* For a value with many vectors, a small `clusters` produces large leaf clusters that are slow to scan.
-* For a value with few vectors, a large `clusters` produces many nearly empty leaf clusters, which wastes space and can even harm recall (there are too few vectors to distribute meaningfully).
-
-Without adaptive clusters, the only workaround is to build several separate indexes tuned for categories of different cardinality, which is inconvenient.
-
-Adaptive clusters solve this: when enabled, {{ ydb-short-name }} chooses the number of clusters *per filtering-column value* automatically, based on how many vectors that value actually contains. Values with more vectors get more clusters (up to the `clusters` value, which acts as the upper bound), and values with few vectors get fewer clusters. This lets a single index deliver good search performance across categories of very different sizes.
+Adaptive clusters solve this: when enabled, {{ ydb-short-name }} chooses the number of clusters *per filtering-column value* automatically, based on how many vectors that value actually contains. Values with more vectors get more clusters (up to the `clusters` value, which acts as the upper bound), and values with few vectors get fewer clusters.
 
 Adaptive clusters are controlled by the `adaptive_clusters` [index parameter](../yql/reference/syntax/create_table/vector_index.md):
 
 * `adaptive_clusters` applies only to filtered indexes (indexes with more than one index column). For non-filtered indexes it has no effect.
-* When you create a filtered index without explicitly specifying index parameters and {{ ydb-short-name }} selects them automatically, adaptive clusters are enabled by default.
-* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; set it to `true` to enable adaptive behavior.
+* When you create a filtered index without explicitly specifying parameters and {{ ydb-short-name }} [selects them automatically](#auto-settings), adaptive clusters are enabled by default.
+* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; to enable adaptive behavior, set `adaptive_clusters` to `true`.
 
 In adaptive mode, the `clusters` parameter is interpreted as the *maximum* number of clusters for any single filtering-column value. The actual number chosen for each value is derived from its vector count, `levels`, and `overlap_clusters`, and is never lower than 2. Values with very few vectors (fewer than 100) always use the minimum of 2 clusters.
 

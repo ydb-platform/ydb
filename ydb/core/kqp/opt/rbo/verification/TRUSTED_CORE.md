@@ -205,6 +205,23 @@ an over-approximation: it may make a proof harder, but cannot make an invalid
 plan pair prove equivalent. Exporter near-miss mutations, NULL/fingerprint/
 argument solver tests, and a real-host bounded proof cover the vertical path.
 
+The proven-total Date-`Unwrap` bridge also changes only
+`semantic_snapshot.cpp`. It admits exactly
+`Unwrap(Coalesce(Optional<Date> direct-member, fallback)) -> Date`, where the
+fallback is either the initial plan's
+`SafeCast(Int32(0), Optional<Date>)` or the final plan's
+`Just(Date(0))`. The gate checks the complete root, `Coalesce`, member, and
+fallback annotations; child order and arity; direct-row visibility; literal
+value; target descriptor; reviewed cast category; safety metadata; binding
+depth; and expression budget. It then lowers both spellings to the existing
+exact `if_present(member, bound-value, Date(0))` IR. The audited MiniKQL
+premise is that Int32 zero is in the Date conversion range and is preserved,
+so both fallbacks are present Date zero and `Unwrap` cannot raise an error.
+Every other `Unwrap`, including the remaining String shape in TPC-DS q8,
+fails closed. C++ near-miss mutations, independent Python NULL/present
+references and semantic mutations, real-host initial/final normalization, and
+the q38/q87 bounded proofs cover this vertical path.
+
 Decimal `MIN` crosses `ir.py`, `decimal.py`, and `relation.py`. The decoder
 admits only exact same-type Decimal input/output with phase-aware nullability;
 the kernel reduces non-NULL values in raw signed-code order and preserves a
@@ -215,16 +232,16 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-q95-bridge 2026-07-24 physical-line audit recorded:
+The post-exact-Date-`Unwrap` 2026-07-24 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,791 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,760 |
-| **Proof-producing code total** | **19,551** |
-| Tests, outside the TCB | 46,575 |
-| Diagnostic/orchestration tools, outside the TCB | 5,136 |
-| Documentation, outside the TCB | 5,583 |
+| Nine trusted Python semantic modules | 10,792 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,904 |
+| **Proof-producing code total** | **19,696** |
+| Tests, outside the TCB | 47,926 |
+| Diagnostic/orchestration tools, outside the TCB | 5,178 |
+| Documentation, outside the TCB | 5,943 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
@@ -271,6 +288,10 @@ the SMT obligation itself:
 - each accepted `yql-datetime-year-v1` shape denotes the same complete
   Date-to-Timestamp cast and deterministic, total Split/GetYear operation on
   the bound Date payload;
+- each accepted Date-`Unwrap` SafeCast spelling converts Int32 zero to a
+  present Date zero, exactly like the accepted `Just(Date(0))` spelling, so
+  the normalized missing branch is exact and the runtime error path is
+  unreachable;
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
@@ -335,7 +356,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, and direct-Uint64-`Just` mutations and real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, and direct-Uint64-`Just` mutations and real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap, real-host Decimal-AVG, and `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

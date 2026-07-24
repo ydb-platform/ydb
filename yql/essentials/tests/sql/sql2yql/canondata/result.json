@@ -11402,6 +11402,20 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_udf-python_udf_with_settings_/sql.yql"
         }
     ],
+    "test_sql2yql.test[udf-python_udf_with_settings_extramem]": [
+        {
+            "checksum": "ec7bdffd03fd31d5f411b1dd63f59c73",
+            "size": 2258,
+            "uri": "https://{canondata_backend}/1600758/913703751e81eebe6e4b27124c2c119c875fb226/resource.tar.gz#test_sql2yql.test_udf-python_udf_with_settings_extramem_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[udf-python_udf_with_settings_fail_extramem]": [
+        {
+            "checksum": "1c568b7829c5f377821a85a536d69cb8",
+            "size": 1134,
+            "uri": "https://{canondata_backend}/1917492/8a9cf24d8f4013f0d7dcc21f651e18a243d501ce/resource.tar.gz#test_sql2yql.test_udf-python_udf_with_settings_fail_extramem_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[udf-same_udf_modules]": [
         {
             "checksum": "218155c5b56f752fea69b11200019e25",
@@ -19359,6 +19373,16 @@
     "test_sql_format.test[udf-python_udf_with_settings]": [
         {
             "uri": "file://test_sql_format.test_udf-python_udf_with_settings_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-python_udf_with_settings_extramem]": [
+        {
+            "uri": "file://test_sql_format.test_udf-python_udf_with_settings_extramem_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-python_udf_with_settings_fail_extramem]": [
+        {
+            "uri": "file://test_sql_format.test_udf-python_udf_with_settings_fail_extramem_/formatted.sql"
         }
     ],
     "test_sql_format.test[udf-same_udf_modules]": [

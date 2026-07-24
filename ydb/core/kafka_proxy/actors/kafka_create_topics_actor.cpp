@@ -287,7 +287,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
     auto eventPtr = ev->Release();
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status));
+    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status) << " " << eventPtr->Message);
     TopicNamesToResponses[eventPtr->TopicPath] = eventPtr;
     InflyTopics--;
     if (InflyTopics == 0) {

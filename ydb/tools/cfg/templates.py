@@ -65,6 +65,33 @@ kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=
 
 """
 
+NEW_STYLE_DYNAMIC_NODE_CONFIG = """
+kikimr_config="${kikimr_home}/cfg"
+kikimr_key_file="${kikimr_config}/key.txt"
+
+kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml"
+kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_mon_threads:+ --mon-threads ${kikimr_mon_threads}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
+
+if [ ! -z "${kikimr_mon_address}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_mon_address:+ --mon-address ${kikimr_mon_address}}"
+else
+    echo "Monitoring address is not defined."
+fi
+
+kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
+
+if [ -f "${kikimr_key_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
+else
+    echo "Key file not found!"
+fi
+kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=${kikimr_cert}}${kikimr_key:+ --key=${kikimr_key}}"
+
+"""
+
 
 CONFIG_V2 = """
 kikimr_config="${kikimr_home}/cfg"
@@ -657,6 +684,46 @@ def kikimr_cfg_for_dynamic_node(
         + rb_arguments(rb_txt_enabled)
         + metering_arguments(metering_txt_enabled)
         + audit_arguments(audit_txt_enabled)
+    )
+
+
+def kikimr_cfg_for_dynamic_node_new_style(
+    node_broker_port=2135,
+    tenant=None,
+    ic_port=19001,
+    grpc_port=2135,
+    mon_port=8765,
+    kikimr_home='/Berkanavt/kikimr',
+    enable_cores=False,
+    default_log_level=3,
+    kikimr_binaries_base_path='/Berkanavt/kikimr',
+    mon_address="",
+    cert_params=None,
+    use_auth_token_file=False,
+):
+    return "\n".join(
+        [
+            local_vars(
+                tenant,
+                node_broker_port=node_broker_port,
+                ic_port=ic_port,
+                grpc_port=grpc_port,
+                mon_port=mon_port,
+                kikimr_home=kikimr_home,
+                kikimr_binaries_base_path=kikimr_binaries_base_path,
+                pq_enable=False,
+                enable_cores=enable_cores,
+                default_log_level=default_log_level,
+                mon_address=mon_address,
+                cert_params=cert_params,
+                new_style_kikimr_cfg=True,
+                use_auth_token_file=use_auth_token_file,
+            ),
+            CUSTOM_CONFIG_INJECTOR,
+            NEW_STYLE_DYNAMIC_NODE_CONFIG,
+            NODE_BROKER_ARGUMENT,
+            tenant_argument(tenant),
+        ]
     )
 
 

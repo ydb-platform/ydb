@@ -10,6 +10,7 @@ namespace NKikimr::NBsController {
             ::NMonitoring::TDynamicCounterPtr Root;
             TString Name;
             ::NMonitoring::TDynamicCounterPtr Subgroup;
+            ::NMonitoring::TDynamicCounterPtr ErasureSpeciesSubgroup;
             ::NMonitoring::TDynamicCounterPtr FlagsSubgroup;
             ::NMonitoring::TDynamicCounters::TCounterPtr NumUnknown;
             ::NMonitoring::TDynamicCounters::TCounterPtr NumGreen;
@@ -22,12 +23,13 @@ namespace NKikimr::NBsController {
             ::NMonitoring::TDynamicCounters::TCounterPtr NumBlack;
             ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedSize;
 
-            TStoragePoolCounters(::NMonitoring::TDynamicCounterPtr counters, TString id, TString name, ui64 allocatedSize)
+            TStoragePoolCounters(::NMonitoring::TDynamicCounterPtr counters, TString id, TString name, ui64 allocatedSize, ui32 erasureSpecies)
                 : Id(std::move(id))
                 , Root(std::move(counters))
                 , Name(std::move(name))
                 , Subgroup(Root->GetSubgroup("storagePool", Name))
-                , FlagsSubgroup(Subgroup->GetSubgroup("subsystem", "flags"))
+                , ErasureSpeciesSubgroup(Subgroup->GetSubgroup("erasureSpecies", TBlobStorageGroupType::ErasureSpeciesName(erasureSpecies)))
+                , FlagsSubgroup(ErasureSpeciesSubgroup->GetSubgroup("subsystem", "flags"))
                 , NumUnknown(FlagsSubgroup->GetCounter("unknown"))
                 , NumGreen(FlagsSubgroup->GetCounter("green"))
                 , NumCyan(FlagsSubgroup->GetCounter("cyan"))
@@ -99,9 +101,9 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void AddStoragePool(const TString& id, const TString& name, ui64 allocatedSize) {
+        void AddStoragePool(const TString& id, const TString& name, ui64 allocatedSize, ui32 erasureSpecies) {
             const bool inserted = Map.try_emplace(id, Counters->GetSubgroup("storagePoolId", id), id, name,
-                allocatedSize).second;
+                allocatedSize, erasureSpecies).second;
             Y_ABORT_UNLESS(inserted);
         }
 

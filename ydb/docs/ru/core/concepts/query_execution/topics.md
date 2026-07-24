@@ -177,7 +177,6 @@ WHERE
         AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
 ```
 
-
 Пример использования пользовательских атрибутов:
 
 ```yql

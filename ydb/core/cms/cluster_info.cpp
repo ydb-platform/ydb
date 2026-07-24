@@ -1066,7 +1066,7 @@ void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
 
 bool TClusterInfo::HasBootstrapTabletNodes() const {
     for (const auto &tablet : BootstrapConfig.GetTablet()) {
-        if (tablet.GetNodeSize() > 0) {
+        if (tablet.NodeSize() > 0) {
             return true;
         }
     }

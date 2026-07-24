@@ -544,6 +544,161 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
     }
 
+    Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {
+        TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const ui64 tabletId = MakeBSControllerID();
+
+        auto makeCluster = [&]() {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            auto &t = *cluster->BootstrapConfig.AddTablet();
+            t.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+            t.AddNode(1);
+            return cluster;
+        };
+
+        // Dead leader — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Dead, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Created leader — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Created, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Active leader — running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+    }
+
+    Y_UNIT_TEST(SysTabletMultipleTypesOnSameNode) {
+        TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const ui64 bscTabletId = MakeBSControllerID();
+        const ui64 ssTabletId = 201;  // arbitrary SchemeShard tablet id
+
+        auto makeCluster = [&]() {
+            TClusterInfoPtr cluster(new TClusterInfo);
+            cluster->AddNode(nodeInfo, nullptr);
+            auto &bscTab = *cluster->BootstrapConfig.AddTablet();
+            bscTab.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+            bscTab.AddNode(1);
+            auto &ssTab = *cluster->BootstrapConfig.AddTablet();
+            ssTab.SetType(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+            ssTab.AddNode(1);
+            return cluster;
+        };
+
+        // BSController leader + SchemeShard follower → running (from BSController)
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // BSController follower + SchemeShard leader → running (from SchemeShard)
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, true));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        }
+
+        // Both followers — not running
+        {
+            auto cluster = makeCluster();
+            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
+            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
+            cluster->GenerateSysTabletsNodesCheckers();
+            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+        }
+    }
+
+    void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
+                        const TSet<int> &expected)
+    {
+        Ydb::Maintenance::Node out;
+        cluster.FillNodeRoles(cluster.Node(nodeId), out);
+
+        TSet<int> actual;
+        for (const auto &role : out.roles()) {
+            const int roleCase = role.role_case();
+            const bool inserted = actual.insert(roleCase).second;
+            UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << roleCase);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+        for (int role : expected) {
+            UNIT_ASSERT_C(actual.contains(role),
+                "node " << nodeId << " is missing role " << role);
+        }
+    }
+
+    Y_UNIT_TEST(FillNodeRoles) {
+        TActorSystemStub stub;
+
+        //   node 1 -> state storage replica only;
+        //   node 2 -> static group host only;
+        //   node 3 -> system tablet host only;
+        //   node 4 -> all roles at once.
+        TClusterInfoPtr cluster(new TClusterInfo);
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            cluster->AddNode({nodeId, "::1", "host" + ToString(nodeId), "host" + ToString(nodeId), 1, TNodeLocation()}, nullptr);
+            cluster->SetNodeState(nodeId, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
+        }
+
+        const TVDiskID staticVDisk2(0, 1, 0, 2, 0);
+        const TVDiskID staticVDisk4(0, 1, 0, 4, 0);
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk2));
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk4));
+        cluster->AddPDisk(MakePDiskConfig(2, 2));
+        cluster->AddVDisk(MakeVSlotConfig(2, staticVDisk2, 2, 0));
+        cluster->AddPDisk(MakePDiskConfig(4, 4));
+        cluster->AddVDisk(MakeVSlotConfig(4, staticVDisk4, 4, 0));
+
+        const ui32 dynamicGroupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
+        const TVDiskID dynamicVDisk(dynamicGroupId, 1, 0, 1, 0);
+        UNIT_ASSERT(!TClusterInfo::IsStaticGroupVDisk(dynamicVDisk));
+        cluster->AddPDisk(MakePDiskConfig(1, 1));
+        cluster->AddVDisk(MakeVSlotConfig(1, dynamicVDisk, 1, 0));
+
+        cluster->NodeToTabletTypes[3].push_back(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        cluster->NodeToTabletTypes[4].push_back(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+
+        auto ssInfo = MakeIntrusive<TStateStorageInfo>();
+        ssInfo->RingGroups.emplace_back();
+        auto &ssGroup = ssInfo->RingGroups.back();
+        ssGroup.NToSelect = 2;
+        ssGroup.Rings.resize(2);
+        ssGroup.Rings[0].Replicas.push_back(TActorId(1, 0, 0, 0));
+        ssGroup.Rings[1].Replicas.push_back(TActorId(4, 0, 0, 0));
+        cluster->ApplyStateStorageInfo(ssInfo);
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(4));
+
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NodeRole::kStateStorage});
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NodeRole::kStaticGroup});
+        CheckNodeRoles(*cluster, 3, {Ydb::Maintenance::NodeRole::kSystemTablet});
+        CheckNodeRoles(*cluster, 4, {
+            Ydb::Maintenance::NodeRole::kStateStorage,
+            Ydb::Maintenance::NodeRole::kStaticGroup,
+            Ydb::Maintenance::NodeRole::kSystemTablet,
+        });
+    }
+
     void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
                         const TSet<int> &expected)
     {

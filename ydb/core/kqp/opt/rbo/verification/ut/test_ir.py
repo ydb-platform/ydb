@@ -1273,8 +1273,15 @@ class SnapshotTest(unittest.TestCase):
                 ):
                     parse_snapshot(malformed)
 
-    def test_decimal_max_requires_exact_type_and_phase_aware_nullability(self):
-        def snapshot_value(*, phase, grouped, input_nullable, output_nullable):
+    def test_decimal_extrema_require_exact_type_and_phase_aware_nullability(self):
+        def snapshot_value(
+            function,
+            *,
+            phase,
+            grouped,
+            input_nullable,
+            output_nullable,
+        ):
             value = minimal_snapshot()
             value["schema"]["tables"][0]["columns"][0].update(
                 type="Decimal(7,2)",
@@ -1289,7 +1296,7 @@ class SnapshotTest(unittest.TestCase):
                 "aggregates": [
                     {
                         "input": "a.k",
-                        "function": "max",
+                        "function": function,
                         "output": "result",
                         "type": "Decimal(7,2)",
                         "nullable": output_nullable,
@@ -1304,7 +1311,8 @@ class SnapshotTest(unittest.TestCase):
             value["plan"]["output"] = keys + ["result"]
             return value
 
-        for phase, grouped, input_nullable in product(
+        for function, phase, grouped, input_nullable in product(
+            ("max", "min"),
             ("undefined", "intermediate", "final"),
             (False, True),
             (False, True),
@@ -1313,21 +1321,27 @@ class SnapshotTest(unittest.TestCase):
                 not grouped and phase != "intermediate"
             )
             with self.subTest(
+                function=function,
                 phase=phase,
                 grouped=grouped,
                 input_nullable=input_nullable,
             ):
                 parse_snapshot(
                     snapshot_value(
+                        function,
                         phase=phase,
                         grouped=grouped,
                         input_nullable=input_nullable,
                         output_nullable=output_nullable,
                     )
                 )
-                with self.assertRaisesRegex(SnapshotError, "max output nullability"):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    f"{function} output nullability",
+                ):
                     parse_snapshot(
                         snapshot_value(
+                            function,
                             phase=phase,
                             grouped=grouped,
                             input_nullable=input_nullable,
@@ -1335,26 +1349,54 @@ class SnapshotTest(unittest.TestCase):
                         )
                     )
 
-        wrong_type = snapshot_value(
-            phase="undefined",
-            grouped=False,
-            input_nullable=False,
-            output_nullable=True,
-        )
-        wrong_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Decimal(8,2)"
-        with self.assertRaisesRegex(SnapshotError, "must exactly match its Decimal input"):
-            parse_snapshot(wrong_type)
+        for function in ("max", "min"):
+            wrong_type = snapshot_value(
+                function,
+                phase="undefined",
+                grouped=False,
+                input_nullable=False,
+                output_nullable=True,
+            )
+            wrong_type["plan"]["nodes"][-1]["aggregates"][0][
+                "type"
+            ] = "Decimal(8,2)"
+            with self.subTest(function=function, mutation="output type"):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "must exactly match its Decimal input",
+                ):
+                    parse_snapshot(wrong_type)
 
-        non_decimal = snapshot_value(
+            non_decimal = snapshot_value(
+                function,
+                phase="undefined",
+                grouped=False,
+                input_nullable=False,
+                output_nullable=True,
+            )
+            non_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
+            non_decimal["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+            with self.subTest(function=function, mutation="input type"):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "only Decimal is modeled",
+                ):
+                    parse_snapshot(non_decimal)
+
+        invalid_min_state = snapshot_value(
+            "min",
             phase="undefined",
             grouped=False,
             input_nullable=False,
             output_nullable=True,
         )
-        non_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
-        non_decimal["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
-        with self.assertRaisesRegex(SnapshotError, "only Decimal is modeled"):
-            parse_snapshot(non_decimal)
+        invalid_min_state["plan"]["nodes"][-1]["aggregates"][0]["state"] = {
+            "sum_type": "Decimal(35,2)",
+            "count_type": "Uint64",
+            "nullable": False,
+        }
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: state"):
+            parse_snapshot(invalid_min_state)
 
     def test_decimal_avg_requires_explicit_sum_count_state_and_exact_phase_lineage(self):
         def trait(input_name, output_name):

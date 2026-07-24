@@ -386,7 +386,7 @@ def aggregate_stage_snapshot(
     decimal_sum_type = decimal.sum_type(input_type)
     if function == "count":
         output_type = "Uint64"
-    elif function in {"avg", "max"}:
+    elif function in {"avg", "max", "min"}:
         if function == "avg" and decimal_sum_type is None:
             raise ValueError("the aggregate test fixture only models Decimal avg")
         output_type = input_type
@@ -398,7 +398,7 @@ def aggregate_stage_snapshot(
         "sum" if staged and function == "count" else function
     )
     keys = ["a.k"] if grouped else []
-    nullable_aggregate = function in {"avg", "max", "sum"}
+    nullable_aggregate = function in {"avg", "max", "min", "sum"}
     logical_nullable = nullable_aggregate and (nullable_input or not grouped)
     trait = {
         "input": "a.x",
@@ -1106,6 +1106,59 @@ def filtered_snapshot(predicate):
                 ],
                 "root": "filter",
                 "output": ["t.flag"],
+                "subplans": [],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
+def string_predicate_snapshot(fingerprint, reverse_arguments=False):
+    arguments = [
+        {"kind": "column", "column": "t.s"},
+        {"kind": "literal", "type": "String", "value": "tail"},
+    ]
+    if reverse_arguments:
+        arguments.reverse()
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "T",
+                        "columns": [
+                            {"name": "s", "type": "String", "nullable": True}
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": [
+                    {
+                        "id": "scan",
+                        "op": "scan",
+                        "table": "T",
+                        "columns": [{"source": "s", "output": "t.s"}],
+                        "pushed_limit": None,
+                    },
+                    {
+                        "id": "filter",
+                        "op": "filter",
+                        "input": "scan",
+                        "predicate": {
+                            "kind": "opaque",
+                            "fingerprint": fingerprint,
+                            "type": "Bool",
+                            "nullable": True,
+                            "args": arguments,
+                        },
+                    },
+                ],
+                "root": "filter",
+                "output": ["t.s"],
                 "subplans": [],
             },
             "stage_graph": None,
@@ -2646,7 +2699,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             REFERENCE_DECIMAL_NAN,
         )
         for function, grouped, nullable_input, nullable_key in product(
-            ("max", "sum"),
+            ("max", "min", "sum"),
             (False, True),
             (False, True),
             (False, True),
@@ -2819,7 +2872,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             REFERENCE_DECIMAL_NAN,
         )
         for function, grouped, nullable_input in product(
-            ("max", "sum"),
+            ("max", "min", "sum"),
             (False, True),
             (False, True),
         ):
@@ -2908,10 +2961,10 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected = self._decimal_reference_bag("avg", grouped, rows)
                     self.assertEqual(actual, expected)
 
-    def test_decimal_max_preserves_finite_bound_through_split_state(self):
-        for staged in (False, True):
+    def test_decimal_extrema_preserve_finite_bound_through_split_state(self):
+        for function, staged in product(("max", "min"), (False, True)):
             snapshot = aggregate_stage_snapshot(
-                "max",
+                function,
                 False,
                 staged,
                 nullable_input=True,
@@ -3258,6 +3311,9 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
             elif function == "max":
                 # Decimal AggrMax compares the signed in-band codes directly.
                 aggregate = max(non_null)
+            elif function == "min":
+                # Decimal AggrMin uses the same raw signed-code order.
+                aggregate = min(non_null)
             elif function == "avg":
                 aggregate = AggregateConcreteDifferentialTest._reference_decimal_average(
                     non_null
@@ -3531,6 +3587,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
             ("count", "Int64"),
             ("sum", "Int64"),
             ("max", "Decimal(2,0)"),
+            ("min", "Decimal(2,0)"),
         )
         for (function, input_type), grouped, nullable_input in product(
             cases, (False, True), (False, True)
@@ -3569,11 +3626,32 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
         staged = aggregate_stage_snapshot("sum", False, True)
         self.assertIn("(mod ", build_problem(logical, staged, 1).formula())
 
+    def test_corrupt_min_final_function_has_a_two_row_witness(self):
+        logical = aggregate_stage_snapshot(
+            "min",
+            False,
+            False,
+            input_type="Decimal(2,0)",
+        )
+        corrupted = aggregate_stage_snapshot(
+            "min",
+            False,
+            True,
+            final_function="max",
+            input_type="Decimal(2,0)",
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_problem(logical, corrupted, 2).script
+            )
+        )
+
     def test_wrong_grouped_aggregate_shuffle_key_has_a_two_row_witness(self):
         for function, input_type in (
             ("count", "Int64"),
             ("sum", "Int64"),
             ("max", "Decimal(2,0)"),
+            ("min", "Decimal(2,0)"),
         ):
             with self.subTest(function=function):
                 logical = aggregate_stage_snapshot(
@@ -3630,7 +3708,7 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
         for field, replacement, message in (
             ("distinct", True, "distinct aggregate"),
             ("unwrap", True, "unwrapped aggregate"),
-            ("function", "min", "not modeled: min"),
+            ("function", "median", "not modeled: median"),
         ):
             with self.subTest(field=field):
                 trait = value.plan.nodes[-1].aggregates[0]
@@ -4008,6 +4086,7 @@ class VerificationTest(unittest.TestCase):
             ("count", "Int64"),
             ("sum", "Int64"),
             ("max", "Decimal(2,0)"),
+            ("min", "Decimal(2,0)"),
         )
         for (function, input_type), grouped, nullable_input in product(
             cases, (False, True), (False, True)
@@ -4054,11 +4133,39 @@ class VerificationTest(unittest.TestCase):
         )
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
+    def test_corrupt_min_final_function_has_a_solver_counterexample(self):
+        logical = aggregate_stage_snapshot(
+            "min",
+            False,
+            False,
+            input_type="Decimal(2,0)",
+        )
+        corrupted = aggregate_stage_snapshot(
+            "min",
+            False,
+            True,
+            final_function="max",
+            input_type="Decimal(2,0)",
+        )
+        result = solve(
+            build_problem(logical, corrupted, 2, 10_000),
+            SOLVER,
+            2,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+        self.assertEqual(len(result.witness["A"]), 2)
+        self.assertNotEqual(
+            result.witness["A"][0]["x"],
+            result.witness["A"][1]["x"],
+        )
+
     def test_wrong_grouped_aggregate_shuffle_key_has_a_solver_counterexample(self):
         for function, input_type in (
             ("count", "Int64"),
             ("sum", "Int64"),
             ("max", "Decimal(2,0)"),
+            ("min", "Decimal(2,0)"),
         ):
             with self.subTest(function=function):
                 logical = aggregate_stage_snapshot(
@@ -4202,6 +4309,51 @@ class VerificationTest(unittest.TestCase):
             10_000,
         )
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_string_predicate_fingerprint_and_argument_order_are_semantic(self):
+        fingerprint = "yql-string-predicate-v1:ends_with"
+        original = string_predicate_snapshot(fingerprint)
+        identical = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                string_predicate_snapshot(fingerprint),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(identical.status, "VERIFIED_BOUNDED")
+
+        for mutation, changed in (
+            (
+                "fingerprint",
+                string_predicate_snapshot(
+                    "yql-string-predicate-v1:string_contains"
+                ),
+            ),
+            (
+                "argument order",
+                string_predicate_snapshot(
+                    fingerprint,
+                    reverse_arguments=True,
+                ),
+            ),
+        ):
+            with self.subTest(mutation=mutation):
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        original,
+                        changed,
+                        1,
+                        10_000,
+                    ),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
 
     def test_dropped_right_join_filter_has_a_witness(self):
         before = right_join({"kind": "and", "args": [KEY_EQUALITY, RESIDUAL]})

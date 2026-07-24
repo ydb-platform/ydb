@@ -437,6 +437,37 @@ NJson::TJsonValue ColumnExpr(TStringBuf name) {
     return value;
 }
 
+TStringBuf CanonicalStringPredicateFingerprint(TStringBuf callable) {
+    if (callable == "EndsWith" || callable == "ends_with") {
+        return "yql-string-predicate-v1:ends_with";
+    }
+    if (callable == "StringContains" || callable == "string_contains") {
+        return "yql-string-predicate-v1:string_contains";
+    }
+    Unsupported(TStringBuilder()
+        << "Unsupported canonical String predicate " << callable);
+}
+
+NJson::TJsonValue CanonicalStringPredicateExpr(
+    TStringBuf callable,
+    bool nullable,
+    NJson::TJsonValue left,
+    NJson::TJsonValue right)
+{
+    auto args = JsonArray();
+    args.AppendValue(std::move(left));
+    args.AppendValue(std::move(right));
+
+    auto result = JsonMap();
+    result["kind"] = "opaque";
+    result["fingerprint"] =
+        TString(CanonicalStringPredicateFingerprint(callable));
+    result["type"] = "Bool";
+    result["nullable"] = nullable;
+    result["args"] = std::move(args);
+    return result;
+}
+
 constexpr size_t MaxExactScalarNodes = 1024;
 constexpr size_t MaxExactScalarDepth = 128;
 constexpr size_t MaxIfPresentBindingDepth = 64;
@@ -1625,6 +1656,39 @@ TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node
     return {resultType, resultNullable};
 }
 
+bool CheckCanonicalStringPredicateCallable(const TExprNode& node) {
+    CheckScalarArity(node, 2, 2);
+    if (!node.Child(0)->IsCallable("Member") ||
+        !node.Child(1)->IsCallable("String"))
+    {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " requires one direct String member and one String literal");
+    }
+
+    bool leftNullable = false;
+    bool rightNullable = false;
+    bool resultNullable = false;
+    if (ScalarTypeName(*node.Child(0), &leftNullable) != "String" ||
+        !leftNullable ||
+        ScalarTypeName(*node.Child(1), &rightNullable) != "String" ||
+        rightNullable)
+    {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " requires Optional<String> and non-null String operands");
+    }
+    if (ScalarTypeName(node, &resultNullable) != "Bool" ||
+        resultNullable != leftNullable)
+    {
+        Unsupported(TStringBuilder()
+            << node.Content()
+            << " result must be Optional<Bool>");
+    }
+    LiteralExpr(*node.Child(1));
+    return resultNullable;
+}
+
 void CheckOpaqueCallable(
     const TExprNode& node,
     bool allowExactUint32LiteralConversion = false)
@@ -1750,6 +1814,10 @@ void CheckOpaqueCallable(
         CheckRestrictedSubstringCallable(node);
         return;
     }
+    if (node.IsCallable({"EndsWith", "StringContains"})) {
+        CheckCanonicalStringPredicateCallable(node);
+        return;
+    }
 
     if (name == "SafeCast" || name == "Convert") {
         if (ParseCanonicalDecimalType(ScalarTypeName(node))) {
@@ -1815,6 +1883,7 @@ enum class EExactCoalesceFalseArgument : ui8 {
     None,
     Comparison,
     BinaryStringMembership,
+    CanonicalStringPredicate,
 };
 
 struct TExactCoalesceFalse {
@@ -1840,6 +1909,10 @@ TExactCoalesceFalse ExactCoalesceFalseArgument(const TExprNode& node) {
         argument.ChildrenSize() == 2)
     {
         kind = EExactCoalesceFalseArgument::Comparison;
+    } else if (argument.IsCallable({"EndsWith", "StringContains"}) &&
+        argument.ChildrenSize() == 2)
+    {
+        kind = EExactCoalesceFalseArgument::CanonicalStringPredicate;
     } else if (argument.ChildrenSize() == 2 &&
         ((argument.IsCallable("Or") &&
           argument.Child(0)->IsCallable("==") &&
@@ -3581,13 +3654,24 @@ NJson::TJsonValue ExportExprNode(
             } else {
                 encoder.Validate(node);
             }
-        } else {
+        } else if (
+            exactCoalesce.Kind ==
+            EExactCoalesceFalseArgument::BinaryStringMembership)
+        {
             // Validate the two direct leaves separately so their equality
             // commutativity markers never relax the global opaque encoder.
             ValidateExactBinaryStringMembership(
                 *argument,
                 rowArgument,
                 visibleColumns);
+        } else {
+            // The whole Coalesce tree is deterministic and total, while the
+            // canonical predicate exporter below assigns the inner operation
+            // the same opaque identity as its pushed OLAP spelling.
+            TOpaqueExpressionEncoder(
+                rowArgument,
+                visibleColumns,
+                boundArguments).Validate(node);
         }
         if (boundArguments.size() >= MaxIfPresentBindingDepth) {
             Unsupported("Exact Coalesce false binding depth exceeds the audit limit");
@@ -3981,6 +4065,38 @@ NJson::TJsonValue ExportExprNode(
         return result;
     }
 
+    if (node.IsCallable({"EndsWith", "StringContains"})) {
+        const bool nullable = CheckCanonicalStringPredicateCallable(node);
+
+        // Retain the closed-world node metadata audit while assigning the
+        // generic expression the same stable uninterpreted identity as the
+        // pushed OLAP spelling. The direct operand grammar keeps that bridge
+        // small and makes argument order visible in the IR.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        return CanonicalStringPredicateExpr(
+            node.Content(),
+            nullable,
+            ExportExprNode(
+                *node.Child(0),
+                rowArgument,
+                visibleColumns,
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1),
+            ExportExprNode(
+                *node.Child(1),
+                rowArgument,
+                visibleColumns,
+                boundArguments,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
+    }
+
     if (node.IsCallable("SqlIn")) {
         constexpr size_t MaxItems = 512;
         if (node.ChildrenSize() != 3) {
@@ -4331,7 +4447,13 @@ NJson::TJsonValue ExportExpr(
     return result;
 }
 
-using TOlapColumnMap = THashMap<TString, TString>;
+struct TOlapColumn {
+    TString Output;
+    TString Type;
+    bool Nullable = false;
+};
+
+using TOlapColumnMap = THashMap<TString, TOlapColumn>;
 
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
@@ -4345,18 +4467,18 @@ NJson::TJsonValue OlapColumnExpr(
     TStringBuf physicalName,
     const TOlapColumnMap& columns)
 {
-    const auto* output = columns.FindPtr(TString(physicalName));
-    if (!output) {
+    const auto* column = columns.FindPtr(TString(physicalName));
+    if (!column) {
         Unsupported(TStringBuilder()
             << "OLAP predicate references unavailable physical column "
             << physicalName);
     }
-    return ColumnExpr(*output);
+    return ColumnExpr(column->Output);
 }
 
-void CheckOlapBoolOpType(const TExprNode& node) {
+std::optional<bool> CheckOlapBoolOpType(const TExprNode& node) {
     if (node.ChildrenSize() != 4) {
-        return;
+        return std::nullopt;
     }
     const auto* descriptor = node.Child(3);
     bool descriptorNullable = false;
@@ -4376,6 +4498,7 @@ void CheckOlapBoolOpType(const TExprNode& node) {
             Unsupported("OLAP Boolean operation type annotation disagrees with its descriptor");
         }
     }
+    return descriptorNullable;
 }
 
 NJson::TJsonValue ExportOlapBinary(
@@ -4391,7 +4514,7 @@ NJson::TJsonValue ExportOlapBinary(
         Unsupported("Malformed OLAP binary operation");
     }
     const TString op(operation.Operator().StringValue());
-    CheckOlapBoolOpType(node);
+    const auto resultNullable = CheckOlapBoolOpType(node);
 
     if (op == "??") {
         const auto& fallback = operation.Right().Ref();
@@ -4411,6 +4534,62 @@ NJson::TJsonValue ExportOlapBinary(
         return ExportOlapScalar(
             operation.Left().Ptr(), columns, true,
             budget, normalizedDepth, sourceDepth + 1);
+    }
+
+    if (op == "ends_with" || op == "string_contains") {
+        if (!resultNullable) {
+            Unsupported(
+                "OLAP String predicate requires an explicit Bool result type");
+        }
+        const auto& left = operation.Left().Ref();
+        const auto& right = operation.Right().Ref();
+        if (!left.IsAtom()) {
+            Unsupported(
+                "OLAP String predicate left operand must be a physical column");
+        }
+        const auto* column = columns.FindPtr(TString(left.Content()));
+        if (!column) {
+            Unsupported(TStringBuilder()
+                << "OLAP predicate references unavailable physical column "
+                << left.Content());
+        }
+        if (column->Type != "String" || !column->Nullable) {
+            Unsupported(
+                "OLAP String predicate requires an Optional<String> column");
+        }
+
+        bool literalNullable = false;
+        if (!right.IsCallable("String") ||
+            ScalarTypeName(right, &literalNullable) != "String" ||
+            literalNullable)
+        {
+            Unsupported(
+                "OLAP String predicate right operand must be a non-null String literal");
+        }
+        LiteralExpr(right);
+        if (*resultNullable != column->Nullable) {
+            Unsupported(
+                "OLAP String predicate result nullability disagrees with its operands");
+        }
+
+        budget.Charge(normalizedDepth);
+        return CanonicalStringPredicateExpr(
+            op,
+            *resultNullable,
+            ExportOlapScalar(
+                operation.Left().Ptr(),
+                columns,
+                false,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1),
+            ExportOlapScalar(
+                operation.Right().Ptr(),
+                columns,
+                false,
+                budget,
+                normalizedDepth + 1,
+                sourceDepth + 1));
     }
 
     TStringBuf kind;
@@ -6244,9 +6423,15 @@ private:
                         << "Read table identity " << table.Identity
                         << " is absent from the captured catalog");
                 }
-                THashSet<TString> catalogColumns;
+                THashMap<
+                    TString,
+                    const TSemanticSnapshotCatalogColumnV1*> catalogColumns;
                 for (const auto& column : (*catalogTable)->Columns) {
-                    catalogColumns.insert(column.Name);
+                    if (!catalogColumns.emplace(column.Name, &column).second) {
+                        Unsupported(TStringBuilder()
+                            << "Catalog table " << table.Path
+                            << " has duplicate column " << column.Name);
+                    }
                 }
                 THashSet<TString> sources;
                 THashSet<TString> outputs;
@@ -6254,13 +6439,22 @@ private:
                 auto columns = JsonArray();
                 for (size_t index = 0; index < read.Columns.size(); ++index) {
                     const TString output = read.OutputIUs[index].GetFullName();
-                    if (!catalogColumns.contains(read.Columns[index]) ||
+                    const auto* catalogColumn =
+                        catalogColumns.FindPtr(read.Columns[index]);
+                    if (!catalogColumn ||
                         !sources.insert(read.Columns[index]).second || output.empty() ||
                         !outputs.insert(output).second)
                     {
                         Unsupported(TStringBuilder() << "Invalid Read column mapping for " << table.Path);
                     }
-                    if (!olapColumns.emplace(read.Columns[index], output).second) {
+                    if (!olapColumns.emplace(
+                            read.Columns[index],
+                            TOlapColumn{
+                                output,
+                                (*catalogColumn)->Type,
+                                (*catalogColumn)->Nullable,
+                            }).second)
+                    {
                         Unsupported(TStringBuilder()
                             << "Ambiguous OLAP physical column " << read.Columns[index]);
                     }

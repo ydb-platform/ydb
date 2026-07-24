@@ -181,6 +181,31 @@ def aggregate_max(
     return result
 
 
+def aggregate_min(
+    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
+) -> smt.Term:
+    """Reduce Decimal ``AggrMin`` inputs in YDB's raw signed-code order.
+
+    MiniKQL initializes a non-empty aggregate from its first input, then
+    compares signed 128-bit codes directly.  NaN is the greatest legal raw
+    code, so it is the internal reduction sentinel; this preserves a lone NaN
+    that a direct fold into ``+Inf`` would lose.  Positive infinity is only the
+    hidden empty/all-NULL payload returned alongside the relational layer's
+    NULL marker.
+    """
+
+    result = smt.int_value(NAN)
+    guards: list[smt.Term] = []
+    for guard, value in guarded_values:
+        guards.append(guard)
+        result = smt.ite(
+            guard,
+            smt.ite(smt.lt(value, result), value, result),
+            result,
+        )
+    return smt.ite(smt.or_(*guards), result, smt.int_value(INF))
+
+
 def add(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     """Exact same-type YQL Decimal addition."""
 

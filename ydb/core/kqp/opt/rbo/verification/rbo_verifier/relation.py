@@ -752,7 +752,7 @@ class Evaluator:
         modeled_functions = (
             {"distinct"}
             if node.distinct_all
-            else {"avg", "count", "max", "sum"}
+            else {"avg", "count", "max", "min", "sum"}
         )
         unsupported = sorted(
             {trait.function for trait in node.aggregates}
@@ -1001,16 +1001,21 @@ class Evaluator:
                 smt.FALSE,
                 smt.add(*(smt.ite(guard, smt.ONE, smt.ZERO) for guard in non_null)),
             )
-        if trait.function == "max":
+        if trait.function in {"max", "min"}:
             guarded_values = tuple(
                 (guard, row.values[trait.input])
                 for guard, row in zip(non_null, source.rows)
                 if guard != smt.FALSE
             )
+            reducer = (
+                decimal.aggregate_max
+                if trait.function == "max"
+                else decimal.aggregate_min
+            )
             return Value(
                 trait.output_type,
                 smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
-                decimal.aggregate_max(
+                reducer(
                     tuple((guard, value.value) for guard, value in guarded_values)
                 ),
                 decimal_finite_abs_bound=max(

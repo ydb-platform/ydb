@@ -2185,6 +2185,58 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesCanonicalStringPredicatePushdown) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT Id
+            FROM `/Root/RboTextOrdered`
+            WHERE Bytes LIKE "%tail"
+                OR Bytes LIKE "%needle%";
+        )");
+
+        const auto fingerprints = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> opaque;
+            CollectExpressions(snapshot["plan"], "opaque", opaque);
+            THashSet<TString> result;
+            for (const auto* expression : opaque) {
+                const TString fingerprint =
+                    (*expression)["fingerprint"].GetStringSafe();
+                if (!fingerprint.StartsWith("yql-string-predicate-v1:")) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["type"].GetStringSafe(),
+                    "Bool");
+                UNIT_ASSERT((*expression)["nullable"].GetBooleanSafe());
+                const auto& args = (*expression)["args"].GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL(args.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[0]["kind"].GetStringSafe(),
+                    "column");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[1]["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[1]["type"].GetStringSafe(),
+                    "String");
+                UNIT_ASSERT(result.insert(fingerprint).second);
+            }
+            return result;
+        };
+
+        const THashSet<TString> expected = {
+            "yql-string-predicate-v1:ends_with",
+            "yql-string-predicate-v1:string_contains",
+        };
+        UNIT_ASSERT_VALUES_EQUAL(fingerprints(pair.Initial), expected);
+        UNIT_ASSERT_VALUES_EQUAL(fingerprints(pair.Final), expected);
+        UNIT_ASSERT(PlanNodes(pair.Initial, "filter").size() == 1);
+        UNIT_ASSERT(PlanNodes(pair.Final, "filter").empty());
+        UNIT_ASSERT(!OnlyPlanNode(pair.Final, "scan")["predicate"].IsNull());
+    }
+
     Y_UNIT_TEST(RealHostVerifiesConstantDateIntervalPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateDateColumnTable(kikimr);

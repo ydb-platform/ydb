@@ -15,11 +15,12 @@ restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
 optional Decimal or Date, exact reviewed `Coalesce(..., false)` forms over
-either a direct comparison or a binary same-member String
-membership/complement predicate, exact direct Decimal
+either a direct comparison, a binary same-member String
+membership/complement predicate, or the reviewed canonical String predicates,
+exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
 semantics for comparison, integral casts, arithmetic, ordering, `SUM`, and
-Decimal `MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
+Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact ordered logical `UnionAll`,
 explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
 and eager inherited errors, exact one-equality-correlated scalar aggregate
@@ -62,6 +63,15 @@ fail-closed result: those computed correlated aggregate shapes require general
 empty-row reconstruction, which is not yet implemented safely. This is a
 reduction in the formula floor, but not a loss of an established proof; none of
 those six formulas belonged to the solver proof floor.
+
+A focused post-dashboard slice now gives generic `EndsWith`/`StringContains`
+and their pushed OLAP spellings one reviewed canonical opaque identity, and
+models same-type Decimal `MIN` exactly. TPCH q2 passes both exporters and
+Decimal `MIN`, then fails closed at the verifier's 32,640-pair Merge
+construction, above the 16,384-pair cap. TPCH q9 clears the String-predicate
+bridge but still reaches unsupported scalar `Map` in both snapshots. A small
+real-host column-store fixture containing both String predicates is
+`VERIFIED_BOUNDED`. These focused results leave formula coverage at 46/121.
 
 The complete TPCH run spent 2,781/7,810 ms in preparation/verifier work and
 produced report SHA-256
@@ -347,8 +357,9 @@ arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just` and
-`Coalesce`; `SafeCast`; non-failing `Convert`; `Substring`; and stored-String
-`Concat` in the exact workload shapes described below. The same audit
+`Coalesce`; `SafeCast`; non-failing `Convert`; `Substring`; the canonical
+String-predicate bridge described below; and stored-String `Concat` in the exact
+workload shapes described below. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
 parent may contain it. YQL has no complete generic totality or determinism flag,
 so all other callables fail closed rather than relying on a denylist. This
@@ -362,6 +373,19 @@ literal converted to `Uint32`; that conversion exception is confined to those
 two direct bound positions. The canonical fingerprint retains both bounds and
 the String column is the only external function argument. Other arities,
 `Utf8`, nullable or dynamic bounds, and out-of-range conversions fail closed.
+
+The canonical String-predicate bridge accepts only generic
+`EndsWith`/`StringContains` or executed OLAP
+`ends_with`/`string_contains` with a direct `Optional<String>` column on the
+left, a non-null `String` literal on the right, and an `Optional<Bool>` result.
+Each operation has its own stable `yql-string-predicate-v1` fingerprint and
+retains the ordered column/literal arguments. The verifier treats it as one
+deterministic total uninterpreted function shared across the two dialects; it
+does not reimplement the byte predicate. Generic
+`Coalesce(predicate, false)` retains exact `if_present` NULL handling, while
+the pushed coalesce is erased only in a positive filter context. Operand, type,
+nullability, result-descriptor, catalog-column, and operation near-misses fail
+closed.
 
 The reviewed `Concat` shape is confined to the body root of a Map expression
 and returns exactly non-null `String`. It is a binary tree whose leaves are
@@ -1047,17 +1071,23 @@ outside the exact integral-`SafeCast` and constant normalization gates, and
 aggregate functions outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
-`sum`, Decimal-only `max`, phase-aware same-type Decimal `avg`, and row-level
-`DistinctAll`, including NULL grouping and inputs and optimizer-generated
-intermediate/final phases.
+`sum`, Decimal-only `min`/`max`, phase-aware same-type Decimal `avg`, and
+row-level `DistinctAll`, including NULL grouping and inputs and
+optimizer-generated intermediate/final phases.
 Signed inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both
 integer sums use the runtime's exact 64-bit modular overflow.
 `sum(Decimal(p,s))` widens every input, partial state, and result to
 `Decimal(35,s)` and preserves YDB's NaN/infinity algebra.
-Decimal `AggrMax` keeps its input type and uses the runtime's raw signed
-128-bit-code order, `-Inf < finite < +Inf < NaN`; this is intentionally
-different from ordinary Decimal comparison. NULL inputs are ignored, and the
-same scalar state combines exactly across partial and final phases.
+Decimal `AggrMin` and `AggrMax` keep their input type and use the runtime's raw
+signed 128-bit-code order, `-Inf < finite < +Inf < NaN`; this is intentionally
+different from ordinary Decimal comparison. They respectively select the least
+and greatest non-NULL input. A group with no non-NULL input returns NULL, while
+a lone NaN remains NaN. The same scalar state combines exactly across partial
+and final phases.
+Independent small-domain references cover guarded raw codes, NULL, every
+special, grouped/scalar and split-task execution, wrong shuffle keys, and
+phase nullability. Mutating a staged final `min` to `max` produces a two-row
+solver counterexample.
 
 Decimal `AggrAdd` saturates each intermediate result and is not associative when
 finite overflow is possible. The verifier therefore carries a conservative
@@ -1096,7 +1126,7 @@ Undefined, intermediate, and final phases use the same local deduplication
 semantics. StageGraph routing remains observable: partial per-task
 deduplication followed by HashShuffle on every intermediate key and final
 deduplication is equivalent, while a non-shuffled split can expose duplicate
-rows normally. Ordinary aggregate `distinct`, `unwrap`, min, non-Decimal max,
+rows normally. Ordinary aggregate `distinct`, `unwrap`, non-Decimal min/max,
 non-Decimal or distinct average, and variance remain `UNSUPPORTED`.
 Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
@@ -1308,8 +1338,11 @@ captured initial/final pair through the normal CLI. One test covers an explicit
 per-task intermediate TopSort, exact Merge metadata (including NULL placement),
 and final Limit. Column-store tests compare initial logical Filters with final
 pushed OLAP predicates, cover `IS NULL` combined with comparisons and
-`IS NULL OR IS NOT NULL`, and require the normal bounded proof. The benchmark
-test loads the exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
+`IS NULL OR IS NOT NULL`, and require the normal bounded proof. A String
+predicate fixture combines `EndsWith` and `StringContains`, requires their
+canonical fingerprints at both generic and pushed OLAP boundaries, and is
+`VERIFIED_BOUNDED` at two rows and two tasks. The benchmark test loads the
+exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
 checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
 solver budget. Nullable `String IN ('first', 'second')` and

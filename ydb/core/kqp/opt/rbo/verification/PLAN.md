@@ -172,8 +172,9 @@ unsupported.
 Three reviewed optimizer-generated wrapper normalizations reuse those existing
 exact nodes.
 `Coalesce(predicate, false)` lowers to `if_present` only when the first child
-is either one direct nullable ordinary comparison or exactly binary
-`Or(member == literal, member == literal)`/`And(member != literal, member != literal)`.
+is either one direct nullable ordinary comparison, exactly binary
+`Or(member == literal, member == literal)`/`And(member != literal, member != literal)`,
+or the canonical String predicate described below.
 The binary form requires the same direct `Optional<String>` member and a
 non-null `String` literal in each leaf. The fallback is exact non-null
 `Bool(false)`, and the result is exact non-null `Bool`. Larger Boolean trees,
@@ -192,6 +193,17 @@ mismatched, dynamic, nonzero, or broader safe near-matches remain opaque.
 All three gates retain
 the full closed-world scalar safety validation and shared normalized-node,
 source-depth, and live-binding limits.
+
+The canonical String-predicate bridge maps generic
+`EndsWith`/`StringContains` and executed OLAP
+`ends_with`/`string_contains` to one stable typed opaque identity per
+operation. Its exact gate is one direct `Optional<String>` member or catalog
+column, one non-null `String` literal, and an `Optional<Bool>` result with
+matching descriptor/nullability. Ordered operands remain explicit. This is a
+shared deterministic-total uninterpreted function, not a reimplementation of
+the byte predicate, so it can prove preservation of the same operation and
+arguments across dialect lowering. Other types, arities, operand orders,
+computed operands, and catalog/descriptor mismatches fail closed.
 
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
@@ -456,6 +468,15 @@ additive, conditional, and signed/unsigned 8/64-bit cast cases. Relation tests
 consume literal arithmetic and integral-cast bounds through a two-row Decimal
 `SUM`, check special/NULL semantics, and retain the strict `10^35` rejection.
 
+Same-type Decimal `min` and `max` retain the input type and use MiniKQL's raw
+signed-code order, `-Inf < finite < +Inf < NaN`, rather than ordinary
+`DataCompare`. They ignore NULL and respectively select the least or greatest
+non-NULL value; an emitted group with no non-NULL value, including scalar empty
+input, is NULL, while a lone NaN remains NaN. Undefined, intermediate, and
+final phases carry the same scalar state, so split-task combination is exact.
+Non-Decimal extrema, distinct/unwrap traits, mismatched types, and
+phase/nullability mismatches fail closed.
+
 Decimal `avg` is admitted only when its input and output are the identical
 canonical `Decimal(p,s)`. The exporter records the physical state hidden by the
 logical RBO IU type as
@@ -570,7 +591,9 @@ Implementation sequence:
 33. M4: exact one-equality-correlated scalar aggregation with an explicit
     per-invocation outer binding;
 34. M4: exact row-level `DistinctAll` aggregation, beginning with TPC-DS q6;
-35. next: dynamic `IN`, broader correlations, range reads, and other OLAP
+35. M4: canonical generic-to-OLAP `EndsWith`/`StringContains` bridge;
+36. M4: exact same-type Decimal aggregate `min`;
+37. next: dynamic `IN`, broader correlations, range reads, and other OLAP
     pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -822,6 +845,10 @@ A C++ `NDecimal::Add` oracle locks the overflow non-associativity that requires
 the headroom gate, the exporter test locks `Decimal(7,2)` to `Decimal(35,2)`
 widening across intermediate/final phases, and a real-host query proves the
 split two-row/two-task aggregate obligation.
+Decimal extrema use independent exhaustive guarded raw-code and concrete
+grouped/scalar references across NULLs, specials, and split tasks. Routing and
+solver mutations cover wrong shuffle keys and a final `min` changed to `max`;
+the latter has a two-row counterexample.
 Symbolic-order tests compare the represented sequence sets with exhaustive
 finite enumeration, exercise 48-slot construction, and retain direction, NULL,
 tie, producer-order, TopSort, and mutation cases. Routing-compaction tests keep
@@ -909,8 +936,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Grouped/scalar count, integer sum, headroom-bounded Decimal sum, and
   row-level `DistinctAll`, including
   split intermediate/final execution, NULLs, exact 64-bit integer behavior,
-  Decimal specials, partial-state bound provenance, same-type Decimal MAX, and
-  phase-aware Decimal AVG with explicit `(sum,count)` state. `DistinctAll`
+  Decimal specials, partial-state bound provenance, same-type Decimal MIN/MAX,
+  and phase-aware Decimal AVG with explicit `(sum,count)` state. `DistinctAll`
   accepts exact positional aliases of a nonempty ordered key tuple, deduplicates
   null-safely, and remains task-local across intermediate/final phases;
   per-trait distinct aggregates remain unsupported.
@@ -936,6 +963,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
   independence, nullability, and fail-closed safety gates.
+- Generic `EndsWith`/`StringContains` and executed OLAP
+  `ends_with`/`string_contains` share one narrow
+  `yql-string-predicate-v1` opaque identity per operation. Only a direct
+  nullable String column, non-null String literal, and matching nullable Bool
+  result are admitted; ordered arguments and the generic coalesce-false NULL
+  behavior remain explicit. Cross-dialect exporter mutations and a real-host
+  column-store fixture cover the bridge, and the fixture is
+  `VERIFIED_BOUNDED`.
 - The workload `Substring` form is admitted only for an optional String and two
   constant `Uint32` bounds. Direct, exact integer-literal conversion to
   `Uint32` is allowed only in those bound positions; type, range, arity, and
@@ -1193,8 +1228,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
   `Decimal(35,s)` and is exact whenever its carried finite bound proves that
   saturating partial addition cannot overflow; unsafe bounds fail closed.
-  Same-type Decimal `max` ignores NULL and reduces the raw signed codes in the
-  runtime's total order, `-Inf < finite < +Inf < NaN`, with the same scalar
+  Same-type Decimal `min`/`max` ignore NULL and reduce the raw signed codes in
+  the runtime's total order, `-Inf < finite < +Inf < NaN`, with the same scalar
   state in logical, intermediate, and final phases. Same-type Decimal `avg`
   uses the explicit weighted `(sum,count)` phase contract above. Casts outside
   those gates, generic division, non-core `IN`, and aggregate functions outside
@@ -1214,13 +1249,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   its former Decimal-SUM headroom rejection and reached the deeper 32,896-pair
   Merge construction cap after 1,720/42,044 ms; the later exact representation
   selector moves q5 through formula construction.
-- Exact Decimal-only `max` has independent raw-code, NULL, grouped/global,
-  split-state, wrong-shuffle, type, and phase-nullability tests. At that
-  milestone focused TPC-DS q74 passed its former aggregate blocker and reached
-  the 65,536-pair join-matching preflight after 463 ms of preparation and
-  375 ms of verifier work. Current q74 reaches a deeper Sort construction cap;
-  it remains unsupported and changed neither the formula slice nor the proof
-  floor.
+- Exact Decimal-only `min`/`max` have independent raw-code, NULL,
+  grouped/global, split-state, wrong-shuffle, type, and phase-nullability tests.
+  A staged final `min` changed to `max` has a two-row solver witness. At the
+  earlier MAX milestone, focused TPC-DS q74 passed its aggregate blocker and
+  reached the 65,536-pair join-matching preflight after 463 ms of preparation
+  and 375 ms of verifier work; current q74 reaches a deeper Sort construction
+  cap. The MIN extension lets TPCH q2 pass verification setup after its
+  canonical `EndsWith` lowering, but q2 then fails closed at a 32,640-pair
+  Merge construction above the 16,384-pair cap. Neither query joins the formula
+  or proof floor.
 - TPC-DS q79 initially returned a symbolic counterexample with
   `d_year = 1998`. The initial plan compared its nullable `Int64` directly with
   `Int32` membership constants; the final plan used an opaque
@@ -1301,10 +1339,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `d8c88141b6e6dccc3bf7596024b6033a297c267e8a1d05511206ea930fd7d763`.
   Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
+
+  Focused post-dashboard checks of the canonical String-predicate bridge and
+  Decimal `MIN` leave this floor at 46/121. TPCH q2 now passes both exporters
+  and `MIN` before reaching the 32,640-pair Merge cap; TPCH q9 clears both
+  String-predicate spellings but reaches scalar `Map` in both snapshots. The
+  small real-host bridge fixture is `VERIFIED_BOUNDED`.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
-  construction blockers are TPC-DS q4's 20,736-pair join match, q64's
+  construction blockers include TPCH q2's 32,640-pair Merge, TPC-DS q4's
+  20,736-pair join match, q64's
   8,192-row join output, q11/q74's 8,126,496-pair Sort constructions, and q31's
   8,386,560-pair Sort construction. q1, q5, q25, q29, q46, q65, q68, q77,
   q80, and q91 now construct complete formulas instead of stopping at their

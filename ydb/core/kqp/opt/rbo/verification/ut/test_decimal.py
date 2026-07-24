@@ -638,6 +638,47 @@ class DecimalKernelTest(unittest.TestCase):
         self.assertEqual(_ground(guarded), decimal.INF)
         self.assertEqual(_ground(decimal.aggregate_max(())), -decimal.INF)
 
+    def test_aggregate_min_matches_exhaustive_guarded_raw_code_reference(self):
+        values = tuple(code for code, _ in _small_domain(decimal.Type(1, 0)))
+        for left, right, left_present, right_present in product(
+            values,
+            values,
+            (False, True),
+            (False, True),
+        ):
+            actual = decimal.aggregate_min(
+                (
+                    (smt.bool_value(left_present), smt.int_value(left)),
+                    (smt.bool_value(right_present), smt.int_value(right)),
+                )
+            )
+            present = tuple(
+                value
+                for value, guard in (
+                    (left, left_present),
+                    (right, right_present),
+                )
+                if guard
+            )
+            expected = min(present) if present else decimal.INF
+            with self.subTest(
+                left=left,
+                right=right,
+                left_present=left_present,
+                right_present=right_present,
+            ):
+                self.assertEqual(_ground(actual), expected)
+
+        self.assertEqual(
+            _ground(
+                decimal.aggregate_min(
+                    ((smt.TRUE, smt.int_value(decimal.NAN)),)
+                )
+            ),
+            decimal.NAN,
+        )
+        self.assertEqual(_ground(decimal.aggregate_min(())), decimal.INF)
+
     def test_all_arithmetic_matches_exhaustive_fraction_reference(self):
         types = tuple(
             decimal.Type(precision, scale)

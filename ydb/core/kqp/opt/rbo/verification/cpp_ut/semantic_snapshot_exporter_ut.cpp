@@ -1584,6 +1584,44 @@ TExprNode::TPtr MakeOlapCoalesceFalse(
         .Done().Ptr();
 }
 
+TExprNode::TPtr MakeOlapStringPredicate(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf column,
+    TStringBuf literal,
+    bool coalesceFalse = true)
+{
+    const auto pos = TPositionHandle();
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    const auto* optionalBool = ScalarType(
+        ctx,
+        NUdf::EDataSlot::Bool,
+        true);
+    auto condition = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value(operation).Build()
+        .Left<TCoAtom>().Value(column).Build()
+        .Right(TypedLiteral(
+            ctx,
+            "String",
+            literal,
+            ScalarType(ctx, NUdf::EDataSlot::String)))
+        .OpType(TExprBase(OptionalDataTypeDescriptor(
+            ctx,
+            "Bool",
+            boolType,
+            optionalBool)))
+        .Done().Ptr();
+    if (!coalesceFalse) {
+        return condition;
+    }
+    return Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        .Operator().Value("??").Build()
+        .Left(TExprBase(std::move(condition)))
+        .Right(TypedLiteral(ctx, "Bool", "false", boolType))
+        .OpType(TExprBase(DataTypeDescriptor(ctx, "Bool", boolType)))
+        .Done().Ptr();
+}
+
 TExprNode::TPtr MakeOlapComparisonProcess(
     TExportTestContext& ctx,
     TStringBuf operation,
@@ -8830,6 +8868,401 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     decimal));
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "unsupported arity 1");
+        }
+    }
+
+    Y_UNIT_TEST(CanonicalizesReviewedStringPredicatesAcrossGenericAndOlapDialects) {
+        struct TStringPredicateCase {
+            TStringBuf Generic;
+            TStringBuf Olap;
+            TStringBuf Literal;
+            TStringBuf Fingerprint;
+        };
+        const TVector<TStringPredicateCase> cases = {
+            {
+                "EndsWith",
+                "ends_with",
+                "BRASS",
+                "yql-string-predicate-v1:ends_with",
+            },
+            {
+                "StringContains",
+                "string_contains",
+                "green",
+                "yql-string-predicate-v1:string_contains",
+            },
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext generic;
+            const auto& genericTable = AddTable(
+                generic,
+                "/Root/GenericStringPredicate",
+                {{"s", "String", false}});
+            auto genericRead = MakeRead(
+                generic,
+                genericTable,
+                "a",
+                {"s"});
+            const auto* stringType = ScalarType(
+                generic,
+                NUdf::EDataSlot::String);
+            const auto* optionalString = ScalarType(
+                generic,
+                NUdf::EDataSlot::String,
+                true);
+            const auto* boolType = ScalarType(
+                generic,
+                NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                generic,
+                NUdf::EDataSlot::Bool,
+                true);
+            SetExactOutputType(
+                generic,
+                *genericRead,
+                {{"a.s", optionalString}});
+            auto genericPredicate = TypedCallable(
+                generic,
+                test.Generic,
+                {
+                    TypedMember(generic, "a.s", optionalString),
+                    TypedLiteral(
+                        generic,
+                        "String",
+                        test.Literal,
+                        stringType),
+                },
+                optionalBool);
+            auto genericMap = MakeIntrusive<TOpMap>(
+                genericRead,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    TExpression(
+                        TypedCallable(
+                            generic,
+                            "Coalesce",
+                            {
+                                std::move(genericPredicate),
+                                TypedLiteral(
+                                    generic,
+                                    "Bool",
+                                    "false",
+                                    boolType),
+                            },
+                            boolType),
+                        &generic.ExprCtx,
+                        &generic.ExpressionProps))});
+            SetExactOutputType(
+                generic,
+                *genericMap,
+                {{"result", boolType}});
+            TOpRoot genericRoot(
+                genericMap,
+                TPositionHandle(),
+                {"result"});
+            const auto genericSnapshot = ParseSupported(
+                ExportSemanticSnapshotV1(genericRoot, generic.RboCtx));
+            const auto& coalesced = FindNode(genericSnapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                coalesced["kind"].GetStringSafe(),
+                "if_present");
+            const auto& genericOpaque = coalesced["optional"];
+
+            TExportTestContext olap;
+            const auto& olapTable = AddTable(
+                olap,
+                "/Root/OlapStringPredicate",
+                {{"s", "String", false}});
+            auto olapRead = MakeRead(
+                olap,
+                olapTable,
+                "a",
+                {"s"},
+                NYql::EStorageType::ColumnStorage);
+            SetExactOutputType(
+                olap,
+                *olapRead,
+                {{
+                    "a.s",
+                    ScalarType(
+                        olap,
+                        NUdf::EDataSlot::String,
+                        true),
+                }});
+            olapRead->OlapFilterLambda = MakeOlapFilterProcess(
+                olap,
+                MakeOlapStringPredicate(
+                    olap,
+                    test.Olap,
+                    "s",
+                    test.Literal));
+            TOpRoot olapRoot(
+                olapRead,
+                TPositionHandle(),
+                {"a.s"});
+            olapRead->Props.StageId =
+                olapRoot.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            const auto olapSnapshot = ParseSupported(
+                ExportSemanticSnapshotV1(olapRoot, olap.RboCtx));
+            const auto& olapOpaque =
+                FindNode(olapSnapshot, "scan")["predicate"];
+
+            for (const auto* expression : {&genericOpaque, &olapOpaque}) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["kind"].GetStringSafe(),
+                    "opaque");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["fingerprint"].GetStringSafe(),
+                    test.Fingerprint);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["type"].GetStringSafe(),
+                    "Bool");
+                UNIT_ASSERT((*expression)["nullable"].GetBooleanSafe());
+                const auto& args = (*expression)["args"].GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL(args.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[0]["column"].GetStringSafe(),
+                    "a.s");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[1]["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[1]["type"].GetStringSafe(),
+                    "String");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    args[1]["value"].GetStringSafe(),
+                    test.Literal);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                genericOpaque["fingerprint"].GetStringSafe(),
+                olapOpaque["fingerprint"].GetStringSafe());
+        }
+    }
+
+    Y_UNIT_TEST(CanonicalStringPredicateBridgeFailsClosed) {
+        enum class EGenericShape {
+            DynamicRight,
+            Utf8Left,
+            NonNullableLeft,
+            NonNullableResult,
+        };
+        const auto exportGeneric = [](EGenericShape shape) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/GenericStringPredicateFailure",
+                {
+                    {"s", "String", false},
+                    {"rhs", "String", true},
+                });
+            auto read = MakeRead(ctx, table, "a", {"s", "rhs"});
+            const auto* stringType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String);
+            const auto* optionalString = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String,
+                true);
+            const auto* optionalUtf8 = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Utf8,
+                true);
+            const auto* boolType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            SetExactOutputType(
+                ctx,
+                *read,
+                {
+                    {"a.s", optionalString},
+                    {"a.rhs", stringType},
+                });
+
+            const auto* leftType =
+                shape == EGenericShape::Utf8Left
+                ? optionalUtf8
+                : shape == EGenericShape::NonNullableLeft
+                    ? stringType
+                    : optionalString;
+            const auto* resultType =
+                shape == EGenericShape::NonNullableResult
+                ? boolType
+                : optionalBool;
+            auto right =
+                shape == EGenericShape::DynamicRight
+                ? TypedMember(ctx, "a.rhs", stringType)
+                : TypedLiteral(ctx, "String", "tail", stringType);
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    TExpression(
+                        TypedCallable(
+                            ctx,
+                            "EndsWith",
+                            {
+                                TypedMember(ctx, "a.s", leftType),
+                                std::move(right),
+                            },
+                            resultType),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps))});
+            SetExactOutputType(
+                ctx,
+                *map,
+                {{"result", resultType}});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        for (const auto [shape, reason] : {
+                 std::pair{
+                     EGenericShape::DynamicRight,
+                     TStringBuf("requires one direct String member and one String literal"),
+                 },
+                 std::pair{
+                     EGenericShape::Utf8Left,
+                     TStringBuf("requires Optional<String> and non-null String operands"),
+                 },
+                 std::pair{
+                     EGenericShape::NonNullableLeft,
+                     TStringBuf("requires Optional<String> and non-null String operands"),
+                 },
+                 std::pair{
+                     EGenericShape::NonNullableResult,
+                     TStringBuf("result must be Optional<Bool>"),
+                 },
+             })
+        {
+            const auto result = exportGeneric(shape);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
+        }
+
+        enum class EOlapShape {
+            MissingResultType,
+            NonNullableResult,
+            DynamicRight,
+            Utf8Column,
+            NonNullableColumn,
+        };
+        const auto exportOlap = [](EOlapShape shape) {
+            TExportTestContext ctx;
+            const bool utf8 = shape == EOlapShape::Utf8Column;
+            const bool notNull = shape == EOlapShape::NonNullableColumn;
+            const TString type = utf8 ? TString("Utf8") : TString("String");
+            const auto slot = utf8
+                ? NUdf::EDataSlot::Utf8
+                : NUdf::EDataSlot::String;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/OlapStringPredicateFailure",
+                {
+                    {"s", type, notNull},
+                    {"rhs", "String", true},
+                });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"s", "rhs"},
+                NYql::EStorageType::ColumnStorage);
+            SetExactOutputType(
+                ctx,
+                *read,
+                {
+                    {"a.s", ScalarType(ctx, slot, !notNull)},
+                    {"a.rhs", ScalarType(
+                        ctx,
+                        NUdf::EDataSlot::String)},
+                });
+
+            const auto pos = TPositionHandle();
+            const auto* stringType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::String);
+            const auto* boolType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool);
+            const auto* optionalBool = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Bool,
+                true);
+            const auto right = [&]() {
+                if (shape == EOlapShape::DynamicRight) {
+                    return ctx.ExprCtx.NewAtom(pos, "rhs");
+                }
+                return TypedLiteral(ctx, "String", "tail", stringType);
+            }();
+
+            TExprNode::TPtr condition;
+            if (shape == EOlapShape::MissingResultType) {
+                condition = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+                    .Operator().Value("ends_with").Build()
+                    .Left<TCoAtom>().Value("s").Build()
+                    .Right(TExprBase(right))
+                    .Done().Ptr();
+            } else {
+                auto descriptor =
+                    shape == EOlapShape::NonNullableResult
+                    ? DataTypeDescriptor(ctx, "Bool", boolType)
+                    : OptionalDataTypeDescriptor(
+                        ctx,
+                        "Bool",
+                        boolType,
+                        optionalBool);
+                condition = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+                    .Operator().Value("ends_with").Build()
+                    .Left<TCoAtom>().Value("s").Build()
+                    .Right(TExprBase(right))
+                    .OpType(TExprBase(std::move(descriptor)))
+                    .Done().Ptr();
+            }
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx,
+                std::move(condition));
+            TOpRoot root(read, pos, {"a.s"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        for (const auto [shape, reason] : {
+                 std::pair{
+                     EOlapShape::MissingResultType,
+                     TStringBuf("requires an explicit Bool result type"),
+                 },
+                 std::pair{
+                     EOlapShape::NonNullableResult,
+                     TStringBuf("result nullability disagrees"),
+                 },
+                 std::pair{
+                     EOlapShape::DynamicRight,
+                     TStringBuf("right operand must be a non-null String literal"),
+                 },
+                 std::pair{
+                     EOlapShape::Utf8Column,
+                     TStringBuf("requires an Optional<String> column"),
+                 },
+                 std::pair{
+                     EOlapShape::NonNullableColumn,
+                     TStringBuf("requires an Optional<String> column"),
+                 },
+             })
+        {
+            const auto result = exportOlap(shape);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
         }
     }
 

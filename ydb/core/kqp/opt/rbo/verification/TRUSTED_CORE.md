@@ -81,7 +81,7 @@ A defect in these files can turn inequivalent supported plans into
 | `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, declarations, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
-| `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, specials, and proof bounds. |
+| `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
 | `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
@@ -119,16 +119,35 @@ Independent nullable composite-key enumeration, malformed exporter/IR shapes,
 staged routing, a non-shuffled duplicate witness, solver checks, and a
 real-host transformation cover the vertical path.
 
-The post-`DistinctAll` 2026-07-23 physical-line audit recorded:
+The canonical String-predicate bridge adds no evaluator-specific truth table.
+`semantic_snapshot.cpp` alone must establish the narrow generic and OLAP
+grammars, catalog type/nullability, positive-filter coalesce handling, and the
+one-to-one mapping from `EndsWith`/`StringContains` to their two stable
+fingerprints. Existing `ir.py`/`scalar.py` opaque-function validation then
+shares each deterministic total function and its ordered column/literal
+arguments across both plans. Cross-dialect exporter mutations and a
+solver-backed real-host fixture are the independent evidence.
+
+Decimal `MIN` crosses `ir.py`, `decimal.py`, and `relation.py`. The decoder
+admits only exact same-type Decimal input/output with phase-aware nullability;
+the kernel reduces non-NULL values in raw signed-code order and preserves a
+lone NaN; the relational layer supplies NULL for an emitted group with no
+non-NULL value, including scalar empty input, and carries the same scalar state
+through undefined, intermediate, and final phases.
+Independent exhaustive guarded-code and concrete aggregate references, staged
+routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
+path.
+
+The post-String-predicate/Decimal-MIN 2026-07-24 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,393 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,050 |
-| **Proof-producing code total** | **18,443** |
-| Tests, outside the TCB | 42,695 |
+| Nine trusted Python semantic modules | 10,426 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,244 |
+| **Proof-producing code total** | **18,670** |
+| Tests, outside the TCB | 43,415 |
 | Diagnostic/orchestration tools, outside the TCB | 5,119 |
-| Documentation, outside the TCB | 4,777 |
+| Documentation, outside the TCB | 4,895 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by
@@ -214,9 +233,9 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate dialect mutations and real-host proof; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/DistinctAll exporter and IR mutations; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, and real-host Decimal-AVG cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/DistinctAll exporter and IR mutations; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, and real-host Decimal-AVG cases |
 | StageGraph and routing | `semantic_snapshot.cpp`; `ir.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

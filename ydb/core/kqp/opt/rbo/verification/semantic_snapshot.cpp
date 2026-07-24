@@ -6877,30 +6877,35 @@ private:
         }
     }
 
-    void ValidateNoNestedSubplanReferences() {
-        // Registry roots may contain their explicit outer dependencies, but
-        // never another virtual subplan binding.
-        for (const auto& subplan : Subplans) {
-            THashSet<const IOperator*> subplanNodes;
-            VisitOperators(
-                subplan.RegistryRoot,
-                subplanNodes,
-                [&](IOperator& op) {
-                    if (!ReferencedSubplanBindings(op).empty()) {
-                        Unsupported(TStringBuilder()
-                            << KindName(subplan)
-                            << " subplan binding " << subplan.Binding
-                            << " contains a nested subplan reference");
-                    }
-                });
+    void ValidateNestedSubplanConsumer(
+        const TSubplanDescriptor& owner,
+        const TSubplanDescriptor& nested) const
+    {
+        const auto* scalar =
+            std::get_if<TScalarSubplanDetails>(&nested.Details);
+        if (
+            SubplanKind(owner) != ESubplanKind::In ||
+            !scalar ||
+            scalar->Correlation)
+        {
+            Unsupported(TStringBuilder()
+                << KindName(owner)
+                << " subplan binding " << owner.Binding
+                << " contains an unsupported nested subplan reference to "
+                << KindName(nested) << " binding " << nested.Binding
+                << "; only an uncorrelated scalar binding may be consumed "
+                   "inside an IN subplan");
         }
     }
 
-    void IndexSubplanConsumers() {
-        THashSet<const IOperator*> mainNodes;
+    void IndexSubplanConsumersUnder(
+        const TIntrusivePtr<IOperator>& root,
+        const TSubplanDescriptor* owner)
+    {
+        THashSet<const IOperator*> nodes;
         VisitOperators(
-            Root.GetInput(),
-            mainNodes,
+            root,
+            nodes,
             [&](IOperator& op) {
                 const auto outputNames = OutputNames(op);
                 for (const auto& subplan : Subplans) {
@@ -6929,6 +6934,9 @@ private:
                 const auto inputNames = OutputNames(*op.GetChildren().front());
                 for (const auto& binding : bindings) {
                     auto& subplan = Subplans[SubplanIndices.at(binding)];
+                    if (owner) {
+                        ValidateNestedSubplanConsumer(*owner, subplan);
+                    }
                     const auto kind = SubplanKind(subplan);
                     const bool allowed =
                         kind == ESubplanKind::Scalar
@@ -6954,9 +6962,21 @@ private:
                     subplan.Consumers.push_back(&op);
                 }
                 if (!ConsumerBindings.emplace(&op, std::move(bindings)).second) {
-                    Unsupported("Subplan consumer was indexed twice");
+                    Unsupported(TStringBuilder()
+                        << op.GetExplainName()
+                        << " subplan consumer is reachable from multiple "
+                           "plan roots");
                 }
             });
+    }
+
+    void IndexSubplanConsumers() {
+        IndexSubplanConsumersUnder(Root.GetInput(), nullptr);
+        for (const auto& subplan : Subplans) {
+            IndexSubplanConsumersUnder(
+                subplan.RegistryRoot,
+                &subplan);
+        }
     }
 
     void ValidateSubplanConsumerContracts() {
@@ -7014,7 +7034,6 @@ private:
 
         RegisterSubplans(roots);
         ValidateSubplanRootTopology();
-        ValidateNoNestedSubplanReferences();
         IndexSubplanConsumers();
         ValidateSubplanConsumerContracts();
     }

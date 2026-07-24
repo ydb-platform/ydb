@@ -178,6 +178,34 @@ const NJson::TJsonValue& FindNode(const NJson::TJsonValue& snapshot, TStringBuf 
     return snapshot;
 }
 
+const NJson::TJsonValue& FindNodeById(
+    const NJson::TJsonValue& snapshot,
+    TStringBuf id)
+{
+    for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+        if (node["id"].GetStringSafe() == id) {
+            return node;
+        }
+    }
+    UNIT_FAIL(TStringBuilder() << "missing plan node " << id);
+    return snapshot;
+}
+
+const NJson::TJsonValue& FindSubplan(
+    const NJson::TJsonValue& snapshot,
+    TStringBuf binding)
+{
+    for (const auto& subplan :
+         snapshot["plan"]["subplans"].GetArraySafe())
+    {
+        if (subplan["binding"].GetStringSafe() == binding) {
+            return subplan;
+        }
+    }
+    UNIT_FAIL(TStringBuilder() << "missing subplan " << binding);
+    return snapshot;
+}
+
 NJson::TJsonValue ParseSupported(const TSemanticSnapshotExportResult& result) {
     UNIT_ASSERT_C(result.IsSupported(), result.UnsupportedReason);
     NJson::TJsonValue snapshot;
@@ -14538,6 +14566,202 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         fixture.Entry().Plan = fixture.InnerRead;
     }
 
+    Y_UNIT_TEST(ExportsInSubplanWithUncorrelatedScalarFilter) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/NestedInOuter",
+            {{"date", "Date", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/NestedInInner",
+            {
+                {"date", "Date", true},
+                {"week", "Int64", true},
+            });
+        const auto& scalarTable = AddTable(
+            ctx,
+            "/Root/NestedInScalar",
+            {{"week", "Int64", true}});
+        auto outerRead = MakeRead(
+            ctx,
+            outerTable,
+            "outer",
+            {"date"});
+        auto innerRead = MakeRead(
+            ctx,
+            innerTable,
+            "inner",
+            {"date", "week"});
+        auto scalarRead = MakeRead(
+            ctx,
+            scalarTable,
+            "scalar",
+            {"week"});
+        const auto* optionalDate =
+            ScalarType(ctx, NUdf::EDataSlot::Date, true);
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* boolType =
+            ScalarType(ctx, NUdf::EDataSlot::Bool);
+        const auto* optionalBool =
+            ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+        SetExactOutputType(ctx, *outerRead, {
+            {"outer.date", optionalDate},
+        });
+        SetExactOutputType(ctx, *innerRead, {
+            {"inner.date", optionalDate},
+            {"inner.week", optionalInt64},
+        });
+        SetExactOutputType(ctx, *scalarRead, {
+            {"scalar.week", optionalInt64},
+        });
+
+        const auto pos = TPositionHandle();
+        TOpRoot root(outerRead, pos, {"outer.date"});
+        const TInfoUnit scalarBinding("_rbo_scalar", true);
+        const TInfoUnit inBinding("_rbo_in", true);
+        root.PlanProps.Subplans.Add(
+            scalarBinding,
+            TSubplanEntry{
+                scalarRead,
+                {},
+                ESubplanType::EXPR,
+                scalarBinding,
+                {}});
+
+        auto nestedPredicate = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                TInfoUnit("inner.week"),
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps),
+            MakeColumnAccess(
+                scalarBinding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps));
+        AnnotateBinaryExpression(
+            nestedPredicate,
+            optionalInt64,
+            optionalInt64,
+            optionalBool);
+        auto nestedFilter = MakeIntrusive<TOpFilter>(
+            innerRead,
+            pos,
+            nestedPredicate);
+        SetExactOutputType(ctx, *nestedFilter, {
+            {"inner.date", optionalDate},
+            {"inner.week", optionalInt64},
+        });
+
+        auto outputDate = MakeColumnAccess(
+            TInfoUnit("inner.date"),
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(outputDate, optionalDate);
+        auto nestedProject = MakeIntrusive<TOpMap>(
+            nestedFilter,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("in.date"),
+                outputDate)});
+        SetExactOutputType(ctx, *nestedProject, {
+            {"inner.date", optionalDate},
+            {"inner.week", optionalInt64},
+            {"in.date", optionalDate},
+        });
+        root.PlanProps.Subplans.Add(
+            inBinding,
+            TSubplanEntry{
+                nestedProject,
+                {TInfoUnit("outer.date")},
+                ESubplanType::IN_SUBPLAN,
+                inBinding,
+                {}});
+
+        auto inValue = MakeColumnAccess(
+            inBinding,
+            pos,
+            &ctx.ExprCtx,
+            &root.PlanProps);
+        AnnotateExpression(inValue, boolType);
+        auto mainFilter = MakeIntrusive<TOpFilter>(
+            outerRead,
+            pos,
+            inValue);
+        SetExactOutputType(ctx, *mainFilter, {
+            {"outer.date", optionalDate},
+        });
+        root.SetInput(mainFilter);
+
+        const auto snapshot =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& plan = snapshot["plan"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            plan["subplans"].GetArraySafe().size(),
+            2);
+        const auto& scalarDescriptor =
+            FindSubplan(snapshot, "_rbo_scalar");
+        const auto& inDescriptor =
+            FindSubplan(snapshot, "_rbo_in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            scalarDescriptor["kind"].GetStringSafe(),
+            "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            inDescriptor["kind"].GetStringSafe(),
+            "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            scalarDescriptor["consumers"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            inDescriptor["consumers"].GetArraySafe().size(),
+            1);
+
+        const TString scalarRootId =
+            scalarDescriptor["root"].GetStringSafe();
+        const TString nestedConsumerId =
+            scalarDescriptor["consumers"][0].GetStringSafe();
+        const TString inRootId =
+            inDescriptor["root"].GetStringSafe();
+        const TString mainConsumerId =
+            inDescriptor["consumers"][0].GetStringSafe();
+        const auto& scalarRoot =
+            FindNodeById(snapshot, scalarRootId);
+        const auto& nestedConsumer =
+            FindNodeById(snapshot, nestedConsumerId);
+        const auto& inRoot =
+            FindNodeById(snapshot, inRootId);
+        const auto& mainConsumer =
+            FindNodeById(snapshot, mainConsumerId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            scalarRoot["op"].GetStringSafe(),
+            "scan");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nestedConsumer["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            EqualityColumns(nestedConsumer["predicate"]),
+            (std::pair<TString, TString>{
+                "inner.week",
+                "_rbo_scalar"}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            inRoot["op"].GetStringSafe(),
+            "project");
+        UNIT_ASSERT_VALUES_EQUAL(
+            inRoot["input"].GetStringSafe(),
+            nestedConsumerId);
+        UNIT_ASSERT_VALUES_EQUAL(
+            mainConsumer["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            mainConsumer["predicate"]["column"].GetStringSafe(),
+            "_rbo_in");
+        UNIT_ASSERT_VALUES_UNEQUAL(nestedConsumerId, mainConsumerId);
+    }
+
     Y_UNIT_TEST(ExportsNullableIntegralInOnlyAsPositiveFilterConjunct) {
         TInSubplanExportFixture fixture;
         const auto catalog = CaptureSemanticSnapshotCatalogV1(
@@ -16516,7 +16740,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             "cannot contain residual subplans");
     }
 
-    Y_UNIT_TEST(NestedScalarSubplanReferenceFailsClosed) {
+    Y_UNIT_TEST(NestedScalarInsideScalarFailsClosed) {
         TExportTestContext ctx;
         const auto& table = AddTable(
             ctx,
@@ -16579,7 +16803,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "contains a nested subplan reference");
+            "only an uncorrelated scalar binding may be consumed "
+            "inside an IN subplan");
     }
 
     Y_UNIT_TEST(ScalarSubplanRootTopologyFailsClosed) {

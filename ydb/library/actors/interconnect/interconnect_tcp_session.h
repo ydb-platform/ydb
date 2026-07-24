@@ -602,6 +602,7 @@ namespace NActors {
                 hFunc(TEvUringRegisterFailed, Handle)
                 hFunc(TEvUringWriteComplete, Handle)
                 hFunc(TEvUringSendZcNotif, Handle)
+                hFunc(NInterconnect::NRdma::TEvRdmaIoDone, Handle)
                 cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
@@ -639,8 +640,10 @@ namespace NActors {
         void Handle(TEvUringRegisterFailed::TPtr& ev);
         void Handle(TEvUringWriteComplete::TPtr& ev);
         void Handle(TEvUringSendZcNotif::TPtr& ev);
+        void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
         void WriteData();
         void WriteDataUring();
+        void WriteDataRdma();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
@@ -785,6 +788,13 @@ namespace NActors {
         std::deque<ui64> XdcZcNotifQueue; // FIFO of in-flight zc send sizes awaiting NOTIF
         void DropFrontXdc(size_t bytes);
         void FlushXdcZcDrop();
+
+        struct TRdmaWriteInFlight {
+            size_t Bytes = 0;
+            bool IsOutOfBand = false;
+        };
+        std::optional<TRdmaWriteInFlight> RdmaWriteInFlight;
+
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
@@ -859,6 +869,7 @@ namespace NActors {
             TInterconnectProxyTCP* const proxy,
             NInterconnect::NRdma::TQueuePair::TPtr rdmaQp);
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
 
     private:
 

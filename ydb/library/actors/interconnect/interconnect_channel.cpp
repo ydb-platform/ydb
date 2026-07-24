@@ -290,12 +290,28 @@ namespace NActors {
 
     template<bool External>
     bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
-        auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
+        auto addChunk = [&](const void *data, size_t len, bool allowCopy, const NInterconnect::NRdma::TMemRegion* memRegion = nullptr) {
             event.UpdateChecksum(data, len);
-            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
-                task.Write<External>(data, len);
+            if constexpr (!External) {
+                if (task.UsePreallocatedInternalStream) {
+                    if (memRegion) {
+                        task.AppendRdma(data, len, memRegion, disableChecksums);
+                    } else if (allowCopy) {
+                        task.Write<false>(data, len);
+                    } else {
+                        task.Append<false>(data, len, &event.ZcTransferId, disableChecksums);
+                    }
+                } else if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                    task.Write<false>(data, len);
+                } else {
+                    task.Append<false>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             } else {
-                task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                    task.Write<true>(data, len);
+                } else {
+                    task.Append<true>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -326,7 +342,13 @@ namespace NActors {
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
-                addChunk(obuf, numb, true);
+                NInterconnect::NRdma::TMemRegionSlice memRegion;
+                if constexpr (!External) {
+                    if (task.UsePreallocatedInternalStream) {
+                        memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(Iter.GetChunk());
+                    }
+                }
+                addChunk(obuf, numb, true, memRegion.Empty() ? nullptr : memRegion.GetMemRegion());
                 Iter += numb;
             }
             complete = !Iter.Valid();

@@ -13,6 +13,8 @@
 
 #include <ydb/library/testlib/unittest_gtest_macro_subst.h>
 
+#include <util/string/cast.h>
+
 using namespace NActors;
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
@@ -352,6 +354,24 @@ static TString FormatLastRdmaStatus(const TString& status) {
     return status.empty() ? TString("<no session>") : status;
 }
 
+static ui64 GetSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+    const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+    return FromString<ui64>(ExtractPattern(cluster, me, peer, start, "<"));
+}
+
+static ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name,
+        TDuration timeout = TDuration::Seconds(10)) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        try {
+            return GetSessionCounter(cluster, me, peer, name);
+        } catch (const TPatternNotFound&) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+    return GetSessionCounter(cluster, me, peer, name);
+}
+
 struct TCounterSumConsumer : NMonitoring::ICountableConsumer {
     const TString CounterName;
     ui64 Sum = 0;
@@ -463,6 +483,16 @@ static void WaitForInterconnectConnection(TTestICCluster& cluster, ui32 fromNode
 
     const bool connected = future.Wait(TDuration::Seconds(30)) && future.GetValueSync();
     UNIT_ASSERT_C(connected, "failed to establish interconnect session from node " << fromNode << " to node " << toNode);
+}
+
+static TTestICCluster::Flags GetRdmaCqModeFlags(NInterconnect::NRdma::ECqMode cqMode) {
+    return cqMode == NInterconnect::NRdma::ECqMode::POLLING
+        ? TTestICCluster::RDMA_POLLING_CQ
+        : TTestICCluster::EMPTY;
+}
+
+static void EnableRdmaSendReceive(ui32, TInterconnectSettings& settings) {
+    settings.EnableRdmaSendReceive = true;
 }
 
 TEST_F(XdcRdmaTest, SerializeToRope) {
@@ -1330,6 +1360,37 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
             TDuration::Seconds(10), lastWatchdogPending),
         "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
+}
+
+TEST_P(XdcRdmaTestCqMode, SendReceiveMainChannelTraffic) {
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
+
+    ui32 index = 0;
+    auto receiverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), TStringBuilder{} << "send receive " << index);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 0u);
+        ++index;
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+
+    constexpr ui32 numEvents = 16;
+    for (ui32 i = 0; i < numEvents; ++i) {
+        auto ev = std::make_unique<TEvTestSerialization>();
+        ev->Record.SetBlobID(i);
+        ev->Record.SetBuffer(TStringBuilder{} << "send receive " << i);
+        cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+    }
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(numEvents, 20));
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
 }
 
 TEST_P(XdcRdmaTestCqMode, SendMix) {

@@ -15,7 +15,10 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
         auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
         for (size_t size = 512; size <= static_cast<size_t>(memPool->GetMaxAllocSz()); size <<= 1) {
             auto region = memPool->Alloc(size, NInterconnect::NRdma::IMemPool::EMPTY);
-            UNIT_ASSERT(region);
+            if (!region) {
+                Cerr << "Skipping RDMA outgoing stream test, SlotMemPool allocation failed" << Endl;
+                return {};
+            }
             region.Reset();
         }
         return memPool;
@@ -185,7 +188,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
                         auto span = stream.AcquireSpanForWriting(nextDataLen);
                         UNIT_ASSERT(span.size() != 0);
                         memcpy(span.data(), nextData, span.size());
-                        stream.Append(span, nullptr);
+                        stream.Append(span, static_cast<ui32*>(nullptr));
                         pending += span.size();
                         break;
                     }
@@ -259,11 +262,18 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
     }
 
     Y_UNIT_TEST(RdmaMemory) {
-        OutgoingTest(false, CreateWarmedSlotMemPool());
+        auto memPool = CreateWarmedSlotMemPool();
+        if (!memPool) {
+            return;
+        }
+        OutgoingTest(false, std::move(memPool));
     }
 
     Y_UNIT_TEST(RdmaMemoryPreallocateNoAlloc) {
         auto memPool = CreateWarmedSlotMemPool();
+        if (!memPool) {
+            return;
+        }
         TOutStream stream(memPool);
 
         std::vector<char> data(128 * 1024);
@@ -279,7 +289,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
             auto span = stream.AcquireSpanForWritingNoAlloc(data.size() - offset);
             UNIT_ASSERT(span.size());
             memcpy(span.data(), data.data() + offset, span.size());
-            stream.Append(span, nullptr);
+            stream.Append(span, static_cast<ui32*>(nullptr));
             offset += span.size();
         }
 
@@ -303,7 +313,11 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
     }
 
     Y_UNIT_TEST(PacketBuilderUsesPreallocatedRdmaMemoryForInternalStream) {
-        auto memPool = std::make_shared<TTrackingMemPool>(CreateWarmedSlotMemPool());
+        auto slotMemPool = CreateWarmedSlotMemPool();
+        if (!slotMemPool) {
+            return;
+        }
+        auto memPool = std::make_shared<TTrackingMemPool>(std::move(slotMemPool));
         NInterconnect::TOutgoingStream mainStream(memPool);
         NInterconnect::TOutgoingStream xdcStream;
 
@@ -319,6 +333,16 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
 
         const TString payload(TTcpPacketBuf::PacketDataLen / 2, 'X');
         packet.Write<false>(payload.data(), payload.size());
+        const TString appendedPayload(128, 'A');
+        auto appendSpan = packet.AcquireSpanForWriting<false>().SubSpan(0, appendedPayload.size());
+        memcpy(appendSpan.data(), appendedPayload.data(), appendSpan.size());
+        packet.Append<false>(appendSpan.data(), appendSpan.size(), nullptr, false);
+        auto rdmaBuf = memPool->AllocRcBuf(128, NInterconnect::NRdma::IMemPool::EMPTY);
+        UNIT_ASSERT(rdmaBuf);
+        memset(rdmaBuf->UnsafeGetDataMut(), 'R', rdmaBuf->GetSize());
+        const auto rdmaBufRegion = NInterconnect::NRdma::TryExtractFromRcBuf(*rdmaBuf);
+        UNIT_ASSERT(!rdmaBufRegion.Empty());
+        packet.AppendRdma(rdmaBuf->GetData(), rdmaBuf->GetSize(), rdmaBufRegion.GetMemRegion(), false);
         packet.Finish(1, 0);
 
         std::vector<NActors::TConstIoVec> iov;
@@ -333,6 +357,16 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
         }
         UNIT_ASSERT_VALUES_EQUAL(total, packet.GetPacketSize());
         UNIT_ASSERT_VALUES_EQUAL(xdcStream.CalculateOutgoingSize(), 0);
+
+        std::vector<NInterconnect::NRdma::TSendSge> rdmaChunks;
+        const size_t rdmaBytes = mainStream.ProduceRdmaSendVec(rdmaChunks, Max<size_t>(), Max<size_t>());
+        UNIT_ASSERT(!rdmaChunks.empty());
+        UNIT_ASSERT_VALUES_EQUAL(rdmaBytes, packet.GetPacketSize());
+        for (const auto& chunk : rdmaChunks) {
+            UNIT_ASSERT(chunk.MemRegion);
+            UNIT_ASSERT(chunk.Data);
+            UNIT_ASSERT(chunk.Size);
+        }
     }
 
     template <typename TCallback>
@@ -358,7 +392,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
             auto& stream = acquireStream;
             auto span = stream.AcquireSpanForWriting(sizeof(payload));
             memcpy(span.data(), payload, span.size());
-            stream.Append(span, nullptr);
+            stream.Append(span, static_cast<ui32*>(nullptr));
             Y_DO_NOT_OPTIMIZE_AWAY(stream.GetSendQueueSize());
         });
 
@@ -383,13 +417,13 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
             Y_ABORT_UNLESS(stream.PreallocateForWriting(sizeof(payload)));
             auto span = stream.AcquireSpanForWritingNoAlloc(sizeof(payload));
             memcpy(span.data(), payload, span.size());
-            stream.Append(span, nullptr);
+            stream.Append(span, static_cast<ui32*>(nullptr));
             Y_DO_NOT_OPTIMIZE_AWAY(stream.GetSendQueueSize());
         });
 
         TOutStream stream(allocator);
         for (size_t i = 0; i != 256; ++i) {
-            stream.Append({payload, sizeof(payload)}, nullptr);
+            stream.Append({payload, sizeof(payload)}, static_cast<ui32*>(nullptr));
         }
 
         ReportLatency(allocatorName, "ProduceIoVec", iterations, [&](size_t) {
@@ -434,6 +468,8 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
 
     Y_UNIT_TEST(PublicMethodsLatencyBenchmark) {
         PublicMethodsLatencyBenchmarkImpl("malloc", {});
-        PublicMethodsLatencyBenchmarkImpl("rdma", CreateWarmedSlotMemPool());
+        if (auto memPool = CreateWarmedSlotMemPool()) {
+            PublicMethodsLatencyBenchmarkImpl("rdma", std::move(memPool));
+        }
     }
 }

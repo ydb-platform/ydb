@@ -215,6 +215,16 @@ struct TTcpPacketOutTask : TNonCopyable {
         }
     }
 
+    void AppendRdma(const void *buffer, size_t len, const NInterconnect::NRdma::TMemRegion* memRegion,
+            bool disableChecksum) {
+        Y_DEBUG_ABORT_UNLESS(len <= GetInternalFreeAmount());
+        InternalSize += len;
+        OutgoingStream.Append({static_cast<const char*>(buffer), len}, memRegion);
+        if (!disableChecksum) {
+            ProcessChecksum<false>(buffer, len);
+        }
+    }
+
     // Write some data with copying.
     template<bool External>
     void Write(const void *buffer, size_t len) {
@@ -303,7 +313,7 @@ private:
         while (len) {
             auto span = stream.AcquireSpanForWritingNoAlloc(len);
             Y_ABORT_UNLESS(span.size());
-            stream.Append({span.data(), span.size()}, nullptr);
+            stream.Append({span.data(), span.size()}, static_cast<ui32*>(nullptr));
             bookmark.push_back(span);
             len -= span.size();
         }
@@ -320,7 +330,7 @@ private:
             auto out = stream.AcquireSpanForWritingNoAlloc(in.size());
             Y_ABORT_UNLESS(out.size());
             memcpy(out.data(), in.data(), out.size());
-            stream.Append({out.data(), out.size()}, nullptr);
+            stream.Append({out.data(), out.size()}, static_cast<ui32*>(nullptr));
             in = in.SubSpan(out.size(), Max<size_t>());
         }
     }

@@ -628,7 +628,23 @@ namespace NActors {
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
     }
 
-    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr&) {
+    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
+        if (!ev->Get()->IsSuccess()) {
+            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma RECEIVE failed, err source: %s, code %d",
+                ev->Get()->GetErrSource().data(), ev->Get()->GetErrCode());
+            throw TExDestroySession({TDisconnectReason::RdmaError()});
+        }
+
+        auto& received = std::get<NInterconnect::NRdma::TEvRdmaIoReceiveDone::TSuccess>(ev->Get()->Record).Buf;
+        const size_t bytes = received.GetSize();
+        if (bytes) {
+            IncomingData.Insert(IncomingData.End(), std::move(received));
+            Metrics->AddTotalBytesRead(bytes);
+            BytesReadFromSocket += bytes;
+            LastReceiveTimestamp = TActivationContext::Monotonic();
+        }
+
+        ReceiveData();
     }
 
     void TInputSessionTCP::ReceiveData() {

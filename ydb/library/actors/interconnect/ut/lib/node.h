@@ -12,6 +12,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/packet.h>
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
@@ -103,6 +104,7 @@ public:
         #if !defined(_msan_enabled_)
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+            setup.RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(common->RdmaMemPool);
         }
         #else
             Y_UNUSED(withRdma);
@@ -143,8 +145,14 @@ public:
             setup.LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL),
                 TMailboxType::ReadAsFilled, 0));
         }
+        const int rdmaReceiveBufSize = sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen;
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{-1, 1024, 0, 0}, rdmaCqMode, nullptr),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{
+                    -1,
+                    1024,
+                    common->Settings.EnableRdmaSendReceive ? 1024 : 0,
+                    common->Settings.EnableRdmaSendReceive ? rdmaReceiveBufSize : 0,
+                }, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

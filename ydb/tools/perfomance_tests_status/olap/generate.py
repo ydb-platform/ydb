@@ -497,6 +497,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     expected = expected_suites(by_br_db_waves)
 
     inbox: list[dict] = []
+    ok_slices: list[dict] = []
     slice_status: dict[tuple[str, str, str], dict] = {}
 
     # Per-slice Now classification (focus scope)
@@ -521,6 +522,11 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             item["issue"] = info["kind"]  # failing | slower | both
             item["history"] = history_view(sorted(pts, key=lambda p: p["ts"]))
             inbox.append(item)
+        elif info["status"] == "ok":
+            item = dict(info)
+            item["issue"] = "ok"
+            item["history"] = history_view(sorted(pts, key=lambda p: p["ts"]))
+            ok_slices.append(item)
 
     # Missing / in_progress / stale from waves (per branch × db)
     for (branch, db), waves in by_br_db_waves.items():
@@ -749,6 +755,11 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             br_picked.extend(sorted(by_kind.get(kind, []), key=inbox_key)[:lim])
         picked.extend(sorted(br_picked, key=inbox_key)[:INBOX_PER_BRANCH])
     inbox = sorted(picked, key=inbox_key)[: INBOX_LIMIT * max(1, len(branches))]
+    # OK catalog for drill-down (not in hot inbox by default)
+    ok_slices = sorted(
+        ok_slices,
+        key=lambda r: (r.get("branch") or "", r.get("db") or "", r.get("suite") or ""),
+    )
 
     def wave_meta_entry(br: str, db: str, last: dict, exp_n: int) -> dict:
         max_ts = last["max_ts"]
@@ -846,6 +857,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "waves_by_db": waves_by_db,
         "last_activity": last_activity,
         "inbox": inbox,
+        "ok": ok_slices,
         "rules": {
             "now": f"last {NOW_RUNS} runs",
             "baseline": f"previous {BASELINE_RUNS} runs",
@@ -882,8 +894,13 @@ def _suite_reports_by_day(item: dict) -> dict[str, str]:
     return out
 
 
-def _query_history(rows: list[dict], report_by_day: dict[str, str] | None = None) -> dict:
-    tail = rows[-HISTORY_MAX_POINTS:]
+def _query_history(
+    rows: list[dict],
+    report_by_day: dict[str, str] | None = None,
+    *,
+    max_points: int | None = None,
+) -> dict:
+    tail = rows[-(max_points or HISTORY_MAX_POINTS) :]
     report_by_day = report_by_day or {}
     return {
         "labels": [r["day"] for r in tail],
@@ -1025,6 +1042,37 @@ def _sync_slow_query_lists(item: dict, slow_qs: list[dict] | None = None) -> Non
     }
 
 
+def _query_metrics(rows: list[dict]) -> dict | None:
+    if len(rows) < 2:
+        return None
+    now = rows[-NOW_RUNS:]
+    base = rows[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or rows[: max(1, len(rows) // 2)]
+    ydb_now = median([r["ydb"] for r in now])
+    ydb_base = median([r["ydb"] for r in base])
+    ydb_pct = pct(ydb_base, ydb_now)
+    fr_now = avg([r["fr"] for r in now]) or 0.0
+    fr_base = avg([r["fr"] for r in base]) or 0.0
+    is_fail = fr_now >= FAIL_HOT and (fr_now >= fr_base + FAIL_RISE or fr_now >= FAIL_BROKEN)
+    is_slow = ydb_pct is not None and ydb_pct >= DUR_TOL * 100
+    kind = "ok"
+    if is_fail and is_slow:
+        kind = "both"
+    elif is_fail:
+        kind = "fail"
+    elif is_slow:
+        kind = "slow"
+    return {
+        "ydb_pct": ydb_pct,
+        "ydb_base": ydb_base,
+        "ydb_now": ydb_now,
+        "fail_rate_late": fr_now,
+        "fail_rate_base": fr_base,
+        "kind": kind,
+        "is_fail": is_fail,
+        "is_slow": is_slow,
+    }
+
+
 def attach_now_query_regressions(data: dict, daily_path: Path) -> int:
     """Now-based per-query slow/fail for hot suites from daily series (last 3 days vs prev 7)."""
     suite_keys = {
@@ -1045,36 +1093,93 @@ def attach_now_query_regressions(data: dict, daily_path: Path) -> int:
         report_by_day = _suite_reports_by_day(item)
         slow_qs: list[dict] = []
         for test, rows in by_suite.get(key, []):
-            if len(rows) < 2:
-                continue
-            now = rows[-NOW_RUNS:]
-            base = rows[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or rows[: max(1, len(rows) // 2)]
-            ydb_now = median([r["ydb"] for r in now])
-            ydb_base = median([r["ydb"] for r in base])
-            ydb_pct = pct(ydb_base, ydb_now)
-            fr_now = avg([r["fr"] for r in now]) or 0.0
-            fr_base = avg([r["fr"] for r in base]) or 0.0
-            is_fail = fr_now >= FAIL_HOT and (fr_now >= fr_base + FAIL_RISE or fr_now >= FAIL_BROKEN)
-            is_slow = ydb_pct is not None and ydb_pct >= DUR_TOL * 100
-            if not is_fail and not is_slow:
+            m = _query_metrics(rows)
+            if not m or (not m["is_fail"] and not m["is_slow"]):
                 continue
             q = {
                 "test": test,
-                "kind": "fail" if is_fail and not is_slow else ("both" if is_fail else "slow"),
-                "ydb_pct": ydb_pct,
-                "ydb_base": ydb_base,
-                "ydb_now": ydb_now,
-                "fail_rate_late": fr_now,
-                "fail_rate_base": fr_base,
+                "kind": m["kind"],
+                "ydb_pct": m["ydb_pct"],
+                "ydb_base": m["ydb_base"],
+                "ydb_now": m["ydb_now"],
+                "fail_rate_late": m["fail_rate_late"],
+                "fail_rate_base": m["fail_rate_base"],
                 "history": _query_history(rows, report_by_day),
             }
-            if is_slow:
+            if m["is_slow"]:
                 n_slow += 1
                 slow_qs.append(q)
             _merge_query(item, q)
 
         _sync_slow_query_lists(item, slow_qs)
     return n_slow
+
+
+def attach_suite_query_catalogs(data: dict, daily_path: Path) -> tuple[int, int]:
+    """Full per-query catalog (+ history) for OK and hot suites (incl. green queries)."""
+    hot = [
+        r
+        for r in (data.get("inbox") or [])
+        if r.get("issue") in ("failing", "slower", "both")
+    ]
+    ok = list(data.get("ok") or [])
+    items = hot + ok
+    suite_keys = {(r["branch"], r["db"], r["suite"]) for r in items}
+    series = load_daily_points(daily_path, suite_keys)
+    if not series:
+        return 0, 0
+    by_suite: dict[tuple[str, str, str], list[tuple[str, list[dict]]]] = defaultdict(list)
+    for (branch, db, suite, test), rows in series.items():
+        by_suite[(branch, db, suite)].append((test, rows))
+
+    n_hot_q = 0
+    n_ok_q = 0
+    hot_keys = {(r["branch"], r["db"], r["suite"]) for r in hot}
+    for item in items:
+        key = (item["branch"], item["db"], item["suite"])
+        report_by_day = _suite_reports_by_day(item)
+        qs: list[dict] = []
+        for test, rows in sorted(by_suite.get(key, []), key=lambda t: t[0]):
+            if len(rows) < 1:
+                continue
+            m = _query_metrics(rows) or {
+                "ydb_pct": None,
+                "ydb_base": None,
+                "ydb_now": rows[-1].get("ydb"),
+                "fail_rate_late": rows[-1].get("fr") or 0.0,
+                "fail_rate_base": None,
+                "kind": "ok",
+            }
+            qs.append(
+                {
+                    "test": test,
+                    "kind": m["kind"],
+                    "ydb_pct": m.get("ydb_pct"),
+                    "ydb_base": m.get("ydb_base"),
+                    "ydb_now": m.get("ydb_now"),
+                    "fail_rate_late": m.get("fail_rate_late"),
+                    "fail_rate_base": m.get("fail_rate_base"),
+                    # slightly shorter history to keep HTML size reasonable
+                    "history": _query_history(rows, report_by_day, max_points=28),
+                }
+            )
+        item["queries"] = qs
+        for q in qs:
+            if q.get("kind") in ("fail", "slow", "both"):
+                _merge_query(item, q)
+        _sync_slow_query_lists(
+            item,
+            [q for q in qs if q.get("kind") in ("slow", "both")],
+        )
+        # keep full catalog in query_map (sync only keeps slow/fail)
+        item["query_map"] = {
+            q["test"]: q for q in qs if q.get("test") and q.get("history")
+        }
+        if key in hot_keys:
+            n_hot_q += len(qs)
+        else:
+            n_ok_q += len(qs)
+    return n_hot_q, n_ok_q
 
 
 def render_html(data: dict, output: Path) -> None:
@@ -1152,6 +1257,8 @@ def main():
     if daily_path.exists():
         n_slow = attach_now_query_regressions(data, daily_path)
         print(f"now slow-queries from {daily_path}: {n_slow}")
+        n_hot_q, n_ok_q = attach_suite_query_catalogs(data, daily_path)
+        print(f"suite query catalogs from {daily_path}: hot={n_hot_q} ok={n_ok_q}")
     else:
         print(f"no daily dump at {daily_path} (optional — per-query slowdowns limited)")
 

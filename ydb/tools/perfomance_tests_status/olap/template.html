@@ -73,7 +73,7 @@
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
   }
-  .cell.ok { background: #dafbe1; color: var(--ok); }
+  .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
   .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
   .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
@@ -142,6 +142,7 @@
   .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .pill.slow { background: #fff8c5; color: var(--warn); }
   .pill.fail { background: #ffebe9; color: var(--bad); }
+  .pill.qok { background: #dafbe1; color: var(--ok); }
   button.pill {
     border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600;
     padding: 2px 7px; border-radius: 999px;
@@ -205,11 +206,12 @@
     <div id="heatmap"></div>
   </div>
 
-  <h2>Problem inbox</h2>
+  <h2>Inbox</h2>
   <div class="filters">
     <label>Issue
       <select id="fIssue">
         <option value="">all hot</option>
+        <option value="ok">ok</option>
         <option value="missing">missing</option>
         <option value="in_progress">in progress</option>
         <option value="failing">failing</option>
@@ -509,12 +511,13 @@ function renderHeatmap() {
   }
   const root = document.getElementById('heatmap');
   root.innerHTML = html || '<div class="empty">нет данных</div>';
-  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress').forEach(el => {
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok').forEach(el => {
     el.addEventListener('click', () => {
       if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
       document.getElementById('fDb').value = el.dataset.db || '';
       document.getElementById('fFam').value = el.dataset.fam || '';
-      document.getElementById('fIssue').value = '';
+      // ok cell → show ok catalog; hot cells → all hot under db×family
+      document.getElementById('fIssue').value = el.classList.contains('ok') ? 'ok' : '';
       renderAll();
       document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -525,14 +528,20 @@ function uiBranches() {
   return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
 }
 
+function inboxPool(issue) {
+  if (issue === 'ok') return DATA.ok || [];
+  return DATA.inbox || [];
+}
+
 function filteredInbox() {
   const issue = document.getElementById('fIssue').value;
   const db = document.getElementById('fDb').value;
   const fam = document.getElementById('fFam').value;
   const br = selectedBranch();
-  return (DATA.inbox || []).filter(r => {
+  return inboxPool(issue).filter(r => {
     if (br && r.branch !== br) return false;
-    if (issue && r.issue !== issue) return false;
+    if (issue && issue !== 'ok' && r.issue !== issue) return false;
+    if (issue === 'ok' && r.issue !== 'ok') return false;
     if (db && r.db !== db) return false;
     if (fam && r.family !== fam) return false;
     if (!itemInWindow(r)) return false;
@@ -622,7 +631,7 @@ function mountHistory(item, id) {
 
 function findQuery(item, testName) {
   if (item.query_map && item.query_map[testName]) return item.query_map[testName];
-  const all = [...(item.slow_queries || []), ...(item.bad_queries || [])];
+  const all = [...(item.queries || []), ...(item.slow_queries || []), ...(item.bad_queries || [])];
   return all.find(q => q.test === testName) || null;
 }
 
@@ -835,16 +844,42 @@ function diveHtml(r, id) {
 
   const slow = listedSlow(r);
   const fails = listedFail(r);
+  const catalog = (r.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
+  const qPill = (q, cls) =>
+    `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
+      q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : '')
+    }${q.history ? '' : ' · no hist'}</button>`;
   const slowHtml = slow.length
-    ? slow.map(q => `<button type="button" class="pill slow" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}${q.history ? '' : ' · no hist'}</button>`).join('')
+    ? slow.map(q => qPill(q, 'slow')).join('')
     : '<span class="muted">нет (или нет daily dump)</span>';
   const failHtml = fails.length
-    ? fails.map(q => `<button type="button" class="pill fail" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${q.history ? '' : ' · no hist'}</button>`).join('')
+    ? fails.map(q => qPill(q, 'fail')).join('')
     : '<span class="muted">—</span>';
+  const catalogHtml = catalog.length
+    ? catalog.map(q => {
+        const cls = (q.kind === 'fail' || q.kind === 'both') ? 'fail'
+          : (q.kind === 'slow' ? 'slow' : 'qok');
+        return qPill(q, cls);
+      }).join('')
+    : '';
 
   const report = r.report
     ? `<a href="${esc(r.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">latest report</a>`
     : '—';
+
+  const queryBlock = catalog.length
+    ? `<div>
+        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история · зелёный=ok · жёлтый=slow · красный=fail</div>
+        <div class="qlist">${catalogHtml}</div>
+      </div>`
+    : `<div>
+        <div class="muted"><b>Slow queries</b> (клик = история запроса · last 3d vs prev 7d)</div>
+        <div class="qlist">${slowHtml}</div>
+      </div>
+      <div>
+        <div class="muted"><b>Failing queries</b> (клик = история)</div>
+        <div class="qlist">${failHtml}</div>
+      </div>`;
 
   return `<div class="dive">
     <div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>
@@ -852,14 +887,7 @@ function diveHtml(r, id) {
       <div class="muted" style="margin-bottom:6px"><b>Last runs</b></div>
       <div class="runs">${runs}</div>
     </div>
-    <div>
-      <div class="muted"><b>Slow queries</b> (клик = история запроса · last 3d vs prev 7d)</div>
-      <div class="qlist">${slowHtml}</div>
-    </div>
-    <div>
-      <div class="muted"><b>Failing queries</b> (клик = история)</div>
-      <div class="qlist">${failHtml}</div>
-    </div>
+    ${queryBlock}
     <div id="${id}_qhist"></div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
@@ -873,7 +901,10 @@ function renderInbox() {
   const rows = filteredInbox();
   const root = document.getElementById('inbox');
   if (!rows.length) {
-    root.innerHTML = '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
+    const issue = document.getElementById('fIssue').value;
+    root.innerHTML = issue === 'ok'
+      ? '<div class="empty">Нет ok-slice под фильтры.</div>'
+      : '<div class="empty">Нет hot-проблем под фильтры — good. (Issue → ok чтобы смотреть зелёные)</div>';
     return;
   }
   const body = rows.map((r, idx) => {
@@ -1011,7 +1042,7 @@ function setupFilters() {
   setupDateBar();
   ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
-      if (id === 'fBranch') refreshDbFilter();
+      if (id === 'fBranch' || id === 'fIssue') refreshDbFilter();
       renderAll();
     });
   });
@@ -1020,9 +1051,11 @@ function setupFilters() {
 function refreshDbFilter() {
   const br = selectedBranch();
   const keep = document.getElementById('fDb').value;
+  const issue = document.getElementById('fIssue')?.value || '';
+  const pool = inboxPool(issue);
   const dbs = br
     ? dbsForBranch(br)
-    : [...new Set((DATA.inbox || []).map(r => r.db).filter(Boolean))].sort();
+    : [...new Set(pool.map(r => r.db).filter(Boolean))].sort();
   document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
     dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
   if (dbs.includes(keep)) document.getElementById('fDb').value = keep;

@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/system/fstat.h>
 
 #include <thread>
 
@@ -17,6 +18,10 @@ namespace {
 using namespace NYdb;
 using namespace NYdb::NTopic;
 
+struct TConfirmSessionInfo {
+    std::optional<uint64_t> Offset;
+};
+
 class TFileTopicReadSession final : public IReadSession {
     constexpr static TDuration FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
@@ -25,12 +30,13 @@ class TFileTopicReadSession final : public IReadSession {
     using TMessage = TReadSessionEvent::TDataReceivedEvent::TMessage;
 
 public:
-    TFileTopicReadSession(TFile file, TPartitionSession::TPtr session, const TString& producerId, bool cancelOnFileFinish)
+    TFileTopicReadSession(TFile file, TPartitionSession::TPtr session, const TString& producerId, bool cancelOnFileFinish, NThreading::TFuture<TConfirmSessionInfo> startFuture)
         : File(std::move(file))
         , Session(std::move(session))
         , ProducerId(producerId)
         , FilePoller([this]() { PollFileForChanges(); })
         , CancelOnFileFinish(cancelOnFileFinish)
+        , StartFuture(startFuture)
     {
         Pool.Start(1);
     }
@@ -114,19 +120,41 @@ private:
 
     void PollFileForChanges() {
         TFileInput fi(File);
+        bool seekable = TFileStat(File).IsFile();
+        EventsQ.Push(TReadSessionEvent::TStartPartitionSessionEvent(Session, /*committedOffset*/0, /*endOffset*/(seekable ? File.GetLength() : 0)));
+        while (!StartFuture.IsReady()) {
+            StartFuture.Wait(FILE_POLL_PERIOD);
+            if (EventsQ.IsStopped()) {
+                return;
+            }
+        }
+        auto start = StartFuture.GetValueSync();
+        if (start.Offset && seekable) {
+            auto target = *start.Offset;
+            while (MsgOffset < target) {
+                auto skipped = fi.Skip(target - MsgOffset);
+                if (skipped == 0) {
+                    break;
+                }
+                MsgOffset += skipped;
+            }
+        }
         while (!EventsQ.IsStopped()) {
             TString rawMsg;
             TVector<TMessage> msgs;
             size_t size = 0;
             ui64 maxBatchRowSize = 100;
 
-            while (fi.ReadLine(rawMsg)) {
+            size_t read;
+            while ((read = fi.ReadLine(rawMsg))) {
+                MsgOffset += read - 1;
                 msgs.emplace_back(MakeNextMessage(rawMsg));
-                MsgOffset++;
+                MsgOffset ++;
+                SeqNo ++;
+                size += rawMsg.size();
                 if (!maxBatchRowSize--) {
                     break;
                 }
-                size += rawMsg.size();
             }
 
             if (!msgs.empty()) {
@@ -157,6 +185,7 @@ private:
     TThreadPool Pool;
     size_t MsgOffset = 0;
     ui64 SeqNo = 0;
+    NThreading::TFuture<TConfirmSessionInfo> StartFuture;
 };
 
 class TFileTopicWriteSession final : public IWriteSession, private TContinuationTokenIssuer {
@@ -330,10 +359,18 @@ private:
 };
 
 struct TDummyPartitionSession final : public TPartitionSessionControl {
-    TDummyPartitionSession(ui64 sessionId, const TString& topicPath, ui64 partId) {
+    TDummyPartitionSession(ui64 sessionId, const TString& topicPath, ui64 partId, NThreading::TPromise<TConfirmSessionInfo> promise)
+    : Promise(std::move(promise))
+    {
         PartitionSessionId = sessionId;
         TopicPath = topicPath;
         PartitionId = partId;
+    }
+
+    ~TDummyPartitionSession() override {
+        if (!Promise.IsReady()) {
+            Promise.SetException("Session destroyed");
+        }
     }
 
     void RequestStatus() override {
@@ -342,8 +379,10 @@ struct TDummyPartitionSession final : public TPartitionSessionControl {
     void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override {
     }
 
-    void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
-        // TODO seek to offset
+    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
+        Promise.SetValue(TConfirmSessionInfo {
+            .Offset = readOffset
+        });
     }
 
     void ConfirmDestroy() override {
@@ -351,6 +390,9 @@ struct TDummyPartitionSession final : public TPartitionSessionControl {
 
     void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override {
     }
+
+private:
+    NThreading::TPromise<TConfirmSessionInfo> Promise;
 };
 
 class TFileTopicClient final : public ITopicClient {
@@ -424,12 +466,14 @@ public:
         } else if (!fsPath.Exists()) {
             filePath = TStringBuilder() << *filePath << "_" << partitionId;
         }
+        auto promise = NThreading::NewPromise<TConfirmSessionInfo>();
 
         return std::make_shared<TFileTopicReadSession>(
             TFile(*filePath, EOpenMode::TEnum::RdOnly),
-            MakeIntrusive<TDummyPartitionSession>(static_cast<ui64>(0), TString(topicPath), partitionId),
+            MakeIntrusive<TDummyPartitionSession>(static_cast<ui64>(0), TString(topicPath), partitionId, promise),
             "",
-            topicsIt->second.CancelOnFileFinish
+            topicsIt->second.CancelOnFileFinish,
+            promise.GetFuture()
         );
     }
 
@@ -445,7 +489,7 @@ public:
         const auto& filePath = topicsIt->second.Path;
         Y_ENSURE(filePath);
 
-        return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));
+        return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::WrOnly | EOpenMode::TEnum::ForAppend));
     }
 
     TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset, const TCommitOffsetSettings& settings) final {

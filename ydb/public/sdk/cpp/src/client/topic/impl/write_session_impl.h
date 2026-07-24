@@ -332,6 +332,12 @@ private:
 
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
 
+    struct TDeferredInFlightWrite {
+        std::shared_ptr<TDeferredPublicationAckState> AckState;
+        uint64_t IntPublicationId = 0;
+        std::optional<std::string> ExtPublicationId;
+    };
+
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
 
 public:
@@ -515,12 +521,6 @@ private:
     std::optional<uint64_t> DirectWriteToPartitionId;
 protected:
     uint64_t MessagesAcquired = 0;
-
-    struct TDeferredInFlightWrite {
-        std::shared_ptr<TDeferredPublicationAckState> AckState;
-        uint64_t IntPublicationId = 0;
-        std::optional<std::string> ExtPublicationId;
-    };
 
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId

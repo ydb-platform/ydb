@@ -2157,6 +2157,145 @@ NJson::TJsonValue ExportMapExpression(
     return columns.back()["expression"];
 }
 
+enum class EDateUnwrapShape {
+    ExactSafeCast,
+    ExactJust,
+    SafeCastNonzero,
+    JustNonzero,
+    ConvertFallback,
+    WrongRootType,
+    WrongCoalesceType,
+    WrongMemberType,
+    WrongSafeCastSourceType,
+    WrongSafeCastTargetType,
+    ReversedCoalesce,
+    InvisibleMember,
+    StringUnwrap,
+    UnsafeRoot,
+    UnsafeSubtree,
+};
+
+TExprNode::TPtr TypedDateUnwrapCoalesceZero(
+    TExportTestContext& ctx,
+    EDateUnwrapShape shape)
+{
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(
+        ctx,
+        NUdf::EDataSlot::Date,
+        true);
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+
+    if (shape == EDateUnwrapShape::StringUnwrap) {
+        const auto* stringType = ScalarType(ctx, NUdf::EDataSlot::String);
+        const auto* optionalStringType = ScalarType(
+            ctx,
+            NUdf::EDataSlot::String,
+            true);
+        return TypedCallable(
+            ctx,
+            "Unwrap",
+            {
+                TypedCallable(
+                    ctx,
+                    "Coalesce",
+                    {
+                        TypedMember(ctx, "a.s", optionalStringType),
+                        TypedCallable(
+                            ctx,
+                            "Just",
+                            {TypedLiteral(ctx, "String", "", stringType)},
+                            optionalStringType),
+                    },
+                    optionalStringType),
+            },
+            stringType);
+    }
+
+    const bool justFallback =
+        shape == EDateUnwrapShape::ExactJust ||
+        shape == EDateUnwrapShape::JustNonzero;
+    const TStringBuf fallbackValue =
+        shape == EDateUnwrapShape::SafeCastNonzero ||
+            shape == EDateUnwrapShape::JustNonzero
+        ? TStringBuf("1")
+        : TStringBuf("0");
+
+    TExprNode::TPtr fallback;
+    if (justFallback) {
+        fallback = TypedCallable(
+            ctx,
+            "Just",
+            {TypedLiteral(ctx, "Date", fallbackValue, dateType)},
+            optionalDateType);
+    } else {
+        const auto* sourceType =
+            shape == EDateUnwrapShape::WrongSafeCastSourceType
+            ? ScalarType(ctx, NUdf::EDataSlot::Int64)
+            : int32Type;
+        TExprNode::TPtr target = OptionalDataTypeDescriptor(
+            ctx,
+            "Date",
+            dateType,
+            optionalDateType);
+        if (shape == EDateUnwrapShape::WrongSafeCastTargetType) {
+            target = OptionalDataTypeDescriptor(
+                ctx,
+                "Int32",
+                int32Type,
+                ScalarType(ctx, NUdf::EDataSlot::Int32, true));
+        }
+        fallback = TypedCallable(
+            ctx,
+            shape == EDateUnwrapShape::ConvertFallback
+                ? TStringBuf("Convert")
+                : TStringBuf("SafeCast"),
+            {
+                TypedLiteral(
+                    ctx,
+                    sourceType == int32Type ? "Int32" : "Int64",
+                    fallbackValue,
+                    sourceType),
+                std::move(target),
+            },
+            optionalDateType);
+    }
+
+    const auto* memberType =
+        shape == EDateUnwrapShape::WrongMemberType
+        ? dateType
+        : optionalDateType;
+    auto member = TypedMember(
+        ctx,
+        shape == EDateUnwrapShape::InvisibleMember
+            ? TStringBuf("a.missing")
+            : TStringBuf("a.x"),
+        memberType);
+
+    TExprNode::TListType coalesceArguments;
+    if (shape == EDateUnwrapShape::ReversedCoalesce) {
+        coalesceArguments = {std::move(fallback), std::move(member)};
+    } else {
+        coalesceArguments = {std::move(member), std::move(fallback)};
+    }
+    auto coalesce = TypedCallable(
+        ctx,
+        "Coalesce",
+        std::move(coalesceArguments),
+        shape == EDateUnwrapShape::WrongCoalesceType
+            ? dateType
+            : optionalDateType);
+    auto unwrap = TypedCallable(
+        ctx,
+        "Unwrap",
+        {std::move(coalesce)},
+        shape == EDateUnwrapShape::WrongRootType
+            ? optionalDateType
+            : dateType);
+
+    return unwrap;
+}
+
 TIntrusivePtr<TOpMap> MakeComputedMap(
     TExportTestContext& ctx,
     TIntrusivePtr<IOperator> input,
@@ -2172,6 +2311,36 @@ TIntrusivePtr<TOpMap> MakeComputedMap(
                 std::move(expression),
                 &ctx.ExprCtx,
                 &ctx.ExpressionProps))});
+}
+
+TSemanticSnapshotExportResult ExportDateUnwrapExpression(
+    TExportTestContext& ctx,
+    EDateUnwrapShape shape)
+{
+    const auto& table = AddTable(ctx, "/Root/DateUnwrap", {
+        {"x", "Date", false},
+        {"s", "String", false},
+    });
+    auto read = MakeRead(ctx, table, "a", {"x", "s"});
+    TExpression expression(
+        TypedDateUnwrapCoalesceZero(ctx, shape),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+    if (shape == EDateUnwrapShape::UnsafeRoot) {
+        expression.GetExpressionBody()->SetSideEffects(
+            ESideEffects::General);
+    } else if (shape == EDateUnwrapShape::UnsafeSubtree) {
+        expression.GetExpressionBody()
+            ->Child(0)->Child(1)->Child(0)->SetUnorderedChildren();
+    }
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            std::move(expression))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
 TExprNode::TPtr StringLiteral(TExportTestContext& ctx, TStringBuf value) {
@@ -4149,6 +4318,150 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 },
                 optionalDateType);
         });
+    }
+
+    Y_UNIT_TEST(DateUnwrapSafeCastAndJustNormalizeByteIdentically) {
+        TString normalized;
+        for (const auto shape : {
+            EDateUnwrapShape::ExactSafeCast,
+            EDateUnwrapShape::ExactJust,
+        }) {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(
+                ExportDateUnwrapExpression(ctx, shape));
+            const auto& expression = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["optional"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["optional"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["value"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+
+            const TString encoded = NJson::WriteJson(
+                expression,
+                false,
+                true);
+            if (normalized.empty()) {
+                normalized = encoded;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(encoded, normalized);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DateUnwrapExactGateFailsClosed) {
+        struct TCase {
+            EDateUnwrapShape Shape;
+            TStringBuf Label;
+            TStringBuf Reason;
+        };
+        const TVector<TCase> cases = {
+            {
+                EDateUnwrapShape::SafeCastNonzero,
+                "SafeCast nonzero",
+                "source must be Int32 zero",
+            },
+            {
+                EDateUnwrapShape::JustNonzero,
+                "Just nonzero",
+                "Just fallback must contain Date zero",
+            },
+            {
+                EDateUnwrapShape::ConvertFallback,
+                "Convert fallback",
+                "fallback must be Just(Date(0)) or SafeCast",
+            },
+            {
+                EDateUnwrapShape::WrongRootType,
+                "wrong Unwrap type",
+                "non-null Date result",
+            },
+            {
+                EDateUnwrapShape::WrongCoalesceType,
+                "wrong Coalesce type",
+                "binary Optional<Date> Coalesce",
+            },
+            {
+                EDateUnwrapShape::WrongMemberType,
+                "wrong member type",
+                "direct visible Optional<Date>",
+            },
+            {
+                EDateUnwrapShape::WrongSafeCastSourceType,
+                "wrong SafeCast source type",
+                "not an exact Int32 literal",
+            },
+            {
+                EDateUnwrapShape::WrongSafeCastTargetType,
+                "wrong SafeCast target type",
+                "target annotation disagrees",
+            },
+            {
+                EDateUnwrapShape::ReversedCoalesce,
+                "reversed Coalesce",
+                "direct visible Optional<Date>",
+            },
+            {
+                EDateUnwrapShape::InvisibleMember,
+                "invisible member",
+                "direct visible Optional<Date>",
+            },
+            {
+                EDateUnwrapShape::StringUnwrap,
+                "generic String Unwrap",
+                "non-null Date result",
+            },
+            {
+                EDateUnwrapShape::UnsafeRoot,
+                "unsafe root",
+                "side-effecting or CSE-unsafe",
+            },
+            {
+                EDateUnwrapShape::UnsafeSubtree,
+                "unsafe subtree",
+                "unordered children",
+            },
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto result = ExportDateUnwrapExpression(
+                ctx,
+                test.Shape);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << test.Label << " unexpectedly exported "
+                    << result.Json);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.UnsupportedReason,
+                test.Reason,
+                test.Label);
+        }
     }
 
     Y_UNIT_TEST(FoldsDirectNumericDateAndIntervalLiteralsExactly) {
@@ -10585,13 +10898,19 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             return ExportMapExpressionResult(ctx, "a", std::move(expression));
         };
 
-        for (const auto callable : {"/", "Unwrap", "StrictCast", "Udf", "Apply", "Now", "CurrentActorId"}) {
+        for (const auto callable : {"/", "StrictCast", "Udf", "Apply", "Now", "CurrentActorId"}) {
             const auto result = exportCallable(callable);
             UNIT_ASSERT_C(!result.IsSupported(), callable);
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar callable");
         }
 
-        auto result = exportCallable("+", [](TExprNode& node) {
+        auto result = exportCallable("Unwrap");
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "Exact Date Unwrap requires");
+
+        result = exportCallable("+", [](TExprNode& node) {
             node.SetSideEffects(ESideEffects::General);
         });
         UNIT_ASSERT(!result.IsSupported());

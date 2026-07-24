@@ -1529,6 +1529,82 @@ def date_filtered_snapshot(kind, day):
     )
 
 
+def date_if_present_snapshot(
+    *,
+    source="d.day",
+    present=None,
+    missing=0,
+):
+    if present is None:
+        present = {"kind": "bound", "depth": 0}
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "D",
+                        "columns": [
+                            {"name": "day", "type": "Date", "nullable": True},
+                            {
+                                "name": "other_day",
+                                "type": "Date",
+                                "nullable": True,
+                            },
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": [
+                    {
+                        "id": "scan",
+                        "op": "scan",
+                        "table": "D",
+                        "columns": [
+                            {"source": "day", "output": "d.day"},
+                            {"source": "other_day", "output": "d.other_day"},
+                        ],
+                        "pushed_limit": None,
+                    },
+                    {
+                        "id": "project",
+                        "op": "project",
+                        "input": "scan",
+                        "ordered": False,
+                        "columns": [
+                            {
+                                "output": "d.result",
+                                "expression": {
+                                    "kind": "if_present",
+                                    "optional": {
+                                        "kind": "column",
+                                        "column": source,
+                                    },
+                                    "present": present,
+                                    "missing": {
+                                        "kind": "literal",
+                                        "type": "Date",
+                                        "value": missing,
+                                    },
+                                    "type": "Date",
+                                    "nullable": False,
+                                },
+                            }
+                        ],
+                    },
+                ],
+                "root": "project",
+                "output": ["d.result"],
+                "subplans": [],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
 def left_join_elimination_snapshot(with_join, right_key_is_unique):
     value = schema()
     value["tables"][1]["unique_keys"] = (
@@ -4473,6 +4549,45 @@ class VerificationTest(unittest.TestCase):
                     20_000,
                 )
                 self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_date_if_present_semantics_are_exact_and_mutations_are_visible(self):
+        original = date_if_present_snapshot()
+        identical = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                date_if_present_snapshot(),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(identical.status, "VERIFIED_BOUNDED")
+
+        for mutation, changed in (
+            ("missing", date_if_present_snapshot(missing=1)),
+            ("source", date_if_present_snapshot(source="d.other_day")),
+            (
+                "present",
+                date_if_present_snapshot(
+                    present={"kind": "literal", "type": "Date", "value": 0}
+                ),
+            ),
+        ):
+            with self.subTest(mutation=mutation):
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        original,
+                        changed,
+                        1,
+                        10_000,
+                    ),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
 
     def test_scalar_subplan_and_staged_cross_join_inline_are_bounded_equivalent(self):
         initial = scalar_subplan_inline_snapshot(False)

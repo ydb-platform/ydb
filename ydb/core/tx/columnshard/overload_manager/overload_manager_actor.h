@@ -20,8 +20,11 @@ class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {
     TCSOverloadManagerCounters Counters;
     TOverloadSubscribers OverloadSubscribers;
     THashSet<ui32> CachedNodeIds;
+    THashSet<ui64> CompactionOverloadedTablets;
     ui64 OverloadStatusGeneration = 0;
-    std::optional<NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus> LastPublishedStatus;
+    // Last status we successfully pushed to FCMs (not set when push was deferred).
+    std::optional<NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus> LastSentStatus;
+    bool NeedPublicationFlush = false;
 
     // clang-format off
     STRICT_STFUNC(StateMain,
@@ -31,6 +34,8 @@ class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {
                   hFunc(NOverload::TEvOverloadResourcesReleased, Handle)
                   hFunc(NOverload::TEvOverloadColumnShardDied, Handle)
                   hFunc(NOverload::TEvPublishNodeOverloadStatus, Handle)
+                  hFunc(NOverload::TEvCompactionOverloadState, Handle)
+                  hFunc(NOverload::TEvSyncNodeOverloadPublication, Handle)
                   hFunc(NActors::TEvInterconnect::TEvNodesInfo, Handle)
                   hFunc(NActors::TEvents::TEvWakeup, Handle)
     )
@@ -42,11 +47,16 @@ class TOverloadManager: public NActors::TActorBootstrapped<TOverloadManager> {
     void Handle(const NOverload::TEvOverloadResourcesReleased::TPtr& ev);
     void Handle(const NOverload::TEvOverloadColumnShardDied::TPtr& ev);
     void Handle(const NOverload::TEvPublishNodeOverloadStatus::TPtr& ev);
+    void Handle(const NOverload::TEvCompactionOverloadState::TPtr& ev);
+    void Handle(const NOverload::TEvSyncNodeOverloadPublication::TPtr& ev);
     void Handle(const NActors::TEvInterconnect::TEvNodesInfo::TPtr& ev);
     void Handle(const NActors::TEvents::TEvWakeup::TPtr& ev);
 
     void RequestNodesList();
-    void PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status);
+    void UpdateCompactionOverloadFlag();
+    bool IsNodeOverloaded() const;
+    void SyncPublication(bool force);
+    bool PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status);
     static bool IsCsFlowControlEnabled();
 
 public:

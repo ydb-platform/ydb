@@ -10,10 +10,14 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_pb.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimr::NColumnShard::NFlowControl {
 
 enum EEvFlowControl {
     EvLongTxWrite = EventSpaceBegin(TKikimrEvents::ES_FLOW_CONTROL_MANAGER),
+    EvTryAdmit,
+    EvTryAdmitResult,
     EvNodeOverloadStatus,
     EvTabletLocationUpdated,
     EvTabletLocationInvalidated,
@@ -38,6 +42,26 @@ public:
         TLongTxWrite result = std::move(*LongTxWrite);
         LongTxWrite.reset();
         return result;
+    }
+};
+
+class TEvTryAdmit: public NActors::TEventLocal<TEvTryAdmit, EvTryAdmit> {
+    YDB_READONLY_DEF(TVector<ui64>, TabletIds);
+
+public:
+    explicit TEvTryAdmit(TVector<ui64> tabletIds)
+        : TabletIds(std::move(tabletIds))
+    {
+    }
+};
+
+class TEvTryAdmitResult: public NActors::TEventLocal<TEvTryAdmitResult, EvTryAdmitResult> {
+    YDB_READONLY_DEF(EAdmitDecision, Decision);
+
+public:
+    explicit TEvTryAdmitResult(EAdmitDecision decision)
+        : Decision(decision)
+    {
     }
 };
 

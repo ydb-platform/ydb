@@ -27,18 +27,27 @@ void TOverloadManager::RequestNodesList() {
     Send(NActors::GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
 }
 
-void TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status) {
+void TOverloadManager::UpdateCompactionOverloadFlag() {
+    const bool overloaded = !CompactionOverloadedTablets.empty();
+    TOverloadManagerServiceOperator::SetCompactionOverloaded(overloaded);
+    Counters.SetCompactionOverloadedTablets(CompactionOverloadedTablets.size());
+}
+
+bool TOverloadManager::IsNodeOverloaded() const {
+    return !CompactionOverloadedTablets.empty() || TOverloadManagerServiceOperator::IsWriteSideOverloaded();
+}
+
+bool TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNodeOverloadStatus::EStatus status) {
     if (!IsCsFlowControlEnabled()) {
-        return;
+        return false;
     }
 
-    LastPublishedStatus = status;
     if (CachedNodeIds.empty()) {
+        NeedPublicationFlush = true;
         RequestNodesList();
-        return;
+        return false;
     }
 
-    ++OverloadStatusGeneration;
     ui32 selfNodeId = SelfId().NodeId();
     if (!selfNodeId && CachedNodeIds.size() == 1) {
         // LocalServices may register OM as TActorId(0, "OverloadMng"); SelfId can still be node-scoped,
@@ -46,12 +55,31 @@ void TOverloadManager::PublishToFlowControlManagers(NKikimrTxColumnShard::TEvNod
         selfNodeId = *CachedNodeIds.begin();
     }
     if (!selfNodeId) {
-        return;
+        NeedPublicationFlush = true;
+        return false;
     }
+
+    ++OverloadStatusGeneration;
     for (const ui32 nodeId : CachedNodeIds) {
         Send(NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(nodeId),
             new NFlowControl::TEvNodeOverloadStatus(selfNodeId, status, OverloadStatusGeneration));
     }
+    LastSentStatus = status;
+    NeedPublicationFlush = false;
+    return true;
+}
+
+void TOverloadManager::SyncPublication(bool force) {
+    if (!IsCsFlowControlEnabled()) {
+        return;
+    }
+
+    const auto want = IsNodeOverloaded() ? NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED
+                                         : NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY;
+    if (!force && !NeedPublicationFlush && LastSentStatus == want) {
+        return;
+    }
+    PublishToFlowControlManagers(want);
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadSubscribe::TPtr& ev) {
@@ -79,10 +107,44 @@ void TOverloadManager::Handle(const NOverload::TEvOverloadResourcesReleased::TPt
 void TOverloadManager::Handle(const NOverload::TEvOverloadColumnShardDied::TPtr& ev) {
     auto record = ev->Get();
     OverloadSubscribers.NotifyColumnShardSubscribers(record->GetColumnShardInfo());
+
+    const ui64 tabletId = record->GetColumnShardInfo().TabletId;
+    if (CompactionOverloadedTablets.erase(tabletId)) {
+        UpdateCompactionOverloadFlag();
+        Counters.OnCompactionReady();
+    }
+    SyncPublication(false);
 }
 
 void TOverloadManager::Handle(const NOverload::TEvPublishNodeOverloadStatus::TPtr& ev) {
+    // Explicit publish (tests / legacy callers). Still records LastSentStatus on success.
     PublishToFlowControlManagers(ev->Get()->GetStatus());
+}
+
+void TOverloadManager::Handle(const NOverload::TEvCompactionOverloadState::TPtr& ev) {
+    const ui64 tabletId = ev->Get()->GetTabletId();
+    const bool overloaded = ev->Get()->GetOverloaded();
+    const bool wasEmpty = CompactionOverloadedTablets.empty();
+
+    if (overloaded) {
+        CompactionOverloadedTablets.insert(tabletId);
+    } else {
+        CompactionOverloadedTablets.erase(tabletId);
+    }
+
+    const bool nowEmpty = CompactionOverloadedTablets.empty();
+    UpdateCompactionOverloadFlag();
+
+    if (wasEmpty && !nowEmpty) {
+        Counters.OnCompactionOverload();
+    } else if (!wasEmpty && nowEmpty) {
+        Counters.OnCompactionReady();
+    }
+    SyncPublication(false);
+}
+
+void TOverloadManager::Handle(const NOverload::TEvSyncNodeOverloadPublication::TPtr&) {
+    SyncPublication(false);
 }
 
 void TOverloadManager::Handle(const NActors::TEvInterconnect::TEvNodesInfo::TPtr& ev) {
@@ -90,12 +152,8 @@ void TOverloadManager::Handle(const NActors::TEvInterconnect::TEvNodesInfo::TPtr
     for (const auto& node : ev->Get()->Nodes) {
         CachedNodeIds.insert(node.NodeId);
     }
-    if (LastPublishedStatus) {
-        // Nodes list arrived (or refreshed) while a status is pending / known — (re)push.
-        const auto status = *LastPublishedStatus;
-        LastPublishedStatus.reset();
-        PublishToFlowControlManagers(status);
-    }
+    // Refresh pushes *current* write+compaction truth, never a stale OVERLOADED snapshot.
+    SyncPublication(true);
 }
 
 void TOverloadManager::Handle(const NActors::TEvents::TEvWakeup::TPtr&) {

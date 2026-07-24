@@ -14,12 +14,6 @@
 
 namespace NKikimr::NColumnShard::NFlowControl {
 
-enum class EAdmitDecision {
-    Allow,
-    RejectNow,
-    // Enqueue // phase 2 wait-queue
-};
-
 class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     static constexpr TDuration LocationRecheckPeriod = TDuration::Seconds(5);
 
@@ -35,6 +29,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // clang-format off
     STRICT_STFUNC(StateMain,
                   HFunc(NFlowControl::TEvLongTxWrite, Handle)
+                  HFunc(NFlowControl::TEvTryAdmit, Handle)
                   HFunc(NFlowControl::TEvNodeOverloadStatus, Handle)
                   HFunc(NFlowControl::TEvTabletLocationUpdated, Handle)
                   HFunc(NFlowControl::TEvTabletLocationInvalidated, Handle)
@@ -43,6 +38,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     // clang-format on
 
     void Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, const TActorContext& ctx);
+    void Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvTabletLocationUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvTabletLocationInvalidated::TPtr& ev, const TActorContext& ctx);
@@ -50,8 +46,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
 
     EAdmitDecision TryAdmit(const TVector<ui64>& tabletIds) const;
     void MaybeStartLocationRechecks(const TVector<ui64>& tabletIds);
-    static bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>* tabletIds);
-    void ReplyOverloaded(const TActorContext& ctx, TLongTxWrite& tx, const TString& message) const;
+    void PublishMapSizes() const;
 
 public:
     TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);

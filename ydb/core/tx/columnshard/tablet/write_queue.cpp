@@ -67,6 +67,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
         WriteTasksOverloadCheckerScheduled = false;
     }
     ui32 countTasks = 0;
+    bool compactionWait = false;
     const TMonotonic now = ctx.Monotonic();
     std::set<TInternalPathId> overloaded;
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
@@ -79,6 +80,9 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
             if (overloadStatus != TColumnShard::EOverloadStatus::None) {
                 overloaded.emplace(it->GetInternalPathId());
                 Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
+                if (overloadStatus == TColumnShard::EOverloadStatus::OverloadCompaction) {
+                    compactionWait = true;
+                }
                 ++countTasks;
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                     {"event", "wait_overload"},
@@ -91,6 +95,15 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
             }
         } else {
             ++it;
+        }
+    }
+
+    if (compactionWait != CompactionOverloadReported) {
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        if (actorSystem) {
+            // Only advance local edge after a real send attempt; otherwise retry next Drain.
+            NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), compactionWait);
+            CompactionOverloadReported = compactionWait;
         }
     }
 
@@ -110,6 +123,13 @@ void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {
+    if (CompactionOverloadReported) {
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
+        if (actorSystem) {
+            NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), false);
+            CompactionOverloadReported = false;
+        }
+    }
     Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(WriteTasks.size());
 }
 

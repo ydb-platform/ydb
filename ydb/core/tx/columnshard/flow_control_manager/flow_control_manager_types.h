@@ -12,6 +12,12 @@
 
 namespace NKikimr::NColumnShard::NFlowControl {
 
+enum class EAdmitDecision {
+    Allow,
+    RejectNow,
+    // Enqueue // phase 2 wait-queue
+};
+
 class TLongTxWrite {
     YDB_READONLY_DEF(TActorId, ReplyTo);
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);

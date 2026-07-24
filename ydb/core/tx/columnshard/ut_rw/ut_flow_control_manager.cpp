@@ -516,10 +516,18 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(true);
 
         const ui32 localNodeId = runtime.GetNodeId(0);
-        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
-        nodes->emplace_back(TEvInterconnect::TNodeInfo(localNodeId, "::", "localhost", "localhost", 1234, TNodeLocation()));
-        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new TEvInterconnect::TEvNodesInfo(nodes)), 0, true);
+        const TActorId seedSender = env.GetReplyTo();
+        // Drop nameservice ListNodes/NodesInfo so a late Bootstrap refresh cannot Sync READY over OM push.
+        runtime.SetEventFilter([seedSender](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::TEvListNodes::EventType) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvInterconnect::TEvNodesInfo::EventType && ev->Sender != seedSender) {
+                return true;
+            }
+            return false;
+        });
+        SeedOverloadManagerNodes(runtime, seedSender, { localNodeId });
 
         bool statusSeen = false;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -534,8 +542,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         });
 
         env.SeedTabletLocation(shardTabletId, localNodeId);
-        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvPublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)), 0, true);
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), seedSender,
+                         new NOverload::TEvCompactionOverloadState(shardTabletId, true)), 0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         env.StartLongTxWrite(env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch()));
@@ -545,6 +553,11 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             UNIT_ASSERT(!writeObserved);
             UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::OVERLOADED);
         }
+
+        // Clear compaction flag so process-global OM state does not leak into later UTs.
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), seedSender,
+                         new NOverload::TEvCompactionOverloadState(shardTabletId, false)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
     }
 
     Y_UNIT_TEST(WriterReportsInvalidateOnDeliveryProblem) {
@@ -717,6 +730,131 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(), new TEvents::TEvWakeup()), 0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         UNIT_ASSERT_C(listNodesCount > afterBootstrap, "expected another ListNodes on Wakeup");
+    }
+
+    Y_UNIT_TEST(CompactionOverloadPublishesOverloadAndReady) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(true);
+
+        const ui32 localNodeId = runtime.GetNodeId(0);
+        SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
+
+        bool overloadedSeen = false;
+        bool readySeen = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvNodeOverloadStatus::EventType) {
+                const auto status = event->Get<TEvNodeOverloadStatus>()->Record.GetStatus();
+                if (status == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED) {
+                    overloadedSeen = true;
+                } else if (status == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY) {
+                    readySeen = true;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        constexpr ui64 tabletId = 42;
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT(overloadedSeen);
+        UNIT_ASSERT(NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
+
+        // Writes still OK → clearing compaction should publish READY.
+        readySeen = false;
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT(readySeen);
+        UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
+    }
+
+    Y_UNIT_TEST(CompactionReadySuppressedWhileWritesOverloaded) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(true);
+        runtime.GetAppData(0).ColumnShardConfig.SetWritingInFlightRequestsCountLimit(1);
+
+        const ui32 localNodeId = runtime.GetNodeId(0);
+        SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
+
+        bool readySeen = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvNodeOverloadStatus::EventType) {
+                const auto status = event->Get<TEvNodeOverloadStatus>()->Record.GetStatus();
+                if (status == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY) {
+                    readySeen = true;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Cross write limit first.
+        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
+                             TRequestReleaseResourcesActor::EMode::RequestOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+
+        constexpr ui64 tabletId = 42;
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        readySeen = false;
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(!readySeen, "READY must not clear FCM while write resources are still overloaded");
+        UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
+
+        // Cleanup process-wide write resource counters for other UTs.
+        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
+                             TRequestReleaseResourcesActor::EMode::ReleaseOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(NodesInfoRefreshDoesNotStickOverloadAfterReady) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(true);
+
+        const ui32 localNodeId = runtime.GetNodeId(0);
+        SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
+
+        ui32 overloadedCount = 0;
+        ui32 readyCount = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvNodeOverloadStatus::EventType) {
+                const auto status = event->Get<TEvNodeOverloadStatus>()->Record.GetStatus();
+                if (status == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED) {
+                    ++overloadedCount;
+                } else if (status == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY) {
+                    ++readyCount;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        constexpr ui64 tabletId = 7;
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        UNIT_ASSERT_C(overloadedCount >= 1, "expected OVERLOADED on compaction enter");
+
+        runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        UNIT_ASSERT_C(readyCount >= 1, "expected READY on compaction leave");
+
+        const ui32 overloadedBeforeRefresh = overloadedCount;
+        const ui32 readyBeforeRefresh = readyCount;
+
+        // Simulate periodic ListNodes refresh: must re-publish READY (current truth), not stale OVERLOADED.
+        SeedOverloadManagerNodes(runtime, env.GetReplyTo(), { localNodeId });
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT_VALUES_EQUAL(overloadedCount, overloadedBeforeRefresh);
+        UNIT_ASSERT_C(readyCount > readyBeforeRefresh, "refresh should re-push READY from current state");
     }
 
     Y_UNIT_TEST(OverloadManagerPushesToAllCachedNodes) {

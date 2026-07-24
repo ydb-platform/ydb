@@ -15,6 +15,8 @@ enum EEvOverload {
     EvOverloadPipeServerDisconnected,
     EvOverloadResourcesReleased,
     EvPublishNodeOverloadStatus,
+    EvCompactionOverloadState,
+    EvSyncNodeOverloadPublication,
 
     EvEnd
 };
@@ -78,5 +80,19 @@ public:
     {
     }
 };
+
+class TEvCompactionOverloadState: public NActors::TEventLocal<TEvCompactionOverloadState, EvCompactionOverloadState> {
+    YDB_READONLY(ui64, TabletId, 0);
+    YDB_READONLY(bool, Overloaded, false);
+
+public:
+    TEvCompactionOverloadState(ui64 tabletId, bool overloaded)
+        : TabletId(tabletId)
+        , Overloaded(overloaded)
+    {
+    }
+};
+
+class TEvSyncNodeOverloadPublication: public NActors::TEventLocal<TEvSyncNodeOverloadPublication, EvSyncNodeOverloadPublication> {};
 
 }   // namespace NKikimr::NColumnShard::NOverload

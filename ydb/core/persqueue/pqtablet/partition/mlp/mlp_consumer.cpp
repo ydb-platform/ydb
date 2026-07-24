@@ -701,7 +701,7 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
-    const bool force = NextForcedProcessingTime <= TInstant::Now();
+    const bool force = NextForcedProcessingTime <= TAppData::TimeProvider->Now();
     const bool dlqEmptyOrAlreadyProcessing = DLQMoverActorId || Storage->DLQEmpty();
     if (!force &&
         ReadRequestsQueue.empty() &&
@@ -715,7 +715,7 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
-    auto now = TInstant::Now();
+    auto now = TAppData::TimeProvider->Now();
     TDuration delay = NextProcessingTime > now && dlqEmptyOrAlreadyProcessing
         ? NextProcessingTime - now
         : TDuration::Zero();
@@ -727,8 +727,8 @@ void TConsumerActor::ProcessEventQueue() {
     YDB_LOG_DEBUG("ProcessEventQueue",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
-    NextForcedProcessingTime = TInstant::Now() + TDuration::Seconds(1);
+    NextProcessingTime = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
+    NextForcedProcessingTime = TAppData::TimeProvider->Now() + TDuration::Seconds(1);
 
     for (auto& ev : CommitRequestsQueue) {
         absl::flat_hash_map<ui64, EOperationResult> offsetResults;
@@ -805,7 +805,7 @@ void TConsumerActor::ProcessEventQueue() {
         {"logPrefix", NPQ_LOG_PREFIX},
         {"afterDeadlinesDump", Storage->DebugString()});
 
-    auto now = TInstant::Now();
+    auto now = TAppData::TimeProvider->Now();
 
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
@@ -965,7 +965,7 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
     if (Storage->GetMessageCount() > 0) {
-        LastTimeWithMessages = TInstant::Now();
+        LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
     }
 
@@ -1094,7 +1094,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     if (logicalMessageCount > 0) {
-        LastTimeWithMessages = TInstant::Now();
+        LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
     }
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {
@@ -1219,7 +1219,7 @@ bool TConsumerActor::UseForReading() const {
     if (!Storage->HasUnlockedMessageGroupsId()) {
         return false;
     }
-    return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
+    return LastTimeWithMessages > TAppData::TimeProvider->Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
 }
 
 void TConsumerActor::NotifyPQRB(bool force) {

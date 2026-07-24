@@ -356,6 +356,11 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EDecimalConversionMode {
+    WithoutCommonTypeFixup /* "without_common_type_fixup" */,
+    WithCommonTypeFixup /* "with_common_type_fixup" */,
+};
+
 enum class EEngineType {
     Default /* "default" */,
     Dq /* "dq" */,
@@ -493,6 +498,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    EDecimalConversionMode DecimalConversionMode = EDecimalConversionMode::WithoutCommonTypeFixup;
     THashMap<TString, size_t> NoBlockRewriteCallableStats;
     THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;

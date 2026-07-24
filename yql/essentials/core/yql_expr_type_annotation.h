@@ -238,13 +238,13 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOpt
 const TTypeAnnotationNode* JoinDryKeyType(bool outer, const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx);
 const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, bool& hasOptional, TExprContext& ctx);
 // Key type for inner or full join.
-const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 
 template <bool Strict, bool Silent = false> // Strict + DryType before - common type for join key.
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn = false);
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type);
 

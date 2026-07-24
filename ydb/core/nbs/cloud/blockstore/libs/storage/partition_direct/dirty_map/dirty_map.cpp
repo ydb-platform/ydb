@@ -298,8 +298,21 @@ TBlocksDirtyMap::TBlocksDirtyMap(
     UpdateConfig(vChunkConfig);
 }
 
+TBlocksDirtyMap::~TBlocksDirtyMap()
+{
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            item.Value.Detach();
+
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+}
+
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
 {
+    ResizeHosts(vChunkConfig.GetHostCount());
+
     const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredDDisks);
     const THostMask removed = DesiredDDisks.Exclude(vChunkConfig.GetDDisks());
 
@@ -341,27 +354,6 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
         ReadyToErase.erase(lsn);
         ReadyToFlush.erase(lsn);
     }
-}
-
-void TBlocksDirtyMap::ResizeHosts(size_t newHostCount)
-{
-    Y_ABORT_UNLESS(newHostCount <= MaxHostCount);
-    Y_ABORT_UNLESS(newHostCount >= PBufferCounters.size());
-    Y_ABORT_UNLESS(newHostCount >= DDiskStates.size());
-
-    PBufferCounters.resize(newHostCount);
-    DDiskStates.resize(newHostCount);
-}
-
-TBlocksDirtyMap::~TBlocksDirtyMap()
-{
-    Inflight.Enumerate(
-        [&](TInflightMap::TFindItem& item)
-        {
-            item.Value.Detach();
-
-            return TInflightMap::EEnumerateContinuation::Continue;
-        });
 }
 
 void TBlocksDirtyMap::RestorePBuffer(
@@ -739,6 +731,15 @@ const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
     return PBufferCounters[host];
 }
 
+ui64 TBlocksDirtyMap::GetPBufferUsedSize(THostIndex host) const
+{
+    if (host >= PBufferCounters.size()) {
+        return 0;
+    }
+
+    return PBufferCounters[host].CurrentBytesCount;
+}
+
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
 {
     auto item = Inflight.GetValue(lsn);
@@ -960,6 +961,19 @@ TString TBlocksDirtyMap::DebugPrintReadyToErase() const
         result << ToString(lsn) << ";";
     }
     return result;
+}
+
+void TBlocksDirtyMap::ResizeHosts(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(newHostCount <= MaxHostCount);
+    Y_ABORT_UNLESS(DDiskStates.size() == PBufferCounters.size());
+
+    if (newHostCount <= PBufferCounters.size()) {
+        return;
+    }
+
+    PBufferCounters.resize(newHostCount);
+    DDiskStates.resize(newHostCount);
 }
 
 THostMask TBlocksDirtyMap::FilterLocations(

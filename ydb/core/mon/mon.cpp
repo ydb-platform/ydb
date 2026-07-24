@@ -1841,6 +1841,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;
     addPort->CaFile = Config.CaFile;
+    addPort->ClientCertificateRequired = Config.ClientCertificateRequired;
     addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 

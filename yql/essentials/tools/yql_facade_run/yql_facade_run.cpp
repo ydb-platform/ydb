@@ -364,6 +364,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
+    opts.AddLongOption("auto-use-yql-libs", "Implicitly mark yql_libs/* files as libraries").NoArgument().SetFlag(&AutoUseYqlLibs);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
 
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument().SetFlag(&WithFinalIssues);
@@ -786,6 +787,10 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
+    if (RunOptions_.AutoUseYqlLibs) {
+        factory.EnableAutoUseYqlLibs();
+    }
 
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));

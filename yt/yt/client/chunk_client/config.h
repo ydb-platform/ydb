@@ -261,6 +261,9 @@ struct TReplicationReaderConfig
     //! data nodes via the io_consumed request field.
     TDuration IoConsumedReportWindow;
 
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    std::optional<double> IoFairShareWeight;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -398,6 +401,9 @@ struct TReplicationWriterConfig
     //! Sliding window over which the job's recently consumed I/O is reported to
     //! data nodes via the io_consumed request field.
     TDuration IoConsumedReportWindow;
+
+    //! If set, reported to data nodes via the io_fair_share_weight request field.
+    std::optional<double> IoFairShareWeight;
 
     int GetDirectUploadNodeCount();
 

@@ -4651,7 +4651,14 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
     subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
-    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+
+    const i64 smallBlobsBytesDelta = static_cast<i64>(newPartitionStats.SmallBlobsVolumeBytes)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsVolumeBytes);
+    const i64 smallBlobsCountDelta = static_cast<i64>(newPartitionStats.SmallBlobsCount)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsCount);
+    subDomainInfo->AggrSmallBlobsUsage(this, smallBlobsBytesDelta, smallBlobsCountDelta);
+
+    if (subDomainInfo->CheckQuotas(this)) {
         PersistSubDomainState(db, subDomainId, *subDomainInfo);
         // Publish is done in a separate transaction, so we may call this directly
         TDeque<TPathId> toPublish;
@@ -8010,7 +8017,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
     }
-    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+    if (TxIdToSetColumnConstraintOperations.contains(txId) || TxIdToDependentSetColumnConstraint.contains(txId)) {
         Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }

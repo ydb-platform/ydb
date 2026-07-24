@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
@@ -232,7 +233,7 @@ SIMPLE_STRICT_UDF(TFromString, TOptionalString(TAutoMapString)) {
     return valueBuilder->NewString(SerializeAddress(addr));
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TIpv4FromUint32, char*(TAutoMapUint32), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+SIMPLE_STRICT_UDF_OPTIONS(TIpv4FromUint32, char*(TAutoMapUint32), builder.SetMinLangVer(NYql::NFeature::IPv4Uint32.MinLangVer)) {
     // in_addr expects bytes in network byte order.
     in_addr addr;
     addr.s_addr = htonl(args[0].Get<ui32>());
@@ -249,7 +250,7 @@ SIMPLE_UDF(TToString, char*(TAutoMapString)) {
     return valueBuilder->NewString(DeserializeAddress(args[0].AsStringRef()).ToString(/*PrintScopeId=*/false));
 }
 
-SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMinLangVer(NYql::NFeature::IPv4Uint32.MinLangVer)) {
     Y_UNUSED(valueBuilder);
     TIpv6Address addr = DeserializeAddress(args[0].AsStringRef());
     if (addr.Type() != TIpv6Address::Ipv4) {

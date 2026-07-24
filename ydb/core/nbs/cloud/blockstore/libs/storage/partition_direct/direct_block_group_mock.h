@@ -41,7 +41,7 @@ struct TOracleMock: public IOracle
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
-    TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
+    TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -174,7 +174,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -248,7 +250,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

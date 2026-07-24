@@ -45,6 +45,7 @@ TS_LINT_DART_FIELDS = (
     df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
+    df.Requirements.from_unit_with_cpu,  # from macro REQUIREMENTS()
 )
 
 TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
@@ -52,7 +53,6 @@ TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
     df.TestData.from_unit,  # from macro DATA()
     df.TestTimeout.from_unit,  # from macro TIMEOUT()
     df.Tag.from_unit,  # from macro TAG()
-    df.Requirements.from_unit,  # from macro REQUIREMENTS()
     df.TsTestForPath.value,
 )
 

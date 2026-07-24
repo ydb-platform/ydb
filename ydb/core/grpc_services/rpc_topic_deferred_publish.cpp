@@ -23,13 +23,6 @@ constexpr TStringBuf NotImplementedMessage = "Topic deferred publish is not impl
 constexpr TStringBuf DisabledMessage = "Topic deferred publish is not enabled";
 constexpr TStringBuf AuthenticationRequiredMessage = "Authentication is required";
 
-TString GetSerializedUserToken(const IRequestOpCtx* request) {
-    if (request == nullptr) {
-        return {};
-    }
-    return request->GetSerializedToken();
-}
-
 TString GetUserSID(const IRequestOpCtx* request) {
     if (request == nullptr) {
         return BUILTIN_ACL_NO_USER_SID;
@@ -423,7 +416,6 @@ public:
             *database,
             protoRequest->int_publication_id(),
             NPQ::NDeferredPublish::EFinalizePublicationOp::Publish,
-            GetSerializedUserToken(Request.get()),
             callerSid));
         Become(&TPublishRequestActor::StateFunc);
     }
@@ -492,7 +484,6 @@ public:
             *database,
             protoRequest->int_publication_id(),
             NPQ::NDeferredPublish::EFinalizePublicationOp::Cancel,
-            GetSerializedUserToken(Request.get()),
             callerSid));
         Become(&TCancelPublicationRequestActor::StateFunc);
     }

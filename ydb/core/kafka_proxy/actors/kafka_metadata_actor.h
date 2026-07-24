@@ -52,9 +52,11 @@ private:
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
                           const TVector<TNodeInfo*>& nodes);
     void AddTopicError(TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode);
+    void ApplyPendingTopicResponses();
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);
+    void EnsureBrokersAndController();
     void RequestICNodeCache();
     void ProcessTopicsFromRequest();
     void SendDiscoveryRequest();
@@ -63,6 +65,10 @@ private:
 
     void AddTopic(const TString& topic, ui64 index);
 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const NActors::TActorContext& ctx);
+    void RespondWithTimeout(const NActors::TActorContext& ctx);
+    void CancelRequestTimeout();
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocationResponse, HandleLocationResponse);
@@ -70,12 +76,16 @@ private:
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
             hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
             HFunc(TEvKafka::TEvResponse, Handle);
+            HFunc(TEvents::TEvWakeup, HandleWakeup);
         }
     }
 
-    TString LogPrefix() const;
+
+    NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
+
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
@@ -90,6 +100,7 @@ private:
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
+    TActorId TimeoutTimerActorId;
     bool NeedAllNodes = false;
     bool HaveError = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;

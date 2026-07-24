@@ -652,7 +652,7 @@ void GetKeys(const TJoinLabels& joinLabels, const TExprNode& keys, TExprContext&
     }
 }
 
-TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& types) {
     if (node.ChildrenSize() > 4U) {
         return SplitEquiJoinToPairs(node, ctx);
     }
@@ -743,7 +743,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
         } else if (rightKind){
             keyTypeItems.emplace_back(JoinDryKeyType(keyType2, keyType1, optKey, ctx));
         } else {
-            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx));
+            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx, types));
             optKey = optKey && !filter;
         }
         badKey = !keyTypeItems.back();
@@ -987,9 +987,9 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
         .Ptr();
 }
 
-TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_ENSURE(input->ChildrenSize() >= 4);
-    return ExpandEquiJoinImpl(*input, ctx);
+    return ExpandEquiJoinImpl(*input, ctx, types);
 }
 
 template <bool Strong>
@@ -2079,7 +2079,7 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
         .Build();
 }
 
-TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
+TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx, const TTypeAnnotationContext& typesCtx)
 {
     const auto pos = collection->Pos();
     const auto tupleType = collection->GetTypeAnn()->Cast<TTupleExprType>();
@@ -2088,7 +2088,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
         return nullptr;
     }
     TTypeAnnotationNode::TListType types(tupleType->GetItems());
-    dictKeyType = CommonType(pos, types, ctx);
+    dictKeyType = CommonType(pos, types, ctx, typesCtx);
     YQL_ENSURE(dictKeyType, "Uncompatible collection elements.");
 
     TExprNode::TPtr tuple;
@@ -2111,7 +2111,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
     return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(tuple)});
 }
 
-TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
@@ -2160,7 +2160,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
-        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
+        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx, types);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict";
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyList) {
@@ -6478,7 +6478,8 @@ private:
         bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
         bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
         bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant ||
+        bool isSuitableVariantItem = NKikimr::NMiniKQL::RuntimeVersion >= 82 && node->IsCallable("VariantItem");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant || isSuitableVariantItem ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
@@ -9348,11 +9349,9 @@ ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, n
 
 struct TPeepHoleRules {
     const TPeepHoleOptimizerMap CommonStageRules = {
-        {"EquiJoin", &ExpandEquiJoin},
         {"SafeCast", &ExpandCast<false>},
         {"StrictCast", &ExpandCast<true>},
         {"AlterTo", &ExpandAlterTo},
-        {"SqlIn", &ExpandSqlIn},
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
@@ -9434,6 +9433,8 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
+        {"EquiJoin", &ExpandEquiJoin},
+        {"SqlIn", &ExpandSqlIn},
         {"Aggregate", &ExpandAggregatePeephole},
         {"AggregateCombine", &ExpandAggregatePeephole},
         {"AggregateCombineState", &ExpandAggregatePeephole},

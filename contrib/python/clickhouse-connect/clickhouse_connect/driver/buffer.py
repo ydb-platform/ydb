@@ -114,11 +114,11 @@ class ResponseBuffer(ByteSource):
     def read_str_col(
         self,
         num_rows: int,
-        encoding: str,
+        encoding: str | None,
         nullable: bool = False,
         null_obj: Any = None,
     ) -> Iterable[str]:
-        column = []
+        column: list[Any] = []
         app = column.append
         null_map = self.read_bytes(num_rows) if nullable else None
         for ix in range(num_rows):
@@ -148,7 +148,7 @@ class ResponseBuffer(ByteSource):
 
     def read_fixed_str_col(self, sz: int, num_rows: int, encoding: str) -> Iterable[str]:
         source = self.read_bytes(sz * num_rows)
-        column = []
+        column: list[str] = []
         app = column.append
         for ix in range(0, sz * num_rows, sz):
             try:
@@ -167,7 +167,7 @@ class ResponseBuffer(ByteSource):
         return column
 
     @property
-    def last_message(self) -> bytes:
+    def last_message(self) -> bytes | None:  # type: ignore[override]  # overrides writable attr with property
         return self.buffer
 
     def close(self):

@@ -3,6 +3,7 @@
 #include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
 #include "kqp_rbo_physical_map_builder.h"
+#include "kqp_rbo_physical_union_all_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
 #include "kqp_rbo_physical_source_builder.h"
@@ -119,6 +120,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             }
 
             auto limit = CastOperator<TOpLimit>(op);
+
             if (limit->HasOffset()) {
                 // clang-format off
                 currentStageBody = Build<TCoSkip>(ctx, op->Pos)
@@ -135,9 +137,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             .Done().Ptr();
             // clang-format on
 
-            if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
-                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());
-            }
+            currentStageBody = NPhysicalConvertionUtils::ExtractMembers(
+                currentStageBody,
+                ctx,
+                NPhysicalConvertionUtils::GetLiveOutputIUs(*limit));
 
             if (!limit->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, limit->GetNumOfConsumers(), ctx, op->Pos);
@@ -164,13 +167,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Sort " << opStageId;
         } else if (op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
+            Y_ENSURE(join->Props.UseBlockHashJoin.has_value(), "Physical join implementation has not been selected");
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput, rboCtx.KqpCtx.Config->GetUseBlockHashJoin());
+            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput, *join->Props.UseBlockHashJoin, rboCtx.TypeCtx);
 
             if (!join->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, join->GetNumOfConsumers(), ctx, op->Pos);
@@ -181,7 +185,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
-            const auto unionOutput = unionAll->GetOutputIUs();
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
@@ -189,45 +192,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
-                const auto inputOutput = inputOp->GetOutputIUs();
-                THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
-                inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
-
-                TVector<std::pair<TString, TString>> renames;
-                renames.reserve(unionAll->Columns.size());
-                bool identity = inputOutput.size() == unionOutput.size();
-                for (size_t i = 0; i < unionAll->Columns.size(); ++i) {
-                    const auto& column = unionAll->Columns[i];
-                    Y_ENSURE(inputOutputSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
-                    renames.emplace_back(column.GetFullName(), column.GetFullName());
-                    identity = identity && inputOutput[i] == column;
-                }
-
-                if (identity) {
-                    return input;
-                }
-                return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
-            };
-
-            TVector<TExprNode::TPtr> extendArgs{
-                projectInput(leftArg, unionAll->GetLeftInput()),
-                projectInput(rightArg, unionAll->GetRightInput())
-            };
-
-            if (unionAll->Ordered) {
-                // clang-format off
-                currentStageBody = Build<TCoOrderedExtend>(ctx, op->Pos)
-                    .Add(extendArgs)
-                .Done().Ptr();
-                // clang-format on
-            } else {
-                // clang-format off
-                currentStageBody = Build<TCoExtend>(ctx, op->Pos)
-                    .Add(extendArgs)
-                .Done().Ptr();
-                // clang-format on
-            }
+            currentStageBody = Build<TPhysicalUnionAllBuilder>(unionAll, ctx, op->Pos, leftInput, rightInput);
 
             if (!unionAll->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, unionAll->GetNumOfConsumers(), ctx, op->Pos);

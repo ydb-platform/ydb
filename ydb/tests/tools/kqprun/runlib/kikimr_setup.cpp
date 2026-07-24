@@ -46,13 +46,13 @@ private:
     TString YqlToken_;
 };
 
-class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
+class TStaticSecuredCredentialsFactory : public NYql::IStructuredTokenCredentialsFactory {
 public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
+    explicit TStaticSecuredCredentialsFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
     {}
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, bool) override {
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
     }
 

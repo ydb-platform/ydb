@@ -191,7 +191,25 @@ TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYso
 }
 
 template <CPolymorphicEnumMapping TMapping>
-typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetCurrentType() const
+template <std::derived_from<typename TMapping::TBaseClass> TConcrete>
+TIntrusivePtr<TConcrete> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<TConcrete>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+template <typename TMapping::TKey Value>
+TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<Value>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetType() const
 {
     return HeldType_;
 }
@@ -217,10 +235,10 @@ void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& o
     }
 
     THROW_ERROR_EXCEPTION_UNLESS(
-        GetCurrentType() == other.GetCurrentType(),
+        GetType() == other.GetType(),
         "Can't merge polymorphic yson structs with different types stored (ThisType: %v, OtherType: %v)",
-        GetCurrentType(),
-        other.GetCurrentType());
+        GetType(),
+        other.GetType());
 
     SerializedStorage_ = PatchNode(SerializedStorage_, other.SerializedStorage_);
 

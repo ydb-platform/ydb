@@ -14,6 +14,7 @@
 #include "mkql_block_getelem.h"
 #include "mkql_block_guess.h"
 #include "mkql_block_variant.h"
+#include "mkql_block_variant_item.h"
 #include "mkql_block_way.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
@@ -313,6 +314,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockExists", &WrapBlockExists},
         {"BlockGuess", &WrapBlockGuess},
         {"BlockVariant", &WrapBlockVariant},
+        {"BlockVariantItem", &WrapBlockVariantItem},
         {"BlockWay", &WrapBlockWay},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},

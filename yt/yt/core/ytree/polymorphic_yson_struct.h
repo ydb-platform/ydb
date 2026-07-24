@@ -1,7 +1,6 @@
 #pragma once
 
 #include "yson_struct.h"
-
 #include "yson_schema.h"
 
 namespace NYT::NYTree {
@@ -210,7 +209,14 @@ public:
     template <TKey Value>
     TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TryGetConcrete() const;
 
-    TKey GetCurrentType() const;
+    //! Same as TryGetConcrete but fails on mismatch.
+    template <std::derived_from<TBase> TConcrete>
+    TIntrusivePtr<TConcrete> GetConcrete() const;
+
+    template <TKey Value>
+    TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> GetConcrete() const;
+
+    TKey GetType() const;
 
     TBase* operator->();
     const TBase* operator->() const;

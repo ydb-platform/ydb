@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount, const EValueType valueType) const {
-    if (!NArrow::NAccessor::NSubColumns::DictionaryApplicableForValueType(valueType)) {
+    if (!NArrow::NAccessor::NSubColumns::CanBeDictionaryEncoded(valueType)) {
         return accessor;
     }
     const auto enumerateNotNull = [&accessor](const auto& consumer) {
@@ -85,12 +85,11 @@ void TMergedBuilder::Initialize() {
         switch (ResultColumnStats.GetAccessorType(i)) {
             case NArrow::NAccessor::IChunkedArray::EType::Array:
                 ColumnBuilders.emplace_back(
-                    TPlainRuntimeBuilder(NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType)), valueType);
+                    TEncodingPlainBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                // Native scalars are never sparsed, so a sparsed column is always binary-backed.
-                AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
-                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0), valueType);
+                ColumnBuilders.emplace_back(
+                    TEncodingSparsedBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:

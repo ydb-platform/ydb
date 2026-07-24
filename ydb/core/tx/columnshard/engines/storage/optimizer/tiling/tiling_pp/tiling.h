@@ -368,6 +368,18 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
         return true;
     }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue tiling_info = NJson::JSON_MAP;
+        tiling_info.InsertValue("Accumulator", Accumulator.DoSerializeToJsonVisual());
+        NJson::TJsonValue levels = NJson::JSON_ARRAY;
+        for (auto& [_, level] : MiddleLevels) {
+            levels.AppendValue(level.DoSerializeToJsonVisual());
+        }
+        tiling_info.InsertValue("MiddleLevels", levels);
+        tiling_info.InsertValue("LastLevel", LastLevel.DoSerializeToJsonVisual());
+        return tiling_info;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

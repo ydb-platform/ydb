@@ -1401,7 +1401,7 @@ will produce next output:
         status: 202
         url: https://httpstat.us/202
 
-If you are in the REPL, you can also activete the recorder for all following responses:
+If you are in the REPL, you can also activate the recorder for all following responses:
 
 .. code-block:: python
 
@@ -1500,7 +1500,7 @@ testing. You can run all tests by:
 
 .. code-block:: shell
 
-    tox -e py37
+    tox -e py38
     tox -e py310
 
 OR manually activate required version of Python and run

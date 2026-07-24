@@ -17,7 +17,7 @@ from ydb.core.protos import config_pb2
 from ydb.tests.library.common.types import Erasure, FailDomainType
 
 from . import tls_tools
-from .kikimr_port_allocator import KikimrPortManagerPortAllocator
+from .kikimr_port_allocator import KikimrFixedNodePortAllocator, KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
@@ -174,6 +174,7 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
+            kafka_listen_address=None,
             metadata_section=None,
             column_shard_config=None,
             use_config_store=False,
@@ -256,6 +257,9 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.monitoring_tls_admin_client_cert_path = None
+        self.monitoring_tls_admin_client_key_path = None
+        self._monitoring_tls_client_certificate_required = False
         self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
@@ -592,10 +596,13 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
+        self.__kafka_api_port = kafka_api_port
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
             kafka_proxy_config['enable_kafka_proxy'] = True
-            kafka_proxy_config["listening_port"] = kafka_api_port
+            kafka_proxy_config["listening_port"] = self.get_kafka_api_port(node_id)
+            if kafka_listen_address is not None:
+                kafka_proxy_config["listening_address"] = kafka_listen_address
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
@@ -823,6 +830,16 @@ class KikimrConfigGenerator(object):
     def kafka_proxy_enabled(self):
         return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
+    def get_kafka_api_port(self, node_id):
+        # An explicitly requested port must be honored as-is, otherwise the node would
+        # still pick a dynamic port from the port manager (--kafka-port overrides the
+        # config's listening_port). The fixed-port allocator already applies the
+        # requested port together with its per-node offset, so keep using it there.
+        node_allocator = self.port_allocator.get_node_port_allocator(node_id)
+        if self.__kafka_api_port not in (None, 'auto') and not isinstance(node_allocator, KikimrFixedNodePortAllocator):
+            return self.__kafka_api_port
+        return node_allocator.kafka_api_port
+
     @property
     def working_dir(self):
         return self.__working_dir
@@ -844,6 +861,19 @@ class KikimrConfigGenerator(object):
 
     def set_binary_paths(self, binary_paths):
         self.__binary_paths = binary_paths
+
+    @property
+    def monitoring_tls_client_certificate_required(self):
+        return self._monitoring_tls_client_certificate_required
+
+    @monitoring_tls_client_certificate_required.setter
+    def monitoring_tls_client_certificate_required(self, value):
+        self._monitoring_tls_client_certificate_required = bool(value)
+        monitoring_config = self.yaml_config.setdefault('monitoring_config', {})
+        if self._monitoring_tls_client_certificate_required:
+            monitoring_config['client_certificate_required'] = True
+        else:
+            monitoring_config.pop('client_certificate_required', None)
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

@@ -214,6 +214,10 @@ void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
 
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
+}
+
 void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
     IssueReportTarget_ = reportTarget;
 }
@@ -317,7 +321,7 @@ TProgramPtr TProgramFactory::Create(
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
+                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
                         qContext, RemoteLayersProviders_);
 }
 
@@ -349,6 +353,7 @@ TProgram::TProgram(
     TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
@@ -438,6 +443,12 @@ TProgram::TProgram(
                     YQL_ENSURE(SavedUserDataTable_.emplace(TUserDataKey::File(alias.AsString()), block).second);
                 }
             }
+        }
+    }
+
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
         }
     }
 

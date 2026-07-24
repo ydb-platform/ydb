@@ -3,18 +3,27 @@ name: Check CPP SDK PEERDIRs
 on:
   pull_request_target:
     branches: [main, stable-*]
+    types: [opened, synchronize, reopened, labeled]
     paths: ['ydb/public/sdk/cpp/**', '.github/workflows/cpp_sdk_peerdirs_check.yml']
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Irrelevant label events must not cancel a running check for the same PR.
+  group: >-
+    ${{ github.workflow }}-${{
+      github.event_name == 'pull_request_target'
+      && format('pr-{0}{1}', github.event.pull_request.number,
+          github.event.action == 'labeled' && github.event.label.name != 'ok-to-test' && format('-ignore-{0}', github.run_id) || '')
+      || github.ref
+    }}
   cancel-in-progress: true
 
 jobs:
   check:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).cpp_sdk_peerdirs_check == true)
+      (github.event.pull_request.state == 'open' &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test'))
     runs-on: [self-hosted, tiny-worker]
     steps:
       - uses: actions/github-script@v8

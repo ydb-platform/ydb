@@ -18,6 +18,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     viewer_ut.cpp
+    viewer_subscriptions_ut.cpp
     topic_data_ut.cpp
     ut/ut_utils.cpp
 )

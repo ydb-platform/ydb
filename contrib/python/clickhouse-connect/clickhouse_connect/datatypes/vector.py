@@ -4,7 +4,7 @@ import logging
 from collections.abc import Sequence
 from math import ceil, nan
 from struct import pack, unpack
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     import numpy
@@ -89,7 +89,7 @@ class QBit(ClickHouseType):
         tuple_data = self._tuple_type.read_column_data(source, num_rows, ctx, read_state)
         vectors = [self._untranspose_row(t) for t in tuple_data]
         if self.nullable:
-            return data_conv.build_nullable_column(vectors, null_map, self._active_null(ctx))
+            return data_conv.build_nullable_column(vectors, cast(bytes, null_map), self._active_null(ctx))
         return vectors
 
     def write_column_prefix(self, dest: bytearray):

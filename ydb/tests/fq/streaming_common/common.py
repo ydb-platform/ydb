@@ -71,6 +71,7 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
         },
         replication_config={
             "iam_service_control": {

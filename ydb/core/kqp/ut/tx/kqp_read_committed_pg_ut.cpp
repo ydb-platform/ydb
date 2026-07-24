@@ -1365,6 +1365,51 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         tester.Execute();
     }
 
+    class TLockOnlyShardDistributedCommit : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            {
+                auto r = Kikimr->RunCall([&] {
+                    return client.ExecuteQuery(R"(
+                        CREATE TABLE `/Root/T1` (
+                            Key Uint32 NOT NULL,
+                            Val String,
+                            PRIMARY KEY (Key)
+                        ) WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+                        CREATE TABLE `/Root/T2` (
+                            Key Uint32 NOT NULL,
+                            Val String,
+                            PRIMARY KEY (Key)
+                        ) WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+                    )", TTxControl::NoTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+            }
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/T1` (Key, Val) VALUES (1u, "a");
+                    UPDATE `/Root/T2` ON (Key, Val) VALUES (2u, "b");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TLockOnlyShardDistributedCommit) {
+        TLockOnlyShardDistributedCommit tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
 } // Y_UNIT_TEST_SUITE(KqpReadCommittedPg)
 
 } // namespace NKqp

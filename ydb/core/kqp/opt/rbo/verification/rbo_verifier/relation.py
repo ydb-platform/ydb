@@ -2583,9 +2583,10 @@ def _sorting_network_family(
     absent rows, so the fixed output slots form a present prefix that ordered
     Limit can slice without constructing every row pair.
 
-    Merge additionally orders the ranks along each producer's concrete
-    semantic sequence. Those chains leave precisely the legal cross-producer
-    interleavings.
+    Merge additionally orders the ranks along each producer's semantic
+    sequence. Fixed producer orders use a chain; symbolic producer orders use
+    one exact constraint per unordered pair. Both leave precisely the legal
+    cross-producer interleavings.
     """
 
     outcomes: list[Outcome] = []
@@ -2654,42 +2655,70 @@ def _sorting_network_family(
         constraints = [smt.distinct(*tie_ranks)]
         if producer_groups is not None:
             input_ordinals = relation.ordinals
-            if input_ordinals is None:
-                raise RelationError(
-                    "merge network requires concrete producer input ordinals"
-                )
             for group in producer_groups:
                 members = tuple(
                     index
                     for index in group
                     if index in compact_index
                 )
-                if any(
-                    input_ordinals[index].operation != "int"
-                    for index in members
-                ):
-                    raise RelationError(
-                        "merge network requires concrete producer input ordinals"
+                concrete = (
+                    input_ordinals is None
+                    or all(
+                        input_ordinals[index].operation == "int"
+                        for index in members
                     )
-                ordered = tuple(sorted(
-                    members,
-                    key=lambda index: input_ordinals[index].atom,
-                ))
-                ordinal_values = tuple(
-                    input_ordinals[index].atom
-                    for index in ordered
                 )
-                if len(set(ordinal_values)) != len(ordinal_values):
-                    raise RelationError(
-                        "merge producer input ordinals must be distinct"
+                if concrete:
+                    ordered = (
+                        members
+                        if input_ordinals is None
+                        else tuple(sorted(
+                            members,
+                            key=lambda index: input_ordinals[index].atom,
+                        ))
                     )
-                constraints.extend(
-                    smt.lt(
-                        tie_ranks[compact_index[left]],
-                        tie_ranks[compact_index[right]],
+                    if input_ordinals is not None:
+                        ordinal_values = tuple(
+                            input_ordinals[index].atom
+                            for index in ordered
+                        )
+                        if len(set(ordinal_values)) != len(ordinal_values):
+                            raise RelationError(
+                                "merge producer input ordinals must be distinct"
+                            )
+                    constraints.extend(
+                        smt.lt(
+                            tie_ranks[compact_index[left]],
+                            tie_ranks[compact_index[right]],
+                        )
+                        for left, right in zip(ordered, ordered[1:])
                     )
-                    for left, right in zip(ordered, ordered[1:])
-                )
+                    continue
+
+                assert input_ordinals is not None
+                for position, left in enumerate(members):
+                    for right in members[position + 1 :]:
+                        input_left = input_ordinals[left]
+                        input_right = input_ordinals[right]
+                        # Match the producer's symbolic order whenever both
+                        # rows exist. Equal input ordinals carry no order,
+                        # exactly as in the ordinal Merge representation.
+                        constraints.append(
+                            smt.or_(
+                                smt.not_(smt.and_(
+                                    relation.rows[left].present,
+                                    relation.rows[right].present,
+                                )),
+                                smt.eq(input_left, input_right),
+                                smt.eq(
+                                    smt.lt(input_left, input_right),
+                                    smt.lt(
+                                        tie_ranks[compact_index[left]],
+                                        tie_ranks[compact_index[right]],
+                                    ),
+                                ),
+                            )
+                        )
 
         codec = _SortingNetworkRowCodec.create(
             relation,
@@ -2840,6 +2869,31 @@ def _select_sorting_network_item(
     )
 
 
+def _merge_network_producer_pairs(
+    source: RelationFamily,
+    groups: tuple[tuple[int, ...], ...],
+) -> int:
+    """Count symbolic producer-order pairs needed by a Merge network."""
+
+    count = 0
+    for outcome in source.outcomes:
+        relation = outcome.relation
+        if relation.ordinals is None:
+            continue
+        for group in groups:
+            live = tuple(
+                index
+                for index in group
+                if relation.rows[index].present != smt.FALSE
+            )
+            if any(
+                relation.ordinals[index].operation != "int"
+                for index in live
+            ):
+                count += _unordered_row_pairs(len(live))
+    return count
+
+
 def merge_family(
     source: RelationFamily,
     order: tuple[SortOrder, ...],
@@ -2873,18 +2927,12 @@ def merge_family(
         _sorting_network_payload_cells(outcome.relation)
         for outcome in source.outcomes
     )
+    producer_pair_count = _merge_network_producer_pairs(source, groups)
     network_fits = (
         network_count <= MAX_SORT_NETWORK_COMPARATORS
         and payload_cells <= MAX_SORT_NETWORK_PAYLOAD_CELLS
         and len(order) <= MAX_SORT_NETWORK_KEY_COLUMNS
-    )
-    concrete_input_ordinals = all(
-        outcome.relation.ordinals is not None
-        and all(
-            ordinal.operation == "int"
-            for ordinal in outcome.relation.ordinals
-        )
-        for outcome in source.outcomes
+        and producer_pair_count <= MAX_RELATION_ROW_PAIRS
     )
 
     def use_network() -> RelationFamily:
@@ -2897,7 +2945,7 @@ def merge_family(
         )
 
     if pair_count > MAX_RELATION_ROW_PAIRS:
-        if network_fits and concrete_input_ordinals:
+        if network_fits:
             return use_network()
         _require_relation_row_pairs(pair_count, "merge construction")
 
@@ -2933,7 +2981,6 @@ def merge_family(
     if (
         ordinal_pair_count > MAX_RELATION_ROW_PAIRS
         and network_fits
-        and concrete_input_ordinals
     ):
         return use_network()
     _require_relation_row_pairs(

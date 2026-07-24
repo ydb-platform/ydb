@@ -2,6 +2,8 @@
 
 #include <util/generic/guid.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 extern const TString ReplicationConsumerName;
@@ -22,30 +24,35 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"logPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (!target->GetStreamName().empty()) {
-            CLOG_W(ctx, "Stream name already assigned"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_WARN_CTX(ctx, "Stream name already assigned",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
@@ -70,16 +77,18 @@ public:
             NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(target->GetStreamConsumerName())
         );
 
-        CLOG_N(ctx, "Stream name assigned"
-            << ": rid# " << rid
-            << ", tid# " << tid
-            << ", name# " << target->GetStreamName());
+        YDB_LOG_NOTICE_CTX(ctx, "Stream name assigned",
+            {"logPrefix", LogPrefix},
+            {"rid", rid},
+            {"tid", tid},
+            {"name", target->GetStreamName()});
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxResolveResourceIdResult: public TTxBase {
@@ -18,30 +20,35 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
+            {"logPrefix", LogPrefix},
+            {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"logPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Resource id resolved"
-                << ": rid# " << rid);
+            YDB_LOG_NOTICE_CTX(ctx, "Resource id resolved",
+                {"logPrefix", LogPrefix},
+                {"rid", rid});
             Replication->UpdateResourceId(Ev->Get()->Value);
 
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString())
             );
         } else {
-            CLOG_E(ctx, "Resolve resource id error"
-                << ": rid# " << rid
-                << ", error# " << Ev->Get()->Error);
+            YDB_LOG_ERROR_CTX(ctx, "Resolve resource id error",
+                {"logPrefix", LogPrefix},
+                {"rid", rid},
+                {"error", Ev->Get()->Error});
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
 
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
@@ -54,7 +61,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

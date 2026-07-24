@@ -14,6 +14,8 @@
 
 #include <util/generic/ptr.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
@@ -27,15 +29,18 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"logPrefix", LogPrefix},
+                {"entry", entry});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 

@@ -16,6 +16,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
@@ -26,12 +28,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe path response"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Unknown describe path response",
+                {"logPrefix", LogPrefix},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -40,8 +45,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe path succeeded"
-                << ": path# " << path.first);
+            YDB_LOG_DEBUG("Describe path succeeded",
+                {"logPrefix", LogPrefix},
+                {"path", path.first});
 
             const auto& entry = result.GetEntry();
             switch (entry.Type) {
@@ -66,19 +72,21 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 break;
             }
 
-            LOG_W("Unsupported entry type"
-                << ": path# " << path.first
-                << ", type# " << entry.Type);
+            YDB_LOG_WARN("Unsupported entry type",
+                {"logPrefix", LogPrefix},
+                {"path", path.first},
+                {"type", entry.Type});
 
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
             Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
         } else {
-            LOG_E("Describe path failed"
-                << ": path# " << path.first
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString()
-                << ", iteration# " << Backoff.GetIteration());
+            YDB_LOG_ERROR("Describe path failed",
+                {"logPrefix", LogPrefix},
+                {"path", path.first},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()},
+                {"iteration", Backoff.GetIteration()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
@@ -98,12 +106,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe table response"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Unknown describe table response",
+                {"logPrefix", LogPrefix},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -112,15 +123,17 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe table succeeded"
-                << ": path# " << path.first);
+            YDB_LOG_DEBUG("Describe table succeeded",
+                {"logPrefix", LogPrefix},
+                {"path", path.first});
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
-            LOG_I("Add target"
-                << ": srcPath# " << target.Config->GetSrcPath()
-                << ", dstPath# " << target.Config->GetDstPath()
-                << ", kind# " << target.Kind);
+            YDB_LOG_INFO("Add target",
+                {"logPrefix", LogPrefix},
+                {"srcPath", target.Config->GetSrcPath()},
+                {"dstPath", target.Config->GetDstPath()},
+                {"kind", target.Kind});
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
                 switch (index.GetIndexType()) {
@@ -137,16 +150,18 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                         CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
                         CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
                     ));
-                LOG_I("Add target"
-                    << ": srcPath# " << target.Config->GetSrcPath()
-                    << ", dstPath# " << target.Config->GetDstPath()
-                    << ", kind# " << target.Kind);
+                YDB_LOG_INFO("Add target",
+                    {"logPrefix", LogPrefix},
+                    {"srcPath", target.Config->GetSrcPath()},
+                    {"dstPath", target.Config->GetDstPath()},
+                    {"kind", target.Kind});
             }
         } else {
-            LOG_E("Describe table failed"
-                << ": path# " << path.first
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Describe table failed",
+                {"logPrefix", LogPrefix},
+                {"path", path.first},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
@@ -166,12 +181,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe topic response"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Unknown describe topic response",
+                {"logPrefix", LogPrefix},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -180,20 +198,23 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe topic succeeded"
-                << ": path# " << path.first);
+            YDB_LOG_DEBUG("Describe topic succeeded",
+                {"logPrefix", LogPrefix},
+                {"path", path.first});
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
                 std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
-            LOG_I("Add target"
-                << ": srcPath# " << target.Config->GetSrcPath()
-                << ", dstPath# " << target.Config->GetDstPath()
-                << ", kind# " << target.Kind);
+            YDB_LOG_INFO("Add target",
+                {"logPrefix", LogPrefix},
+                {"srcPath", target.Config->GetSrcPath()},
+                {"dstPath", target.Config->GetDstPath()},
+                {"kind", target.Kind});
         } else {
-            LOG_E("Describe topic failed"
-                << ": path# " << path.first
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Describe topic failed",
+                {"logPrefix", LogPrefix},
+                {"path", path.first},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);
@@ -245,20 +266,24 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         auto it = Listings.find(ev->Cookie);
         if (it == Listings.end()) {
-            LOG_W("Unknown listing response"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Unknown listing response",
+                {"logPrefix", LogPrefix},
+                {"cookie", ev->Cookie});
             return;
         }
 
         const auto& path = it->second;
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Listing succeeded"
-                << ": path# " << path.first);
+            YDB_LOG_DEBUG("Listing succeeded",
+                {"logPrefix", LogPrefix},
+                {"path", path.first});
 
             for (const auto& child : result.GetChildren()) {
                 switch (child.Type) {
@@ -281,10 +306,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
             }
         } else {
-            LOG_E("Listing failed"
-                << ": path# " << path.first
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Listing failed",
+                {"logPrefix", LogPrefix},
+                {"path", path.first},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryListing(it->first);

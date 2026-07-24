@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
@@ -24,16 +26,24 @@ namespace {
 
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+                YDB_LOG_WARN("Error of resolving topic Retry",
+                    {"logPrefix", LogPrefix},
+                    {"srcStreamPath", SrcStreamPath},
+                    {"ev", ev->Get()->ToString()});
                 return Retry();
             }
 
-            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
+            YDB_LOG_ERROR("Error of resolving topic Stop",
+                {"logPrefix", LogPrefix},
+                {"srcStreamPath", SrcStreamPath},
+                {"ev", ev->Get()->ToString()});
             return; // TODO: hard error
         }
 
@@ -53,7 +63,8 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry",
+            {"logPrefix", LogPrefix});
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 

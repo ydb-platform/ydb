@@ -2,6 +2,8 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxInit: public TTxBase {
@@ -237,12 +239,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"logPrefix", LogPrefix});
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"logPrefix", LogPrefix});
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

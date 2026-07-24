@@ -28,6 +28,7 @@ subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
 exact uncorrelated single-column dynamic `IN`,
 the exact nullable
 `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection shape,
+the exact proven-total Date `Unwrap(Coalesce(member, zero))` shape,
 exact row-level `DistinctAll` aggregation, side-explicit join keys including
 the narrow shared-IU one-sided join slice, exact direct non-null Uint64
 `Just`, exact scalar-final Uint64 sum unwrap, and exact direct scalar
@@ -51,29 +52,45 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete post-fix formula-only measurements were generated on
-2026-07-24 from source `4f73b38aaaf` after the correlated-COUNT repair, exact
+2026-07-24 from source `93a01455afe` after the correlated-COUNT repair, exact
 `DistinctAll` support, restoration of
 the production PostgreSQL parser/runtime in the benchmark host, and the exact
 dynamic-`IN`, nullable Date-year, q95 multi-distinct, and exact String
-dynamic-`IN` slices. They establish formula construction for TPCH q1, q3, q4,
-q5, q6, q7, q8, q9, q10,
+dynamic-`IN` slices, followed by the exact proven-total Date `Unwrap` gate.
+They establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
-q25, q29, q37,
+q25, q29, q37, q38,
 q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69,
-q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99:
-53/121 workload queries (43.8%). TPCH has sixteen formulas, four unsupported
-queries, and two optimizer failures; TPC-DS has thirty-seven formulas,
-thirty-six unsupported queries, and twenty-six optimizer failures. Across both
-suites that is 40 unsupported queries and 28 optimizer failures.
+q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, and q99:
+55/121 workload queries (45.5%). TPCH has sixteen formulas, four unsupported
+queries, and two optimizer failures; TPC-DS has thirty-nine formulas,
+thirty-four unsupported queries, and twenty-six optimizer failures. Across both
+suites that is 38 unsupported queries and 28 optimizer failures.
 
 There are two useful denominators behind that workload-wide number.
-Ninety-three queries complete optimizer preparation, so 53/93 (57.0%) of
-optimizer-successful queries construct formulas. Seventeen TPCH and forty-two
-TPC-DS queries actually enter the Python verifier; 53/59 (89.8%) of those
-entrants construct the full bounded obligation. The difference is the
-deliberately fail-closed C++ export boundary, not an SMT construction failure.
+Ninety-three queries complete optimizer preparation, so 55/93 (59.1%) of
+optimizer-successful queries construct formulas. Seventeen TPCH and forty-four
+TPC-DS queries actually enter the Python verifier; 55/61 (90.2%) of those
+entrants construct the full bounded obligation. The 32-query gap from 93
+optimizer-successful queries to 61 verifier entrants is the deliberately
+fail-closed C++ export boundary.
+Of the 38 current unsupported results, 27 stop at initial export, five at final
+export, and six inside the verifier. Thus 32 are intentionally rejected before
+formula construction is attempted; only six exported plan pairs currently fail
+to construct a formula.
 
-The latest extension admits dynamic `IN` only when the lookup and result are
+The latest exact Date-`Unwrap` gate admits only a non-null Date
+`Unwrap` of a binary Optional-Date `Coalesce` whose first argument is one
+direct visible nullable Date member and whose fallback is known-present Date
+zero. The initial snapshot spells that fallback as
+`SafeCast(Int32(0), Optional<Date>)`; the final snapshot spells it as
+`Just(Date(0))`. Both normalize to the existing non-null Date `if_present`
+form, preserving the member when present and Date zero when absent. This moves
+TPC-DS q38 and q87 through formula construction and into the bounded proof
+floor. Other `Unwrap` semantics remain closed; in particular, TPC-DS q8's
+String `Unwrap` is still unsupported.
+
+The preceding extension admits dynamic `IN` only when the lookup and result are
 the same non-null `String` type, reusing the exact existential-equality
 semantics already audited for fixed-width integers. It adds TPC-DS q56 and q60
 to formula construction. q45 also clears its initial String-`IN` boundary and
@@ -96,9 +113,9 @@ return `WITNESS_NOT_REPRODUCED`, and focused q56/q60 solver runs return
 focused report SHA-256 is
 `1da4256d6b306933aa54cabc99fce262f12bcac69b1dd64c9dfd599fad7b6caa`.
 That source also retains the nonmanual production runtime regression. Both
-queries remain formula-covered rather than proved: formula coverage is
-unchanged at 53/121, 53/93 optimizer-successful queries, and 53/59 verifier
-entrants, while the proof floor remains 20/121.
+queries remained formula-covered rather than proved at that checkpoint:
+formula coverage was 53/121, 53/93 optimizer-successful queries, and 53/59
+verifier entrants, while the proof floor was 20/121.
 
 The q95 bridge is a composition of four narrow exact contracts rather than a
 query-specific equivalence shortcut. Join keys are serialized as ordered
@@ -126,10 +143,10 @@ unwrap, or residual shape still fails closed.
 Together these contracts model q95 before and after its multi-distinct rewrite.
 Its focused formula is 288,499 bytes and 1,269 lines. A preceding dedicated
 two-row, two-task proof-floor run returned `VERIFIED_BOUNDED` after
-512/3,013 ms of preparation/verification. The enforced floor is now 10/10
-TPCH and 10/10 TPC-DS, including q95: 20/121 workload queries (16.5%).
-The current complete verification-subtree gate passes 34/34 suites and 914/914
-tests.
+512/3,013 ms of preparation/verification. At that q95 milestone, the enforced
+floor was 10/10 TPCH and 10/10 TPC-DS, including q95: 20/121 workload queries
+(16.5%). The complete verification-subtree gate at that milestone passed
+34/34 suites and 914/914 tests.
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -209,15 +226,19 @@ optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
 32/32 real-host integration tests.
 
-The current policy-checked TPCH formula dashboard spent 2,801/30,006 ms in
+The current policy-checked TPCH formula dashboard spent 2,810/30,317 ms in
 preparation/verifier work and produced report SHA-256
-`deb388eec49e32242cd66bfbe943ef2f73a692d95d96150fbfb68f8281390753`;
-TPC-DS spent 68,622/200,340 ms and produced
+`464b67c4ae5ec2661789e659c349e94f7c45ef958f38214bb733d99b2814ef02`;
+TPC-DS spent 63,563/189,499 ms and produced
+`cdfd41c4ab74b42a884b332c05b006f7a543c23f1f4ab4c924dbd08f2adc16f8`.
+TPC-DS q38 and q87 emitted after 335/471 and 306/474 ms, respectively.
+The preceding 53-formula TPCH/TPC-DS reports spent 2,801/30,006 and
+68,622/200,340 ms and produced
+`deb388eec49e32242cd66bfbe943ef2f73a692d95d96150fbfb68f8281390753` and
 `9d808615985c7c6fce4bc76cfb7b1c92e68e82ecb02294e23921f7dad809af2d`.
-TPC-DS q6 itself emitted its formula after 344/11,938 ms, while q56, q60, and
-q95 emitted after 1,653/1,082, 1,464/1,092, and 474/454 ms, respectively. The
-preceding milestone reports and their timings/hashes remain historical records
-in
+In those reports, TPC-DS q6, q56, q60, and q95 emitted after 344/11,938,
+1,653/1,082, 1,464/1,092, and 474/454 ms, respectively. Earlier milestone
+reports and their timings/hashes remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The canonical q6 formula is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation, down from 627,951,195 bytes
@@ -227,12 +248,20 @@ before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
-q19, and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, q95, and
-q96: twenty obligations (16.5% of the workload). The current post-fix
+q19, and q22 plus TPC-DS q3, q38, q42, q48, q52, q55, q69, q87, q90, q93,
+q95, and q96: twenty-two obligations (18.2% of the workload). The current post-fix
 proof-floor gate is green and policy-valid: TPCH passes 10/10
-`VERIFIED_BOUNDED` after 1,164/61,112 ms and produced report SHA-256
-`1971377b7fa14ab2b6823cdacb99a4d79a76ac4ceea9de46117d30df94a154f9`;
-TPC-DS passes 10/10 after 2,063/40,374 ms and produced
+`VERIFIED_BOUNDED` after 1,234/58,883 ms and produced report SHA-256
+`db65dfe267b0b343f3cded64a32a028fab5561f4ad7b48a5803e0d3629c77f37`;
+TPC-DS passes 12/12 after 2,522/41,013 ms and produced
+`ea0aaa45b9cc8e7de40ad97ce23420bec926838acc8e17c4925edfad9e481751`.
+Its q38 and q87 rows spent 333/1,115 and 324/1,052 ms, respectively.
+The complete verification subtree at this milestone passes 34/34 suites and
+919/919 tests.
+The preceding twenty-query proof floor passed 10/10 TPCH after
+1,164/61,112 ms and 10/10 TPC-DS after 2,063/40,374 ms, producing report
+SHA-256 values
+`1971377b7fa14ab2b6823cdacb99a4d79a76ac4ceea9de46117d30df94a154f9` and
 `9a0d87075982d9ef4138b1d55b2265bd9ef461c237fec239c817e601da02bf7f`.
 The preceding nineteen-query proof floor used the same ten TPCH obligations
 and nine TPC-DS obligations without q95. It spent 1,226/59,673 ms for TPCH and
@@ -289,8 +318,10 @@ The complete nineteen-obligation proof floor was confirmed after the dynamic
 and two tasks. After the later nullable Date-year bridge, formula coverage was
 50/121 (41.3%) and that proof floor remained unchanged. These are retained
 historical checkpoints; the q95 bridge then raised the figures to 51 formulas
-and twenty enforced proofs, and exact String dynamic `IN` raises the current
-formula count to 53 without changing that proof floor.
+and twenty enforced proofs, and exact String dynamic `IN` raised the formula
+count at the next checkpoint to 53 without changing that proof floor. The
+exact proven-total Date `Unwrap` gate raises the current counts to 55 formulas
+and twenty-two enforced proofs.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -1067,8 +1098,9 @@ nullable/coercing dynamic `IN`, range reads, and other OLAP pushdowns remain
 separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy now adds
-TPC-DS q95 after the earlier TPCH q18 addition; the complete 10/10 TPCH and
-10/10 TPC-DS gate is `VERIFIED_BOUNDED`.
+TPC-DS q95 after the earlier TPCH q18 addition, then q38 and q87 through the
+exact proven-total Date `Unwrap` gate; the complete 10/10 TPCH and 12/12
+TPC-DS gate is `VERIFIED_BOUNDED`.
 
 The audit has found nine production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -1159,7 +1191,8 @@ side-routing logic, and adds the direct rule regression. Commit `4f73b38aaaf`
 retains the nonmanual production runtime regression. After the fix, the two old
 witnesses are `WITNESS_NOT_REPRODUCED` and focused 60-second q56/q60 solver
 runs are `UNKNOWN`; the SHA-bound timings and report digest are recorded above.
-Neither query enters the proof floor. Formula coverage therefore remains
+Neither query entered the proof floor at that source checkpoint. Formula
+coverage there remained
 53/121 overall, 53/93 among optimizer-successful queries, and 53/59 among
 verifier entrants, with 20/121 bounded proofs.
 

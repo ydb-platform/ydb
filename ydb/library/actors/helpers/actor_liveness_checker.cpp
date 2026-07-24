@@ -18,13 +18,7 @@ namespace NActors {
         // Every local liveness probe eventually produces ActorAlive or ActorDead.
         // Remote probes currently produce ActorLivenessUnsure.
         for (const auto& [actorId, cookie] : PendingTargets) {
-            TActivationContext::Send(new IEventHandle(
-                TEvents::TSystem::CheckActorLiveness,
-                TEvents::TEvCheckActorLiveness::RequestFlags,
-                actorId,
-                SelfId(),
-                nullptr,
-                cookie));
+            SendActorLivenessCheck(actorId, cookie);
         }
     }
 

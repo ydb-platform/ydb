@@ -268,6 +268,22 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 void TKqpScanComputeActor::DoBootstrap() {
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
+
+    if (GetTask().GetProgram().GetSettings().WasmUdfModulesSize() > 0) {
+        try {
+            WasmQueryCompartment_.emplace(GetTask().GetProgram().GetSettings());
+        } catch (const std::exception& e) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR,
+                TStringBuilder() << "Failed to acquire WASM query compartment: " << e.what());
+            return;
+        }
+    }
+
+    std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->Active()) {
+        wasmGuard.emplace(WasmQueryCompartment_->Activate());
+    }
+
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;

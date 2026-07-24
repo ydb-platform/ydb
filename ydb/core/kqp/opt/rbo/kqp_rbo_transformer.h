@@ -36,10 +36,10 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                                              TTypeAnnotationContext &typeCtx);
 
-class TKqpNewRBOTransformer: public TGraphTransformerBase {
+class TKqpNewRBOTransformer : public TGraphTransformerBase {
 public:
     TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                          TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables, const TString& cluster, const TString& database,
+                          TKikimrTablesData& tables, const TString& cluster, const TString& database,
                           TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry);
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -62,7 +62,6 @@ private:
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;
     TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
 
     // Special fields to request column statistics.
@@ -80,8 +79,7 @@ private:
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TKikimrTablesData& tables,
                                                        const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry);
 

@@ -9,13 +9,21 @@ namespace NKikimr::NBlobDepot {
 
     struct TS3Manager::TEvDeleteResult : TEventLocal<TEvDeleteResult, TEvPrivate::EvDeleteResult> {
         std::vector<TS3Locator> LocatorsOk;
+        std::vector<TS3Locator> LocatorsThrottled;
         std::vector<TS3Locator> LocatorsError;
 
-        TEvDeleteResult(std::vector<TS3Locator>&& locatorsOk, std::vector<TS3Locator>&& locatorsError)
+        TEvDeleteResult(std::vector<TS3Locator>&& locatorsOk, std::vector<TS3Locator>&& locatorsThrottled,
+                std::vector<TS3Locator>&& locatorsError)
             : LocatorsOk(std::move(locatorsOk))
+            , LocatorsThrottled(std::move(locatorsThrottled))
             , LocatorsError(std::move(locatorsError))
         {}
     };
+
+    static bool IsSlowDown(const Aws::S3::S3Error& error) {
+        return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
+            || error.GetExceptionName() == "SlowDown";
+    }
 
     class TS3Manager::TDeleterActor : public TActor<TDeleterActor> {
         TActorId ParentId;
@@ -38,6 +46,8 @@ namespace NKikimr::NBlobDepot {
                 Finish(std::nullopt);
             } else if (const auto& error = msg.GetError(); error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
                 Finish(std::nullopt);
+            } else if (IsSlowDown(error)) {
+                Finish(error.GetMessage().c_str(), /*throttled=*/true);
             } else {
                 Finish(error.GetMessage().c_str());
             }
@@ -47,7 +57,9 @@ namespace NKikimr::NBlobDepot {
             auto& msg = *ev->Get();
 
             std::vector<TS3Locator> locatorsOk;
+            std::vector<TS3Locator> locatorsThrottled;
             std::vector<TS3Locator> locatorsError;
+            bool requestThrottled = false;
 
             if (msg.IsSuccess()) {
                 auto& result = msg.Result.GetResult();
@@ -72,24 +84,42 @@ namespace NKikimr::NBlobDepot {
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         }
+                    } else if (error.KeyHasBeenSet() && error.GetCode() == "SlowDown") {
+                        if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
+                            STLOG(PRI_WARN, BLOB_DEPOT, BDTS19, "S3 SlowDown for object", (Id, LogId),
+                                (Locator, it->second), (Error, error.GetMessage().c_str()));
+                            BDEV(BDEV39, "deleted_from_S3:SlowDown", (BDT, TabletId), (Locator, it->second));
+                            locatorsThrottled.push_back(it->second);
+                            Locators.erase(it);
+                        }
                     } else {
                         STLOG(PRI_WARN, BLOB_DEPOT, BDTS11, "failed to delete object from S3", (Id, LogId),
                             (Key, error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt),
                             (Error, error.GetMessage().c_str()));
                     }
                 }
+            } else if (IsSlowDown(msg.GetError())) {
+                requestThrottled = true;
+                STLOG(PRI_WARN, BLOB_DEPOT, BDTS20, "S3 SlowDown for batch delete", (Id, LogId),
+                    (Error, msg.GetError().GetMessage().c_str()));
             } else {
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
                     (Error, msg.GetError().GetMessage().c_str()));
             }
 
+            auto *remainingTarget = requestThrottled ? &locatorsThrottled : &locatorsError;
             for (const auto& [key, locator] : Locators) {
-                locatorsError.push_back(locator);
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS08, "failed to delete object from S3", (Id, LogId), (Locator, locator));
-                BDEV(BDEV31, "deleted_from_S3:error", (BDT, TabletId), (Locator, locator));
+                remainingTarget->push_back(locator);
+                if (requestThrottled) {
+                    BDEV(BDEV40, "deleted_from_S3:SlowDown", (BDT, TabletId), (Locator, locator));
+                } else {
+                    STLOG(PRI_WARN, BLOB_DEPOT, BDTS08, "failed to delete object from S3", (Id, LogId), (Locator, locator));
+                    BDEV(BDEV31, "deleted_from_S3:error", (BDT, TabletId), (Locator, locator));
+                }
             }
 
-            Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsError)));
+            Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
+                std::move(locatorsError)));
             PassAway();
         }
 
@@ -97,18 +127,27 @@ namespace NKikimr::NBlobDepot {
             Finish("event undelivered");
         }
 
-        void Finish(std::optional<TString> error) {
+        void Finish(std::optional<TString> error, bool throttled = false) {
             if (error) {
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS03, "failed to delete object(s) from S3", (Id, LogId), (Locators, Locators),
-                    (Error, error));
+                    (Error, error), (Throttled, throttled));
             }
             std::vector<TS3Locator> locatorsOk;
+            std::vector<TS3Locator> locatorsThrottled;
             std::vector<TS3Locator> locatorsError;
-            auto *target = error ? &locatorsError : &locatorsOk;
+            std::vector<TS3Locator> *target;
+            if (!error) {
+                target = &locatorsOk;
+            } else if (throttled) {
+                target = &locatorsThrottled;
+            } else {
+                target = &locatorsError;
+            }
             for (const auto& [key, locator] : Locators) {
                 target->push_back(locator);
             }
-            Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsError)));
+            Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
+                std::move(locatorsError)));
             PassAway();
         }
 
@@ -167,7 +206,22 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::RunDeletersIfNeeded() {
-        while (NumDeleteTxInFlight + ActiveDeleters.size() < MaxDeletesInFlight) {
+        // Gate on SlowDown-induced throttling cooldown.
+        const TMonotonic now = TActivationContext::Monotonic();
+        if (now < DeleteThrottleUntil) {
+            if (!DeleteWakeupScheduled) {
+                TActivationContext::Schedule(DeleteThrottleUntil, new IEventHandle(TEvPrivate::EvDeleteThrottleWakeup,
+                    0, Self->SelfId(), {}, nullptr, 0));
+                DeleteWakeupScheduled = true;
+            }
+            return;
+        }
+
+        while (NumDeleteTxInFlight + ActiveDeleters.size() < CurrentMaxDeletesInFlight) {
+            if (DeleteQueue.empty()) {
+                break;
+            }
+
             // create list of locators we are going to delete during this operation
             THashMap<TString, TS3Locator> locators;
             while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
@@ -223,6 +277,34 @@ namespace NKikimr::NBlobDepot {
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_BYTES] += len;
 
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_ERROR] += msg.LocatorsError.size();
+                Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_SLOW_DOWN] +=
+                    msg.LocatorsThrottled.size();
+
+                if (!msg.LocatorsThrottled.empty()) {
+                    // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.
+                    DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsThrottled.begin(), msg.LocatorsThrottled.end());
+                    CurrentMaxDeletesInFlight = 1;
+                    ConsecutiveSuccessfulDeleteBatches = 0;
+                    const TDuration delay = DeleteBackoff.Next();
+                    DeleteThrottleUntil = TActivationContext::Monotonic() + delay;
+                    STLOG(PRI_WARN, BLOB_DEPOT, BDTS21, "S3 delete throttled", (Id, Self->GetLogId()),
+                        (Delay, delay), (Throttled, msg.LocatorsThrottled.size()),
+                        (CurrentMaxDeletesInFlight, CurrentMaxDeletesInFlight));
+                    BDEV(BDEV36, "S3_delete_throttled", (BDT, Self->TabletID()), (DelayMs, delay.MilliSeconds()),
+                        (Throttled, msg.LocatorsThrottled.size()));
+                } else if (!msg.LocatorsOk.empty()) {
+                    // Pure success: gradually restore concurrency.
+                    if (CurrentMaxDeletesInFlight < MaxDeletesInFlight) {
+                        if (++ConsecutiveSuccessfulDeleteBatches >= SuccessesPerConcurrencyStepUp) {
+                            ConsecutiveSuccessfulDeleteBatches = 0;
+                            ++CurrentMaxDeletesInFlight;
+                            if (CurrentMaxDeletesInFlight >= MaxDeletesInFlight) {
+                                CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+                                DeleteBackoff.Reset();
+                            }
+                        }
+                    }
+                }
 
                 if (!msg.LocatorsOk.empty()) {
                     Self->Execute(std::make_unique<TTxDeleteTrashS3>(Self, std::move(msg.LocatorsOk)));
@@ -231,10 +313,16 @@ namespace NKikimr::NBlobDepot {
 
                 if (!msg.LocatorsError.empty()) {
                     DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsError.begin(), msg.LocatorsError.end());
-                    RunDeletersIfNeeded();
                 }
+
+                RunDeletersIfNeeded();
             })
         )
+    }
+
+    void TS3Manager::HandleDeleteThrottleWakeup() {
+        DeleteWakeupScheduled = false;
+        RunDeletersIfNeeded();
     }
 
 } // NKikimr::NBlobDepot

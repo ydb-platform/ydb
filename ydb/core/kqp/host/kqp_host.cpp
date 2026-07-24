@@ -1825,6 +1825,7 @@ private:
         state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
+        state->EnableS3ConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
 
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
@@ -1924,6 +1925,7 @@ private:
         state->SupportRtmrMode = false;
         state->AllowTransparentSystemColumns = false;
         state->StreamingTopicsReadByDefault = false;
+        state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -1983,6 +1985,7 @@ private:
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
         TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
+        TypesCtx->OptimizerFlags.insert("rewriteswitchoverextractmembers");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 

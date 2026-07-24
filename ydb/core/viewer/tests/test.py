@@ -22,6 +22,7 @@ class TestViewer(object):
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
             'enable_resource_pools': True,  # just for canonized data - .metadata table
+            'enable_extra_sids_control_for_http_viewer': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -605,6 +606,19 @@ class TestViewer(object):
         result = cls.replace_types_by_key(result, replace_with_types)
         result = cls.replace_values_by_key(result, replace_with_values)
         return result
+
+    @classmethod
+    def normalize_result_viewer_config(cls, result):
+        """Normalize dynamic local cluster settings returned by /viewer/config."""
+        return cls.replace_values_by_key(result, {'BackendFileName',
+                                                  'MaxInFlight',
+                                                  'MaxInFlightBySize',
+                                                  'MonitoringPort',
+                                                  'NetDataFilePath',
+                                                  'NumWorkers',
+                                                  'Port',
+                                                  'StartupConfigYaml',
+                                                  })
 
     @classmethod
     def normalize_result_healthcheck(cls, result):
@@ -1536,6 +1550,89 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_external_http_access_controls(cls):
+        result = {}
+
+        result['viewer_simple_counter_root'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['viewer_simple_counter_monitoring'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['viewer_simple_counter_viewer'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['viewer_simple_counter_database'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['administration_bscontrollerinfo_viewer'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['administration_bscontrollerinfo_database'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['viewer_config_root'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        }))
+        result['viewer_config_monitoring'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }))
+        result['viewer_config_viewer'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }))
+        result['viewer_config_database'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+        result['database_nodes_missing_database_database'] = cls.get_viewer("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        return result
+
+    @classmethod
     def test_security(cls):
         result = {}
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
@@ -1691,6 +1788,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
+
         return result
 
     @classmethod

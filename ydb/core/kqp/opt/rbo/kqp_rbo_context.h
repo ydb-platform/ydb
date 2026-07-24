@@ -13,26 +13,24 @@ using namespace NOpt;
 
 class TRBOContext {
 public:
-    TRBOContext(TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, NYql::IGraphTransformer& typeAnnTransformer,
-                NYql::IGraphTransformer& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry)
+    TRBOContext(NOpt::TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, NYql::IGraphTransformer& typeAnnTransformer,
+                const NMiniKQL::IFunctionRegistry& funcRegistry)
         : KqpCtx(kqpCtx)
         , ExprCtx(ctx)
         , TypeCtx(typeCtx)
         , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTypeAnnTransformer(peepholeTypeAnnTransformer)
         , FuncRegistry(funcRegistry)
         , CBOCtx(
               TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
     }
 
-    TKqpOptimizeContext& KqpCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
     NYql::TExprContext& ExprCtx;
     NYql::TTypeAnnotationContext& TypeCtx;
     NYql::IGraphTransformer& TypeAnnTransformer;
-    NYql::IGraphTransformer& PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TKqpProviderContext CBOCtx;
 };
 
-} // namespace NKqp
+}
 }

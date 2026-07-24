@@ -76,6 +76,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             }
         }
 
+        if (settings.max_shards_in_flight() == 0) {
+            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "max_shards_in_flight must be greater than 0");
+        }
+
         auto info = MakeIntrusive<TForcedCompactionInfo>();
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;
@@ -166,7 +170,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
-        Self->ProcessForcedCompactionQueues();
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -182,7 +186,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

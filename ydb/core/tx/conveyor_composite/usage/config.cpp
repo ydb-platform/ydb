@@ -134,8 +134,8 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         if (conclusion.IsFail()) {
             return conclusion;
         }
-        Links.emplace_back(std::move(link));
         categories.emplace(::ToString(link.GetCategory()));
+        Links.emplace_back(std::move(link));
     }
     if (!PoolName || PoolName == "WP::DEFAULT") {
         PoolName = "WP::" + JoinSeq("-", categories);

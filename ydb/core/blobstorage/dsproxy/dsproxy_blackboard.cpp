@@ -100,7 +100,7 @@ void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoB
     Y_VERIFY_S(disk.OrderNumber == orderNumber, "AddResponseData, disk.OrderNumber != orderNumber"
         << " blobId# " << id
         << " shift# " << shift
-        << " size# " << data.size()
+        << " size# " << dataSize
         << " VDiskId# " << info.GetVDiskId(orderNumber)
         << " diskIdx# " << diskIdx
         << " disk# " << disk.ToString()

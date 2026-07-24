@@ -18,6 +18,7 @@
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -2158,10 +2159,16 @@ public:
         TBase::PassAway();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
+        const NYql::TIssues& subIssues = {})
+    {
+        NYql::TIssue issue(message);
+        for (const auto& subIssue : subIssues) {
+            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+        }
         NYql::TIssues issues;
-        issues.AddIssue(NYql::TIssue(message));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
+        issues.AddIssue(std::move(issue));
+        this->Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
     bool IsFinished() {
@@ -2654,13 +2661,53 @@ public:
         }
     }
 
+    // Human-readable name of the impl/main table a read targets, for diagnostics.
+    static TStringBuf ReadKindName(EReadKind readKind) {
+        switch (readKind) {
+            case EReadKind_Word:          return "posting";
+            case EReadKind_Word_L2:       return "posting(L2)";
+            case EReadKind_WordStats:     return "dict";
+            case EReadKind_DocumentStats: return "docs";
+            case EReadKind_Document:      return "main";
+            case EReadKind_TotalStats:    return "stats";
+        }
+    }
+
+    // Path of the table a read targets, so an error names the exact (impl) table that failed.
+    TString GetReadTablePath(EReadKind readKind) const {
+        switch (readKind) {
+            case EReadKind_Word:
+            case EReadKind_Word_L2:
+                return IndexTableReader ? IndexTableReader->GetTablePath() : TString();
+            case EReadKind_WordStats:
+                return DictTableReader ? DictTableReader->GetTablePath() : TString();
+            case EReadKind_DocumentStats:
+                return DocsTableReader ? DocsTableReader->GetTablePath() : TString();
+            case EReadKind_Document:
+                return MainTableReader ? MainTableReader->GetTablePath() : TString();
+            case EReadKind_TotalStats:
+                return StatsTableReader ? StatsTableReader->GetTablePath() : TString();
+        }
+    }
+
+    // Handle error statuses in TEvReadResult.
+    // OVERLOADED / INTERNAL_ERROR -> schedule retry with backoff.
+    // NOT_FOUND (shard moved/split) -> reset pipe and retry.
+    // Other statuses -> abort with ABORTED status.
     void HandleReadResultError(ui64 readId, const TReadInfo& readInfo, const NKikimrTxDataShard::TEvReadResult& record) {
         ui64 shardId = readInfo.ShardId;
         auto statusCode = record.GetStatus().GetCode();
 
+        NYql::TIssues shardIssues;
+        NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
+        const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
+
         CA_LOG_W("Read result error, ReadId=" << readId
             << ", ShardId=" << shardId
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(statusCode));
+            << ", ReadKind=" << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
+            << ", Table=" << tablePath
+            << ", Status=" << Ydb::StatusIds::StatusCode_Name(statusCode)
+            << ", Issues=[" << shardIssues.ToOneLineString() << "]");
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
@@ -2677,8 +2724,10 @@ public:
                 return;
             }
             default: {
-                RuntimeError(TStringBuilder() << "Read request aborted, status: "
-                    << Ydb::StatusIds::StatusCode_Name(statusCode), NYql::NDqProto::StatusIds::ABORTED);
+                RuntimeError(TStringBuilder() << "Read request aborted while reading table '" << tablePath
+                    << "' (shard " << shardId << ", " << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
+                    << "), status: " << Ydb::StatusIds::StatusCode_Name(statusCode),
+                    NYql::NDqProto::StatusIds::ABORTED, shardIssues);
                 return;
             }
         }

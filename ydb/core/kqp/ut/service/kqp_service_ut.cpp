@@ -14,6 +14,7 @@
 #include <util/system/sanitizers.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -187,6 +188,133 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         auto result = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+    }
+
+    // Repro for the cross-node client-cancel "subscription race" (the Proxy/Forwarded
+    // path). When a query-service request is served by a session on a different node than
+    // the gRPC request actor, the session learns about client cancel only by subscribing
+    // (TEvSubscribeGrpcCancel) to that remote gRPC actor. If the gRPC actor already died on
+    // its own client-lost before the subscription is delivered, the subscription is
+    // silently dropped and the session never tears down -> the executer and all its compute
+    // actors leak until the query deadline.
+    //
+    // Reproduced deterministically on a single node: drive KqpProxy with a TEvQueryRequest
+    // that has no RequestCtx (so the session takes the remote CancelationActor cancel path,
+    // exactly as a forwarded request does) and a CancelationActor that is dead by the time
+    // the subscription is delivered. We hold the subscription until the compute actors are
+    // up (emulating cross-node latency), then deliver it to the dead actor. With the fix the
+    // FlagTrackDelivery bounce (TEvUndelivered) makes the session treat it as client-lost
+    // and abort every compute actor; without the fix nothing happens and they leak (this
+    // assertion fails).
+    Y_UNIT_TEST(RemoteClientLostSubscriptionRaceTerminatesComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        {
+            auto tdb = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // The "remote gRPC request actor" the session subscribes to for client-cancel.
+        // It is never registered, so by the time the held subscription is delivered the
+        // actor is dead -> FlagTrackDelivery bounces TEvUndelivered back to the session.
+        const TActorId deadRpcActor(runtime->GetNodeId(0), 0, 0xDEAD, 0);
+
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        ui32 stateEvents = 0;
+        THolder<IEventHandle> heldSubscribe;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NGRpcService::TEvSubscribeGrpcCancel::EventType &&
+                ev->GetRecipientRewrite() == deadRpcActor && !heldSubscribe) {
+                // Emulate cross-node latency: hold the subscription until the compute
+                // actors are up, so any teardown happens with CAs still alive.
+                heldSubscribe.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite()) && ev->Sender == executerActor) {
+                    abortedComputeActors.insert(ev->GetRecipientRewrite());
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        // Drive KqpProxy directly with a request that looks forwarded from another node:
+        // no RequestCtx (so the session uses the remote CancelationActor cancel path) and a
+        // CancelationActor pointing at the already-dead gRPC request actor.
+        auto edge = runtime->AllocateEdgeActor();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
+        ActorIdToProto(edge, ev->Record.MutableRequestActorId());
+        ActorIdToProto(deadRpcActor, ev->Record.MutableCancelationActor());
+        auto& req = *ev->Record.MutableRequest();
+        req.SetDatabase("/Root");
+        req.SetQuery("SELECT * FROM `/Root/LargeTable`");
+        req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        auto* txControl = req.MutableTxControl();
+        txControl->mutable_begin_tx()->mutable_serializable_read_write();
+        txControl->set_commit_tx(true);
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), edge, ev.release()));
+
+        // Wait until the compute actors are up AND the session has issued its cancel
+        // subscription (which we are holding).
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3 && heldSubscribe; });
+            runtime->DispatchEvents(opts);
+        }
+        UNIT_ASSERT_C(!computeActors.empty(), "Expected compute actors to start");
+        UNIT_ASSERT_C(heldSubscribe, "Session did not issue a remote cancel subscription");
+        UNIT_ASSERT_C(abortedComputeActors.empty(), "Compute actors aborted before client-lost");
+
+        const auto computeActorsBeforeCancel = computeActors;
+
+        // The client "cancels": deliver the subscription to the now-dead gRPC actor.
+        runtime->Send(heldSubscribe.Release());
+
+        // The session must learn the client is gone and terminate every compute actor.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return abortedComputeActors.size() >= computeActorsBeforeCancel.size();
+            });
+            runtime->DispatchEvents(opts, TDuration::Seconds(10));
+        }
+
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors leaked after client-lost (subscription race): "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size() << ")");
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {

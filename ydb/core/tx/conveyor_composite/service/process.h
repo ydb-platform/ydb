@@ -112,7 +112,8 @@ public:
         CPUUsage->AddPredicted(result.GetPredictedDuration());
         WaitingTasksCount->Dec();
         InProgressTasksCount.Inc();
-        return std::move(result).BuildTask(signals->GetTaskSignals(result.GetTask()->GetTaskClassIdentifier()));
+        const auto taskClass = result.GetTask()->GetTaskClassIdentifier();
+        return std::move(result).BuildTask(signals->GetTaskSignals(taskClass));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {

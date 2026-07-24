@@ -224,7 +224,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
     Y_ENSURE(OpRoot);
-    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
     OpRoot->ComputePlanMetadata(rboCtx);
     for (auto it : *OpRoot) {
         if (IsSuitableToCollectStatistics(it.Current)) {
@@ -291,7 +291,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
-                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 return RBO.Optimize(*OpRoot, rboCtx);
             } else {
                 return node;
@@ -360,13 +360,12 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 }
 
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                             TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                             TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                                              TKikimrTablesData& tables, const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                              const NMiniKQL::IFunctionRegistry& funcRegistry)
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
     , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
-    , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
     , FuncRegistry(funcRegistry)
     , Tables(tables)
     , Cluster(cluster)
@@ -438,11 +437,10 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TKikimrTablesData& tables,
                                                        const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), tables, cluster, database,
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), tables, cluster, database,
                                      actorSystem, funcRegistry);
 }
 

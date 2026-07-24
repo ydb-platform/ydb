@@ -178,6 +178,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
+    if (settings.QueryReplayBackendFactory) {
+        ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
+    }
+
     Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {

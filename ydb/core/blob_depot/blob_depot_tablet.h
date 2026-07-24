@@ -39,6 +39,8 @@ namespace NKikimr::NBlobDepot {
                 EvDeleteResult,
                 EvScanFound,
                 EvScanContinue,
+                EvDeleteThrottleWakeup,
+                EvPutThrottleWakeup,
             };
         };
 

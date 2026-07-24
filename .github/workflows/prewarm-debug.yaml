@@ -13,7 +13,7 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2

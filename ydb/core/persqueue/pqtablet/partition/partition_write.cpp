@@ -463,6 +463,8 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
     KVWriteInProgress = false;
 
+    FlushStaleTxMetaDone(ctx);
+
     for (auto& span : TxForPersistSpans) {
         span.End();
     }

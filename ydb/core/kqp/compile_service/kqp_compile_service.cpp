@@ -517,7 +517,7 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr));
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -899,7 +899,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr));
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

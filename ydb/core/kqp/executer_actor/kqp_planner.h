@@ -43,7 +43,7 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const TActorId& Executer;
+        const TActorId Executer;
         const TString& Database;
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;

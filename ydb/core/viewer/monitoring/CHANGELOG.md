@@ -1,5 +1,13 @@
 # Changelog
 
+## [14.5.0-hotfix.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.5.0...v14.5.0-hotfix.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* **PDisk, VDisk, Group:** do not use colorized progress for size ([#3953](https://github.com/ydb-platform/ydb-embedded-ui/issues/3953)) ([33ae59a](https://github.com/ydb-platform/ydb-embedded-ui/commit/33ae59a44f3e8e5005f541b163bce9bb4027ac94))
+* **PDiskSpaceDistribution:** slot height calculation ([#3897](https://github.com/ydb-platform/ydb-embedded-ui/issues/3897)) ([829f171](https://github.com/ydb-platform/ydb-embedded-ui/commit/829f1710b15ad571f999f817b953643edd28536f))
+
 ## [14.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.4.4...v14.5.0) (2026-02-02)
 
 

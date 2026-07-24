@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Iterator, Sequence, TypeAlias
 
 from .string_order import MAX_REPRESENTATIVES, StringOrderUniverse
@@ -30,6 +30,20 @@ class Term:
     operation: str
     arguments: tuple[Term, ...] = ()
     atom: bool | int | str | None = None
+    _hash: int = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # Terms form an immutable DAG and are constructed bottom-up. Cache the
+        # structural hash here so sets and routing-fact maps do not repeatedly
+        # walk large shared subterms.
+        object.__setattr__(
+            self,
+            "_hash",
+            hash((self.sort, self.operation, self.arguments, self.atom)),
+        )
+
+    def __hash__(self) -> int:
+        return self._hash
 
     def render(self) -> str:
         if self.operation == "symbol":

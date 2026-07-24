@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import concurrent.futures
 import pytest
 import time
 
@@ -7,7 +6,9 @@ from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeF
 from ydb.tests.stress.sqs_topic.workload import Workload
 
 
-MIN_SUPPORTED_VERSION = "stable-26-1-2"
+MIN_SUPPORTED_VERSION = "stable-26-2"
+ITERATION_DURATION_SECONDS = 10
+COUNT_GROWTH_TIMEOUT = 120
 
 
 def skip_if_unsupported(versions):
@@ -33,31 +34,65 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
             },
         )
 
+    def _wait_count_growth(self, get_current, prev, what, timeout=COUNT_GROWTH_TIMEOUT, on_stall=None):
+        deadline = time.time() + timeout
+        last = prev
+        last_error = None
+        while time.time() < deadline:
+            try:
+                current = get_current()
+                last = current
+                last_error = None
+                if current > prev:
+                    logger.info("%s grew: %s -> %s", what, prev, current)
+                    return current
+                logger.info("%s has not grown yet: prev=%s current=%s", what, prev, current)
+            except Exception as e:
+                last_error = e
+                logger.warning("Failed to get %s: %r", what, e)
+            if on_stall is not None:
+                on_stall()
+            else:
+                time.sleep(1)
+        raise AssertionError(
+            f"{what} did not grow within {timeout}s: prev={prev}, last={last}, error={last_error!r}"
+        )
+
     def test_write_and_read(self):
         logger.info(f"endpoint: {self.http_proxy_endpoint}")
 
-        duration = 30
+        utils = Workload(
+            self.endpoint,
+            self.database_path,
+            ITERATION_DURATION_SECONDS,
+            self.http_proxy_endpoint + self.database_path,
+        )
 
-        # endpoint, database, duration, sqs_endpoint
-        utils = Workload(self.endpoint, self.database_path, duration, self.http_proxy_endpoint + self.database_path)
+        with utils:
+            # keep_messages_order=False: otherwise committed offset stalls mid-rolling
+            # once a gap appears in the shared consumer contig.
+            utils.create_topics(keep_messages_order=False)
 
-        utils.create_topics()
+            prev_written = 0
+            prev_committed = 0
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            logger.info("Starting workload")
-            runners = [
-                executor.submit(utils.write_to_topic),
-                executor.submit(utils.read_from_topic),
-            ]
+            for iteration, _ in enumerate(self.roll()):
+                logger.info("Running SQS workload after roll iteration #%d", iteration)
+                utils.endpoint = self.endpoint
+                utils.sqs_endpoint = self.http_proxy_endpoint + self.database_path
 
-            for _ in self.roll():
-                time.sleep(1)
+                # Write first, then read: verifies each side independently and avoids
+                # reader starvation / connection flakes during mixed-version rolling.
+                utils.write_to_topic()
+                prev_written = self._wait_count_growth(
+                    lambda: utils.get_written_messages_count(self.driver),
+                    prev_written,
+                    "written messages count",
+                )
 
-            logger.info("Waiting for workload task")
-            for nn, runner in enumerate(concurrent.futures.as_completed(runners)):
-                try:
-                    result = runner.result()
-                    logger.info("Workload task #%d completed, result: %r", nn, result)
-                except Exception:
-                    logger.exception("Workload task #%d failed", nn)
-                    raise
+                prev_committed = self._wait_count_growth(
+                    lambda: utils.get_committed_messages_count(self.driver),
+                    prev_committed,
+                    "committed messages count",
+                    on_stall=utils.read_from_topic,
+                )

@@ -1810,6 +1810,26 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             "SELECT k, g1, g2 FROM TestTable WHERE k < 3 ORDER BY k;",
             "[[1;[11];[67]];[2;[19];[111]]]");
     }
+
+    Y_UNIT_TEST(AlterAddNotNullDefaultColumn) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                g Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 10);");
+        fixture.Check("SELECT k, a, g FROM TestTable ORDER BY k;", "[[1;[10];[11]]]");
+
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN c Int32 NOT NULL DEFAULT 7;");
+        fixture.Check("SELECT k, a, g, c FROM TestTable ORDER BY k;", "[[1;[10];[11];7]]");
+
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (2, 20);");
+        fixture.Check("SELECT k, a, g, c FROM TestTable ORDER BY k;", "[[1;[10];[11];7];[2;[20];[21];7]]");
+    }
 }
 
 Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {

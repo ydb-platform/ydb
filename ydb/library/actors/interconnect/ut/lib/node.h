@@ -75,17 +75,24 @@ public:
         }
         setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
-        if (common->Settings.EnableInterconnectSessionV2) {
+        if (common->Settings.V2.Enable) {
             // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
             // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
             // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
-            ui32 uringShards = 4;
+            ui32 uringShards = common->Settings.V2.UringEngineThreads;
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
                 uringShards = FromString<ui32>(s);
             }
+            ui32 ringsPerShard = common->Settings.V2.UringEngineRingsPerShard;
+            if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
+                ringsPerShard = FromString<ui32>(s);
+            }
             common->UringEngineV2 = CreateUringEngine(uringShards,
                 common->MonCounters->GetSubgroup("subsystem", "uring"),
-                common->Settings.EnableSQPOLLv2);
+                common->Settings.V2.EnableSQPOLL,
+                ringsPerShard,
+                common->Settings.V2.UringEngineSqThreadIdleMs,
+                common->Settings.V2.ShareRingsAmongThreads);
             setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
                 if (engine) {
                     engine->SetActorSystem(actorSystem);

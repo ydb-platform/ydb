@@ -488,6 +488,7 @@ message SetNotNullState {
         STATE_APPLYING = 3;
         STATE_DONE = 4;
         STATE_CANCELLED = 5;
+        STATE_REJECTED = 6;
     }
 }
 

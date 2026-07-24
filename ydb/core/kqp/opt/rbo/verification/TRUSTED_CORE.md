@@ -102,25 +102,36 @@ budget.
 
 The dynamic-`IN` slice adds one explicit typed `in` subplan descriptor. C++ and
 Python independently require exactly one lookup column from the sole Filter
-consumer and one result column from the inner root, with the same non-null
-fixed-width integral or exact `String` type. The binding is non-null `Bool`,
-uncorrelated, and virtual; `OuterBind`, `AddDependencies`, observable
-`EnsureAtMostOne`, fanout, nesting, staging, tuples, coercions, nullable values,
-`Utf8`, Bool, Date, Decimal, and mismatched identities fail closed.
+consumer and one result column from the inner root, with exactly the same
+underlying type. Non-null columns may use a fixed-width integral or exact
+`String` type. Lookup and result nullability may vary independently only for a
+fixed-width integral type, and if either is nullable every binding reference
+must be a direct positive top-level Filter conjunct. The binding is non-null
+`Bool`, uncorrelated, and virtual; `OuterBind`, `AddDependencies`, observable
+`EnsureAtMostOne`, fanout, nesting, staging, tuples, coercions, nullable
+`String`, `Utf8`, Bool, Date, Decimal, mismatched identities, and nullable
+`NOT`/`OR`/embedded uses fail closed.
 
 `relation.py` evaluates membership per present outer row as the OR of present
-non-null inner values equal to the non-null lookup value. Thus duplicates
-collapse, empty input is false, and consumer negation implements `NOT`.
-Repeated references reuse the cached subplan family, while root errors remain
-eager even with no present outer row. A shared preflight rejects more than
-16,384 outer/inner membership pairs cumulatively across alternatives and
-nested evaluation. The optimized side is still evaluated as
+non-NULL inner values equal to a non-NULL lookup value. Thus duplicates
+collapse and empty input is false. In the non-null slice, ordinary consumer
+negation implements `NOT`. In the nullable slice, the accepted positive Filter
+is true exactly when that OR is true: SQL FALSE and UNKNOWN both reject the
+outer row. The model therefore does not claim scalar three-valued `IN`
+equivalence under negation or any other Boolean embedding. Repeated references
+reuse the cached subplan family, while root errors remain eager even with no
+present outer row. A shared preflight rejects more than 16,384 outer/inner
+membership pairs cumulatively across alternatives and nested evaluation. The
+optimized side is still evaluated as
 the ordinary final StageGraph; there is no dynamic-`IN` equivalence shortcut.
 Independent duplicate/empty/negation, cache, left-semi/left-anti, inherited
 error, mapping-mutation, descriptor-boundary, pair-cap, exporter, inspector,
 and real-host `IN`-to-`left_semi` tests cover the vertical path. String-specific
 tests also exhaust the finite reference domain across duplicate values, empty
-inputs, row presence, negation, and both semi/anti lowerings.
+inputs, row presence, negation, and both semi/anti lowerings. Nullable-integral
+tests independently cover lookup/result nullability combinations, NULL,
+duplicates, empty input, exact positive-Filter truth, rejected Boolean
+embeddings, bounded `left_semi` equivalence, and a real-host lowering.
 
 The side-explicit Join-key slice crosses `semantic_snapshot.cpp`, `ir.py`,
 `scalar.py`, `relation.py`, and the ordinary `stages.py` execution path.
@@ -232,21 +243,24 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-exact-Date-`Unwrap` 2026-07-24 physical-line audit recorded:
+The post-positive-nullable-`IN` 2026-07-24 physical-line audit records
+implementation, test, and diagnostic rows at source `dfd6546dfd5`;
+documentation includes this evidence update:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,792 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,904 |
-| **Proof-producing code total** | **19,696** |
-| Tests, outside the TCB | 47,926 |
+| Nine trusted Python semantic modules | 10,835 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,952 |
+| **Proof-producing code total** | **19,787** |
+| Tests, outside the TCB | 48,280 |
 | Diagnostic/orchestration tools, outside the TCB | 5,178 |
-| Documentation, outside the TCB | 5,943 |
+| Documentation, outside the TCB | 6,096 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
 under `ut/`, `*_ut/`, and `prefix_capture/ut/`; documentation is every tracked
-Markdown file. The diagnostic row is the remaining non-test, non-document,
+Markdown file under this verification directory. The diagnostic row is the
+remaining non-test, non-document,
 non-TCB source. Build/configuration metadata (`ya.make`, `.gitignore`, and the
 coverage policy) is excluded. These figures are a review baseline, not a
 generated invariant. The trusted core is a medium-sized verification
@@ -270,9 +284,11 @@ the SMT obligation itself:
   with no hidden row-selection, ordering, error, or nondeterministic choice
   semantics beyond the explicitly modeled root;
 - each accepted dynamic-`IN` descriptor represents one uncorrelated
-  existential membership test over the recorded lookup/result columns, with
-  no hidden NULL, coercion, correlation, cardinality-error, or fanout
-  semantics;
+  existential membership test over the recorded lookup/result columns; for an
+  independently nullable fixed-width-integral pair, the binding occurs only
+  as a direct positive top-level Filter conjunct where FALSE and UNKNOWN both
+  reject the outer row; there is no hidden coercion, correlation,
+  cardinality-error, or fanout semantics;
 - each accepted side-explicit JoinKey names the actual left and right runtime
   values, each admitted shared-IU semi/anti join exposes only its selected
   side, and StageGraph occurrences with equal IU spellings remain distinct
@@ -358,7 +374,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, and direct-Uint64-`Just` mutations and real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap, real-host Decimal-AVG, and `IN`-to-`left_semi` cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap and positive-nullable-context checks, real-host Decimal-AVG, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

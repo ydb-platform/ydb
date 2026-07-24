@@ -16,7 +16,11 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         description="Confirm every bounded benchmark counterexample on isolated YDB targets"
     )
-    result.add_argument("report", type=Path, help="version-four benchmark coverage report")
+    result.add_argument(
+        "report",
+        type=Path,
+        help="version-four or version-five benchmark coverage report",
+    )
     result.add_argument("--inspector", type=Path, required=True)
     result.add_argument("--solver", type=Path, required=True)
     result.add_argument("--replay", type=Path, required=True)

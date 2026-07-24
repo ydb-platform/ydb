@@ -46,13 +46,13 @@ constexpr ui64 DefaultTimeoutMs = 10'000;
 constexpr ui64 ProofFloorTimeoutMs = 60'000;
 constexpr const char* CoverageReportFormat =
     "ydb-rbo-benchmark-coverage";
-constexpr ui64 CoverageReportVersion = 4;
+constexpr ui64 CoverageReportVersion = 5;
 constexpr const char* CoveragePolicyFormat =
     "ydb-rbo-benchmark-coverage-policy";
-constexpr ui64 CoveragePolicyVersion = 3;
+constexpr ui64 CoveragePolicyVersion = 4;
 constexpr const char* CoveragePolicyEvaluationFormat =
     "ydb-rbo-benchmark-coverage-policy-evaluation";
-constexpr ui64 CoveragePolicyEvaluationVersion = 2;
+constexpr ui64 CoveragePolicyEvaluationVersion = 3;
 
 enum class ECoverageRun {
     Environment,
@@ -80,6 +80,7 @@ const TSuite Tpcds{
 
 struct TSuiteCoveragePolicy {
     ui32 QueryCount = 0;
+    std::set<ui32> RequiredPrepareSuccessQueries;
     std::set<ui32> RequiredVerifierEntryQueries;
     std::set<ui32> RequiredFormulaQueries;
     std::set<ui32> RequiredVerifiedQueries;
@@ -93,10 +94,14 @@ struct TPolicyEvaluation {
     bool Valid = true;
     ECoverageMode Mode = ECoverageMode::FormulaDashboard;
     bool FullSelection = false;
+    bool PrepareSuccessFloorEnforced = false;
     bool VerifierEntryFloorEnforced = false;
     bool FormulaFloorEnforced = false;
     bool ProofFloorEnforced = false;
     std::set<ui32> SelectedQueries;
+    std::set<ui32> RequiredPrepareSuccessQueries;
+    std::set<ui32> PrepareSuccessFloorQueries;
+    std::set<ui32> PrepareSuccessQueries;
     std::set<ui32> RequiredVerifierEntryQueries;
     std::set<ui32> VerifierEntryQueries;
     std::set<ui32> RequiredFormulaQueries;
@@ -229,6 +234,7 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             encoded,
             {
                 "query_count",
+                "required_prepare_success_queries",
                 "required_verifier_entry_queries",
                 "required_formula_queries",
                 "required_verified_queries",
@@ -242,6 +248,11 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
         }
         TSuiteCoveragePolicy suitePolicy;
         suitePolicy.QueryCount = suite->QueryCount;
+        suitePolicy.RequiredPrepareSuccessQueries = PolicyQueryIds(
+            encoded["required_prepare_success_queries"],
+            *suite,
+            "required_prepare_success_queries",
+            context);
         suitePolicy.RequiredVerifierEntryQueries = PolicyQueryIds(
             encoded["required_verifier_entry_queries"],
             *suite,
@@ -323,6 +334,7 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     const std::set<ui32>& selected,
     const TMap<ui32, TString>& statuses,
     const std::set<ui32>& verifierEntryQueries,
+    const std::set<ui32>& prepareSuccessQueries,
     ECoverageMode mode)
 {
     const auto suitePolicy = policy.Suites.find(suite.Name);
@@ -337,6 +349,9 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     result.Mode = mode;
     result.SelectedQueries = selected;
     result.FullSelection = IsFullSelection(suite, selected);
+    result.RequiredPrepareSuccessQueries =
+        suitePolicy->second.RequiredPrepareSuccessQueries;
+    result.PrepareSuccessQueries = prepareSuccessQueries;
     result.RequiredVerifierEntryQueries =
         suitePolicy->second.RequiredVerifierEntryQueries;
     result.VerifierEntryQueries = verifierEntryQueries;
@@ -357,10 +372,20 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     }
 
     if (mode == ECoverageMode::FormulaDashboard) {
+        result.PrepareSuccessFloorEnforced = result.FullSelection;
         result.VerifierEntryFloorEnforced = result.FullSelection;
         result.FormulaFloorEnforced = result.FullSelection;
         if (!result.FormulaFloorEnforced) {
             return result;
+        }
+        result.PrepareSuccessFloorQueries =
+            result.RequiredPrepareSuccessQueries;
+        for (const ui32 queryId : result.PrepareSuccessFloorQueries) {
+            if (!result.PrepareSuccessQueries.contains(queryId)) {
+                result.Violations.push_back(TStringBuilder()
+                    << suite.Name << " q" << queryId
+                    << " regressed before successful query preparation");
+            }
         }
         for (const ui32 queryId : result.RequiredVerifierEntryQueries) {
             const auto status = statuses.find(queryId);
@@ -393,11 +418,24 @@ TPolicyEvaluation EvaluateCoveragePolicy(
         return result;
     }
 
+    result.PrepareSuccessFloorEnforced = true;
     result.ProofFloorEnforced = true;
+    for (const ui32 queryId : result.RequiredVerifiedQueries) {
+        if (result.RequiredPrepareSuccessQueries.contains(queryId)) {
+            result.PrepareSuccessFloorQueries.insert(queryId);
+        }
+    }
     if (selected != result.RequiredVerifiedQueries) {
         result.Violations.push_back(TStringBuilder()
             << suite.Name
             << " proof floor did not select exactly its required verified queries");
+    }
+    for (const ui32 queryId : result.PrepareSuccessFloorQueries) {
+        if (!result.PrepareSuccessQueries.contains(queryId)) {
+            result.Violations.push_back(TStringBuilder()
+                << suite.Name << " q" << queryId
+                << " proof obligation did not complete query preparation");
+        }
     }
     for (const ui32 queryId : result.RequiredVerifiedQueries) {
         const auto status = statuses.find(queryId);
@@ -684,11 +722,19 @@ NJson::TJsonValue PolicyEvaluationJson(
     result["valid"] = evaluation.Valid;
     result["mode"] = CoverageModeName(evaluation.Mode);
     result["full_selection"] = evaluation.FullSelection;
+    result["prepare_success_floor_enforced"] =
+        evaluation.PrepareSuccessFloorEnforced;
     result["verifier_entry_floor_enforced"] =
         evaluation.VerifierEntryFloorEnforced;
     result["formula_floor_enforced"] = evaluation.FormulaFloorEnforced;
     result["proof_floor_enforced"] = evaluation.ProofFloorEnforced;
     result["selected_queries"] = JsonIds(evaluation.SelectedQueries);
+    result["required_prepare_success_queries"] =
+        JsonIds(evaluation.RequiredPrepareSuccessQueries);
+    result["prepare_success_floor_queries"] =
+        JsonIds(evaluation.PrepareSuccessFloorQueries);
+    result["prepare_success_queries"] =
+        JsonIds(evaluation.PrepareSuccessQueries);
     result["required_verifier_entry_queries"] =
         JsonIds(evaluation.RequiredVerifierEntryQueries);
     result["verifier_entry_queries"] =
@@ -750,9 +796,34 @@ struct TOutcome {
     TString Status;
     TString Layer;
     TString Reason;
+    TString PrepareStatus = "NOT_RUN";
+    TString PrepareReason;
     TVector<std::pair<TString, TString>> UnsupportedReasons;
     bool Fatal = false;
 };
+
+void SetPreparationOutcome(
+    TOutcome& outcome,
+    bool succeeded,
+    TString reason = {})
+{
+    outcome.PrepareStatus = succeeded ? "SUCCEEDED" : "FAILED";
+    outcome.PrepareReason = succeeded ? TString() : std::move(reason);
+    outcome.Json["prepare_status"] = outcome.PrepareStatus;
+    outcome.Json["prepare_reason"] = outcome.PrepareReason;
+}
+
+void SetUnknownPreparationOutcome(
+    TOutcome& outcome,
+    TString reason)
+{
+    outcome.PrepareStatus = "UNKNOWN";
+    outcome.PrepareReason = reason.empty()
+        ? "preparation outcome is unavailable"
+        : std::move(reason);
+    outcome.Json["prepare_status"] = outcome.PrepareStatus;
+    outcome.Json["prepare_reason"] = outcome.PrepareReason;
+}
 
 TOutcome HarnessError(
     ui32 queryId,
@@ -772,7 +843,69 @@ TOutcome HarnessError(
     outcome.Json["prepare_ms"] = prepareMs;
     outcome.Json["verify_ms"] = 0;
     outcome.Json["capture_count"] = captureCount;
+    outcome.Json["prepare_status"] = outcome.PrepareStatus;
+    outcome.Json["prepare_reason"] = outcome.PrepareReason;
     return outcome;
+}
+
+void PreserveTextArtifact(
+    NJson::TJsonValue& artifacts,
+    TStringBuf key,
+    const TString& name,
+    TStringBuf content)
+{
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    if (!SHA256(
+            reinterpret_cast<const unsigned char*>(content.data()),
+            content.size(),
+            digest))
+    {
+        ythrow yexception() << "cannot hash diagnostic artifact " << name;
+    }
+    TFileOutput((GetOutputPath() / name).GetPath()).Write(content);
+    artifacts[TString(key)] = name;
+    artifacts[TStringBuilder() << key << "_sha256"] =
+        to_lower(HexEncode(digest, sizeof(digest)));
+}
+
+NJson::TJsonValue PreserveCaptureArtifacts(
+    TStringBuf suiteSlug,
+    ui32 queryId,
+    TStringBuf query,
+    const TRBOSemanticSnapshotBoundaryResultV1& initial,
+    const TRBOSemanticSnapshotBoundaryResultV1& final)
+{
+    const TString stem = TStringBuilder()
+        << suiteSlug << "_q" << queryId;
+    NJson::TJsonValue artifacts(NJson::JSON_MAP);
+
+    const auto preserveCapture = [&](
+        TStringBuf side,
+        const TRBOSemanticSnapshotBoundaryResultV1& capture)
+    {
+        if (capture.IsSupported()) {
+            PreserveTextArtifact(
+                artifacts,
+                TStringBuilder() << side << "_snapshot",
+                TStringBuilder() << stem << "." << side << ".json",
+                capture.Json);
+        } else {
+            PreserveTextArtifact(
+                artifacts,
+                TStringBuilder() << side << "_unsupported",
+                TStringBuilder() << stem << "." << side << ".unsupported.txt",
+                capture.UnsupportedReason);
+        }
+    };
+
+    preserveCapture("initial", initial);
+    preserveCapture("final", final);
+    PreserveTextArtifact(
+        artifacts,
+        "query",
+        stem + ".query.yql",
+        query);
+    return artifacts;
 }
 
 NJson::TJsonValue PreserveArtifacts(
@@ -786,31 +919,14 @@ NJson::TJsonValue PreserveArtifacts(
 {
     const TString stem = TStringBuilder()
         << suiteSlug << "_q" << queryId;
-    NJson::TJsonValue artifacts(NJson::JSON_MAP);
-
-    const auto preserveText = [&](
-        TStringBuf key,
-        const TString& name,
-        TStringBuf text)
-    {
-        unsigned char digest[SHA256_DIGEST_LENGTH];
-        if (!SHA256(
-                reinterpret_cast<const unsigned char*>(text.data()),
-                text.size(),
-                digest))
-        {
-            ythrow yexception() << "cannot hash diagnostic artifact " << name;
-        }
-        TFileOutput((GetOutputPath() / name).GetPath()).Write(text);
-        artifacts[TString(key)] = name;
-        artifacts[TStringBuilder() << key << "_sha256"] =
-            to_lower(HexEncode(digest, sizeof(digest)));
-    };
-
-    preserveText("initial_snapshot", stem + ".initial.json", initial.Json);
-    preserveText("final_snapshot", stem + ".final.json", final.Json);
-    preserveText("query", stem + ".query.yql", query);
-    preserveText(
+    NJson::TJsonValue artifacts = PreserveCaptureArtifacts(
+        suiteSlug,
+        queryId,
+        query,
+        initial,
+        final);
+    PreserveTextArtifact(
+        artifacts,
         "verifier_verdict",
         stem + ".verdict.json",
         verifierVerdict);
@@ -831,7 +947,8 @@ TOutcome RunVerifier(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     ui64 timeoutMs,
-    const TMaybe<TString>& solver)
+    const TMaybe<TString>& solver,
+    bool preserveArtifacts)
 {
     TTempDir tempDir;
     const auto initialPath = tempDir.Path() / "initial.json";
@@ -839,6 +956,26 @@ TOutcome RunVerifier(
     const auto formulaPath = tempDir.Path() / "problem.smt2";
     TFileOutput(initialPath.GetPath()).Write(initial.Json);
     TFileOutput(finalPath.GetPath()).Write(final.Json);
+    const auto harnessError = [&](TString reason) {
+        auto outcome = HarnessError(
+            queryId,
+            prepareMs,
+            2,
+            reason);
+        if (preserveArtifacts) {
+            try {
+                outcome.Json["artifacts"] = PreserveCaptureArtifacts(
+                    suiteSlug,
+                    queryId,
+                    query,
+                    initial,
+                    final);
+            } catch (const std::exception& error) {
+                outcome.Json["artifact_error"] = error.what();
+            }
+        }
+        return outcome;
+    };
 
     TShellCommand command(BinaryPath(
         "ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify"));
@@ -863,22 +1000,14 @@ TOutcome RunVerifier(
     const bool stdoutJson = ParseJson(stdoutText, stdoutVerdict);
     const bool stderrJson = ParseJson(stderrText, stderrVerdict);
     if (!stdoutJson && !stderrJson) {
-        return HarnessError(
-            queryId,
-            prepareMs,
-            2,
-            TStringBuilder()
+        return harnessError(TStringBuilder()
                 << "verifier returned no JSON; exit="
                 << command.GetExitCode().GetOrElse(-1)
                 << "; stdout=" << stdoutText
                 << "; stderr=" << stderrText);
     }
     if (stdoutJson && stderrJson) {
-        return HarnessError(
-            queryId,
-            prepareMs,
-            2,
-            "verifier returned JSON on both stdout and stderr");
+        return harnessError("verifier returned JSON on both stdout and stderr");
     }
     NJson::TJsonValue verdict = stdoutJson
         ? std::move(stdoutVerdict)
@@ -887,7 +1016,7 @@ TOutcome RunVerifier(
     if (!verdict.IsMap() || !verdict.Has("status") ||
         !verdict["status"].IsString())
     {
-        return HarnessError(queryId, prepareMs, 2, "verifier JSON has no string status");
+        return harnessError("verifier JSON has no string status");
     }
 
     const TString status = verdict["status"].GetStringSafe();
@@ -904,11 +1033,7 @@ TOutcome RunVerifier(
     if (!Statuses.contains(status) || !exitCode.Defined() ||
         exitCode.GetRef() != ExpectedExit(status))
     {
-        return HarnessError(
-            queryId,
-            prepareMs,
-            2,
-            TStringBuilder()
+        return harnessError(TStringBuilder()
                 << "verifier protocol mismatch: status=" << status
                 << ", exit=" << exitCode.GetOrElse(-1));
     }
@@ -934,7 +1059,7 @@ TOutcome RunVerifier(
     outcome.Json["capture_count"] = 2;
     outcome.Json["verdict"] = VerdictForCoverageReport(
         std::move(verdict), status);
-    if (status == "COUNTEREXAMPLE" || status == "UNKNOWN" ||
+    if (preserveArtifacts || status == "COUNTEREXAMPLE" || status == "UNKNOWN" ||
         status == "SCHEMA_MISMATCH" || status == "SOLVER_ERROR")
     {
         try {
@@ -948,9 +1073,101 @@ TOutcome RunVerifier(
                 formulaPath);
         } catch (const std::exception& error) {
             outcome.Json["artifact_error"] = error.what();
+            outcome.Fatal = true;
         }
     }
     return outcome;
+}
+
+TOutcome OptimizerFailure(
+    ui32 queryId,
+    ui64 prepareMs,
+    size_t captureCount,
+    TString reason)
+{
+    TOutcome outcome;
+    outcome.Status = "OPTIMIZER_FAILURE";
+    outcome.Layer = "optimizer";
+    outcome.Reason = std::move(reason);
+    outcome.Json["query_id"] = queryId;
+    outcome.Json["status"] = outcome.Status;
+    outcome.Json["layer"] = outcome.Layer;
+    outcome.Json["reason"] = outcome.Reason;
+    outcome.Json["prepare_ms"] = prepareMs;
+    outcome.Json["verify_ms"] = 0;
+    outcome.Json["capture_count"] = captureCount;
+    return outcome;
+}
+
+TOutcome ClassifyCapturedPair(
+    const TSuite& suite,
+    ui32 queryId,
+    TStringBuf query,
+    ui64 prepareMs,
+    const TRBOSemanticSnapshotBoundaryResultV1& initial,
+    const TRBOSemanticSnapshotBoundaryResultV1& final,
+    ui64 timeoutMs,
+    const TMaybe<TString>& solver,
+    bool preserveArtifacts)
+{
+    if (initial.Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
+        final.Boundary != ERBOSemanticSnapshotBoundaryV1::Final)
+    {
+        return HarnessError(
+            queryId,
+            prepareMs,
+            2,
+            "snapshot callback count or order is invalid");
+    }
+
+    if (!initial.IsSupported() || !final.IsSupported()) {
+        TOutcome outcome;
+        outcome.Status = "UNSUPPORTED";
+        if (!initial.IsSupported()) {
+            outcome.UnsupportedReasons.emplace_back(
+                "initial_export", initial.UnsupportedReason);
+        }
+        if (!final.IsSupported()) {
+            outcome.UnsupportedReasons.emplace_back(
+                "final_export", final.UnsupportedReason);
+        }
+        outcome.Layer = outcome.UnsupportedReasons.front().first;
+        outcome.Reason = outcome.UnsupportedReasons.front().second;
+        outcome.Json["query_id"] = queryId;
+        outcome.Json["status"] = outcome.Status;
+        outcome.Json["layer"] = outcome.Layer;
+        outcome.Json["reason"] = outcome.Reason;
+        outcome.Json["initial_reason"] = initial.UnsupportedReason;
+        outcome.Json["final_reason"] = final.UnsupportedReason;
+        outcome.Json["prepare_ms"] = prepareMs;
+        outcome.Json["verify_ms"] = 0;
+        outcome.Json["capture_count"] = 2;
+        if (preserveArtifacts) {
+            try {
+                outcome.Json["artifacts"] = PreserveCaptureArtifacts(
+                    suite.Slug,
+                    queryId,
+                    query,
+                    initial,
+                    final);
+            } catch (const std::exception& error) {
+                outcome.Json["artifact_error"] = error.what();
+                outcome.Fatal = true;
+            }
+        }
+        return outcome;
+    }
+
+    return RunVerifier(
+        suite.Slug,
+        queryId,
+        query,
+        prepareMs,
+        initial,
+        final,
+        timeoutMs,
+        solver,
+        preserveArtifacts);
 }
 
 TOutcome ClassifyQuery(
@@ -978,68 +1195,76 @@ TOutcome ClassifyQuery(
     });
     const ui64 prepareMs = (TInstant::Now() - started).MilliSeconds();
     const auto captures = sink->Take();
-
-    if (!prepared.Success()) {
-        TOutcome outcome;
-        outcome.Status = "OPTIMIZER_FAILURE";
-        outcome.Layer = "optimizer";
-        outcome.Reason = prepared.Issues().ToString();
-        outcome.Json["query_id"] = queryId;
-        outcome.Json["status"] = outcome.Status;
-        outcome.Json["layer"] = outcome.Layer;
-        outcome.Json["reason"] = outcome.Reason;
-        outcome.Json["prepare_ms"] = prepareMs;
-        outcome.Json["verify_ms"] = 0;
-        outcome.Json["capture_count"] = captures.size();
-        return outcome;
+    const bool prepareSucceeded = prepared.Success();
+    TString prepareReason = prepareSucceeded
+        ? TString()
+        : prepared.Issues().ToString();
+    if (!prepareSucceeded && prepareReason.empty()) {
+        prepareReason = "query preparation failed without diagnostic issues";
     }
-    if (captures.size() != 2 ||
-        captures[0].Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
-        captures[1].Boundary != ERBOSemanticSnapshotBoundaryV1::Final)
-    {
-        return HarnessError(
+
+    TOutcome outcome;
+    const auto preserveExceptionalPair = [&] {
+        if (prepareSucceeded || captures.size() != 2 ||
+            captures[0].Boundary != ERBOSemanticSnapshotBoundaryV1::Initial ||
+            captures[1].Boundary != ERBOSemanticSnapshotBoundaryV1::Final)
+        {
+            return;
+        }
+        try {
+            outcome.Json["artifacts"] = PreserveCaptureArtifacts(
+                suite.Slug,
+                queryId,
+                query,
+                captures[0],
+                captures[1]);
+        } catch (const std::exception& artifactError) {
+            outcome.Json["artifact_error"] = artifactError.what();
+        }
+    };
+    try {
+        if (captures.size() == 2) {
+            outcome = ClassifyCapturedPair(
+                suite,
+                queryId,
+                query,
+                prepareMs,
+                captures[0],
+                captures[1],
+                timeoutMs,
+                solver,
+                !prepareSucceeded);
+        } else if (prepareSucceeded) {
+            outcome = HarnessError(
+                queryId,
+                prepareMs,
+                captures.size(),
+                "snapshot callback count is invalid");
+        } else {
+            outcome = OptimizerFailure(
+                queryId,
+                prepareMs,
+                captures.size(),
+                prepareReason);
+        }
+    } catch (const std::exception& error) {
+        outcome = HarnessError(
             queryId,
             prepareMs,
             captures.size(),
-            "snapshot callback count or order is invalid");
+            TStringBuilder()
+                << "captured-pair classification threw: " << error.what());
+        preserveExceptionalPair();
+    } catch (...) {
+        outcome = HarnessError(
+            queryId,
+            prepareMs,
+            captures.size(),
+            "captured-pair classification threw a non-standard exception");
+        preserveExceptionalPair();
     }
-
-    const auto& initial = captures[0];
-    const auto& final = captures[1];
-    if (!initial.IsSupported() || !final.IsSupported()) {
-        TOutcome outcome;
-        outcome.Status = "UNSUPPORTED";
-        if (!initial.IsSupported()) {
-            outcome.UnsupportedReasons.emplace_back(
-                "initial_export", initial.UnsupportedReason);
-        }
-        if (!final.IsSupported()) {
-            outcome.UnsupportedReasons.emplace_back(
-                "final_export", final.UnsupportedReason);
-        }
-        outcome.Layer = outcome.UnsupportedReasons.front().first;
-        outcome.Reason = outcome.UnsupportedReasons.front().second;
-        outcome.Json["query_id"] = queryId;
-        outcome.Json["status"] = outcome.Status;
-        outcome.Json["layer"] = outcome.Layer;
-        outcome.Json["reason"] = outcome.Reason;
-        outcome.Json["initial_reason"] = initial.UnsupportedReason;
-        outcome.Json["final_reason"] = final.UnsupportedReason;
-        outcome.Json["prepare_ms"] = prepareMs;
-        outcome.Json["verify_ms"] = 0;
-        outcome.Json["capture_count"] = captures.size();
-        return outcome;
-    }
-
-    return RunVerifier(
-        suite.Slug,
-        queryId,
-        query,
-        prepareMs,
-        initial,
-        final,
-        timeoutMs,
-        solver);
+    SetPreparationOutcome(outcome, prepareSucceeded, prepareReason);
+    return outcome;
 }
 
 void RunCoverage(const TSuite& suite, ECoverageRun run) {
@@ -1050,27 +1275,34 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     TMaybe<TCoveragePolicy> policy;
     std::set<ui32> selected;
     TMap<ui32, TString> statuses;
+    std::set<ui32> prepareSuccessQueries;
     std::set<ui32> verifierEntryQueries;
     TVector<TString> policyLoadViolations;
     ui64 timeoutMs = DefaultTimeoutMs;
     bool timeoutResolved = false;
     NJson::TJsonValue rows(NJson::JSON_ARRAY);
     TMap<TString, ui32> summary;
+    TMap<TString, ui32> prepareSummary;
     TMap<std::pair<TString, TString>, TVector<ui32>> unsupported;
     TMap<TString, TVector<ui32>> optimizerFailures;
     bool fatal = false;
 
     const auto record = [&](ui32 queryId, TString source, TOutcome outcome) {
         ++summary[outcome.Status];
+        ++prepareSummary[outcome.PrepareStatus];
         if (outcome.Status == "UNSUPPORTED") {
             for (const auto& reason : outcome.UnsupportedReasons) {
                 unsupported[reason].push_back(queryId);
             }
-        } else if (outcome.Status == "OPTIMIZER_FAILURE") {
-            optimizerFailures[outcome.Reason].push_back(queryId);
+        }
+        if (outcome.PrepareStatus == "FAILED") {
+            optimizerFailures[outcome.PrepareReason].push_back(queryId);
         }
         if (queryId >= 1 && queryId <= suite.QueryCount) {
             statuses[queryId] = outcome.Status;
+            if (outcome.PrepareStatus == "SUCCEEDED") {
+                prepareSuccessQueries.insert(queryId);
+            }
             if (outcome.Layer == "verifier") {
                 verifierEntryQueries.insert(queryId);
             }
@@ -1122,9 +1354,15 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                     0,
                     0,
                     TStringBuilder() << "classification threw: " << error.what());
+                SetUnknownPreparationOutcome(
+                    outcome,
+                    "classification failed before a preparation outcome was recorded");
             } catch (...) {
                 outcome = HarnessError(
                     queryId, 0, 0, "classification threw a non-standard exception");
+                SetUnknownPreparationOutcome(
+                    outcome,
+                    "classification failed before a preparation outcome was recorded");
             }
             record(
                 queryId,
@@ -1156,6 +1394,9 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     policyEvaluation.Mode = mode;
     if (!policy) {
         policyEvaluation.Valid = false;
+        policyEvaluation.PrepareSuccessFloorEnforced =
+            mode == ECoverageMode::FormulaDashboard ||
+            mode == ECoverageMode::ProofFloor;
         policyEvaluation.VerifierEntryFloorEnforced =
             mode == ECoverageMode::FormulaDashboard;
         policyEvaluation.FormulaFloorEnforced =
@@ -1171,9 +1412,13 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                 selected,
                 statuses,
                 verifierEntryQueries,
+                prepareSuccessQueries,
                 mode);
         } catch (const std::exception& error) {
             policyEvaluation.Valid = false;
+            policyEvaluation.PrepareSuccessFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard ||
+                mode == ECoverageMode::ProofFloor;
             policyEvaluation.VerifierEntryFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.FormulaFloorEnforced =
@@ -1184,6 +1429,9 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                 << "coverage policy evaluation failed: " << error.what());
         } catch (...) {
             policyEvaluation.Valid = false;
+            policyEvaluation.PrepareSuccessFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard ||
+                mode == ECoverageMode::ProofFloor;
             policyEvaluation.VerifierEntryFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.FormulaFloorEnforced =
@@ -1199,6 +1447,10 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     NJson::TJsonValue summaryJson(NJson::JSON_MAP);
     for (const auto& [status, count] : summary) {
         summaryJson[status] = count;
+    }
+    NJson::TJsonValue prepareSummaryJson(NJson::JSON_MAP);
+    for (const auto& [status, count] : prepareSummary) {
+        prepareSummaryJson[status] = count;
     }
 
     NJson::TJsonValue unsupportedJson(NJson::JSON_ARRAY);
@@ -1224,6 +1476,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         ? NJson::TJsonValue(timeoutMs)
         : NJson::TJsonValue(NJson::JSON_NULL);
     report["summary"] = std::move(summaryJson);
+    report["prepare_summary"] = std::move(prepareSummaryJson);
     report["queries"] = std::move(rows);
     report["unsupported_inventory"] = std::move(unsupportedJson);
     report["optimizer_failure_inventory"] = std::move(optimizerJson);
@@ -1239,6 +1492,8 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         true));
     Cout << suite.Name << " summary: "
          << NJson::WriteJson(report["summary"], false, true) << Endl
+         << "Preparation summary: "
+         << NJson::WriteJson(report["prepare_summary"], false, true) << Endl
          << "Coverage policy: "
          << NJson::WriteJson(report["policy"], false, true) << Endl
          << "Coverage report: " << reportPath.GetPath() << Endl;
@@ -1255,6 +1510,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto policy = LoadCoveragePolicy();
         UNIT_ASSERT_VALUES_EQUAL(policy.Suites.size(), 2);
         UNIT_ASSERT(
+            policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries ==
+            std::set<ui32>({
+                1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 21, 22,
+            }));
+        UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({1}));
         UNIT_ASSERT(
@@ -1266,6 +1526,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
                 3, 4, 6, 11, 12, 14, 15, 18, 19, 21, 22,
+            }));
+        UNIT_ASSERT(
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries ==
+            std::set<ui32>({
+                2, 3, 5, 6, 10, 15, 16, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
+                46, 48, 50, 52, 54, 55, 56, 59, 60, 61, 62, 65, 68, 69, 71, 76,
+                77, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
@@ -1289,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             CoverageReportFormat);
         UNIT_ASSERT_VALUES_EQUAL(
             report["version"].GetUIntegerSafe(),
-            4);
+            CoverageReportVersion);
     }
 
     Y_UNIT_TEST(DiagnosticArtifactsPreserveExactBytes) {
@@ -1386,6 +1653,91 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "COUNTEREXAMPLE");
     }
 
+    Y_UNIT_TEST(CapturedPairOutcomeIsIndependentOfPreparation) {
+        const TRBOSemanticSnapshotBoundaryResultV1 initial{
+            ERBOSemanticSnapshotBoundaryV1::Initial,
+            {},
+            "Unsupported scalar callable YqlAggWin",
+            {},
+        };
+        const TRBOSemanticSnapshotBoundaryResultV1 final{
+            ERBOSemanticSnapshotBoundaryV1::Final,
+            "{\"supported\":true}\n",
+            {},
+            {},
+        };
+
+        auto outcome = ClassifyCapturedPair(
+            Tpcds,
+            12,
+            "SELECT 1;\n",
+            17,
+            initial,
+            final,
+            1'000,
+            Nothing(),
+            true);
+        SetPreparationOutcome(
+            outcome,
+            false,
+            "physical query compilation rejected YqlAggWin");
+
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Status, "UNSUPPORTED");
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Layer, "initial_export");
+        UNIT_ASSERT_VALUES_EQUAL(outcome.PrepareStatus, "FAILED");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outcome.Json["status"].GetStringSafe(),
+            "UNSUPPORTED");
+        UNIT_ASSERT_VALUES_EQUAL(
+            outcome.Json["prepare_status"].GetStringSafe(),
+            "FAILED");
+        UNIT_ASSERT_STRING_CONTAINS(
+            outcome.Json["prepare_reason"].GetStringSafe(),
+            "physical query compilation");
+        UNIT_ASSERT_VALUES_EQUAL(outcome.UnsupportedReasons.size(), 1);
+        UNIT_ASSERT(outcome.Json.Has("artifacts"));
+        const auto& artifacts = outcome.Json["artifacts"];
+        UNIT_ASSERT_VALUES_EQUAL(artifacts.GetMapSafe().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["initial_unsupported"].GetStringSafe(),
+            "tpcds_q12.initial.unsupported.txt");
+        UNIT_ASSERT_VALUES_EQUAL(
+            artifacts["final_snapshot"].GetStringSafe(),
+            "tpcds_q12.final.json");
+        UNIT_ASSERT_VALUES_EQUAL(
+            TFileInput((GetOutputPath() /
+                artifacts["initial_unsupported"].GetStringSafe()).GetPath()).ReadAll(),
+            initial.UnsupportedReason);
+    }
+
+    Y_UNIT_TEST(CapturedPairRequiresInitialThenFinalOrder) {
+        const TRBOSemanticSnapshotBoundaryResultV1 first{
+            ERBOSemanticSnapshotBoundaryV1::Final,
+            {},
+            "unsupported final",
+            {},
+        };
+        const TRBOSemanticSnapshotBoundaryResultV1 second{
+            ERBOSemanticSnapshotBoundaryV1::Initial,
+            {},
+            "unsupported initial",
+            {},
+        };
+        const auto outcome = ClassifyCapturedPair(
+            Tpcds,
+            39,
+            "SELECT 1;\n",
+            17,
+            first,
+            second,
+            1'000,
+            Nothing(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Status, "HARNESS_ERROR");
+        UNIT_ASSERT(outcome.Fatal);
+        UNIT_ASSERT_STRING_CONTAINS(outcome.Reason, "count or order");
+    }
+
     Y_UNIT_TEST(PolicyAllowsMonotonicCoverageImprovements) {
         const auto policy = LoadCoveragePolicy();
         std::set<ui32> selected;
@@ -1410,6 +1762,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             OutcomeIds(statuses),
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
@@ -1449,6 +1802,70 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             statuses.size());
     }
 
+    Y_UNIT_TEST(PolicyTracksPreparationIndependently) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        const auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
+        auto prepareSuccess = OutcomeIds(statuses);
+        prepareSuccess.erase(2);
+
+        const auto evaluation = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            OutcomeIds(statuses),
+            prepareSuccess,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(evaluation.PrepareSuccessFloorEnforced);
+        UNIT_ASSERT(evaluation.FormulaFloorEnforced);
+        UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(2));
+        UNIT_ASSERT(!evaluation.PrepareSuccessQueries.contains(2));
+        UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 1);
+        UNIT_ASSERT(evaluation.Violations.front().Contains(
+            "q2 regressed before successful query preparation"));
+
+        const auto report = PolicyEvaluationJson(evaluation);
+        UNIT_ASSERT(report["prepare_success_floor_enforced"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["required_prepare_success_queries"].GetArraySafe().size(),
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries.size());
+
+        auto independentPolicy = policy;
+        independentPolicy.Suites.at(Tpcds.Name)
+            .RequiredPrepareSuccessQueries.erase(2);
+        const auto independent = EvaluateCoveragePolicy(
+            independentPolicy,
+            Tpcds,
+            selected,
+            statuses,
+            OutcomeIds(statuses),
+            prepareSuccess,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(independent.FormulaEmittedQueries.contains(2));
+        UNIT_ASSERT(independent.Violations.empty());
+    }
+
+    Y_UNIT_TEST(PolicyDocumentKeepsPreparationAndFormulaFloorsIndependent) {
+        NJson::TJsonValue encoded;
+        UNIT_ASSERT(NJson::ReadJsonTree(
+            TFileInput(CoveragePolicyPath()).ReadAll(),
+            &encoded,
+            true));
+        encoded["suites"][Tpcds.Name]["required_prepare_success_queries"] =
+            NJson::TJsonValue(NJson::JSON_ARRAY);
+
+        const auto decoded = DecodeCoveragePolicy(
+            NJson::WriteJson(encoded, false, true));
+        UNIT_ASSERT(
+            decoded.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries.empty());
+        UNIT_ASSERT(
+            !decoded.Suites.at(Tpcds.Name).RequiredFormulaQueries.empty());
+    }
+
     Y_UNIT_TEST(PolicyPinsTpchQ1AtFormulaConstruction) {
         const auto policy = LoadCoveragePolicy();
         std::set<ui32> selected;
@@ -1464,6 +1881,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             verifierEntries,
+            policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(current.VerifierEntryFloorEnforced);
         UNIT_ASSERT(current.FormulaFloorEnforced);
@@ -1479,6 +1897,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             regressedStatuses,
             verifierEntries,
+            policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
         UNIT_ASSERT(regressed.Violations.front().Contains(
@@ -1498,6 +1917,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             OutcomeIds(statuses),
+            policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(current.VerifierEntryFloorEnforced);
         UNIT_ASSERT(current.FormulaFloorEnforced);
@@ -1517,6 +1937,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 selected,
                 regressedStatuses,
                 OutcomeIds(regressedStatuses),
+                policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
                 ECoverageMode::FormulaDashboard);
             UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
             const TString expected = TStringBuilder()
@@ -1543,6 +1964,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 selected,
                 statuses,
                 OutcomeIds(statuses),
+                policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
                 ECoverageMode::FormulaDashboard);
             UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
             UNIT_ASSERT(evaluation.Violations.empty());
@@ -1579,6 +2001,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(beforeVerifier.VerifierEntryFloorEnforced);
         UNIT_ASSERT_VALUES_EQUAL(beforeVerifier.Violations.size(), 2);
@@ -1594,6 +2017,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT_VALUES_EQUAL(optimizerFailure.Violations.size(), 2);
         UNIT_ASSERT(optimizerFailure.Violations[0].Contains(
@@ -1608,6 +2032,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT_VALUES_EQUAL(missing.Violations.size(), 2);
         UNIT_ASSERT(missing.Violations[0].Contains(
@@ -1633,6 +2058,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
@@ -1677,13 +2103,17 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             {},
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(!evaluation.VerifierEntryFloorEnforced);
         UNIT_ASSERT(!evaluation.FormulaFloorEnforced);
+        UNIT_ASSERT(evaluation.PrepareSuccessFloorEnforced);
         UNIT_ASSERT(evaluation.ProofFloorEnforced);
         UNIT_ASSERT(evaluation.Violations.empty());
         UNIT_ASSERT(
             evaluation.VerifiedBoundedQueries == selected);
+        UNIT_ASSERT(
+            evaluation.PrepareSuccessFloorQueries == selected);
 
         const auto report = PolicyEvaluationJson(evaluation);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1696,6 +2126,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             report["mode"].GetStringSafe(),
             "proof_floor");
         UNIT_ASSERT(report["proof_floor_enforced"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["prepare_success_floor_queries"].GetArraySafe().size(),
+            selected.size());
         UNIT_ASSERT_VALUES_EQUAL(
             report["verified_bounded_queries"].GetArraySafe().size(),
             selected.size());
@@ -1724,6 +2157,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, 16, 38, 42, 48, 52, 55, 69, 87, 90, 93, 94, 95, 96},
             statuses,
             {},
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(evaluation.ProofFloorEnforced);
         UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 4);
@@ -1744,6 +2178,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, 16, 38, 42, 48, 52, 55, 69, 87, 90, 93, 94, 95, 96},
             optimizerFailureStatuses,
             {},
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(optimizerFailure.Violations.back().Contains(
             "q96 regressed from VERIFIED_BOUNDED to OPTIMIZER_FAILURE"));
@@ -1754,6 +2189,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, 42, 48, 52, 55, 69, 90, 93},
             statuses,
             {},
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(wrongSelection.Violations.front().Contains(
             "did not select exactly"));
@@ -1767,6 +2203,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             {3, 42, 48, 50, 52, 55, 61, 71, 76, 88, 90, 93, 96},
             statuses,
+            {},
             {},
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(!focused.VerifierEntryFloorEnforced);
@@ -1784,6 +2221,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             {},
+            {},
             ECoverageMode::SolverExperiment);
         UNIT_ASSERT(!solver.VerifierEntryFloorEnforced);
         UNIT_ASSERT(!solver.FormulaFloorEnforced);
@@ -1795,6 +2233,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             {3, 16, 38, 42, 48, 52, 55, 69, 87, 90, 93, 94, 95, 96},
             statuses,
+            {},
             {},
             ECoverageMode::SolverExperiment);
         UNIT_ASSERT(!coincidentalProofSelection.ProofFloorEnforced);
@@ -1874,6 +2313,22 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
             yexception,
             "unsupported version");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name].EraseValue(
+            "required_prepare_success_queries");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "is missing field required_prepare_success_queries");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name]["required_prepare_success_queries"] =
+            true;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required_prepare_success_queries must be an array");
 
         encoded = baseline;
         encoded["suites"][Tpcds.Name].EraseValue(

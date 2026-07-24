@@ -182,10 +182,12 @@ WHERE
 
 ```yql
 SELECT
-    count(*) as error_count
+    COUNT(*) AS ErrorCount
 FROM
     input_topic  -- локальный топик; для внешнего: ext_source.input_topic
-WHERE __ydb_user_attributes["type"] = "log" AND __ydb_user_attributes["level"] = "error";
+WHERE
+    __ydb_user_attributes["type"] = "log"
+        AND __ydb_user_attributes["level"] = "error";
 ```
 
 ## Запись в топик {#topic-write}

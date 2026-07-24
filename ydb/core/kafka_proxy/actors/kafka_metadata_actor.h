@@ -56,6 +56,7 @@ private:
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);
+    void EnsureBrokersAndController();
     void RequestICNodeCache();
     void ProcessTopicsFromRequest();
     void SendDiscoveryRequest();

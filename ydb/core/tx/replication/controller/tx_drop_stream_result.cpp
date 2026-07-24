@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -30,7 +30,7 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
@@ -38,7 +38,7 @@ public:
         auto* target = Replication->FindTarget(tid);
         if (!target) {
             YDB_LOG_WARN_CTX(ctx, "Unknown target",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid});
             return true;
@@ -46,7 +46,7 @@ public:
 
         if (target->GetStreamState() != TReplication::EStreamState::Removing) {
             YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid},
                 {"state", target->GetStreamState()});
@@ -55,13 +55,13 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Stream dropped",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid});
         } else {
             const auto& status = Ev->Get()->Status;
             YDB_LOG_ERROR_CTX(ctx, "Drop stream error",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"tid", tid},
                 {"status", status.GetStatus()},
@@ -86,7 +86,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

@@ -22,7 +22,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
@@ -35,7 +35,7 @@ public:
 
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot alter unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"pathId", pathId});
 
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::UNKNOWN);
@@ -133,7 +133,7 @@ public:
 
         if (alter) {
             YDB_LOG_NOTICE_CTX(ctx, "Alter replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", Replication->GetId()},
                 {"pathId", pathId});
         } else {
@@ -145,7 +145,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

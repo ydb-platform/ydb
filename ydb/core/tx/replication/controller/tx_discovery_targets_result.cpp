@@ -24,7 +24,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -32,14 +32,14 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Ready) {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"state", Replication->GetState()});
             return true;
@@ -50,7 +50,7 @@ public:
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
-                
+
                 TString transformLambda;
                 TString runAsUser;
                 TString directoryPath;
@@ -70,7 +70,7 @@ public:
                 );
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",
-                    {"logPrefix", LogPrefix},
+                    {"logPrefix", TxLogPrefix},
                     {"rid", rid},
                     {"tid", tid},
                     {"kind", target.Kind},
@@ -82,7 +82,7 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Discovery error: " << error);
 
             YDB_LOG_ERROR_CTX(ctx, "Discovery error",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"error", error});
         }
@@ -98,7 +98,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

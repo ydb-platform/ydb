@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -29,26 +29,26 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
 
         if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
             YDB_LOG_ERROR_CTX(ctx, "Unexpected cookie",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"cookie", Ev->Cookie});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Secret resolved",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             Replication->UpdateSecret(Ev->Get()->Value);
         } else {
             YDB_LOG_ERROR_CTX(ctx, "Resolve secret error",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"error", Ev->Get()->Error});
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
@@ -65,7 +65,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

@@ -37,12 +37,12 @@ public:
     public:
         TTxBase(const TString& name, TController* self)
             : TTransactionBase(self)
-            , LogPrefix(self, name)
+            , TxLogPrefix(self, name)
         {
         }
 
     protected:
-        const TTabletLogPrefix LogPrefix;
+        const TTabletLogPrefix TxLogPrefix;
     };
 
 private:

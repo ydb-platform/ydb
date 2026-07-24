@@ -73,7 +73,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"pending", Self->PendingTxId.size()},
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()});
@@ -139,7 +139,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"pending", Self->PendingTxId.size()},
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()},

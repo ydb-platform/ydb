@@ -240,13 +240,13 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

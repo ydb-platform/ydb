@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
@@ -30,7 +30,7 @@ public:
         Replication = Self->Find(rid);
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot resolve database of unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
@@ -39,14 +39,14 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Database resolved",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"database", tenant});
 
             Self->UnresolvedDatabaseReplications.erase(Replication->GetId());
         } else {
             YDB_LOG_ERROR_CTX(ctx, "Resolve database error",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             Y_ABORT_UNLESS(!tenant);
 
@@ -71,7 +71,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

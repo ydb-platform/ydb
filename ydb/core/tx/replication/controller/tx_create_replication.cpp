@@ -22,7 +22,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
@@ -33,7 +33,7 @@ public:
         const auto pathId = TPathId::FromProto(record.GetPathId());
         if (Self->Find(pathId)) {
             YDB_LOG_WARN_CTX(ctx, "Replication already exists",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"pathId", pathId});
 
             Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS);
@@ -44,7 +44,7 @@ public:
 
         const auto rid = Self->SysParams.AllocateReplicationId(db);
         YDB_LOG_NOTICE_CTX(ctx, "Add replication",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"rid", rid},
             {"pathId", pathId});
 
@@ -65,7 +65,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
@@ -76,7 +76,7 @@ public:
             Y_ABORT_UNLESS(tenant);
             if (!Self->NodesManager.HasTenant(tenant)) {
                 YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
-                    {"logPrefix", LogPrefix},
+                    {"logPrefix", TxLogPrefix},
                     {"tenant", tenant});
                 Self->NodesManager.DiscoverNodes(tenant, Self->DiscoveryCache, ctx);
             }

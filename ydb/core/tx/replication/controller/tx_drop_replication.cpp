@@ -39,7 +39,7 @@ public:
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
@@ -49,7 +49,7 @@ public:
 
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"pathId", pathId});
 
             auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
@@ -95,7 +95,7 @@ public:
         }
 
         YDB_LOG_NOTICE_CTX(ctx, "Drop replication",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"rid", Replication->GetId()},
             {"pathId", pathId});
 
@@ -105,7 +105,7 @@ public:
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"logPrefix", LogPrefix},
+            {"logPrefix", TxLogPrefix},
             {"execute", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
@@ -113,14 +113,14 @@ public:
 
         if (!Replication) {
             YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Removing) {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
-                {"logPrefix", LogPrefix},
+                {"logPrefix", TxLogPrefix},
                 {"rid", rid},
                 {"state", Replication->GetState()});
             return true;
@@ -146,7 +146,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Complete",
-            {"logPrefix", LogPrefix});
+            {"logPrefix", TxLogPrefix});
 
         if (Result) {
             ctx.Send(Result.Release());

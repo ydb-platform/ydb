@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/formats/arrow/program
     ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/core/tx/columnshard/engines/storage/indexes/bloom
+    ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm
 
     yql/essentials/udfs/common/json2
 )
@@ -47,6 +48,7 @@ SRCS(
     ut_script.cpp
     ut_minmax_index.cpp
     ut_sync_portion_index_reuse.cpp
+    ut_index_blob_size_limit.cpp
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
     helper.cpp

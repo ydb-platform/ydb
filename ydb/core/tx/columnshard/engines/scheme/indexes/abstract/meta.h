@@ -62,8 +62,8 @@ private:
 
 protected:
     virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
-        const TIndexInfo& indexInfo) const = 0;
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo,
+        const std::optional<ui64> chunkSizeLimit) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
@@ -128,7 +128,8 @@ public:
     virtual ~IIndexMeta() = default;
 
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> BuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const;
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo,
+        const std::optional<ui64> chunkSizeLimit) const;
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;

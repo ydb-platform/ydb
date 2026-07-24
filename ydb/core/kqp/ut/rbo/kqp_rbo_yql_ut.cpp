@@ -2844,7 +2844,184 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(Indexes) {
+    Y_UNIT_TEST(Indexes_newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        // appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Table` (
+                Key Int32,
+                SubKey1 Int32,
+                SubKey2 String,
+                Value1 String,
+                Value2 String,
+                PRIMARY KEY (Key, SubKey1, SubKey2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const std::vector<std::tuple<i32, i32, TString, TString>> data = {
+            {0, 0, "0", "1"}, {0, 0, "1", "2"}, {0, 1, "0", "3"}, {0, 1, "1", "4"},
+            {1, 0, "0", "5"}, {1, 0, "1", "6"}, {1, 1, "0", "7"}, {1, 1, "1", "8"},
+        };
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [key, subKey1, subKey2, value] : data) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").OptionalInt32(key)
+                .AddMember("SubKey1").OptionalInt32(subKey1)
+                .AddMember("SubKey2").OptionalString(subKey2)
+                .AddMember("Value1").OptionalString(value)
+                .AddMember("Value2").OptionalString(value)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/Table", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        for (const auto& addIndex : {
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index12 GLOBAL ON (SubKey1, SubKey2);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index21 GLOBAL ON (SubKey2, Value1);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index212 GLOBAL ON (SubKey2) COVER (Value2);",
+             }) {
+            result = session.ExecuteSchemeQuery(addIndex).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        db = kikimr.GetTableClient();
+        session = db.CreateSession().GetValueSync().GetSession();
+        auto db2 = kikimr.GetQueryClient();
+        auto session2 = db2.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            // R"(
+            //     -- принудительно выбирается индекс с помощью конструкции VIEW
+            //     SELECT t.SubKey1
+            //     FROM `/Root/Table` VIEW `Index12` as t
+            //     WHERE t.SubKey2 = "0"
+            //     order by t.SubKey1;
+            // )",
+            // R"(
+            //     -- выбирается индекс Index12, point prefix для него 1
+            //     SELECT *
+            //     FROM `/Root/Table`
+            //     WHERE SubKey1 = 1 and SubKey2 > "0"
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+            R"(
+                -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix
+                SELECT * 
+                FROM Table `/Root/Table`
+                WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            // R"(
+            //     -- используется Index212
+            //     SELECT * 
+            //     FROM Table `/Root/Table`
+            //     WHERE Key = 0 and SubKey2 = "1"
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+            // R"(
+            //     -- должен использоваться Index12
+            //     SELECT * 
+            //     FROM Table 
+            //     WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+            // R"(
+            //     -- используется Index12
+            //     SELECT * 
+            //     FROM Table 
+            //     WHERE SubKey1 > 0
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+            // R"(
+            //     -- используется Index21 или Index212
+            //     SELECT * 
+            //     FROM Table 
+            //     WHERE SubKey2 = "1"
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+            R"(
+                -- используется Index212
+                SELECT Value2 
+                FROM Table
+                WHERE SubKey2 = "0"
+                ORDER BY Value2;
+            )",
+            // R"(
+            //     -- используется Index12
+            //     SELECT * 
+            //     FROM Table 
+            //     WHERE SubKey1 = 0
+            //     ORDER BY Key, SubKey1, SubKey2;
+            // )",
+        };
+
+        std::vector<std::string> results = {
+            // R"([[[0]];[[0]];[[1]];[[1]]])",
+            // R"([[[0];[1];["1"];["4"];["4"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]]])",
+            // R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]]])",
+            // R"([[[0];[0];["0"];["1"];["1"]];[[1];[0];["0"];["5"];["5"]]])",
+            // R"([[[0];[1];["0"];["3"];["3"]];[[0];[1];["1"];["4"];["4"]];[[1];[1];["0"];["7"];["7"]];[[1];[1];["1"];["8"];["8"]]])",
+            // R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
+            // R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+        };
+
+        std::vector<TString> expectedIndexes = {
+            // "Index12",
+            // "Index12",
+            "", // PK
+            // Index212,
+            // "Index12",
+            // "Index12",
+            // "Index21", // or "Index212"
+            "Index212",
+            // "Index12",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            Cout << query << "\n";
+            auto result2 = session2.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+            auto plan = TString{*result2.GetStats()->GetPlan()};
+            PrintPlan(plan, /*analyzeMode=*/false);
+            auto ast = TString{*result2.GetStats()->GetAst()};
+            Cout << "Plan AST:\n" << ast;
+
+            const auto& expectedIndex = expectedIndexes[i];
+            if (expectedIndex.empty()) {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), "query #" << i << " must read the main table, ast:\n" << ast);
+                UNIT_ASSERT_C(!plan.Contains("indexImplTable"), "query #" << i << " must read the main table, plan:\n" << plan);
+            } else {
+                const auto implTable = TString::Join(expectedIndex, "/indexImplTable");
+                UNIT_ASSERT_C(ast.Contains(implTable), "query #" << i << " expected index " << expectedIndex << ", ast:\n" << ast);
+                UNIT_ASSERT_C(plan.Contains(expectedIndex) && plan.Contains("indexImplTable"), "query #" << i << " expected index " << expectedIndex << ", plan:\n" << plan);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Indexes_oldRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);

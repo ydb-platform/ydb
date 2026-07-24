@@ -1,6 +1,7 @@
 #include "kqp_operator.h"
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -175,6 +176,15 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto path = TKqpTable(TableCallable).Path().StringValue();
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    if (slash != TString::npos && TStringBuf(path).SubStr(slash + 1) == NTableIndex::ImplTable) {
+        const auto indexSlash = path.rfind('/', slash - 1);
+        if (indexSlash != TString::npos) {
+            const auto tableSlash = path.rfind('/', indexSlash - 1);
+            res["Table"] = path.substr(tableSlash == TString::npos ? 0 : tableSlash + 1);
+            res["Index"] = path.substr(indexSlash + 1, slash - indexSlash - 1);
+        }
+    }
 
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
 

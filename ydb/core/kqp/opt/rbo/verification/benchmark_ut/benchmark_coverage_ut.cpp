@@ -1267,9 +1267,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
-                3, 5, 6, 10, 15, 19, 25, 29, 33, 37, 38, 40, 42, 43, 46,
-                48, 50, 52, 55, 56, 60, 61, 62, 65, 68, 69, 71, 76, 77, 79,
-                80, 82, 87, 88, 90, 91, 93, 95, 96, 99,
+                3, 5, 6, 10, 15, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
+                46, 48, 50, 52, 55, 56, 60, 61, 62, 65, 68, 69, 71, 76, 77,
+                79, 80, 82, 87, 88, 90, 91, 93, 95, 96, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==

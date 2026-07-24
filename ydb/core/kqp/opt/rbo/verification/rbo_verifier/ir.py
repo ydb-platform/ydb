@@ -99,6 +99,7 @@ class Expr:
     nullable: bool | None = None
     fingerprint: str | None = None
     null_safe: bool = False
+    source_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -625,7 +626,20 @@ def _parse_expr(
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
 
-    if kind in {"cast_decimal", "cast_integral"}:
+    if kind == "cast_decimal":
+        _keys(obj, {"kind", "arg", "source_type", "type", "nullable"}, path)
+        return Expr(
+            kind=kind,
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
+            source_type=_scalar_type(
+                obj["source_type"],
+                f"{path}.source_type",
+            ),
+            result_type=_scalar_type(obj["type"], f"{path}.type"),
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind == "cast_integral":
         _keys(obj, {"kind", "arg", "type", "nullable"}, path)
         return Expr(
             kind=kind,
@@ -1475,18 +1489,31 @@ def _infer_expr(
     if expr.kind == "cast_decimal":
         assert expr.result_type is not None and expr.nullable is not None
         argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
-        if family(argument.name) != "int":
-            _fail(path, "Decimal cast source must be integral")
-        if argument.nullable:
-            _fail(path, "Decimal cast source must be non-nullable")
+        if expr.source_type is None:
+            _fail(path, "Decimal cast requires its audited source type")
+        if expr.source_type != argument.name:
+            _fail(
+                path,
+                "Decimal cast source type annotation does not match its "
+                f"serialized argument: {expr.source_type!r} != {argument.name!r}",
+            )
         result = decimal.parse_type(expr.result_type)
         if result is None:
             _fail(path, "Decimal cast result must be a canonical Decimal type")
         if result.integral_digits < 1:
             _fail(path, "Decimal cast result must have at least one integral digit")
-        if expr.nullable:
-            _fail(path, "exact integral Decimal cast must be non-nullable")
-        return ValueType(expr.result_type, False)
+        source = decimal.parse_type(argument.name)
+        if family(argument.name) == "int":
+            pass
+        elif source is None:
+            _fail(path, "Decimal cast source must be integral or Decimal")
+        elif source.scale != result.scale:
+            _fail(path, "Decimal widening must preserve scale")
+        elif source.precision > result.precision:
+            _fail(path, "Decimal widening must not decrease precision")
+        if expr.nullable != argument.nullable:
+            _fail(path, "Decimal cast result nullability must match its source")
+        return ValueType(expr.result_type, expr.nullable)
 
     if expr.kind == "cast_integral":
         assert expr.result_type is not None and expr.nullable is not None

@@ -1282,30 +1282,38 @@ NJson::TJsonValue StringLiteralDecimalSafeCastExpr(const TExprNode& node) {
     return DecimalValueExpr(resultType, *parameters, value, text);
 }
 
-TString CheckIntegralDecimalSafeCastCallable(const TExprNode& node) {
+struct TExactDecimalSafeCast {
+    TString SourceType;
+    TString ResultType;
+    bool Nullable = false;
+};
+
+TExactDecimalSafeCast CheckExactDecimalSafeCastCallable(
+    const TExprNode& node)
+{
     if (!node.IsCallable("SafeCast")) {
-        Unsupported("Integral Decimal cast must use SafeCast");
+        Unsupported("Exact Decimal cast must use SafeCast");
     }
     CheckScalarArity(node, 2, 2);
 
     bool resultNullable = false;
     const TString resultType = ScalarTypeName(node, &resultNullable);
     const auto parameters = ParseCanonicalDecimalType(resultType);
-    if (!parameters || resultNullable) {
+    if (!parameters) {
         Unsupported(
-            "Integral Decimal SafeCast must have a non-nullable canonical Decimal result");
+            "Exact Decimal SafeCast must have a canonical Decimal result");
     }
     if (parameters->Precision == parameters->Scale) {
         Unsupported(
-            "Integral Decimal SafeCast target must have at least one integral digit");
+            "Exact Decimal SafeCast target must have at least one integral digit");
     }
 
     const auto targetAnnotation = node.Child(1)->GetTypeAnn();
     if (!targetAnnotation) {
-        Unsupported("Integral Decimal SafeCast target is missing its Type annotation");
+        Unsupported("Exact Decimal SafeCast target is missing its Type annotation");
     }
     if (targetAnnotation->GetKind() != ETypeAnnotationKind::Type) {
-        Unsupported("Integral Decimal SafeCast target annotation is not Type");
+        Unsupported("Exact Decimal SafeCast target annotation is not Type");
     }
 
     bool targetNullable = false;
@@ -1317,21 +1325,65 @@ TString CheckIntegralDecimalSafeCastCallable(const TExprNode& node) {
         annotationNullable != targetNullable)
     {
         Unsupported(
-            "Integral Decimal SafeCast target annotation disagrees with its descriptor");
+            "Exact Decimal SafeCast target annotation disagrees with its descriptor");
     }
-    if (targetNullable || targetType != resultType) {
+    if (targetNullable != resultNullable || targetType != resultType) {
         Unsupported(
-            "Integral Decimal SafeCast target does not match its non-nullable result");
+            "Exact Decimal SafeCast target does not match its result");
+    }
+    if (targetNullable) {
+        const auto& itemDescriptor = *node.Child(1)->Child(0);
+        const auto itemAnnotation = itemDescriptor.GetTypeAnn();
+        bool itemAnnotationNullable = false;
+        if (!itemAnnotation ||
+            itemAnnotation->GetKind() != ETypeAnnotationKind::Type ||
+            TypeName(
+                itemAnnotation->Cast<TTypeExprType>()->GetType(),
+                &itemAnnotationNullable) != targetType ||
+            itemAnnotationNullable)
+        {
+            Unsupported(
+                "Exact Decimal SafeCast item annotation disagrees with its descriptor");
+        }
     }
 
+    const auto& source = *node.Child(0);
     bool sourceNullable = false;
-    const TString sourceType = ScalarTypeName(*node.Child(0), &sourceNullable);
-    if (sourceNullable || !IsIntegerType(sourceType)) {
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    const auto sourceDecimal = ParseCanonicalDecimalType(sourceType);
+    if (!IsIntegerType(sourceType) && !sourceDecimal) {
         Unsupported(
-            "Integral Decimal SafeCast source must be a non-nullable exact integer");
+            "Exact Decimal SafeCast source must be an integer or Decimal");
+    }
+    if (sourceNullable != resultNullable) {
+        Unsupported(
+            "Exact Decimal SafeCast result nullability must match its source");
+    }
+    if (sourceDecimal &&
+        (sourceDecimal->Scale != parameters->Scale ||
+         sourceDecimal->Precision > parameters->Precision))
+    {
+        Unsupported(
+            "Exact Decimal SafeCast supports only same-scale widening");
     }
 
-    return resultType;
+    const auto options = CastResult<false>(
+        source.GetTypeAnn(),
+        node.GetTypeAnn());
+    const bool reviewedCast = sourceDecimal
+        ? options == NUdf::ECastOptions::Complete
+        : options == NUdf::ECastOptions::Complete ||
+            options == NUdf::ECastOptions::MayLoseData;
+    if (!reviewedCast) {
+        Unsupported(
+            "Exact Decimal SafeCast has unexpected weak-cast semantics");
+    }
+
+    return {
+        .SourceType = sourceType,
+        .ResultType = resultType,
+        .Nullable = resultNullable,
+    };
 }
 
 bool IsPartialIntegralSafeCast(const TExprNode& node) {
@@ -1834,7 +1886,7 @@ void CheckOpaqueCallable(
                 return;
             }
             if (name == "SafeCast") {
-                CheckIntegralDecimalSafeCastCallable(node);
+                CheckExactDecimalSafeCastCallable(node);
                 return;
             }
             DecimalConstantCastExpr(node);
@@ -4428,7 +4480,7 @@ NJson::TJsonValue ExportExprNode(
             return result;
         }
 
-        const TString resultType = CheckIntegralDecimalSafeCastCallable(node);
+        const auto cast = CheckExactDecimalSafeCastCallable(node);
         if (IsCompleteIntegerLiteralDecimalCast(node)) {
             return DecimalConstantCastExpr(node);
         }
@@ -4450,8 +4502,9 @@ NJson::TJsonValue ExportExprNode(
             budget,
             normalizedDepth + 1,
             sourceDepth + 1);
-        result["type"] = resultType;
-        result["nullable"] = false;
+        result["source_type"] = cast.SourceType;
+        result["type"] = cast.ResultType;
+        result["nullable"] = cast.Nullable;
         return result;
     }
 

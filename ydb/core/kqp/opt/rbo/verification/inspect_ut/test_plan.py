@@ -113,10 +113,12 @@ class ExpressionRendererTest(unittest.TestCase):
                 ir.Expr(
                     kind="cast_decimal",
                     args=(_column(),),
+                    source_type="Int64",
                     result_type="Decimal(15,4)",
                     nullable=False,
                 ),
-                'cast_decimal(arg=column("x"), type="Decimal(15,4)", nullable=false)',
+                'cast_decimal(arg=column("x"), source_type="Int64", '
+                'type="Decimal(15,4)", nullable=false)',
             ),
             (
                 ir.Expr(
@@ -183,6 +185,15 @@ class ExpressionRendererTest(unittest.TestCase):
             render_expression(ir.Expr(kind="in", args=(_column(),)))
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):
             render_expression(ir.Expr(kind="cast_decimal", args=()))
+        with self.assertRaisesRegex(InspectionError, "source_type"):
+            render_expression(
+                ir.Expr(
+                    kind="cast_decimal",
+                    args=(_literal(),),
+                    result_type="Decimal(15,4)",
+                    nullable=False,
+                )
+            )
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):
             render_expression(ir.Expr(kind="cast_integral", args=()))
         with self.assertRaisesRegex(InspectionError, "exactly one argument"):

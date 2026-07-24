@@ -296,7 +296,15 @@ def _arithmetic_snapshot(kind, staged, right=None):
     return parse_snapshot(value)
 
 
-def _cast_snapshot(staged, argument=None):
+def _cast_snapshot(
+    staged,
+    argument=None,
+    *,
+    source_type="Int8",
+    source_nullable=False,
+    result_type="Decimal(3,2)",
+    result_nullable=False,
+):
     argument = argument or {"kind": "column", "column": "a.i"}
     value = {
         "format": "ydb-rbo-semantic-snapshot",
@@ -306,7 +314,11 @@ def _cast_snapshot(staged, argument=None):
                 {
                     "name": "A",
                     "columns": [
-                        {"name": "i", "type": "Int8", "nullable": False},
+                        {
+                            "name": "i",
+                            "type": source_type,
+                            "nullable": source_nullable,
+                        },
                     ],
                     "unique_keys": [],
                 }
@@ -333,8 +345,9 @@ def _cast_snapshot(staged, argument=None):
                             "expression": {
                                 "kind": "cast_decimal",
                                 "arg": argument,
-                                "type": "Decimal(3,2)",
-                                "nullable": False,
+                                "source_type": source_type,
+                                "type": result_type,
+                                "nullable": result_nullable,
                             },
                         }
                     ],
@@ -770,6 +783,41 @@ class DecimalKernelTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(ValueError, "Decimal narrowing"):
                     decimal.narrow_same_scale(
+                        smt.ZERO,
+                        source_type,
+                        result_type,
+                    )
+
+    def test_widen_same_scale_is_identity_for_finite_values_and_specials(self):
+        for value in (
+            -decimal.INF,
+            -9_999_999,
+            0,
+            9_999_999,
+            decimal.INF,
+            decimal.NAN,
+        ):
+            with self.subTest(value=value):
+                actual = decimal.widen_same_scale(
+                    smt.int_value(value),
+                    "Decimal(7,2)",
+                    "Decimal(12,2)",
+                )
+                self.assertEqual(_ground(actual), value)
+
+    def test_widen_same_scale_rejects_unaudited_shapes(self):
+        for source_type, result_type in (
+            ("Int64", "Decimal(12,2)"),
+            ("Decimal(7,2)", "Int64"),
+            ("Decimal(7,2)", "Decimal(12,3)"),
+            ("Decimal(7,2)", "Decimal(6,2)"),
+        ):
+            with self.subTest(
+                source_type=source_type,
+                result_type=result_type,
+            ):
+                with self.assertRaises(ValueError):
+                    decimal.widen_same_scale(
                         smt.ZERO,
                         source_type,
                         result_type,
@@ -1335,6 +1383,7 @@ class DecimalIrTest(unittest.TestCase):
             cast = {
                 "kind": "cast_decimal",
                 "arg": {"kind": "column", "column": "a.i"},
+                "source_type": source_type,
                 "type": "Decimal(3,2)",
                 "nullable": False,
             }
@@ -1350,14 +1399,68 @@ class DecimalIrTest(unittest.TestCase):
             with self.subTest(source_type=source_type):
                 expression = parse_snapshot(value).plan.nodes[1].predicate.args[0]
                 self.assertEqual(
-                    (expression.kind, expression.result_type, expression.nullable),
-                    ("cast_decimal", "Decimal(3,2)", False),
+                    (
+                        expression.kind,
+                        expression.source_type,
+                        expression.result_type,
+                        expression.nullable,
+                    ),
+                    ("cast_decimal", source_type, "Decimal(3,2)", False),
                 )
 
-    def test_integral_decimal_cast_ir_fails_closed(self):
+    def test_nullable_q18_decimal_cast_families_are_admitted(self):
+        cases = (
+            ("integral", "a.i"),
+            ("Decimal widening", "a.d"),
+        )
+        for label, column in cases:
+            value = _snapshot({"kind": "literal", "type": "Bool", "value": True})
+            if column == "a.i":
+                value["schema"]["tables"][0]["columns"][2].update(
+                    type="Int64",
+                    nullable=True,
+                )
+            cast = {
+                "kind": "cast_decimal",
+                "arg": {"kind": "column", "column": column},
+                "source_type": (
+                    "Int64" if column == "a.i" else "Decimal(7,2)"
+                ),
+                "type": "Decimal(12,2)",
+                "nullable": True,
+            }
+            value["plan"]["nodes"][1]["predicate"] = {
+                "kind": "eq",
+                "left": cast,
+                "right": {
+                    "kind": "literal",
+                    "type": "Decimal(12,2)",
+                    "value": {"kind": "finite", "scaled": "0"},
+                },
+            }
+
+            with self.subTest(family=label):
+                expression = parse_snapshot(value).plan.nodes[1].predicate.args[0]
+                self.assertEqual(
+                    (
+                        expression.kind,
+                        expression.source_type,
+                        expression.result_type,
+                        expression.nullable,
+                    ),
+                    (
+                        "cast_decimal",
+                        "Int64" if column == "a.i" else "Decimal(7,2)",
+                        "Decimal(12,2)",
+                        True,
+                    ),
+                )
+
+    def test_decimal_cast_ir_fails_closed(self):
         base = {
             "kind": "cast_decimal",
             "arg": {"kind": "column", "column": "a.i"},
+            "source_type": "Int32",
             "type": "Decimal(3,2)",
             "nullable": False,
         }
@@ -1378,24 +1481,53 @@ class DecimalIrTest(unittest.TestCase):
         cases = []
         decimal_source = copy.deepcopy(base)
         decimal_source["arg"]["column"] = "a.d"
+        decimal_source["source_type"] = "Decimal(7,2)"
+        decimal_source["nullable"] = True
         cases.append(
-            ("Decimal source", snapshot(decimal_source), "source must be integral")
+            (
+                "Decimal narrowing",
+                snapshot(decimal_source),
+                "must not decrease precision",
+            )
+        )
+
+        cross_scale = copy.deepcopy(decimal_source)
+        cross_scale["type"] = "Decimal(12,3)"
+        cross_scale_snapshot = snapshot(cross_scale)
+        cross_scale_snapshot["plan"]["nodes"][1]["predicate"]["right"]["type"] = (
+            "Decimal(12,3)"
+        )
+        cases.append(
+            (
+                "cross-scale Decimal",
+                cross_scale_snapshot,
+                "must preserve scale",
+            )
         )
 
         for source_type in ("Bool", "Date", "String"):
             non_integral_source = snapshot(copy.deepcopy(base))
             non_integral_source["schema"]["tables"][0]["columns"][2]["type"] = source_type
+            non_integral_source["plan"]["nodes"][1]["predicate"]["left"][
+                "source_type"
+            ] = source_type
             cases.append(
                 (
                     f"{source_type} source",
                     non_integral_source,
-                    "source must be integral",
+                    "must be integral or Decimal",
                 )
             )
 
         nullable_source = snapshot(copy.deepcopy(base))
         nullable_source["schema"]["tables"][0]["columns"][2]["nullable"] = True
-        cases.append(("nullable source", nullable_source, "source must be non-nullable"))
+        cases.append(
+            (
+                "nullable source only",
+                nullable_source,
+                "nullability must match",
+            )
+        )
 
         non_decimal = copy.deepcopy(base)
         non_decimal["type"] = "Int64"
@@ -1405,27 +1537,62 @@ class DecimalIrTest(unittest.TestCase):
             "type": "Int64",
             "value": 0,
         }
-        cases.append(("non-Decimal result", non_decimal_snapshot, "canonical Decimal type"))
+        cases.append(
+            (
+                "non-Decimal result",
+                non_decimal_snapshot,
+                "canonical Decimal",
+            )
+        )
 
         no_integral_digit = copy.deepcopy(base)
         no_integral_digit["type"] = "Decimal(3,3)"
         no_integral_snapshot = snapshot(no_integral_digit)
         no_integral_snapshot["plan"]["nodes"][1]["predicate"]["right"]["type"] = "Decimal(3,3)"
-        cases.append(("no integral digit", no_integral_snapshot, "at least one integral digit"))
+        cases.append(
+            (
+                "no integral digit",
+                no_integral_snapshot,
+                "at least one integral digit",
+            )
+        )
 
         nullable_result = copy.deepcopy(base)
         nullable_result["nullable"] = True
-        cases.append(("nullable result", snapshot(nullable_result), "must be non-nullable"))
-
-        extra_field = copy.deepcopy(base)
-        extra_field["source_type"] = "Int32"
-        cases.append(("unknown field", snapshot(extra_field), "unknown fields"))
-
-        missing_arg = copy.deepcopy(base)
-        del missing_arg["arg"]
-        cases.append(("missing arg", snapshot(missing_arg), "missing fields"))
+        cases.append(
+            (
+                "nullable result only",
+                snapshot(nullable_result),
+                "nullability must match",
+            )
+        )
 
         for label, value, message in cases:
+            with self.subTest(case=label):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(value)
+
+        mismatched_source_type = copy.deepcopy(base)
+        mismatched_source_type["source_type"] = "Int64"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "source type annotation does not match",
+        ):
+            parse_snapshot(snapshot(mismatched_source_type))
+
+        missing_source_type = copy.deepcopy(base)
+        del missing_source_type["source_type"]
+        missing_arg = copy.deepcopy(base)
+        del missing_arg["arg"]
+        malformed = (
+            (
+                "missing source_type",
+                snapshot(missing_source_type),
+                "missing fields: source_type",
+            ),
+            ("missing arg", snapshot(missing_arg), "missing fields"),
+        )
+        for label, value, message in malformed:
             with self.subTest(case=label):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(value)
@@ -1593,6 +1760,34 @@ class DecimalVerificationTest(unittest.TestCase):
         )
         self.assertEqual(result.status, "COUNTEREXAMPLE")
         self.assertEqual(len(result.witness["A"]), 1)
+
+    def test_nullable_q18_cast_families_survive_stage_verification(self):
+        for source_type in ("Int64", "Decimal(7,2)"):
+            result = solve(
+                build_problem(
+                    _cast_snapshot(
+                        staged=False,
+                        source_type=source_type,
+                        source_nullable=True,
+                        result_type="Decimal(12,2)",
+                        result_nullable=True,
+                    ),
+                    _cast_snapshot(
+                        staged=True,
+                        source_type=source_type,
+                        source_nullable=True,
+                        result_type="Decimal(12,2)",
+                        result_nullable=True,
+                    ),
+                    1,
+                    10_000,
+                ),
+                SOLVER,
+                1,
+                10_000,
+            )
+            with self.subTest(source_type=source_type):
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_arithmetic_survives_normal_initial_to_stage_verification(self):
         for kind in ("add", "sub", "mul", "div"):

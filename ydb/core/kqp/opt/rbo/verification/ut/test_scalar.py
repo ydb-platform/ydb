@@ -501,6 +501,100 @@ class DecimalCastDispatchTest(unittest.TestCase):
             Value("Decimal(3,2)", smt.FALSE, cast_value, 900),
         )
 
+    def test_nullable_integral_cast_propagates_null_and_saturates_overflow(self):
+        expression = Expr(
+            kind="cast_decimal",
+            args=(Expr(kind="column", column="source"),),
+            result_type="Decimal(12,2)",
+            nullable=True,
+        )
+        cases = (
+            (-10_000_000_000, -decimal.INF),
+            (-9_999_999_999, -999_999_999_900),
+            (9_999_999_999, 999_999_999_900),
+            (10_000_000_000, decimal.INF),
+        )
+        for source, expected in cases:
+            actual = Encoder(smt.Script()).evaluate(
+                expression,
+                {
+                    "source": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(source),
+                    )
+                },
+            )
+            with self.subTest(source=source):
+                self.assertEqual(actual.type, "Decimal(12,2)")
+                self.assertEqual(actual.is_null, smt.FALSE)
+                self.assertEqual(_ground(actual.value), expected)
+                self.assertEqual(
+                    actual.decimal_finite_abs_bound,
+                    999_999_999_900,
+                )
+
+        null = Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "source": Value(
+                    "Int64",
+                    smt.TRUE,
+                    smt.int_value(10_000_000_000),
+                )
+            },
+        )
+        self.assertEqual(null.is_null, smt.TRUE)
+
+    def test_nullable_same_scale_decimal_widening_preserves_codes_and_bounds(self):
+        expression = Expr(
+            kind="cast_decimal",
+            args=(Expr(kind="column", column="source"),),
+            result_type="Decimal(12,2)",
+            nullable=True,
+        )
+        cases = (
+            (smt.FALSE, -321, 321),
+            (smt.FALSE, decimal.INF, 0),
+            (smt.FALSE, decimal.NAN, 0),
+            (smt.TRUE, 0, 0),
+        )
+        for is_null, source, finite_bound in cases:
+            actual = Encoder(smt.Script()).evaluate(
+                expression,
+                {
+                    "source": Value(
+                        "Decimal(7,2)",
+                        is_null,
+                        smt.int_value(source),
+                        finite_bound,
+                    )
+                },
+            )
+            with self.subTest(is_null=is_null, source=source):
+                self.assertEqual(actual.type, "Decimal(12,2)")
+                self.assertEqual(actual.is_null, is_null)
+                self.assertEqual(actual.value, smt.int_value(source))
+                self.assertEqual(
+                    actual.decimal_finite_abs_bound,
+                    finite_bound,
+                )
+
+        unbounded = Encoder(smt.Script()).evaluate(
+            expression,
+            {
+                "source": Value(
+                    "Decimal(7,2)",
+                    smt.FALSE,
+                    smt.ZERO,
+                )
+            },
+        )
+        self.assertEqual(
+            unbounded.decimal_finite_abs_bound,
+            9_999_999,
+        )
+
 
 class DecimalFiniteAbsBoundTest(unittest.TestCase):
     def test_finite_null_and_special_literals_have_exact_bounds(self):

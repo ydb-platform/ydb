@@ -219,12 +219,12 @@ def subtract(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
 
 
 def cast_integral(value: smt.Term, source_type: str, result_type: str) -> smt.Term:
-    """Exactly cast a non-null YQL integer to ``Decimal(p,s)``.
+    """Exactly cast a non-NULL YQL integer to ``Decimal(p,s)``.
 
     The finite coefficient is the integer multiplied by the target scale.
     YDB Decimal bounds are strict: coefficients with absolute value at least
-    ``10**precision`` saturate to the infinity of their sign.  The caller and
-    snapshot IR deliberately exclude nullable and non-integral sources.
+    ``10**precision`` saturate to the infinity of their sign.  The caller
+    propagates source NULL separately.
     """
 
     if _integer_decimal_digits(source_type) is None:
@@ -236,6 +236,24 @@ def cast_integral(value: smt.Term, source_type: str, result_type: str) -> smt.Te
         raise ValueError("Decimal cast result must have at least one integral digit")
     coefficient = smt.mul(value, smt.int_value(10**decimal_type.scale))
     return _saturate_finite(coefficient, decimal_type.precision)
+
+
+def widen_same_scale(
+    value: smt.Term,
+    source_type: str,
+    result_type: str,
+) -> smt.Term:
+    """Exactly widen a Decimal without changing its scale or encoded value."""
+
+    source = parse_type(source_type)
+    result = parse_type(result_type)
+    if source is None or result is None:
+        raise ValueError("Decimal widening requires Decimal source and result types")
+    if source.scale != result.scale or result.precision < source.precision:
+        raise ValueError(
+            "Decimal widening requires the same scale and non-decreasing precision"
+        )
+    return value
 
 
 def narrow_same_scale(

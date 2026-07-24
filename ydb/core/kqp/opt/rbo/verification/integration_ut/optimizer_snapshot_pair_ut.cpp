@@ -2029,7 +2029,10 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             CollectExpressions(snapshot["plan"], "cast_decimal", casts);
             UNIT_ASSERT_VALUES_EQUAL(casts.size(), 2);
             for (const auto* cast : casts) {
-                UNIT_ASSERT_VALUES_EQUAL(cast->GetMapSafe().size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(cast->GetMapSafe().size(), 5);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*cast)["source_type"].GetStringSafe(),
+                    "Uint64");
                 UNIT_ASSERT_VALUES_EQUAL(
                     (*cast)["type"].GetStringSafe(),
                     "Decimal(15,4)");
@@ -2068,6 +2071,80 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesNullableExactSafeCastsToDecimal) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+                SELECT
+                    CAST(Payload AS Decimal(12, 2)) AS FromInteger,
+                    CAST(Amount AS Decimal(12, 2)) AS FromDecimal
+                FROM `/Root/RboExistsInner`;
+            )");
+
+        const auto assertCasts = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> casts;
+            CollectExpressions(snapshot["plan"], "cast_decimal", casts);
+            UNIT_ASSERT_VALUES_EQUAL(casts.size(), 2);
+
+            THashSet<TString> sources;
+            THashSet<TString> auditedSourceTypes;
+            for (const auto* cast : casts) {
+                UNIT_ASSERT_VALUES_EQUAL(cast->GetMapSafe().size(), 5);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*cast)["type"].GetStringSafe(),
+                    "Decimal(12,2)");
+                UNIT_ASSERT((*cast)["nullable"].GetBooleanSafe());
+                auditedSourceTypes.insert(
+                    (*cast)["source_type"].GetStringSafe());
+
+                const auto& argument = (*cast)["arg"];
+                UNIT_ASSERT_VALUES_EQUAL(
+                    argument["kind"].GetStringSafe(),
+                    "column");
+                sources.insert(argument["column"].GetStringSafe());
+            }
+            const THashSet<TString> expectedSources = {
+                "/Root/RboExistsInner.Payload",
+                "/Root/RboExistsInner.Amount",
+            };
+            UNIT_ASSERT_VALUES_EQUAL(sources, expectedSources);
+            const THashSet<TString> expectedAuditedSourceTypes = {
+                "Int64",
+                "Decimal(7,2)",
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                auditedSourceTypes,
+                expectedAuditedSourceTypes);
+
+            THashMap<TString, TString> sourceTypes;
+            for (const auto& table :
+                snapshot["schema"]["tables"].GetArraySafe())
+            {
+                if (!table["name"].GetStringSafe().Contains(
+                    "/Root/RboExistsInner"))
+                {
+                    continue;
+                }
+                for (const auto& column : table["columns"].GetArraySafe()) {
+                    const TString name = column["name"].GetStringSafe();
+                    if (name == "Payload" || name == "Amount") {
+                        UNIT_ASSERT(column["nullable"].GetBooleanSafe());
+                        sourceTypes[name] = column["type"].GetStringSafe();
+                    }
+                }
+            }
+            const THashMap<TString, TString> expectedSourceTypes = {
+                {"Payload", "Int64"},
+                {"Amount", "Decimal(7,2)"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(sourceTypes, expectedSourceTypes);
+        };
+
+        assertCasts(pair.Initial);
+        assertCasts(pair.Final);
     }
 
     Y_UNIT_TEST(RealHostVerifiesDecimalSumPhases) {

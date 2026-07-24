@@ -3557,6 +3557,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         expression = {
             "kind": "cast_decimal",
             "arg": {"kind": "column", "column": "a.x"},
+            "source_type": "Int64",
             "type": "Decimal(35,2)",
             "nullable": False,
         }

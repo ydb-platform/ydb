@@ -59,6 +59,21 @@ void EmitPhase(const NWilson::TTraceId& parentId, TInstant start, TInstant end,
     }
 }
 
+// Shard spans are named by the action, not the object ("Read from shard ..."), so the tree reads
+// as a story. Tablet ids are ~17 digits with a long common prefix within a table; the name keeps
+// only the distinguishing tail, the full id lives in the ydb.shard_id attribute.
+TString ShardDisplayName(const TStringBuf action, ui64 shardId) {
+    const TString full = ToString(shardId);
+    TStringBuilder name;
+    name << action << " shard ";
+    if (full.size() <= 6) {
+        name << full;
+    } else {
+        name << "\u2026" << full.substr(full.size() - 6);
+    }
+    return name;
+}
+
 // Global span budget of one query render (see MaxUserFacingSpansPerQuery). Tasks are admitted
 // by the precomputed duration cutoff (global top-K), shard children by the running counter.
 struct TSpanBudget {
@@ -88,6 +103,24 @@ TStageSignals CollectStageSignals(const NYql::NDqProto::TDqStageStats& stage) {
     return signals;
 }
 
+// Short action of a stage, inherited by its task spans ("Read task 3"): a task viewed out of
+// context should still say what it was doing.
+TString StageShortVerb(const NYql::NDqProto::TDqStageStats& stage) {
+    if (stage.OperatorJoinSize() > 0) {
+        return "Join";
+    }
+    if (stage.OperatorAggregationSize() > 0) {
+        return "Aggregate";
+    }
+    if (stage.OperatorFilterSize() > 0) {
+        return "Filter";
+    }
+    if (stage.TablesSize() > 0) {
+        return stage.GetTables(0).GetWriteRows().GetSum() > 0 ? "Write" : "Read";
+    }
+    return "Compute";
+}
+
 TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
     // Name by the dominant operator first; a table name only labels a pure read/write stage.
     if (stage.OperatorJoinSize() > 0) {
@@ -108,7 +141,7 @@ TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
 
 // Task start/finish are ABSOLUTE epoch ms (raw from the compute actor), unlike the stage
 // aggregate which is offset from BaseTimeMs — so no base is added here.
-void EmitTaskSpans(const NWilson::TTraceId& stageParent,
+void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVerb,
         const std::unordered_map<ui64, TUserFacingTaskSnapshot>& tasks, ui64 stageStartMs,
         TSpanBudget& budget) {
     for (const auto& [taskId, task] : tasks) {
@@ -129,7 +162,7 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
             stageParent, stageParent.Span(stageParent.GetVerbosity()),
             TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
             NWilson::NTraceProto::Status::STATUS_CODE_OK,
-            TStringBuilder() << "Task " << task.TaskId);
+            TStringBuilder() << stageVerb << " task " << task.TaskId);
         if (!span) {
             continue;
         }
@@ -178,7 +211,7 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
                 TInstant::MilliSeconds(shard.GetStartTimeMs()),
                 TInstant::MilliSeconds(shard.GetFinishTimeMs()),
                 NWilson::NTraceProto::Status::STATUS_CODE_OK,
-                TStringBuilder() << "Shard " << shard.GetShardId());
+                ShardDisplayName("Read from", shard.GetShardId()));
             if (!shardSpan) {
                 continue;
             }
@@ -259,7 +292,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
                 span.Attribute("ydb.tasks_truncated",
                     static_cast<i64>(stage.GetTotalTasksCount() - stageTasks.size()));
             }
-            EmitTaskSpans(span.GetTraceId(), stageTasks, base + startMs, budget);
+            EmitTaskSpans(span.GetTraceId(), StageShortVerb(stage), stageTasks, base + startMs, budget);
         }
         span.End();
     }
@@ -335,7 +368,8 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
                     for (const auto& ack : acks) {
                         if (ack.PreparedAt >= w.Start) {
                             EmitPhase(prep.GetTraceId(), w.Start, ack.PreparedAt,
-                                TStringBuilder() << "Shard " << ack.ShardId);
+                                ShardDisplayName("Prepare", ack.ShardId),
+                                {{"ydb.shard_id", static_cast<i64>(ack.ShardId)}});
                         }
                     }
                     prep.End();
@@ -349,7 +383,8 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
                     for (const auto& ack : acks) {
                         if (ack.CommittedAt >= w.Start) {
                             EmitPhase(apply.GetTraceId(), w.Start, ack.CommittedAt,
-                                TStringBuilder() << "Shard " << ack.ShardId);
+                                ShardDisplayName("Commit", ack.ShardId),
+                                {{"ydb.shard_id", static_cast<i64>(ack.ShardId)}});
                         }
                     }
                     apply.End();

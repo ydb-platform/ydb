@@ -85,9 +85,8 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             return CreateWriter();
 
         default:
-            YDB_LOG_DEBUG("Dump NPQLOGPREFIX, #_NDescriber::Description(Settings.DestinationTopic, topic.Status)",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"nDescriberDescriptionSettingsDestinationTopicTopicStatus", NDescriber::Description(Settings.DestinationTopic, topic.Status)});
+            YDB_LOG_DEBUG(NDescriber::Description(Settings.DestinationTopic, topic.Status),
+                {"logPrefix", NPQ_LOG_PREFIX});
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
 }

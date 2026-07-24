@@ -361,7 +361,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    YDB_LOG_DEBUG("Handle TEvReadSetAck txId",
+    YDB_LOG_DEBUG("Handle TEvReadSetAck",
         {"logPrefix", LogPrefix()},
         {"txId", TxId});
 
@@ -377,7 +377,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        YDB_LOG_DEBUG("Predicate acks ",
+        YDB_LOG_DEBUG("Predicate acks",
             {"logPrefix", LogPrefix()},
             {"predicateAcksCount", PredicateAcksCount},
             {"predicateRecipientsSize", PredicateRecipients.size()});
@@ -428,7 +428,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG("HaveAllRecipientsReceive",
         {"logPrefix", LogPrefix()},
         {"predicateAcks", PredicateAcksCount},
         {"predicateRecipientsSize", PredicateRecipients.size()});

@@ -481,7 +481,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
 void TConsumerActor::CommitIfNeeded() {
     auto offset = Storage->GetFirstUncommittedOffset();
-    YDB_LOG_DEBUG("Try commit vs",
+    YDB_LOG_DEBUG("Try commit",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"offset", offset},
         {"lastCommittedOffset", LastCommittedOffset});

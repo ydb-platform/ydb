@@ -210,7 +210,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteInFlight.empty());
     PQ_ENSURE(WriteRequestInFlight);
-    YDB_LOG_INFO("Written messages with current queue bytes)",
+    YDB_LOG_INFO("Written messages with current queue bytes",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"writeRequestInFlightValueCmdWriteSize", WriteRequestInFlight.value().CmdWriteSize()},
         {"firstOffset", WriteRequestInFlight.value().GetCmdWriteOffset()},
@@ -303,7 +303,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 
     if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
         LastStateLogTimestamp = ctx.Now();
-        YDB_LOG_NOTICE("[STATE] read credentials credentials request",
+        YDB_LOG_NOTICE("[STATE] Current state, read session, credentials provider and credentials request inflight",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"currentState", GetCurrentState()},
             {"session", bool(ReadSession)},
@@ -391,7 +391,7 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    YDB_LOG_NOTICE("Got new config, equal with",
+    YDB_LOG_NOTICE("Got new config, equal with previous",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"previous", equalConfigs});
     if (!equalConfigs) {

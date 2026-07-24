@@ -178,11 +178,11 @@ void TPartition::DumpKeysForBlobsCompaction() const
         {"logPrefix", NPQ_LOG_PREFIX});
     for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
         const auto& k = BlobEncoder.DataKeysBody[i];
-        YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' '*'), #_k.Key, #_k.Size",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"kSizeCompactedBlobSizeLowerBoundR", ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')},
-            {"key", k.Key},
-            {"kSize", k.Size});
+        TStringBuilder str;
+        str << ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size;
+
+        YDB_LOG_DEBUG_COMP(Service, str,
+            {"logPrefix", NPQ_LOG_PREFIX});
     }
     YDB_LOG_DEBUG_COMP(Service, "===================================",
         {"logPrefix", NPQ_LOG_PREFIX});

@@ -453,7 +453,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
 {
     if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK ||
         resp.WriteResultSize() < 1) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config write",
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config write error",
             {"logPrefix", LogPrefix()},
             {"error", resp.DebugString()},
             {"selfId", ctx.SelfID});
@@ -462,7 +462,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
     }
     for (const auto& res : resp.GetWriteResult()) {
         if (res.GetStatus() != NKikimrProto::OK) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config write",
+            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config write error",
                 {"logPrefix", LogPrefix()},
                 {"error", resp.DebugString()},
                 {"selfId", ctx.SelfID});
@@ -786,7 +786,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 {
     PQ_ENSURE(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config read error Error status code",
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Config read error",
             {"logPrefix", LogPrefix()},
             {"selfId", ctx.SelfID},
             {"status", read.GetStatus()});
@@ -1468,7 +1468,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     const int curConfigVersion = cfg.GetVersion();
 
     if (curConfigVersion == oldConfigVersion) { //already applied
-        YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Config already applied version actor txId config:\n",
+        YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Config already applied version actor txId config",
             {"logPrefix", LogPrefix()},
             {"configVersion", Config.GetVersion()},
             {"sender", sender},
@@ -2213,7 +2213,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
                 partNo++;
                 uncompressedSize = 0;
-                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client PART message SourceId: \' \'",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client PART message",
                     {"logPrefix", LogPrefix()},
                     {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
                     {"partition", req.GetPartition()},
@@ -2266,7 +2266,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             });
             FillBatchInfo(cmd, msgs.back());
         }
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client message SourceId: \' \' size",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client message",
             {"logPrefix", LogPrefix()},
             {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
             {"partition", req.GetPartition()},
@@ -2827,7 +2827,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     if (writeId.IsKafkaApiTransaction() && TxWrites.contains(writeId) && TxWrites.at(writeId).Deleting) {
         // This branch happens when previous Kafka transaction has committed and we receive write for next one
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.",
             {"logPrefix", LogPrefix()});
         KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
         return;
@@ -2849,7 +2849,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         } else if (writeInfo.TxId.Defined() && writeId.IsKafkaApiTransaction()) {
             // This branch happens when previous Kafka transaction has committed and we receive write for next one
             // before PQ has deleted supportive partition for previous transaction
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.",
                 {"logPrefix", LogPrefix()});
             KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
             return;
@@ -3729,7 +3729,9 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         const TWriteId writeId = GetWriteId(txBody);
         if (TxWrites.contains(writeId)
             && !DeferredPublicationFinalizePartitionsMatchStaged(txBody, TxWrites.at(writeId).Partitions)) {
-            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize partition set mismatch");
+            YDB_LOG_WARN("TxId deferred publication finalize partition set mismatch",
+                {"logPrefix", LogPrefix()},
+                {"txId", event.GetTxId()});
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
@@ -5444,7 +5446,7 @@ void TPersQueue::SendProposeTransactionResult(const TActorId& target,
         error->SetReason(reason);
     }
 
-    YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "Send TEvPersQueue::TEvProposeTransactionResult(",
+    YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "Send TEvPersQueue::TEvProposeTransactionResult",
         {"logPrefix", LogPrefix()},
         {"txId", txId},
         {"status", NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus())});
@@ -5625,7 +5627,7 @@ void TPersQueue::InitTxsOrder()
 
 void TPersQueue::EndInitTransactions()
 {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Dump logPrefix, #_Txs.size, #_PlannedTxs.size",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Transactions are initialized",
         {"logPrefix", LogPrefix()},
         {"txsSize", Txs.size()},
         {"plannedTxsSize", PlannedTxs.size()});
@@ -5651,7 +5653,7 @@ void TPersQueue::EndInitTransactions()
         if (!TxsOrder.contains(tx.State)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Skip",
                 {"logPrefix", LogPrefix()},
-                {"txsOrder", tx.Step},
+                {"txStep", tx.Step},
                 {"txId", txId},
                 {"txState", NKikimrPQ::TTransaction_EState_Name(tx.State)});
             continue;
@@ -5659,7 +5661,7 @@ void TPersQueue::EndInitTransactions()
 
         PushTxInQueue(tx, tx.State);
 
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Dump logPrefix, txsOrder, txId, #_NKikimrPQ::TTransaction_EState_Name(tx.State), #_tx.Pending",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Put the transaction in the queue",
             {"logPrefix", LogPrefix()},
             {"txsOrder", tx.Step},
             {"txId", txId},

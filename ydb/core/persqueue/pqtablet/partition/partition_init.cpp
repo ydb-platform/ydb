@@ -553,9 +553,9 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
 
     for (size_t i = 0; i < keys.size(); ++i) {
         if (NActors::TlsActivationContext) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Key[",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Dump key[index]",
                 {"logPrefix", LogPrefix()},
-                {"i", i},
+                {"index", i},
                 {"value", keys[i]});
         }
     }

@@ -91,7 +91,7 @@ public:
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
+        YDB_LOG_DEBUG("Handle TEvGone",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"toString", ev->Get()->ToString()});
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
@@ -117,7 +117,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
+        YDB_LOG_DEBUG("Handle TEvClientDestroyed",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"toString", ev->Get()->ToString()});
         if (SchemeShardPipe == ev->Get()->ClientId) {
@@ -126,7 +126,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
+        YDB_LOG_DEBUG("Handle TEvClientConnected",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"toString", ev->Get()->ToString()});
 

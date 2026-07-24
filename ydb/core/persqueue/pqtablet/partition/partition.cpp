@@ -1013,7 +1013,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     for (const auto& h : BlobEncoder.HeadKeys) {
         ss << "SYNC INIT HEAD KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
-    YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, ss",
+    YDB_LOG_DEBUG_COMP(Service, "SYNC INIT",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"ss", ss});
 
@@ -2887,7 +2887,7 @@ void TPartition::ProcessUserActionAndTxEvents()
 
 void TPartition::DumpTheSizeOfInternalQueues() const
 {
-    YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, events, pendingCommits, pendingWrites",
+    YDB_LOG_DEBUG_COMP(Service, "Dump events, pendingCommits, pendingWrites",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"events", UserActionAndTransactionEvents.size()},
         {"pendingCommits", UserActionAndTxPendingCommit.size()},
@@ -2920,7 +2920,7 @@ auto TPartition::ProcessUserActionAndTxEvent(TSimpleSharedPtr<TEvPQ::TEvSetClien
 auto TPartition::ProcessUserActionAndTxEvent(TSimpleSharedPtr<TTransaction>& tx,
                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers) -> EProcessResult
 {
-    YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxEvent(TTransaction[",
+    YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxEvent",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"transactionTypeTx", GetTransactionType(*tx)});
     return PreProcessUserActionOrTransaction(tx, affectedSourceIdsAndConsumers);
@@ -3251,14 +3251,14 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
             auto& k = deletedKeys.front();
 
             if (auto lock = k.Lock.lock(); lock) {
-                YDB_LOG_DEBUG_COMP(Service, "Key",
+                YDB_LOG_DEBUG_COMP(Service, "Key locked",
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"locked", k.Key});
                 // key is locked, wait for it to be unlocked
                 break;
             }
 
-            YDB_LOG_DEBUG_COMP(Service, "Key",
+            YDB_LOG_DEBUG_COMP(Service, "Key deleted",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"deleted", k.Key});
 

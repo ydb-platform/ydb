@@ -263,9 +263,9 @@ private:
 
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        YDB_LOG_DEBUG("Handle",
+        YDB_LOG_DEBUG("Handle TEvCheckMessageDeduplicationResponse",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"TEvCheckMessageDeduplicationResponse", record.ShortUtf8DebugString()});
+            {"record", record.ShortUtf8DebugString()});
         for (const auto& [messageDeduplicationId, result] : record.GetResult()) {
             auto deduplicationInfoIt = DeduplicationInfo.find(messageDeduplicationId);
             if (deduplicationInfoIt == DeduplicationInfo.end()) {

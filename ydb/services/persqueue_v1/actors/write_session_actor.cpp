@@ -1571,14 +1571,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
                     ctx);
                 return;
             }
-            if (deferredPublish.ext_publication_id().empty()) {
-                CloseSession(
-                    "WriteRequest.deferred_publish.ext_publication_id must not be empty",
-                    PersQueue::ErrorCode::BAD_REQUEST,
-                    ctx);
-                return;
-            }
-            if (deferredPublish.ext_publication_id().size() > NPQ::NDeferredPublish::MaxDeferredPublishStringLength) {
+            if (deferredPublish.has_ext_publication_id()
+                && deferredPublish.ext_publication_id().size() > NPQ::NDeferredPublish::MaxDeferredPublishStringLength) {
                 CloseSession(
                     "WriteRequest.deferred_publish.ext_publication_id is too long",
                     PersQueue::ErrorCode::BAD_REQUEST,
@@ -1587,16 +1581,19 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             }
 
             const ui64 intPublicationId = deferredPublish.int_publication_id();
-            const auto knownExt = DeferredPublicationExtByInt.FindPtr(intPublicationId);
-            if (knownExt && *knownExt != deferredPublish.ext_publication_id()) {
-                YDB_LOG_WARN_CTX(ctx, "Deferred publish ext_publication_id mismatch",
-                    {"cookie", Cookie},
-                    {"sessionId", OwnerCookie},
-                    {"intPublicationId", intPublicationId},
-                    {"expectedExtPublicationId", *knownExt},
-                    {"actualExtPublicationId", deferredPublish.ext_publication_id()});
-            } else if (!knownExt) {
-                DeferredPublicationExtByInt[intPublicationId] = deferredPublish.ext_publication_id();
+            if (deferredPublish.has_ext_publication_id()) {
+                const auto& extPublicationId = deferredPublish.ext_publication_id();
+                const auto knownExt = DeferredPublicationExtByInt.FindPtr(intPublicationId);
+                if (knownExt && *knownExt != extPublicationId) {
+                    YDB_LOG_WARN_CTX(ctx, "Deferred publish ext_publication_id mismatch",
+                        {"cookie", Cookie},
+                        {"sessionId", OwnerCookie},
+                        {"intPublicationId", intPublicationId},
+                        {"expectedExtPublicationId", *knownExt},
+                        {"actualExtPublicationId", extPublicationId});
+                } else if (!knownExt) {
+                    DeferredPublicationExtByInt[intPublicationId] = extPublicationId;
+                }
             }
         }
     }

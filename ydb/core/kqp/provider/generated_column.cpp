@@ -105,6 +105,8 @@ const THashSet<TStringBuf>& NonRowCallables() {
         "TablePath",
         "TableName",
         "TableRecord",
+        "TableRow",
+        "JoinTableRow",
         "SystemMetadata",
         "FilePath",
         "FileContent",

@@ -17,47 +17,29 @@ namespace NActors {
         }
 
         class TSubscriberLivenessChecker
-            : public TActorBootstrapped<TSubscriberLivenessChecker>
+            : public TActorLivenessChecker
         {
         public:
             TSubscriberLivenessChecker(
                     const TActorId& subscriptionOwner,
                     TVector<TActorLivenessCheckTarget> subscribers)
-                : SubscriptionOwner(subscriptionOwner)
-                , Subscribers(std::move(subscribers))
+                : TActorLivenessChecker(std::move(subscribers))
+                , SubscriptionOwner(subscriptionOwner)
             {
             }
 
-            void Bootstrap() {
-                if (Subscribers.empty()) {
-                    return PassAway();
-                }
-
-                Become(&TThis::StateFunc);
-                Checker = Register(CreateActorLivenessChecker(std::move(Subscribers), SelfId()));
-            }
-
         private:
-            STRICT_STFUNC(StateFunc,
-                hFunc(TEvents::TEvActorDead, Handle)
-                hFunc(TEvents::TEvGone, Handle)
-            )
-
-            void Handle(TEvents::TEvActorDead::TPtr& ev) {
-                ++LeakedSubscribersByActivity[static_cast<ui32>(ev->Cookie)];
+            void OnDead(const TActorLivenessCheckTarget& target) override {
+                ++LeakedSubscribersByActivity[static_cast<ui32>(target.Cookie)];
                 // The IC session identifies the subscription by event sender.
                 TActivationContext::Send(new IEventHandle(
                     SubscriptionOwner,
-                    ev->Sender,
+                    target.ActorId,
                     new TEvents::TEvUnsubscribe));
             }
 
-            void Handle(TEvents::TEvGone::TPtr& ev) {
-                if (ev->Sender != Checker) {
-                    return;
-                }
+            void OnFinish() override {
                 LogLeakedSubscribers();
-                PassAway();
             }
 
             void LogLeakedSubscribers() const {
@@ -81,8 +63,6 @@ namespace NActors {
 
         private:
             const TActorId SubscriptionOwner;
-            TVector<TActorLivenessCheckTarget> Subscribers;
-            TActorId Checker;
             TMap<ui32, ui64> LeakedSubscribersByActivity;
         };
 

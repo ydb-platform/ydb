@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 namespace NActors {
 namespace {
 
@@ -23,39 +25,39 @@ namespace {
     };
 
     struct TCheckResult {
+        TVector<TActorLivenessCheckTarget> AliveTargets;
         TVector<TActorLivenessCheckTarget> DeadTargets;
-        bool Complete = false;
+        TVector<TActorLivenessCheckTarget> UnsureTargets;
+        size_t FinishCount = 0;
     };
 
-    class TCheckObserver
-        : public TActorBootstrapped<TCheckObserver>
+    class TTestActorLivenessChecker
+        : public TActorLivenessChecker
     {
     public:
-        explicit TCheckObserver(TCheckResult& result)
-            : Result(result)
+        TTestActorLivenessChecker(
+                TVector<TActorLivenessCheckTarget> targets,
+                TCheckResult& result)
+            : TActorLivenessChecker(std::move(targets))
+            , Result(result)
         {
         }
 
-        void Bootstrap() {
-            Become(&TThis::StateFunc);
-        }
-
     private:
-        STRICT_STFUNC(StateFunc,
-            hFunc(TEvents::TEvActorDead, Handle)
-            hFunc(TEvents::TEvGone, Handle)
-        )
-
-        void Handle(TEvents::TEvActorDead::TPtr& ev) {
-            Result.DeadTargets.push_back({
-                .ActorId = ev->Sender,
-                .Cookie = ev->Cookie,
-            });
+        void OnAlive(const TActorLivenessCheckTarget& target) override {
+            Result.AliveTargets.push_back(target);
         }
 
-        void Handle(TEvents::TEvGone::TPtr&) {
-            Result.Complete = true;
-            PassAway();
+        void OnDead(const TActorLivenessCheckTarget& target) override {
+            Result.DeadTargets.push_back(target);
+        }
+
+        void OnUnsure(const TActorLivenessCheckTarget& target) override {
+            Result.UnsureTargets.push_back(target);
+        }
+
+        void OnFinish() override {
+            ++Result.FinishCount;
         }
 
     private:
@@ -71,22 +73,25 @@ Y_UNIT_TEST_SUITE(TActorLivenessCheckerTest) {
 
         const TActorId target = runtime.Register(new TTargetActor());
         TCheckResult result;
-        const TActorId observer = runtime.Register(new TCheckObserver(result));
-        runtime.Register(CreateActorLivenessChecker(
+        runtime.Register(new TTestActorLivenessChecker(
             {{
                 .ActorId = target,
                 .Cookie = 10,
             }},
-            observer));
+            result));
 
         TDispatchOptions options;
         options.CustomFinalCondition = [&result] {
-            return result.Complete;
+            return result.FinishCount;
         };
         runtime.DispatchEvents(options);
 
-        UNIT_ASSERT(result.Complete);
+        UNIT_ASSERT_VALUES_EQUAL(result.FinishCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.AliveTargets.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.AliveTargets.front().ActorId, target);
+        UNIT_ASSERT_VALUES_EQUAL(result.AliveTargets.front().Cookie, 10);
         UNIT_ASSERT(result.DeadTargets.empty());
+        UNIT_ASSERT(result.UnsureTargets.empty());
     }
 
     Y_UNIT_TEST(ReportsDeadActorWithCookie) {
@@ -96,24 +101,25 @@ Y_UNIT_TEST_SUITE(TActorLivenessCheckerTest) {
         const TActorId target(runtime.GetNodeId(), 0, Max<ui64>(), 0);
         constexpr ui64 Cookie = 42;
         TCheckResult result;
-        const TActorId observer = runtime.Register(new TCheckObserver(result));
-        runtime.Register(CreateActorLivenessChecker(
+        runtime.Register(new TTestActorLivenessChecker(
             {{
                 .ActorId = target,
                 .Cookie = Cookie,
             }},
-            observer));
+            result));
 
         TDispatchOptions options;
         options.CustomFinalCondition = [&result] {
-            return result.Complete;
+            return result.FinishCount;
         };
         runtime.DispatchEvents(options);
 
-        UNIT_ASSERT(result.Complete);
+        UNIT_ASSERT_VALUES_EQUAL(result.FinishCount, 1);
+        UNIT_ASSERT(result.AliveTargets.empty());
         UNIT_ASSERT_VALUES_EQUAL(result.DeadTargets.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.DeadTargets.front().ActorId, target);
         UNIT_ASSERT_VALUES_EQUAL(result.DeadTargets.front().Cookie, Cookie);
+        UNIT_ASSERT(result.UnsureTargets.empty());
     }
 
     Y_UNIT_TEST(KeepsRemoteActorWhenLivenessIsUnsure) {
@@ -121,23 +127,27 @@ Y_UNIT_TEST_SUITE(TActorLivenessCheckerTest) {
         runtime.Initialize();
 
         const TActorId target(runtime.GetNodeId() + 1, 0, 1, 0);
+        constexpr ui64 Cookie = 10;
         TCheckResult result;
-        const TActorId observer = runtime.Register(new TCheckObserver(result));
-        runtime.Register(CreateActorLivenessChecker(
+        runtime.Register(new TTestActorLivenessChecker(
             {{
                 .ActorId = target,
-                .Cookie = 10,
+                .Cookie = Cookie,
             }},
-            observer));
+            result));
 
         TDispatchOptions options;
         options.CustomFinalCondition = [&result] {
-            return result.Complete;
+            return result.FinishCount;
         };
         runtime.DispatchEvents(options);
 
-        UNIT_ASSERT(result.Complete);
+        UNIT_ASSERT_VALUES_EQUAL(result.FinishCount, 1);
+        UNIT_ASSERT(result.AliveTargets.empty());
         UNIT_ASSERT(result.DeadTargets.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.UnsureTargets.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.UnsureTargets.front().ActorId, target);
+        UNIT_ASSERT_VALUES_EQUAL(result.UnsureTargets.front().Cookie, Cookie);
     }
 }
 

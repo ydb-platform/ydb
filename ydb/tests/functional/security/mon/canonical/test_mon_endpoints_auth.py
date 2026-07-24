@@ -35,6 +35,19 @@ _COUNTER_ENDPOINT_QUERIES = [
     {'max_counter': '1', 'period': '1', 'database': TENANT_DATABASE},
 ]
 
+_PDISK_STORAGE_QUERY = {'node_id': '1', 'pdisk_id': '1'}
+_VDISK_STORAGE_QUERY = {'node_id': '1', 'pdisk_id': '1', 'vslot_id': '1000'}
+
+_PDISK_INFO_QUERIES = [
+    {},
+    _PDISK_STORAGE_QUERY,
+]
+
+_VDISK_READ_QUERIES = [
+    {},
+    _VDISK_STORAGE_QUERY,
+]
+
 ENDPOINT_SPECS = [
     {'path': '/actors/'},
     {'path': '/actors/blobstorageproxies'},
@@ -105,8 +118,7 @@ ENDPOINT_SPECS = [
     {'path': '/operation/forget'},
     {'path': '/operation/get'},
     {'path': '/operation/list'},
-    {'path': '/pdisk'},
-    {'path': '/pdisk/info'},
+    {'path': '/pdisk/info', 'queries': _PDISK_INFO_QUERIES},
     {'path': '/pdisk/restart'},
     {'path': '/pdisk/status'},
     {'path': '/ping'},
@@ -128,11 +140,10 @@ ENDPOINT_SPECS = [
     {'path': '/tablet'},
     {'path': '/tablets'},
     {'path': '/trace'},
-    {'path': '/vdisk'},
-    {'path': '/vdisk/blobindexstat'},
+    {'path': '/vdisk/blobindexstat', 'queries': _VDISK_READ_QUERIES},
     {'path': '/vdisk/evict'},
-    {'path': '/vdisk/getblob'},
-    {'path': '/vdisk/vdiskstat'},
+    {'path': '/vdisk/getblob', 'queries': _VDISK_READ_QUERIES},
+    {'path': '/vdisk/vdiskstat', 'queries': _VDISK_READ_QUERIES},
     {'path': '/ver'},
     {'path': '/viewer'},
     {'path': '/viewer/acl'},

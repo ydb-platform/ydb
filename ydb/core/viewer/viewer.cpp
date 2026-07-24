@@ -1,4 +1,5 @@
 #include "viewer.h"
+#include "viewer_utils.h"
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -226,6 +227,13 @@ public:
 
             auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
                 EndpointAccess[TString(rule.Path)] = rule.Settings;
+                // Auto-register legacy /viewer/json/X alias for /viewer/X (same as JsonHandlers aliases).
+                TStringBuf path(rule.Path);
+                TStringBuf prefix = path.After('/').Before('/');
+                TStringBuf rest = path.After('/').After('/');
+                if (prefix == "viewer" && !rest.empty() && !rest.StartsWith("json/")) {
+                    EndpointAccess["/viewer/json/" + TString(rest)] = rule.Settings;
+                }
             };
 
             auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
@@ -237,73 +245,81 @@ public:
             if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
                 applyAccessRules({
                     // Viewer-level endpoints.
+                    // non "/viewer" prefix endpoints.
+                    {"/pdisk/info", {EViewerEndpointAccessType::Viewer}},
+                    {"/pdisk/restart", {EViewerEndpointAccessType::Viewer}},
+                    {"/pdisk/status", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/vdiskstat", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/getblob", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/blobindexstat", {EViewerEndpointAccessType::Viewer}},
+                    {"/vdisk/evict", {EViewerEndpointAccessType::Viewer}},
+                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
                     {"/viewer/hiveinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/hiveinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/hivestats", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/hivestats", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/counters", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/counters", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/graph", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/graph", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/tenants", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/tenants", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/storage", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/storage", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/peers", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/peers", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/nodeinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/nodeinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/multipart_counter", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/multipart_counter", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/simple_counter", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/simple_counter", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/sse_counter", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/sse_counter", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/groups", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/groups", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/config", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/compute", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/compute", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/netinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/topicinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/topicinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/storage_usage", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/storage_usage", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/tabletcounters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/labeledcounters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/metainfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/browse", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/content", {EViewerEndpointAccessType::Viewer}},
 
                     // Administration-level endpoints.
                     {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
-                    {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
-                    {"/viewer/topic_data", {EViewerEndpointAccessType::Administration}},
-                    {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
-                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/json/autocomplete", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/json/nodelist", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/nodes", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/json/nodes", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/tabletinfo", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/json/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    // non "/viewer" prefix endpoints.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
+                    {"/operation/get", {EViewerEndpointAccessType::Database, true}},
+                    {"/operation/list", {EViewerEndpointAccessType::Database, true}},
+                    {"/operation/cancel", {EViewerEndpointAccessType::Database, true}},
+                    {"/operation/forget", {EViewerEndpointAccessType::Database, true}},
+                    {"/query/script/execute", {EViewerEndpointAccessType::Database, true}},
+                    {"/query/script/fetch", {EViewerEndpointAccessType::Database, true}},
+                    {"/scheme/directory", {EViewerEndpointAccessType::Database, true}},
+                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
+                    {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodes", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/describe", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/describe_replication", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/describe_transfer", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/describe_topic", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/describe_consumer", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/commit_offset", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/hotkeys", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/put_record", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/tenantinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/whoami", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/query", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/acl", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/check_access", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/plan2svg", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/storage_stats", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/database_stats", {EViewerEndpointAccessType::Database, true}},
                 });
             }
 
@@ -634,6 +650,8 @@ private:
     EDatabaseScopedRequestValidationResult ValidateDatabaseScopedRequest(
         const TString& path,
         const TCgiParameters& params,
+        const TStringBuf& method,
+        const TStringBuf& body,
         const TString& serializedToken,
         TString& error) const
     {
@@ -647,9 +665,11 @@ private:
             return EDatabaseScopedRequestValidationResult::Ok;
         }
         const auto itAccess = EndpointAccess.find(path);
-        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam && params.Get("database").empty()) {
-            error = TStringBuilder() << "`database` is required for " << path;
-            return EDatabaseScopedRequestValidationResult::DatabaseRequired;
+        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
+            if (GetDatabaseParam(params, method, body).empty()) {
+                error = TStringBuilder() << "`database` is required for " << path;
+                return EDatabaseScopedRequestValidationResult::DatabaseRequired;
+            }
         }
         return EDatabaseScopedRequestValidationResult::Ok;
     }
@@ -879,7 +899,13 @@ private:
                 return;
             }
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), msg->UserToken, scopeError)) {
+            switch (ValidateDatabaseScopedRequest(
+                path,
+                msg->Request.GetParams(),
+                msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
+                msg->Request.GetPostContent(),
+                msg->UserToken,
+                scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                     return;
@@ -975,7 +1001,13 @@ private:
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, proxyParams, ev->Get()->UserToken, scopeError)) {
+            switch (ValidateDatabaseScopedRequest(
+                path,
+                proxyParams,
+                ev->Get()->Request->Method,
+                ev->Get()->Request->Body,
+                ev->Get()->UserToken,
+                scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
                         ev->Get()->Request->CreateResponseString(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError))));

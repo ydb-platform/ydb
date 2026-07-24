@@ -29,11 +29,15 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <vector>
 
+#include "decompression_test_hooks.h"
+
 
 namespace NYdb::inline Dev::NTopic {
+
 
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,

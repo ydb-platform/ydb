@@ -7,6 +7,7 @@
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 #include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/decompression_test_hooks.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
@@ -32,6 +33,7 @@
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
 #include <util/generic/guid.h>
+#include <util/generic/scope.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -4585,6 +4587,154 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(WhenTheTopicIsDeletedAfterReadingTheData_Uncompressed) {
         WhenTheTopicIsDeletedImpl(AFTER_DOREAD, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
+    }
+
+    // LOGBROKER-10348: Cleanup() must not race with StartDecompressionTasks() on Tasks deque.
+    // Without the session lock in Cleanup, TSan reports a data race (and release builds may crash
+    // in tcmalloc while pop_front'ing TDecompressionTask).
+    //
+    // Test hooks synchronize both pop sites on a barrier so the race is deterministic under TSan.
+    Y_UNIT_TEST(DecompressionCleanupRaceWithStartTasks) {
+        constexpr ui32 Messages = 4;
+        constexpr size_t MessageSize = 1_MB - 1_KB;
+
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user")
+            .AppendTopics(std::string{SHORT_TOPIC_NAME})
+            .ReadOriginal({"dc1"})
+            .DecompressionExecutor(decompressor)
+            // Keep most decompression tasks pending so Cleanup and StartDecompressionTasks
+            // both operate on the same non-empty Tasks deque.
+            .MaxMemoryUsageBytes(MessageSize + 2_KB)
+            .Decompress(true);
+
+        auto reader = CreateReader(*driver, settings);
+
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+            auto* ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < Messages; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "race-src-" << i);
+            const std::string payload(MessageSize, 'x');
+            UNIT_ASSERT(writer->Write(payload, 1));
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+        }
+
+        for (int i = 0; i < 200 && decompressor->GetFuncsCount() < 1; ++i) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(decompressor->GetFuncsCount() >= 1, "no decompression tasks planned");
+
+        // Rendezvous: Cleanup must reach the pop hook first (while the first task is still
+        // decompressing), then wait for StartDecompressionTasks. StartDecompressionTasks runs
+        // under session->Lock; if it waits before Cleanup has begun, Release/DeleteNotReadyTail
+        // cannot take that lock and Cleanup never starts.
+        //
+        // Fixed code (lock in Cleanup): Cleanup blocks on session->Lock while StartTasks waits
+        // here → StartTasks times out → no concurrent pop.
+        // Unfixed: both sides meet and race on Tasks (TSan / crash).
+        std::atomic<bool> cleanupWaiting{false};
+        std::atomic<bool> startTasksArrived{false};
+        std::atomic<bool> rendezvousDone{false};
+        std::mutex mu;
+        std::condition_variable cv;
+        constexpr auto RendezvousTimeout = std::chrono::seconds(5);
+
+        auto beforeCleanupPop = [&] {
+            if (rendezvousDone.load(std::memory_order_acquire)) {
+                return;
+            }
+            {
+                std::lock_guard lock(mu);
+                cleanupWaiting.store(true, std::memory_order_release);
+            }
+            cv.notify_all();
+
+            std::unique_lock lock(mu);
+            cv.wait_for(lock, RendezvousTimeout, [&] {
+                return startTasksArrived.load(std::memory_order_acquire);
+            });
+            rendezvousDone.store(true, std::memory_order_release);
+        };
+
+        auto beforeStartTasksPop = [&] {
+            if (rendezvousDone.load(std::memory_order_acquire)) {
+                return;
+            }
+            {
+                std::unique_lock lock(mu);
+                if (!cv.wait_for(lock, RendezvousTimeout, [&] {
+                        return cleanupWaiting.load(std::memory_order_acquire);
+                    }))
+                {
+                    return;
+                }
+                startTasksArrived.store(true, std::memory_order_release);
+            }
+            cv.notify_all();
+        };
+
+        NYdb::NTopic::NTesting::SetDecompressionTasksPopHooks(beforeCleanupPop, beforeStartTasksPop);
+        Y_DEFER {
+            NYdb::NTopic::NTesting::ClearDecompressionTasksPopHooks();
+        };
+
+        std::thread decompressThread([&] {
+            decompressor->StartFuncs({0});
+        });
+
+        // While the first task is still decompressing (Lock free), trigger Cleanup so it can
+        // wait at the hook before OnDataDecompressed → StartDecompressionTasks takes the lock.
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
+
+        {
+            std::unique_lock lock(mu);
+            UNIT_ASSERT_C(
+                cv.wait_for(lock, RendezvousTimeout, [&] {
+                    return cleanupWaiting.load(std::memory_order_acquire);
+                }),
+                "Cleanup did not reach pop hook before decompression finished");
+        }
+
+        decompressThread.join();
+
+        UNIT_ASSERT_C(rendezvousDone.load(std::memory_order_acquire),
+                      "Cleanup/StartDecompressionTasks pop rendezvous did not happen");
+
+        for (int i = 0; i < 20; ++i) {
+            auto msg = reader->GetEvent(false, 1);
+            if (!msg) {
+                Sleep(TDuration::MilliSeconds(20));
+                continue;
+            }
+            if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg) ||
+                std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*msg))
+            {
+                break;
+            }
+        }
+
+        for (int i = 0; i < 50; ++i) {
+            decompressor->RunAllTasks();
+            if (decompressor->GetPlannedCount() == 0 && decompressor->GetRunningCount() == 0) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(20));
+        }
+
+        reader->Close(TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(CheckDecompressionTasksWithoutSession) {

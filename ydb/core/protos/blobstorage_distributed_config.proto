@@ -367,6 +367,11 @@ message TEvNodeConfigInvokeOnRootResult {
         optional bool AllowEnablingDistconf = 1;
     }
 
+    message TReassignGroupDisk {
+        NKikimrBlobStorage.TVSlotId SourceSlotId = 1;
+        NKikimrBlobStorage.TVSlotId TargetSlotId = 2;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -378,6 +383,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
+        TReassignGroupDisk ReassignGroupDisk = 13;
     }
 }
 

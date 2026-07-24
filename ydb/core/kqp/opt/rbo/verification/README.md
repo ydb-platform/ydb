@@ -14,7 +14,8 @@ hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge, pushed OLAP-filter including exact presence tests,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
-partial integral `SafeCast`, exact direct String/Utf8-literal `SafeCast` to
+same-type fixed-width integral division, exact partial integral `SafeCast`,
+exact direct String/Utf8-literal `SafeCast` to
 optional Decimal or Date, exact reviewed `Coalesce(..., false)` forms over
 either a direct comparison, a binary same-member String
 membership/complement predicate, or the reviewed canonical String predicates,
@@ -61,32 +62,32 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The current complete policy-checked dashboards, generated on 2026-07-24,
-include the repeated-source Map milestone and have formula
+include the exact same-type integral-division milestone and have formula
 construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
 q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10, q15, q16, q18,
 q19, q25, q29, q33,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65,
-q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95,
-q96, q97, and q99: 63/121 workload queries (52.1%). TPCH has seventeen
+q68, q69, q71, q73, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94,
+q95, q96, q97, and q99: 64/121 workload queries (52.9%). TPCH has seventeen
 formulas, three unsupported semantic outcomes, and two no-pair optimizer
-failures; TPC-DS has forty-six formulas, thirty-five unsupported semantic
+failures; TPC-DS has forty-seven formulas, thirty-four unsupported semantic
 outcomes, and eighteen no-pair optimizer failures. Across both suites the
-semantic-outcome partition is therefore 63 formulas, 38 `UNSUPPORTED`, and 20
+semantic-outcome partition is therefore 64 formulas, 37 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`. Preparation is a separate partition: twenty TPCH and
 seventy-three TPC-DS queries succeed, while two TPCH and twenty-six TPC-DS
 queries fail. Eight TPC-DS rows belong to both the preparation-failure and
 semantic-unsupported inventories, so those inventories must not be added as
 disjoint workload counts.
 
-Four denominators answer different questions. Formula coverage is 63/121
-(52.1%) over the corpus, 63/101 (62.4%) over exact Initial/Final
-boundary-result pairs, 63/93 (67.7%) within the preparation-successful subset,
-and 63/70 (90.0%) among verifier entrants. The preparation-success ratio uses
+Four denominators answer different questions. Formula coverage is 64/121
+(52.9%) over the corpus, 64/101 (63.4%) over exact Initial/Final
+boundary-result pairs, 64/93 (68.8%) within the preparation-successful subset,
+and 64/72 (88.9%) among verifier entrants. The preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
-permits a future formula to coexist with failed later preparation. Of the 38
-current unsupported outcomes, 29 stop first at initial export, two at final
-export, and seven inside the verifier. Thus the strict C++ boundary rejects 31
-of the 101 exact pairs before formula construction, while seven exported pairs
+permits a future formula to coexist with failed later preparation. Of the 37
+current unsupported outcomes, 27 stop first at initial export, two at final
+export, and eight inside the verifier. Thus the strict C++ boundary rejects 29
+of the 101 exact pairs before formula construction, while eight exported pairs
 fail closed in the verifier itself.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
@@ -99,24 +100,39 @@ and Read range/ordering semantics for q51. The focused run spent 3,186/0 ms in
 preparation/verifier work and produced report SHA-256
 `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
-The complete TPCH dashboard spent 2,752/42,193 ms in preparation/verifier work
+The complete TPCH dashboard spent 2,853/43,093 ms in preparation/verifier work
 and produced report SHA-256
-`2cf12ff5803e229a1c8af9ec04a6d3314ab91f7b471bdc883e683da8654541f5`.
-TPC-DS spent 81,647/413,358 ms and produced
-`507eaf74a90f01b722824277a4632cbdf5cf5076d4809a978d0065cdcc927a11`.
+`47fc68101e60941caabc508f73ba8f563dcbebb79dbb0dba5a359fec9216f1ec`.
+TPC-DS spent 87,229/546,380 ms and produced
+`a095d7b36f902548f828152546d34046e0df75f055d28ad8ba2ef28e99e548fa`.
 Both complete formula-only policy runs are green.
+
+TPC-DS q73 now emits a formula after 252/760 ms of preparation/verifier work
+in the complete run. q78 passes both exporters but fails closed after
+1,075/27,987 ms at a 52,326-pair Sort construction above the 16,384-pair
+audit cap. The checked-in policy pins q73 at preparation plus formula
+construction and bounded proof, and q78 at preparation plus verifier entry.
+Complete validation passes 537/537 Python verifier tests, 207/207 C++ exporter
+tests, and 14/14 coverage-policy tests. A focused solver differential passes
+1/1: the unchanged division pair is verified, while reversing the operands
+produces a bounded counterexample. The focused real-host q73 proof is
+`VERIFIED_BOUNDED` after 239/8,940 ms and has report SHA-256
+`2c9dd4e765f4507bd952189055d67a0db5cf818ecb84abe188bfcdd8a15122e0`.
 
 The detailed planning estimate in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md)
 groups the preparation-successful formula gap into roughly eight to ten broad
-feature families and twelve to eighteen narrow milestones. Including exact
-window semantics for the newly visible failed-preparation pairs gives roughly
-ten to twelve families and sixteen to twenty-four milestones for the complete
+feature families and eleven to seventeen narrow milestones. The numeric
+primary-first-blocker cluster is now nine `Double` queries; q73 emits, while
+q78 migrated from `/` into the eight-query factorized-construction cluster.
+Including exact window semantics for the newly visible failed-preparation
+pairs gives roughly
+ten to twelve families and fifteen to twenty-three milestones for the complete
 captured-pair gap; the remaining twenty workload entries need frontend or
 optimizer progress before verifier feature work can reach them.
 Those milestone ranges assume deliberately workload-targeted gates. A safer
-engineering budget for clean, reusable implementations is roughly fifteen to
-twenty-two milestones for the preparation-successful gap and twenty to thirty
-for all currently captured pairs.
+remaining engineering budget for clean, reusable implementations is roughly
+fourteen to twenty-one milestones for the preparation-successful gap and
+nineteen to twenty-nine for all currently captured pairs.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -198,8 +214,8 @@ green. A fresh focused TPC-DS q58 run now passes the Date-type boundary and
 fails closed later with
 `IN subplan binding _rbo_arg_1 contains a nested subplan reference`; it still
 does not emit a formula. Coverage counts and proof policy therefore remain
-unchanged. q58's nested subplan and q83's static nullable-Date `SqlIn` remain
-future slices.
+unchanged. q58/q83's nested subplans and q83's final static nullable-Date
+`SqlIn` remain future slices.
 
 The preceding exact Date-`Unwrap` gate admits only a non-null Date
 `Unwrap` of a binary Optional-Date `Coalesce` whose first argument is one
@@ -391,19 +407,26 @@ before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
-q19, q21, and q22 plus TPC-DS q3, q16, q38, q42, q48, q52, q55, q69, q87,
-q90, q93, q94, q95, and q96: twenty-five obligations (20.7% of the workload).
+q19, q21, and q22 plus TPC-DS q3, q16, q38, q42, q48, q52, q55, q69, q73,
+q87, q90, q93, q94, q95, and q96: twenty-six obligations (21.5% of the
+workload).
 
-The current complete proof-floor gate is green and policy-valid. TPCH passed
-11/11 `VERIFIED_BOUNDED` after 1,445/67,977 ms of preparation/verification and
-produced report SHA-256
-`c5668fdda1f40493fdcef4729118d634a63c25f44024106198cdd89775d9d4ed`;
-TPC-DS passed 14/14 after 3,328/49,834 ms and produced
+The current complete proof-floor gate is green and policy-valid: 11/11 TPCH
+and 15/15 TPC-DS obligations are `VERIFIED_BOUNDED`, for 26/26 or 26/121
+(21.5%) of the workload at the declared bounds. TPCH spent 1,410/66,080 ms in
+preparation/verification and produced report SHA-256
+`bf835d975699de6a2320df13ff3858891aa3612a5c84db8adf86ef0b9615368a`;
+TPC-DS spent 3,589/59,127 ms and produced
+`ffb0efb0c9e60bfdcd38ac6bf724fcb0e270448c381d53437290d9d7cd668212`.
+The incremental q73 focused run spent 239/8,940 ms and produced report SHA-256
+`2c9dd4e765f4507bd952189055d67a0db5cf818ecb84abe188bfcdd8a15122e0`.
+The immediately preceding retained 25-obligation gate passed 11/11 TPCH after
+1,445/67,977 ms and 14/14 TPC-DS after 3,328/49,834 ms; its report SHA-256
+values were
+`c5668fdda1f40493fdcef4729118d634a63c25f44024106198cdd89775d9d4ed` and
 `489f58334593770ff80024bc50a055ed8d60712a34056839d837fbed29c7ff34`.
-The combined gate therefore confirms 25/25 obligations, or 25/121 (20.7%) of
-the workload, at the declared bounds.
 
-The three new focused real-host solver rows independently return
+The three preceding focused real-host solver rows independently return
 `VERIFIED_BOUNDED`: TPCH q21 spent 168/1,901 ms of
 preparation/verification and produced report SHA-256
 `851b3a040d3aa1126d5b0256da95c8851984b977f8d7671db47a9f2d1a9eccef`;
@@ -493,10 +516,11 @@ solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend
 neither the proof floor nor the formula count.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
-for TPCH q1 and TPC-DS q5, q59, q65, and q80: both snapshots must continue to
-export and reach the verifier. All except q59 satisfy the stronger
-formula-construction floor; q59 is pinned at entry while its 32,640-pair Sort
-exceeds the 16,384-pair audit cap. Later formula or proof results satisfy every
+for TPCH q1 and TPC-DS q5, q59, q65, q78, and q80: both snapshots must
+continue to export and reach the verifier. q59 and q78 are pinned at entry
+while their 32,640- and 52,326-pair Sort constructions exceed the 16,384-pair
+audit cap; every other entry-floor query satisfies the stronger
+formula-construction floor. Later formula or proof results satisfy every
 weaker floor automatically.
 The complete nineteen-obligation proof floor was confirmed after the dynamic
 `IN` slice: 19/121 workload queries (15.7%) were `VERIFIED_BOUNDED` at two rows
@@ -515,7 +539,10 @@ twenty-two-query proof floor. The exact two-dependency `EXISTS` slice then added
 TPCH q21 and TPC-DS q16/q94 to both tiers, yielding 62 formulas and twenty-five
 bounded proofs. Exact repeated-source Map projection plus cached structural SMT
 term hashes subsequently move TPC-DS q54 through formula construction, yielding
-63 formulas while leaving that proof floor unchanged.
+63 formulas while leaving that proof floor unchanged. Exact same-type integral
+division then adds q73 to the formula and proof floors and moves q78 to the
+verifier-entry floor, yielding 64 formulas and twenty-six proofs. The
+preparation floor independently pins both q73 and q78.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -754,6 +781,13 @@ static Optional result while making runtime presence exact. Nullable,
 computed, missing, foreign-row, wrong-result-type, or unsafe variants fail
 closed.
 
+Exact integral `/` requires both operands and the result to have the same
+fixed-width signed or unsigned integer identity, and the result must be
+Optional. An absent operand produces NULL. A zero divisor and signed
+`MIN / -1` overflow also produce NULL; every other quotient truncates toward
+zero by dividing nonnegative magnitudes and restoring the sign. Mixed-type,
+mixed-width, non-Optional-result, and floating-point forms fail closed.
+
 Scalar syntax outside the explicit Boolean, equality, ordering, integer
 arithmetic, and restricted static-membership core is represented by a shared
 typed uninterpreted function when
@@ -763,10 +797,11 @@ current reviewed opaque families are scalar comparisons; `Just` and
 String-predicate bridge described below; and stored-String `Concat` in the exact
 workload shapes described below. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
-parent may contain it. YQL has no complete generic totality or determinism flag,
-so all other callables fail closed rather than relying on a denylist. This
-includes UDF and PG calls, generic division, strict casts, `Unwrap`, runtime-
-dependent generators, free variables, and unsafe AST metadata.
+parent may contain it; the same is true of the exact integral `/` core above.
+YQL has no complete generic totality or determinism flag, so all other
+callables fail closed rather than relying on a denylist. This includes UDF and
+PG calls, floating-point or mixed-type division, strict casts, `Unwrap`,
+runtime-dependent generators, free variables, and unsafe AST metadata.
 
 The reviewed `Substring` shape is exactly
 `Substring(Optional<String>, start, count) -> Optional<String>`. Both bounds
@@ -1237,8 +1272,8 @@ and the complete dashboard emits q54's two-row/two-task bounded formula after
 50,737 ms of verifier work. A separate 60-second solver attempt returned
 `UNKNOWN` when the global deadline expired before mismatch branch 3/8
 (`left_outcome_0_unmatched`). q54 is therefore formula-covered, not proved,
-and does not change the twenty-five-query bounded proof floor. The milestone
-passes 529/529 Python verifier tests, 205/205 C++ exporter tests, 39/39
+and did not change the then-current twenty-five-query bounded proof floor. The
+milestone passes 529/529 Python verifier tests, 205/205 C++ exporter tests, 39/39
 real-host integration tests, and 12/12 coverage-policy tests.
 
 Equality-correlated scalar aggregation is exact for one deliberately narrow
@@ -1626,9 +1661,11 @@ not unbounded ordering proofs or semantic approximations.
 byte-order quotient above. Date is an exact bounded integer-day type with
 literals, equality, ordinary ordering, Sort, and Merge. Decimal has exact
 literals, its legal typed domain, and the comparison and arithmetic semantics
-above, plus exact raw-code Sort/TopSort/Merge ordering. Generic division, casts
-outside the exact integral-`SafeCast` and constant normalization gates, and
-aggregate functions outside the modeled subset below remain unsupported.
+above, plus exact raw-code Sort/TopSort/Merge ordering. Same-type fixed-width
+integral division has the exact nullable semantics above. Floating-point,
+mixed-type, and other division forms, casts outside the exact
+integral-`SafeCast` and constant normalization gates, and aggregate functions
+outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
 `sum`, Decimal-only `min`/`max`, phase-aware same-type Decimal `avg`, row-level

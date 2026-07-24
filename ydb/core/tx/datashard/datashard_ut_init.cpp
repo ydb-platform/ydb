@@ -155,6 +155,35 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     Y_UNIT_TEST(TestResolvePathAfterRestart) {
         TestTablePath(true, true);
     }
+
+    Y_UNIT_TEST(TestGetTableInfoReflectsRename) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+        auto *dataShard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+        UNIT_ASSERT(dataShard);
+
+        const auto *info = dataShard->GetTableInfo();
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->TablePath, "/Root/table-1");
+        auto prevTableId = info->TableId;
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table-1", "/Root/table-1-moved"));
+
+        info = dataShard->GetTableInfo();
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->TablePath, "/Root/table-1-moved");
+        UNIT_ASSERT_UNEQUAL(info->TableId, prevTableId);
+    }
 }
 
 }

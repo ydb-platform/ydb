@@ -12,6 +12,8 @@
 #include <ydb/core/protos/tablet_counters_aggregator.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
+#include <optional>
+
 ////////////////////////////////////////////
 namespace NKikimr {
 
@@ -50,15 +52,28 @@ struct TEvTabletCounters {
         TAutoPtr<TTabletCountersBase> ExecutorCounters;
         TAutoPtr<TTabletCountersBase> AppCounters;
         TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
+        const ui32 FollowerId;                              // 0 = leader, >0 = replica
+
+        // Mirrors NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo
+        struct TTableInfo {
+            TPathId TableId;
+            TString TablePath;
+            ui64 SchemaVersion = 0;
+        };
+        std::optional<TTableInfo> TableInfo;
 
         TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId,
-            TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters)
+            TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters,
+            ui32 followerId = 0,
+            std::optional<TTableInfo> tableInfo = std::nullopt)
             : TabletID(tabletID)
             , TabletType(tabletType)
             , TenantPathId(tenantPathId)
             , ExecutorCounters(executorCounters)
             , AppCounters(appCounters)
             , InFlightCounter(inFlightCounter)
+            , FollowerId(followerId)
+            , TableInfo(std::move(tableInfo))
         {}
     };
 

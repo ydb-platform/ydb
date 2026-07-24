@@ -145,7 +145,7 @@ Y_UNIT_TEST(MoveTransfersAckState) {
     TDeferredPublication::TAccess::AckState(b)->OnAck();
     UNIT_ASSERT(waitB.Wait(TDuration::Seconds(1)));
 
-    // Moved-from handle is unusable for finalize: ids cleared, fresh empty state.
+    // Moved-from: ids cleared; ack state is created lazily on TAccess (empty, not sealed).
     UNIT_ASSERT_VALUES_EQUAL(a.IntPublicationId, 0u);
     UNIT_ASSERT(!a.ExtPublicationId.has_value());
     auto waitA = TDeferredPublication::TAccess::AckState(a)->WaitAllAcks();

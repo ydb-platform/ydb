@@ -53,7 +53,8 @@ TDeferredPublication::TDeferredPublication(TDeferredPublication&& other) noexcep
 {
     other.IntPublicationId = 0;
     other.ExtPublicationId.reset();
-    other.AckState_ = MakeAckState();
+    // Leave AckState_ null: avoid heap traffic on write-pipeline variant moves.
+    // A fresh empty state is created on the next TAccess::AckState call if needed.
 }
 
 TDeferredPublication& TDeferredPublication::operator=(const TDeferredPublication& other) {
@@ -72,7 +73,7 @@ TDeferredPublication& TDeferredPublication::operator=(TDeferredPublication&& oth
         AckState_ = std::move(other.AckState_);
         other.IntPublicationId = 0;
         other.ExtPublicationId.reset();
-        other.AckState_ = MakeAckState();
+        // See move constructor: no MakeAckState() for the moved-from object.
     }
     return *this;
 }
@@ -80,6 +81,9 @@ TDeferredPublication& TDeferredPublication::operator=(TDeferredPublication&& oth
 const std::shared_ptr<TDeferredPublicationAckState>& TDeferredPublication::TAccess::AckState(
     const TDeferredPublication& publication)
 {
+    if (!publication.AckState_) {
+        publication.AckState_ = MakeAckState();
+    }
     return publication.AckState_;
 }
 

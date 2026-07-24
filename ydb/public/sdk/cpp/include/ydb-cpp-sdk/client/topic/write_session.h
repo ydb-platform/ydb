@@ -208,13 +208,16 @@ class TDeferredPublicationAckState;
 //! Deferred publication for StreamWrite and deferred-publish control RPCs.
 //! Each handle owns ack-tracking state (shared on copy, transferred on move).
 //! Publish/Cancel wait for acks only when this handle's state recorded writes.
-//! Move leaves the source with IntPublicationId=0, no ExtPublicationId, and a fresh empty ack state.
+//! Move leaves the source with IntPublicationId=0, no ExtPublicationId, and no ack state;
+//! a fresh empty ack state is created lazily on the first TAccess::AckState call.
+//! Copies of a moved-from handle do not share that lazily created state with each other.
 //! On Write, ExtPublicationId is optional and informational (omit / "" / any string); only the
 //! MaxExtPublicationIdLength cap applies. BeginPublication still requires a non-empty ext id.
 struct TDeferredPublication {
     //! SDK-internal hatch to private AckState_. Not part of the public contract:
     //! keeps AckState_ hidden from users while write-session / Publish / Cancel can reach it
     //! without a public getter (and without friending every call site).
+    //! Creates an empty ack state if the handle has none (e.g. after move).
     struct TAccess;
 
     static constexpr size_t MaxExtPublicationIdLength = MaxDeferredPublishExtIdLength;
@@ -246,7 +249,8 @@ struct TDeferredPublication {
     }
 
 private:
-    std::shared_ptr<TDeferredPublicationAckState> AckState_;
+    // mutable: TAccess::AckState may lazy-create through a const handle (Publish/Cancel).
+    mutable std::shared_ptr<TDeferredPublicationAckState> AckState_;
 };
 
 //! Contains the message to write and all the options.

@@ -3172,9 +3172,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return std::visit([]<typename T>(const T& v) {
             if constexpr (std::is_same_v<std::monostate, T>) {
                 return TString{};
-            } else {
+            } else if constexpr (std::is_same_v<NKikimrSchemeOp::TBloomNGrammFilter, T>) {
                 TString str;
                 Y_ENSURE(v.SerializeToString(&str));
+                return str;
+            } else {
+                TString str{v.SerializeAsString()};
+                Y_ENSURE(!str.empty());
                 return str;
             }
         }, SpecializedIndexDescription);

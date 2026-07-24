@@ -1,5 +1,6 @@
 #include "interconnect_tcp_session_v2.h"
 #include "interconnect_tcp_proxy.h"
+#include "subscriber_liveness_checker.h"
 
 #include <util/stream/str.h>
 #include <util/string/cast.h>
@@ -56,6 +57,8 @@ namespace NActors {
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
+        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval,
+            new TEvPrivate::TEvCheckSubscriberLiveness);
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
     }
 
@@ -188,6 +191,19 @@ namespace NActors {
         Subscribers.erase(ev->Sender);
     }
 
+    void TInterconnectSessionTCPv2::CheckSubscriberLiveness() {
+        if (!Subscribers.empty()) {
+            TVector<TActorId> subscribers;
+            subscribers.reserve(Subscribers.size());
+            for (const auto& [actorId, _] : Subscribers) {
+                subscribers.push_back(actorId);
+            }
+            Register(CreateSubscriberLivenessChecker(SelfId(), std::move(subscribers)));
+        }
+        Schedule(Proxy->Common->Settings.SubscriberLivenessCheckInterval,
+            new TEvPrivate::TEvCheckSubscriberLiveness);
+    }
+
     void TInterconnectSessionTCPv2::HandlePoison() {
         Terminate(TDisconnectReason::UserRequest());
     }
@@ -204,6 +220,7 @@ namespace NActors {
 //        str << "<tr><td>OutstandingWrites</td><td>" << PendingBatches.size() << "</td></tr>";
         str << "<tr><td>BytesSent</td><td>" << BytesSent << "</td></tr>";
         str << "<tr><td>BytesReceived</td><td>" << BytesReceived << "</td></tr>";
+        str << "<tr><td>Subscribers.size()</td><td>" << Subscribers.size() << "</td></tr>";
         str << "</table>";
         str << "</div></div>";
         TActivationContext::Send(new IEventHandle(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str())));

@@ -83,6 +83,7 @@ namespace NActors {
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
+        TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
         // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).

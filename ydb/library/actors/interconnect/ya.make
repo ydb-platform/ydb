@@ -56,6 +56,8 @@ SRCS(
     packet.h
     profiler.h
     slowpoke_actor.h
+    subscriber_liveness_checker.cpp
+    subscriber_liveness_checker.h
     subscription_manager.cpp
     subscription_manager.h
     types.cpp

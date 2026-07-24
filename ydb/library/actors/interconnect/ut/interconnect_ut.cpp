@@ -162,6 +162,37 @@ private:
     std::atomic<size_t> Received = 0;
 };
 
+class TConnectionSubscriberActor : public TActorBootstrapped<TConnectionSubscriberActor> {
+public:
+    explicit TConnectionSubscriberActor(ui32 peerNodeId)
+        : PeerNodeId(peerNodeId)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvents::TEvSubscribe);
+    }
+
+    bool IsConnected() const {
+        return Connected.load(std::memory_order_acquire);
+    }
+
+private:
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
+        Connected.store(true, std::memory_order_release);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle)
+        cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway)
+        cFunc(TEvents::TSystem::Poison, PassAway)
+    )
+
+private:
+    const ui32 PeerNodeId;
+    std::atomic<bool> Connected = false;
+};
+
 class TBurstSenderActor : public TActorBootstrapped<TBurstSenderActor> {
 public:
     TBurstSenderActor(TActorId recipient, size_t messages, size_t payloadSize)
@@ -1081,6 +1112,48 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
 }
 
+void RunSubscriberLivenessCheck(bool useSessionV2) {
+    if (useSessionV2 && !TUringContext::IsAvailable()) {
+        Cerr << "io_uring not available; skipping" << Endl;
+        return;
+    }
+
+    const TDuration checkInterval = TDuration::MilliSeconds(100);
+    auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
+        settings.SubscriberLivenessCheckInterval = checkInterval;
+        settings.EnableInterconnectSessionV2 = useSessionV2;
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr,
+        useSessionV2 ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* subscriber = new TConnectionSubscriberActor(1);
+    const TActorId subscriberId = cluster.RegisterActor(subscriber, 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return subscriber->IsConnected();
+    }, "subscriber connected");
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 1;
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "live subscriber registered");
+
+    Sleep(3 * checkInterval);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+
+    cluster.KillActor(2, subscriberId);
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "dead subscriber removed");
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
@@ -1089,6 +1162,14 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
         RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
         RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheck) {
+        RunSubscriberLivenessCheck(false);
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckV2) {
+        RunSubscriberLivenessCheck(true);
     }
 
     Y_UNIT_TEST(RdmaRetryWatchdogPendingSessionsAggregated) {

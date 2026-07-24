@@ -72,6 +72,7 @@ namespace NActors {
         struct TEvPrivate {
             enum {
                 EvTerminate = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvCheckSubscriberLiveness,
             };
 
             struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {
@@ -79,6 +80,9 @@ namespace NActors {
 
                 TEvTerminate(TDisconnectReason reason) : Reason(reason) {}
             };
+
+            struct TEvCheckSubscriberLiveness
+                : TEventLocal<TEvCheckSubscriberLiveness, EvCheckSubscriberLiveness> {};
         };
 
         STATEFN(StateFunc) {
@@ -88,6 +92,7 @@ namespace NActors {
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvUnsubscribe::EventType, HandleUnsubscribe)
+                cFunc(TEvPrivate::TEvCheckSubscriberLiveness::EventType, CheckSubscriberLiveness)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 cFunc(TEvInterconnect::EvForwardDelayed, IgnoreForwardDelayed)
                 hFunc(TEvPrivate::TEvTerminate, [&](auto& ev) { Terminate(ev->Get()->Reason); });
@@ -98,6 +103,7 @@ namespace NActors {
         void ForwardWithSubscribe(STATEFN_SIG);
         void HandleSubscribe(STATEFN_SIG);
         void HandleUnsubscribe(STATEFN_SIG);
+        void CheckSubscriberLiveness();
         void HandlePoison();
         void IgnoreForwardDelayed() {}
 

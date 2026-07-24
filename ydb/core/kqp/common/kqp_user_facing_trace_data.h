@@ -31,6 +31,13 @@ enum class EUserFacingTracePhase : size_t {
     Snapshot,
     RunTasks,
     Commit, // effects commit/flush via the buffer actor (covers the coordinator round-trip)
+    // Sub-windows below are reported by other actors and assigned directly, outside the
+    // executer's Begin/End chain. The two resolve ones run concurrently and may overlap.
+    ResolveMetadata,     // scheme cache navigate (table metadata); child of ResolveTables
+    ResolvePartitioning, // scheme cache key-range resolve; child of ResolveTables
+    CommitPrepareShards, // children of Commit; empty for immediate (single-shard) commit
+    CommitCoordinator,
+    CommitApplyShards,
     Count,
 };
 

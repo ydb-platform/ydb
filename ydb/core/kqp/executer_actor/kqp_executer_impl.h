@@ -245,6 +245,11 @@ protected:
             ExecuterStateSpan.EndOk();
         }
 
+        if (UserFacingTraceData) {
+            UserFacingTraceData->Timeline.Phase(EUserFacingTracePhase::ResolveMetadata) = reply.NavigateWindow;
+            UserFacingTraceData->Timeline.Phase(EUserFacingTracePhase::ResolvePartitioning) = reply.ResolveKeysWindow;
+        }
+
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
 
         // Prune partitions here outside of TasksGraph - in all possible cases.

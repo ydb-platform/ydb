@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -45,6 +46,11 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
 
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
     std::optional<TCommitTimestamp> CommitTimestamp;
+    // Wall-clock windows of a distributed commit for the user-facing trace;
+    // empty for immediate (single-shard) commit and flush/rollback replies.
+    TUserFacingTraceTimeline::TWindow CommitPrepareShards;
+    TUserFacingTraceTimeline::TWindow CommitCoordinator;
+    TUserFacingTraceTimeline::TWindow CommitApplyShards;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

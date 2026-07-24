@@ -66,6 +66,7 @@ private:
     }
 
     void HandleResolveNames(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        NavigateWindow.End = TInstant::Now();
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -271,6 +272,7 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
+        ResolveKeysWindow.End = TInstant::Now();
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
@@ -469,6 +471,7 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
+            NavigateWindow.Start = TInstant::Now();
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, NWilson::TTraceId(ResolveTraceId));
             Become(&TKqpTableResolver::ResolveNamesState);
@@ -476,11 +479,13 @@ private:
         }
 
         if (requestNavigate->ResultSet.size()) {
+            NavigateWindow.Start = TInstant::Now();
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, NWilson::TTraceId(ResolveTraceId));
         } else {
             NavigationFinished = true;
         }
+        ResolveKeysWindow.Start = TInstant::Now();
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
             0, 0, NWilson::TTraceId(ResolveTraceId));
         Become(&TKqpTableResolver::ResolveKeysState);
@@ -533,6 +538,8 @@ private:
         }
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->CpuTime = CpuTime;
+        replyEv->NavigateWindow = NavigateWindow;
+        replyEv->ResolveKeysWindow = ResolveKeysWindow;
 
         Send(Owner, replyEv.release());
         PassAway();
@@ -541,6 +548,8 @@ private:
 private:
     const TActorId Owner;
     const ui64 TxId;
+    TUserFacingTraceTimeline::TWindow NavigateWindow;
+    TUserFacingTraceTimeline::TWindow ResolveKeysWindow;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;

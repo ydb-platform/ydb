@@ -266,7 +266,22 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
     }
     if (NWilson::TSpan prepareSpan = MakePhase(executeId, prepareStart, prepareEnd, "Prepare")) {
         for (const auto& [phase, name] : preparePhases) {
-            if (const auto& window = tl.Phase(phase)) {
+            const auto& window = tl.Phase(phase);
+            if (!window) {
+                continue;
+            }
+            if (phase == EUserFacingTracePhase::ResolveTables) {
+                // The two scheme-cache round-trips run concurrently; their windows may overlap.
+                if (NWilson::TSpan rt = MakePhase(prepareSpan.GetTraceId(), window.Start, window.End, name)) {
+                    if (const auto& w = tl.Phase(EUserFacingTracePhase::ResolveMetadata)) {
+                        EmitPhase(rt.GetTraceId(), w.Start, w.End, "Metadata");
+                    }
+                    if (const auto& w = tl.Phase(EUserFacingTracePhase::ResolvePartitioning)) {
+                        EmitPhase(rt.GetTraceId(), w.Start, w.End, "Partitioning");
+                    }
+                    rt.End();
+                }
+            } else {
                 EmitPhase(prepareSpan.GetTraceId(), window.Start, window.End, name);
             }
         }
@@ -283,7 +298,19 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan.End();
     }
     if (const auto& commit = tl.Phase(EUserFacingTracePhase::Commit)) {
-        EmitPhase(executeId, commit.Start, commit.End, "Commit");
+        // Distributed-commit breakdown (empty on the immediate single-shard path).
+        if (NWilson::TSpan commitSpan = MakePhase(executeId, commit.Start, commit.End, "Commit")) {
+            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitPrepareShards)) {
+                EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "PrepareShards");
+            }
+            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitCoordinator)) {
+                EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "Coordinator");
+            }
+            if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitApplyShards)) {
+                EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "ApplyShards");
+            }
+            commitSpan.End();
+        }
     }
     executeSpan.End();
 }

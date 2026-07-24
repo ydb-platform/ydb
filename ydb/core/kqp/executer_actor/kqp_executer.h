@@ -127,6 +127,9 @@ struct TEvKqpExecuter {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
         TDuration CpuTime;
+        // Wall-clock windows of the scheme-cache round-trips, for the user-facing trace.
+        TUserFacingTraceTimeline::TWindow NavigateWindow;
+        TUserFacingTraceTimeline::TWindow ResolveKeysWindow;
     };
 
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,

@@ -91,7 +91,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(execute->get().BFSFindOne("Run"), "user Run phase missing");
         auto prepare = execute->get().FindOne("Prepare");
         UNIT_ASSERT_C(prepare, "user Prepare group missing");
-        UNIT_ASSERT_C(prepare->get().BFSFindOne("ResolveTables"), "ResolveTables not under Prepare");
+        auto resolveTables = prepare->get().BFSFindOne("ResolveTables");
+        UNIT_ASSERT_C(resolveTables, "ResolveTables not under Prepare");
+        // Scheme-cache round-trips are nested under ResolveTables. (Metadata/navigate may be
+        // skipped when table names were already resolved at compile time; key-range resolve
+        // always runs.)
+        UNIT_ASSERT_C(resolveTables->get().FindOne("Partitioning"), "Partitioning not under ResolveTables");
 
         // Compile is derived post-hoc as a top-level phase under the user root.
         UNIT_ASSERT_C(userRoot->FindOne("Compile"), "user Compile phase missing");

@@ -326,6 +326,12 @@ public:
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
+        if (UserFacingTraceData) {
+            auto& tl = UserFacingTraceData->Timeline;
+            tl.Phase(EUserFacingTracePhase::CommitPrepareShards) = ev->Get()->CommitPrepareShards;
+            tl.Phase(EUserFacingTracePhase::CommitCoordinator) = ev->Get()->CommitCoordinator;
+            tl.Phase(EUserFacingTracePhase::CommitApplyShards) = ev->Get()->CommitApplyShards;
+        }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
     }

@@ -245,7 +245,32 @@ namespace NKikimr {
                             const ui64 *IngrPtr;
                             const bool Keep;
                             const bool DoNotKeep;
+                            ui32 ResponseSize;
                             bool Success = true;
+
+                            ui64 GetChecksum(TRope& data) const {
+                                Y_ABORT_UNLESS(data.GetSize() >= ResponseSize);
+                                const ui32 writtenSize = data.GetSize();
+
+                                ui32 dataOffset = 0;
+                                switch (TDiskBlob::DeriveBlobHeaderMode(ResponseSize, writtenSize, &dataOffset)) {
+                                    case EBlobHeaderMode::XXH3_64BIT_HEADER: {
+                                        Y_ABORT_UNLESS(!dataOffset);
+                                        ui64 checksum;
+                                        auto it = data.Position(ResponseSize);
+                                        it.ExtractPlainDataAndAdvance(&checksum, sizeof(checksum));
+                                        data.EraseBack(sizeof(checksum));
+                                        return checksum;
+                                    }
+
+                                    case EBlobHeaderMode::OLD_HEADER:
+                                    case EBlobHeaderMode::NO_HEADER:
+                                        return CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                }
+
+                                Y_ABORT("unexpected blob header mode");
+                            }
+
                             void operator()(NReadBatcher::TReadError) {
                                 Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep);
@@ -253,17 +278,21 @@ namespace NKikimr {
                             }
                             void operator()(TRcBuf&& buffer) const {
                                 TRope data(std::move(buffer));
-                                const ui64 checksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                const ui64 checksum = GetChecksum(data);
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
                             void operator()(const TRope& data) const {
                                 TRope resultData(data);
-                                const ui64 checksum = CalculateXxh3Hash(resultData.Begin(), resultData.GetSize()).second;
+                                const ui64 checksum = GetChecksum(resultData);
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(resultData), CookiePtr,
                                     IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
-                        } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep, doNotKeep};
+                        };
+                        const ui32 partSize = GType.PartSize(it->Id);
+                        const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
+                        TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
+                            doNotKeep, responseSize};
                         rit.GetData(processor);
                         if (!processor.Success) {
                             NMatrix::TVectorType& v = neededParts[it->Id.FullID()];

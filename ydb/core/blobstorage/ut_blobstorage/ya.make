@@ -51,6 +51,7 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
+    user_checksumming.cpp
     validation.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp

@@ -3,6 +3,7 @@
 #include "events.h"
 #include "table_query.h"
 #include "wasm/manifest.h"
+#include "wasm/registry_helpers.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -22,11 +23,10 @@ private:
         ReadLibraryArtifact,
         ReadLibraryWasmChunks,
         ReadLibraryObjectChunks,
-        LoadCompartment,
+        RegisterModule,
     };
 
     NActors::TActorId ReplyTo_;
-    NActors::TActorId CompartmentActorId_;
     TString Md5_;
     TString Manifest_;
     TString ArtifactTablePath_;
@@ -48,20 +48,17 @@ private:
     void HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev);
     void OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response);
     void StartNextLibrary();
-    void StartCompartmentLoad();
-    void HandleCompartmentLoaded(TEvWasmCompartmentLoaded::TPtr& ev);
+    void RegisterLoadedModule();
 
 public:
     TWasmArtifactLoadActor(
         const NActors::TActorId& replyTo,
-        const NActors::TActorId& compartmentActorId,
         const TString& md5,
         const TString& manifest,
         const TString& artifactTablePath,
         const TString& artifactChunksTablePath,
         TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
         : ReplyTo_(replyTo)
-        , CompartmentActorId_(compartmentActorId)
         , Md5_(md5)
         , Manifest_(manifest)
         , ArtifactTablePath_(artifactTablePath)
@@ -75,7 +72,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>, HandleQueryResult);
             hFunc(NMetadata::NRequest::TEvRequestFailed, HandleQueryFailed);
-            hFunc(TEvWasmCompartmentLoaded, HandleCompartmentLoaded);
             default:
                 break;
         }

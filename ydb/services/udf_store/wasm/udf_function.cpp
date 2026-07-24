@@ -1,5 +1,6 @@
 #include "udf_function.h"
 
+#include "compartment_manager.h"
 #include "invocation_context.h"
 #include "registry_helpers.h"
 
@@ -13,8 +14,6 @@
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
-
-#include <mutex>
 
 namespace NKikimr::NUdfStore::NWasm {
 
@@ -204,10 +203,14 @@ TUnboxedValue TWasmUdfFunction::Run(
     const TUnboxedValuePod* args) const
 {
     try {
-        auto* compartment = State_->Compartment.get();
-        Y_ENSURE(compartment, "Wasm compartment is not initialized");
+        auto* queryHandle = GetCurrentQueryCompartment();
+        Y_ENSURE(queryHandle && queryHandle->Compartment,
+            "Query WASM compartment is not initialized");
 
-        std::lock_guard invocationLock(State_->InvocationMutex);
+        auto* compartment = queryHandle->Compartment.get();
+        const auto exportKey = MakeExportKey(State_->ModuleName, Descriptor_.Name);
+        auto* exportIt = queryHandle->Exports.FindPtr(exportKey);
+        Y_ENSURE(exportIt, "Missing WASM export binding for " << exportKey);
 
         TCurrentCompartmentGuard compartmentGuard(compartment);
         TWasmUdfInvocationContext context(compartment);
@@ -230,6 +233,7 @@ TUnboxedValue TWasmUdfFunction::Run(
 
         InvokeUdfExport(
             compartment,
+            *exportIt,
             Descriptor_.Name,
             std::bit_cast<uintptr_t>(&context),
             resultOffset,

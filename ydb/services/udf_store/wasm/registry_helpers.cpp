@@ -84,12 +84,30 @@ void AddPrecompiledModule(
 std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     const TVector<TNamedModuleBytecode>& libraries)
 {
-    auto compartment = CreateMinimalRuntimeImage();
+    // Without user libraries, use Empty (standard host intrinsics as "env").
+    // MinimalRuntime uses the empty intrinsic module and does not export
+    // AllocateBytes / ThrowException that WASM UDFs import from "env".
+    if (libraries.empty()) {
+        return CreateEmptyImage();
+    }
+
+    // User-provided runtime libraries (e.g. "sdk") must be installed as "env"
+    // via AddSdk / CreateImageFromSdk. Loading them with CreateMinimalRuntimeImage
+    // + name "sdk" leaves the minimal runtime in front of the linker and causes
+    // import type mismatches.
     for (const auto& library : libraries) {
+        if (!library.Bytecode.ObjectCode) {
+            ythrow yexception()
+                << "Precompiled object code is required for library '" << library.Name << "'";
+        }
+    }
+
+    auto compartment = CreateImageFromSdk(libraries.front().Bytecode);
+    for (size_t i = 1; i < libraries.size(); ++i) {
         AddPrecompiledModule(
             compartment.get(),
-            library.Bytecode,
-            library.Name);
+            libraries[i].Bytecode,
+            libraries[i].Name);
     }
     return compartment;
 }
@@ -118,14 +136,14 @@ TCurrentCompartmentGuard::~TCurrentCompartmentGuard() {
 
 void InvokeUdfExport(
     IWebAssemblyCompartment* compartment,
-    const TString& functionName,
+    void* runtimeFunction,
+    const TString& functionNameForErrors,
     uintptr_t context,
     uintptr_t result,
     const TVector<uintptr_t>& args)
 {
-    auto* runtimeFunction = compartment->GetFunction(std::string(functionName));
     if (runtimeFunction == nullptr) {
-        ythrow yexception() << "Unknown wasm export: " << functionName;
+        ythrow yexception() << "Unknown wasm export: " << functionNameForErrors;
     }
 
     constexpr size_t kMaxArgs = 32;
@@ -161,8 +179,24 @@ void InvokeUdfExport(
         const auto message = WAVM::Runtime::describeException(exception);
         WAVM::Runtime::destroyException(exception);
         ythrow yexception() << "WAVM runtime exception while calling \""
-            << functionName << "\": " << message;
+            << functionNameForErrors << "\": " << message;
     }
+}
+
+void InvokeUdfExport(
+    IWebAssemblyCompartment* compartment,
+    const TString& functionName,
+    uintptr_t context,
+    uintptr_t result,
+    const TVector<uintptr_t>& args)
+{
+    InvokeUdfExport(
+        compartment,
+        compartment->GetFunction(std::string(functionName)),
+        functionName,
+        context,
+        result,
+        args);
 }
 
 THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {

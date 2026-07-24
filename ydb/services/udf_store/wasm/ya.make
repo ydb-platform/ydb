@@ -3,9 +3,11 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ../cpu_spec.cpp
+    compartment_manager.cpp
     host.cpp
     manifest.cpp
     compile.cpp
+    module_catalog.cpp
     registry_helpers.cpp
     single_module_loader.cpp
     system_libraries.cpp
@@ -25,6 +27,7 @@ PEERDIR(
     ydb/services/udf_store/wasm/abi
     ydb/library/wasm/api
     ydb/library/wasm/engine
+    ydb/library/yql/dq/proto
     yql/essentials/public/udf
     yql/essentials/minikql
     library/cpp/json

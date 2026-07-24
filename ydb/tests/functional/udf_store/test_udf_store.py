@@ -12,7 +12,11 @@ import yatest.common
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.functional.udf_store.lib.constants import UDF_TABLE_META_PATH, UDF_KV_BINARIES_PATH
+from ydb.tests.functional.udf_store.lib.constants import (
+    UDF_TABLE_META_PATH,
+    UDF_KV_BINARIES_PATH,
+    UDF_TABLE_LIBRARY_SOURCE_PATH,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +148,15 @@ def _upload_udf_binary():
     return yatest.common.binary_path(os.environ["YDB_UPLOAD_UDF_PATH"])
 
 
-def _run_upload_udf(endpoint, database, udf_file_path, udf_type="NATIVE_UNSAFE", manifest_path=""):
+def _run_upload_udf(
+    endpoint,
+    database,
+    udf_file_path,
+    udf_type="NATIVE_UNSAFE",
+    manifest_path="",
+    kind="udf",
+    library_name="",
+):
     """
     Invoke the upload_udf binary as a subprocess.
 
@@ -157,9 +169,12 @@ def _run_upload_udf(endpoint, database, udf_file_path, udf_type="NATIVE_UNSAFE",
         "--database", database,
         "--udf-file", udf_file_path,
         "--type", udf_type,
+        "--kind", kind,
     ]
     if manifest_path:
         cmd.extend(["--manifest", manifest_path])
+    if library_name:
+        cmd.extend(["--library-name", library_name])
     # Resolve YDB_KV_VOLUME_TOOL_PATH to an absolute path so the subprocess
     # can find the binary regardless of its working directory.
     env = os.environ.copy()
@@ -173,6 +188,17 @@ def _run_upload_udf(endpoint, database, udf_file_path, udf_type="NATIVE_UNSAFE",
             f"upload_udf failed (rc={result.returncode}): {result.stderr}"
         )
     return result.stdout.strip()
+
+
+def _run_upload_library(endpoint, database, library_file_path, library_name):
+    return _run_upload_udf(
+        endpoint,
+        database,
+        library_file_path,
+        udf_type="WASM",
+        kind="library",
+        library_name=library_name,
+    )
 
 
 def test_using_native_unsafe_udf():
@@ -383,6 +409,128 @@ def test_using_wasm_udf():
         assert len(rows) == 1
         result_value = list(rows[0].values())[0]
         assert result_value == 3, "Expected LocalUdf::udf_add(1, 2) == 3, got %r" % result_value
+
+    finally:
+        cluster.remove_database(database)
+        cluster.unregister_and_stop_slots(db_nodes)
+        cluster.stop()
+
+
+def test_using_wasm_udf_with_sdk_and_library():
+    """
+    Upload sdk + helpers libraries, then a WASM UDF that depends on both
+    (required_libraries: ["sdk", "helpers"]), and run WithHelpers::scale(7).
+    """
+    database = "/Root/test"
+    cluster = _make_cluster(
+        enable_udf_store=True,
+        enable_wasm_udf=True,
+    )
+    db_nodes = _create_database(cluster, database)
+    try:
+        node = cluster.nodes[1]
+        driver_config = ydb.DriverConfig(
+            endpoint="%s:%s" % (node.host, node.port),
+            database=database,
+        )
+        endpoint = "grpc://%s:%s" % (node.host, node.port)
+
+        assert _wait_for_condition(
+            lambda: _table_exists(driver_config, database),
+            timeout_seconds=60,
+            description="UDF metadata table creation at startup",
+        )
+        assert _wait_for_condition(
+            lambda: _kv_volume_exists(endpoint, database),
+            timeout_seconds=60,
+            description="KV volume creation at startup",
+        )
+
+        data_dir = "ydb/tests/functional/udf_store/data/wasm"
+        sdk_path = yatest.common.source_path("%s/sdk_stub.wat" % data_dir)
+        helpers_path = yatest.common.source_path("%s/helpers.wat" % data_dir)
+        udf_path = yatest.common.source_path("%s/with_helpers.wat" % data_dir)
+        manifest_path = yatest.common.source_path("%s/with_helpers_manifest.json" % data_dir)
+
+        _run_upload_library(endpoint, database, sdk_path, "sdk")
+        _run_upload_library(endpoint, database, helpers_path, "helpers")
+
+        def _library_compile_ready(name):
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                        database=database,
+                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        name=name,
+                    ),
+                )
+                if not result or not result[0].rows:
+                    return False
+                return list(result[0].rows[0].values())[0] == "ready"
+            except Exception as e:
+                logger.debug("library %s compile status not ready yet: %s", name, e)
+                return False
+
+        assert _wait_for_condition(
+            lambda: _library_compile_ready("sdk"),
+            timeout_seconds=180,
+            description="library sdk compile_status=ready",
+        )
+        assert _wait_for_condition(
+            lambda: _library_compile_ready("helpers"),
+            timeout_seconds=180,
+            description="library helpers compile_status=ready",
+        )
+
+        udf_md5 = _run_upload_udf(
+            endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path
+        )
+
+        def _wasm_compile_ready():
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
+                        database=database,
+                        path=UDF_TABLE_META_PATH,
+                        md5=udf_md5,
+                    ),
+                )
+                if not result or not result[0].rows:
+                    return False
+                return list(result[0].rows[0].values())[0] == "ready"
+            except Exception as e:
+                logger.debug("WASM compile status not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            _wasm_compile_ready,
+            timeout_seconds=180,
+            description="WithHelpers WASM compile_status=ready for md5=%s" % udf_md5,
+        ), "WithHelpers WASM UDF was not compiled within timeout"
+
+        UDF_QUERY = "SELECT WithHelpers::scale(7);"
+        udf_query_result = [None]
+
+        def try_wasm_query():
+            try:
+                udf_query_result[0] = _run_query(driver_config, UDF_QUERY)
+                return True
+            except Exception as e:
+                logger.debug("WithHelpers query not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            try_wasm_query,
+            timeout_seconds=120,
+            description="WithHelpers::scale query execution",
+        ), "WithHelpers WASM UDF query did not succeed within timeout"
+
+        rows = udf_query_result[0][0].rows
+        assert len(rows) == 1
+        result_value = list(rows[0].values())[0]
+        assert result_value == 21, "Expected WithHelpers::scale(7) == 21, got %r" % result_value
 
     finally:
         cluster.remove_database(database)

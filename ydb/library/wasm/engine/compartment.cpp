@@ -454,7 +454,7 @@ public:
                     &loadError);
 
                 if (!succeeded) {
-                    THROW_ERROR_EXCEPTION("Could not load WebAssembly module: %v", loadError.message);
+                    THROW_ERROR_EXCEPTION("Could not load WebAssembly runtime library: %v", loadError.message);
                 }
 
                 CoerceImportIndexTypesToLayout(irModule, MemoryLayoutData_);

@@ -7,6 +7,7 @@
 #include <ydb/library/wasm/api/data_transfer.h>
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -56,6 +57,14 @@ public:
 private:
     NYdb::NWasm::IWebAssemblyCompartment* Previous_;
 };
+
+void InvokeUdfExport(
+    NYdb::NWasm::IWebAssemblyCompartment* compartment,
+    void* runtimeFunction,
+    const TString& functionNameForErrors,
+    uintptr_t context,
+    uintptr_t result,
+    const TVector<uintptr_t>& args);
 
 void InvokeUdfExport(
     NYdb::NWasm::IWebAssemblyCompartment* compartment,

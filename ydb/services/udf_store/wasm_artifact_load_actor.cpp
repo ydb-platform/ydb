@@ -6,11 +6,16 @@
 #include "wasm/compile.h"
 #include "wasm/manifest.h"
 #include "wasm/registry_helpers.h"
+#include "wasm/single_module_loader.h"
 #include "wasm/udf_function.h"
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
+
+#include <util/string/join.h>
+
+#include <algorithm>
 
 namespace NKikimr::NUdfStore {
 
@@ -77,7 +82,7 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 WasmArtifactKindToString(EWasmArtifactKind::Library),
                 BlobKindObjectCode());
             break;
-        case EStep::LoadCompartment:
+        case EStep::RegisterModule:
             return;
     }
 
@@ -197,53 +202,65 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
             StartNextLibrary();
             return;
         }
-        case EStep::LoadCompartment:
+        case EStep::RegisterModule:
             return;
     }
 }
 
 void TWasmArtifactLoadActor::StartNextLibrary() {
     if (NextLibraryIndex_ >= ParsedManifest_.RequiredLibraries.size()) {
-        StartCompartmentLoad();
+        RegisterLoadedModule();
         return;
     }
     PendingLibraryName_ = ParsedManifest_.RequiredLibraries[NextLibraryIndex_];
     ExecuteQuery(NTableQuery::BuildSelectArtifactQuery(ArtifactTablePath_), true);
 }
 
-void TWasmArtifactLoadActor::StartCompartmentLoad() {
+void TWasmArtifactLoadActor::RegisterLoadedModule() {
     const auto format = ModuleArtifact_.Format == "wat" || ModuleArtifact_.Format == "wast"
         ? NYdb::NWasm::EBytecodeFormat::HumanReadable
         : NYdb::NWasm::EBytecodeFormat::Binary;
-    Step_ = EStep::LoadCompartment;
-    Send(CompartmentActorId_, new TEvWasmCompartmentLoad(
-        Md5_,
-        Manifest_,
-        ModuleArtifact_.WasmData,
-        ModuleArtifact_.ObjectCode,
-        format,
-        Libraries_));
-}
-
-void TWasmArtifactLoadActor::HandleCompartmentLoaded(TEvWasmCompartmentLoaded::TPtr& ev) {
-    if (ev->Get()->Md5 != Md5_) {
-        ReplyError("Unexpected compartment loaded response MD5");
-        return;
-    }
-    if (!ev->Get()->Success || !ev->Get()->State) {
-        ReplyError(ev->Get()->ErrorMessage.empty()
-            ? TString("Failed to load WASM compartment")
-            : ev->Get()->ErrorMessage);
-        return;
-    }
+    Step_ = EStep::RegisterModule;
 
     try {
-        auto module = NWasm::BuildWasmSoModule(ev->Get()->State);
+        for (const auto& required : ParsedManifest_.RequiredLibraries) {
+            const bool found = std::any_of(
+                Libraries_.begin(),
+                Libraries_.end(),
+                [&](const NWasm::TNamedModuleBytecode& library) {
+                    return library.Name == required && library.Bytecode.ObjectCode;
+                });
+            if (!found) {
+                ReplyError(TStringBuilder()
+                    << "Required library '" << required
+                    << "' was not loaded before registering WASM UDF '" << Md5_ << "'");
+                return;
+            }
+        }
+
+        NWasm::TWasmLoadParams params{
+            .Md5 = Md5_,
+            .Manifest = ParsedManifest_,
+            .ModuleWasmData = ModuleArtifact_.WasmData,
+            .ModuleObjectCode = ModuleArtifact_.ObjectCode,
+            .ModuleFormat = format,
+            .Libraries = Libraries_,
+        };
+        auto state = NWasm::LoadWasmFromManifest(params);
+        auto module = NWasm::BuildWasmSoModule(state);
         if (!module) {
             ReplyError("BuildWasmSoModule returned null");
             return;
         }
-        FunctionRegistry_->AddModule(TString{}, ParsedManifest_.ModuleName, std::move(module));
+        // Unique path so multiple WASM modules can be registered in one registry.
+        FunctionRegistry_->AddModule(
+            TStringBuilder() << "wasm:" << Md5_,
+            ParsedManifest_.ModuleName,
+            std::move(module));
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+            << "TWasmArtifactLoadActor: registered wasm UDF '" << Md5_
+            << "' module '" << ParsedManifest_.ModuleName
+            << "' with libraries=[" << JoinSeq(",", ParsedManifest_.RequiredLibraries) << "]";
         Send(ReplyTo_, new TEvReadBodyResponse(true, Md5_));
         PassAway();
     } catch (const std::exception& ex) {

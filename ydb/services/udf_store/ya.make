@@ -7,7 +7,6 @@ SRCS(
     artifact_table_initializer.cpp
     kv_body_store.cpp
     table_query.cpp
-    wasm_compartment_actor.cpp
     wasm_compile_actor.cpp
     wasm_library_compile_actor.cpp
     wasm_artifact_load_actor.cpp

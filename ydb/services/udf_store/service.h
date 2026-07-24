@@ -1,7 +1,7 @@
 #pragma once
 #include "metadata_subscription/snapshot.h"
 #include "kv_body_store.h"
-#include "wasm_compartment_actor.h"
+#include "wasm/module_catalog.h"
 #include "wasm_compile_actor.h"
 #include "wasm_library_compile_actor.h"
 #include "wasm_artifact_load_actor.h"
@@ -62,7 +62,6 @@ private:
     std::deque<TPendingUdf> PendingWasmCompile;
     std::deque<TPendingUdf> PendingWasmLoad;
     std::deque<TPendingLibrary> PendingLibraryCompile;
-    THashMap<TString, NActors::TActorId> WasmCompartmentActors;
     THashMap<TString, TString> LoadedWasmModuleNames;
 
     bool IsMd5Pending(const TString& md5, EUdfType type) const;
@@ -78,7 +77,6 @@ private:
     void FetchNextWasmCompile();
     void FetchNextWasmLoad();
     void FetchNextLibraryCompile();
-    NActors::TActorId GetOrCreateWasmCompartmentActor(const TString& md5);
     void UnloadWasmUdf(const TString& md5);
     static TString GetModuleExtensionFromManifest(TStringBuf manifest);
     void EnsureArtifactTable();

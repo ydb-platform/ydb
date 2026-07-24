@@ -3,6 +3,7 @@
 #include "metadata_subscription/storage_paths.h"
 #include "cpu_spec.h"
 #include "wasm/manifest.h"
+#include "wasm/module_catalog.h"
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/base/appdata.h>
@@ -411,21 +412,10 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     }
 }
 
-NActors::TActorId TUdfStoreService::GetOrCreateWasmCompartmentActor(const TString& md5) {
-    if (auto it = WasmCompartmentActors.find(md5); it != WasmCompartmentActors.end()) {
-        return it->second;
-    }
-    const auto actorId = Register(new TWasmCompartmentActor(md5));
-    WasmCompartmentActors[md5] = actorId;
-    return actorId;
-}
-
 void TUdfStoreService::UnloadWasmUdf(const TString& md5) {
     LoadedWasmModuleNames.erase(md5);
-    if (auto it = WasmCompartmentActors.find(md5); it != WasmCompartmentActors.end()) {
-        Send(it->second, new TEvWasmCompartmentUnload(md5));
-        WasmCompartmentActors.erase(it);
-    }
+    LoadedUdfs.erase(md5);
+    NWasm::GetWasmModuleCatalog().Unregister(md5);
 }
 
 void TUdfStoreService::FetchNextNativeBody() {
@@ -494,11 +484,9 @@ void TUdfStoreService::FetchNextWasmLoad() {
 
     WasmLoadInProgress = true;
     const auto& pending = PendingWasmLoad.front();
-    const auto compartmentActorId = GetOrCreateWasmCompartmentActor(pending.Md5);
 
     Register(new TWasmArtifactLoadActor(
         SelfId(),
-        compartmentActorId,
         pending.Md5,
         pending.Manifest,
         ArtifactTablePath,

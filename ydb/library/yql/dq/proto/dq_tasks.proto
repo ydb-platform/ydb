@@ -51,6 +51,7 @@ message TProgram {
 
         bool HasWatermarkGenerator = 17;
         optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
+        repeated string WasmUdfModules = 19;
     }
 
     uint32 RuntimeVersion = 1;

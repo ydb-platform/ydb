@@ -455,7 +455,9 @@ private:
     bool DeferredPublishIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest) const;
 
     void TrySubscribeOnTransactionCommit(TTransactionBase* tx);
+    void CancelPendingWriteAcks();
     void CancelTransactions();
+    void CancelDeferredPublications();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);
     void DeleteTx(const TTransactionId& txId);

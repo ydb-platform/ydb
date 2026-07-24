@@ -2115,8 +2115,14 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 
-        CancelTransactions();
+        CancelPendingWriteAcks();
     }
+}
+
+void TWriteSessionImpl::CancelPendingWriteAcks()
+{
+    CancelTransactions();
+    CancelDeferredPublications();
 }
 
 void TWriteSessionImpl::CancelTransactions()
@@ -2131,7 +2137,10 @@ void TWriteSessionImpl::CancelTransactions()
     }
 
     Txs.clear();
+}
 
+void TWriteSessionImpl::CancelDeferredPublications()
+{
     std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
     for (const auto& [_, deferred] : WrittenInDeferred) {
         if (deferred.AckState) {

@@ -689,10 +689,14 @@ Implementation sequence:
 51. M4: one-constructor packed-row sorting-network transport, one exact shared
     comparator definition per network outcome, exact present-prefix sequence
     equality, and TPC-DS q59/q78 formula coverage;
-52. M4 next: nested subplans exposed by TPC-DS q58/q83, q83's final static
-    nullable-Date `SqlIn`, more than two dependencies, broader correlations,
-    coercing and nullable-String dynamic `IN`, range reads, and other OLAP
-    pushdowns.
+52. M4: exact uncorrelated scalar bindings consumed from expression-level
+    dynamic-`IN` roots, with flat descriptors and independently checked
+    main/subplan-root ownership;
+53. M4: exact fixed or symbolic producer-order Merge sorting networks, moving
+    TPC-DS q58 through formula construction;
+54. M4 next: q83's nested `IN` and final static nullable-Date `SqlIn`, more
+    than two dependencies, broader correlations, coercing and nullable-String
+    dynamic `IN`, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -786,9 +790,14 @@ a proven present prefix, so ordered Limit can take its literal
 `offset:offset+count` slice directly. When both result sequences have that
 invariant, equality compares aligned slots and requires any unmatched suffix to
 be absent; this is the exact compressed-sequence equality without the
-quadratic rank matrix. Merge uses the same network only with concrete producer
-ordinals and adds rank chains in each semantic producer order, yielding exactly
-the legal cross-producer interleavings. Small explicit permutation selection
+quadratic rank matrix. Merge uses the same network for fixed or symbolic
+producer ordinals. A fixed producer order adds adjacent tie-rank chains in its
+semantic order. A symbolic producer order adds one presence-guarded direction
+equivalence per unordered producer pair; equal input ordinals impose no edge,
+while the existing ordinal invariant makes two present input ordinals
+distinct. Both encodings therefore yield exactly the legal cross-producer
+interleavings. The symbolic producer-pair count is preflighted cumulatively
+against the 16,384 relation-pair cap. Small explicit permutation selection
 deliberately continues to use the full shaped row vector. The bounded-ordinal
 representation remains the latent-order model for unordered bags. Sort and
 Limit phases are preserved but do not independently change the modeled runtime
@@ -798,7 +807,7 @@ sequences; otherwise they are compared as bags.
 Every materialized relation fails closed above 4096 candidate rows. Join
 matching/output, UnionAll, and grouped-aggregate sizes are checked before their
 large intermediates are allocated. Sort, Merge, and latent-sequence pair
-preflights charge only syntactically live slots. Sort and concrete-order Merge
+preflights charge only syntactically live slots. Sort and fixed- or symbolic-order Merge
 may instead use the exact network above, bounded by 32768 comparators, 131072
 logical packed-payload cells, and 64 ordering columns. The payload metric is
 live input rows times scalar lanes; it is an auditably stable logical-width
@@ -1407,15 +1416,23 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `NOT`, `OR`, embedded nullable uses, nullable `String`, coercions, and other
   nullable identities fail closed because false and SQL UNKNOWN are
   distinguishable outside the positive Filter-truth position. `OuterBind`,
-  `AddDependencies`, observable `EnsureAtMostOne`, nesting, staging, fanout,
-  tuples, `Utf8`, Bool, Decimal, and mismatched identities also fail
+  `AddDependencies`, observable `EnsureAtMostOne`, all other nesting, staging,
+  fanout, tuples, `Utf8`, Bool, Decimal, and mismatched identities also fail
   closed. Non-null consumer `NOT` continues to supply anti-membership, repeated
   references share one cached subplan family, and inherited root errors remain
-  eager. The membership product is cumulatively capped at 16,384 outer/inner
-  pairs across alternatives and nested evaluation. Real-host integer, String,
-  and nullable-Date cases prove initial dynamic `IN` equivalent to final
-  `left_semi` at two rows and two tasks; TPC-DS q33 exercises the nullable
-  positive contract.
+  eager. Its root may reference an uncorrelated scalar binding; this is the
+  only admitted nesting. C++ and Python independently require that nested
+  binding to be scalar and closed and every consumer operator to belong to
+  exactly one main or subplan root. Structural subplan-root nesting, a
+  correlated scalar, and every other nested owner/kind fail closed. The nested
+  scalar retains ordinary cached zero/one/many-row semantics. Its new
+  cardinality error is demanded by its immediate consumer inside the `IN`
+  root, while an inherited root error remains eager. The membership product is
+  cumulatively capped at 16,384 outer/inner pairs across alternatives and
+  nested evaluation. Real-host integer, String, and nullable-Date cases prove
+  initial dynamic `IN` equivalent to final `left_semi` at two rows and two
+  tasks; TPC-DS q33 exercises the nullable positive contract and q58 exercises
+  three admitted scalar-inside-`IN` pairs.
 - Exact nullable Date-year projection accepts only an
   `Optional<Uint16>` `Map` over a complete `SafeCast` from one direct visible
   `Optional<Date>` member to `Optional<Timestamp>`. Its unary non-null
@@ -1640,7 +1657,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1 and TPC-DS q5, q59, q65, q78,
-  and q80 must reach the verifier, the 67-query formula floor must keep
+  and q80 must reach the verifier, the 68-query formula floor must keep
   constructing SMT, and the twenty-six-query hermetic proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
   entry tier; later formulas and proofs satisfy every weaker semantic tier
@@ -1651,29 +1668,29 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   remove the former factorial and repeated-structure construction gates.
 
   The current complete policy-checked formula dashboards, generated on
-  2026-07-24, include the packed sorting-network carrier and both q59/q78
-  formulas.
+  2026-07-24, include the packed sorting-network carrier, both q59/q78
+  formulas, and the closed-nesting/symbolic-Merge q58 formula.
   TPCH's semantic partition is 18 formulas, two unsupported queries, and two
-  no-pair optimizer failures; TPC-DS has 49 formulas, 32 unsupported queries,
+  no-pair optimizer failures; TPC-DS has 50 formulas, 31 unsupported queries,
   and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
   73/99 TPC-DS queries and fails for the other 2 and 26. TPCH retains 20 exact
-  pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 54
+  pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 55
   verifier entrants. Eight failed TPC-DS preparations retain exact pairs and
   overlap the unsupported inventory.
-  Across both suites, 67/121 queries construct formulas (55.4%), 67/101 exact
-  pairs do so (66.3%), 67/93 do so within the preparation-successful subset
-  (72.0%), and 67/72 verifier entrants do so (93.1%). The 34 unsupported rows
-  split by primary reason into 27 initial-export, two final-export, and five
+  Across both suites, 68/121 queries construct formulas (56.2%), 68/101 exact
+  pairs do so (67.3%), 68/93 do so within the preparation-successful subset
+  (73.1%), and 68/73 verifier entrants do so (93.2%). The 33 unsupported rows
+  split by primary reason into 26 initial-export, two final-export, and five
   verifier results.
 
-  The complete TPCH formula dashboard spent 2,857/31,100 ms in
+  The complete TPCH formula dashboard spent 2,830/31,001 ms in
   preparation/verifier work and produced report SHA-256
-  `bfe8fd75c81e9eccd8b511f05f5e23e0e947b3e35d69b9d56d0304b0eb56ee0f`;
-  TPC-DS spent 65,258/475,399 ms and produced
-  `44254733785284105840e269653f3cae79384db985cf13260906df57cf1deaa6`.
+  `5fccc0e753eae3b00cf2cd82f13a996ae1bbd35a0ace58db3ef0b96230fb4dc7`;
+  TPC-DS spent 64,296/572,939 ms and produced
+  `6e218e639ce898250ca7ef82d4dc4542f7ec20275a33c404817ca3ddcb09e0a3`.
   Both complete formula-only policy runs are green. Within the TPC-DS run, q59
-  emits after 828/74,462 ms and q78 after 1,042/113,216 ms of
-  preparation/verifier work.
+  and q78 retain the packed-network formula floor; q58 emits after
+  3,459/108,714 ms of preparation/verifier work.
 
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
@@ -1682,18 +1699,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   It spent 3,186/0 ms and produced report SHA-256
   `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
-  The packed carrier removes one feature family and two queries from the prior
+  The packed carrier and q58 remove three queries from the prior
   preparation-successful gap, leaving an estimated 7--9 feature families or
-  9--15 narrow milestones. The numeric primary-first-blocker cluster remains
+  8--14 narrow milestones. The numeric primary-first-blocker cluster remains
   nine `Double` queries; q78 now emits, and the factorized-construction cluster
-  falls from seven to five primary blockers. Adding exact window semantics for
-  the newly visible failed-preparation pairs makes the full captured-pair gap
-  roughly 9--11 families or 13--21 milestones. Approximate projections from
-  the current 67 formulas are 73--79 after another 3--5 milestones, 83--91
-  after 8--12, and 89--93 preparation-successful formulas after 9--15. Later
+  has five primary blockers. Adding exact window semantics for the newly
+  visible failed-preparation pairs makes the full captured-pair gap roughly
+  9--11 families or 12--20 milestones. Approximate projections from the
+  current 68 formulas are 73--79 after another 2--4 milestones, 83--91 after
+  7--11, and 89--93 preparation-successful formulas after 8--14. Later
   blockers can change these workload-targeted ranges. A safer engineering
-  budget for clean, reusable implementations is about 12--19 milestones for
-  the preparation-successful gap and 17--27 for all captured pairs. The 20
+  budget for clean, reusable implementations is about 11--18 milestones for
+  the preparation-successful gap and 16--26 for all captured pairs. The 20
   no-pair entries require
   frontend/optimizer progress; the present captured-pair ceiling is 101/121,
   and formula construction is not solver proof.
@@ -2054,8 +2071,12 @@ ordered discriminated descriptor for each used binding: stable binding name,
 kind, root node, exact type/nullability, dependency list, explicit consumer
 nodes, and either the selected scalar output or complete `EXISTS` predicate.
 Export fails closed on an unregistered, duplicate, or colliding binding, bad
-topology, consumer mismatch, nesting, staging, unsupported kind, or a physical
-placement the snapshot cannot represent.
+topology, consumer mismatch, structural root nesting, staging, unsupported
+kind, or a physical placement the snapshot cannot represent. The sole
+expression-level exception is a closed scalar binding referenced from an
+uncorrelated dynamic-`IN` root. Descriptors remain flat; C++ and Python
+independently assign every consumer operator to exactly one main or subplan
+root.
 
 Exact ordered logical UnionAll is also implemented as a prerequisite for scalar
 lowering. Each unordered input denotes every legal local sequence; the operator
@@ -2221,10 +2242,14 @@ exact `String` or `Date` identity. String lookup/output must both be non-null.
 Integral and Date lookup/output may be independently nullable, but if either is
 nullable the binding may occur only in direct positive top-level conjuncts in
 its sole Filter consumer. The binding is non-null `Bool`, has no dependencies,
-and remains virtual. Export and decoding reject `OuterBind`, `AddDependencies`,
-observable `EnsureAtMostOne`, multiple consumers, nesting, staging, tuple
-mappings, coercions, nullable `String`, `Utf8`, Bool, Decimal, other nullable
-identities, or mismatched identities.
+and remains virtual. Its root may reference an uncorrelated scalar binding;
+this is the only admitted nesting. Export and decoding independently require
+that nested binding to be scalar and closed and every consumer operator to
+belong to exactly one main or subplan root. They reject `OuterBind`,
+`AddDependencies`, observable `EnsureAtMostOne`, multiple consumers,
+structural root nesting, a correlated scalar, any other nested owner/kind,
+staging, tuple mappings, coercions, nullable `String`, `Utf8`, Bool, Decimal,
+other nullable identities, or mismatched identities.
 
 For each present consumer row, the evaluator ORs equality with every present
 inner row, requiring the lookup and inner value to be non-NULL. For non-null
@@ -2239,13 +2264,16 @@ Date values use the existing exact bounded `[0, NUdf::MAX_DATE)` domain; the
 membership condition remains true exactly when one present inner row carries
 the same non-NULL Date as the present outer lookup.
 Repeated uses share a cached subplan family; errors inherited from the root
-remain eager even with an empty outer input. The membership product is
-preflighted at 16,384 pairs cumulatively across alternatives. Focused Python
-tests cover duplicates, empty input, nullable lookup/output combinations,
-NULL inner rows, positive-conjunct validation, `NOT`, cache reuse,
-left-semi/left-anti references, inherited errors, malformed descriptors, and
-the cap; C++ independently covers the complete accepted topology and near-miss
-matrix.
+remain eager even with an empty outer input. A nested scalar uses the same
+cached zero/one/many-row semantics as a main-root consumer. Its new cardinality
+error is demanded by the immediate consumer inside the `IN` root, while an
+inherited root error remains eager. The membership product is preflighted at
+16,384 pairs cumulatively across alternatives and nested evaluation. Focused
+Python tests cover duplicates, empty input, nullable lookup/output
+combinations, NULL inner rows, positive-conjunct validation, `NOT`, cache
+reuse, nested scalar results and errors, left-semi/left-anti references,
+inherited errors, malformed descriptors, and the cap; C++ independently
+covers the complete accepted topology and near-miss matrix.
 
 Real-host integer and String fixtures capture initial dynamic `IN` and final
 `left_semi`, then return `VERIFIED_BOUNDED` at two rows and two tasks. The
@@ -2258,19 +2286,28 @@ led to the confirmed and repaired shared-IU defect documented below; post-fix
 both old witnesses are invalid and the corrected obligations are `UNKNOWN`, so
 the then-current twenty-query proof floor was unchanged. The nullable positive
 integral extension adds q33 formula construction after 1,551/1,158 ms, but no
-proof or optimizer finding; q58 and q83 remain outside the admitted contract.
+proof or optimizer finding. The later closed scalar-inside-`IN` slice admits
+q58; q83's nested `IN` remains outside the contract.
 
 The subsequent exact Date extension reuses that descriptor and evaluator only
 for uncorrelated, same-type Date lookup/output columns. Their nullability may
 vary independently; any nullable case must remain a direct positive top-level
 Filter conjunct. Focused C++ gates and a real-host nullable-Date
-`IN`-to-`left_semi` obligation are green. A fresh focused TPC-DS q58 run now
-passes the Date-type gate and fails closed later because
-`IN subplan binding _rbo_arg_1 contains a nested subplan reference`. It still
-does not construct a formula, so the recorded coverage and proof policies do
-not change. q58/q83's nested subplans, q83's final static nullable-Date
-`SqlIn`, coercions, nullable String, and nullable non-positive Boolean contexts
-remain separate work.
+`IN`-to-`left_semi` obligation are green. The later closed-nesting slice admits
+an uncorrelated scalar binding only when its expression-level owner is an `IN`
+root and keeps all descriptors flat. Together with exact symbolic
+producer-order Merge networks, it moves TPC-DS q58 through formula construction.
+The focused dashboard takes 3,291/103,862 ms of preparation/verifier work and
+has SHA-256
+`87c0a2e7d51b077c19c7b261fd899f00dc590106385764574eaa7e46aac50b94`.
+Direct retained emission takes 101.43 seconds, peaks at 2,294,048 KiB RSS, and
+produces a 324,938,538-byte formula with SHA-256
+`22f51f5d1a82091a35d29b6ac120344725f1272b8093ae9a0f1c3fa6fc6eaa70`.
+This is formula coverage only: q58 adds no bounded proof or optimizer finding.
+Complete validation passes 568/568 verifier tests, 208/208 C++ exporter tests,
+and 14/14 coverage-policy tests.
+q83's nested `IN` and final static nullable-Date `SqlIn`, coercions, nullable
+String, and nullable non-positive Boolean contexts remain separate work.
 
 The exact nullable Date-year projection bridge accepts only the reviewed
 `Map(SafeCast(Optional<Date> -> Optional<Timestamp>), lambda Timestamp:
@@ -2313,10 +2350,10 @@ preparation failure. Exact uncorrelated same-type non-null integral and String
 slices are now implemented, as are the exact nullable Date dynamic-`IN`
 positive-Filter slice, the exact nullable Date-year projection bridge, and
 exact proven-total Date `Unwrap`.
-Nested subplans exposed by q58/q83, q83's final static nullable-Date `SqlIn`,
-coercing dynamic `IN`, nullable String and non-positive nullable uses, more
-than two `EXISTS` dependencies, broader correlated predicates, range reads,
-and other OLAP pushdowns remain future work. The
+q83's nested `IN` and final static nullable-Date `SqlIn`, coercing dynamic
+`IN`, nullable String and non-positive nullable uses, more than two `EXISTS`
+dependencies, broader correlated predicates, range reads, and other OLAP
+pushdowns remain future work. The
 proof policy adds TPCH q18 to the previous eighteen obligations; the expanded
 gate confirmed all nineteen at that checkpoint. The later q95 slice adds the
 twentieth obligation. The Date `Unwrap` slice adds q38 and q87 as the
@@ -2464,7 +2501,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 67 formula-construction and twenty-six curated proof obligations have
+- The 68 formula-construction and twenty-six curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   twenty-six as `VERIFIED_BOUNDED`; four focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

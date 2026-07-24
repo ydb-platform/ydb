@@ -302,15 +302,17 @@ std::set<ui32> OutcomeIds(const TMap<ui32, TString>& statuses) {
     return result;
 }
 
-TMap<ui32, TString> FormulaFloorStatuses(
+TMap<ui32, TString> FormulaDashboardFloorStatuses(
     const TCoveragePolicy& policy,
     const TSuite& suite)
 {
     TMap<ui32, TString> result;
-    for (const ui32 queryId :
-         policy.Suites.at(suite.Name).RequiredFormulaQueries)
-    {
+    const auto& suitePolicy = policy.Suites.at(suite.Name);
+    for (const ui32 queryId : suitePolicy.RequiredFormulaQueries) {
         result[queryId] = "FORMULA_EMITTED";
+    }
+    for (const ui32 queryId : suitePolicy.RequiredVerifierEntryQueries) {
+        result.try_emplace(queryId, "UNSUPPORTED");
     }
     return result;
 }
@@ -1263,13 +1265,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({3, 4, 6, 11, 12, 14, 15, 18, 19, 22}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
-            std::set<ui32>({5, 65, 80}));
+            std::set<ui32>({5, 59, 65, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
-                3, 5, 6, 10, 15, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
+                2, 3, 5, 6, 10, 15, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
                 46, 48, 50, 52, 55, 56, 60, 61, 62, 65, 68, 69, 71, 76, 77,
-                79, 80, 82, 87, 88, 90, 91, 93, 95, 96, 99,
+                79, 80, 82, 87, 88, 90, 91, 93, 95, 96, 97, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
@@ -1386,7 +1388,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        auto statuses = FormulaFloorStatuses(policy, Tpcds);
+        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         ui32 improvementQuery = 0;
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
             if (!policy.Suites.at(Tpcds.Name)
@@ -1409,15 +1411,19 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
         UNIT_ASSERT(!evaluation.ProofFloorEnforced);
         UNIT_ASSERT(evaluation.Violations.empty());
-        for (const ui32 queryId : {5, 65, 80}) {
+        for (const ui32 queryId :
+             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
+        {
             UNIT_ASSERT(evaluation.VerifierEntryQueries.contains(queryId));
         }
         UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(5));
         UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(65));
         UNIT_ASSERT(evaluation.FormulaEmittedQueries.contains(80));
+        auto expectedFormulaQueries =
+            policy.Suites.at(Tpcds.Name).RequiredFormulaQueries;
+        expectedFormulaQueries.insert(improvementQuery);
         UNIT_ASSERT(
-            evaluation.FormulaEmittedQueries ==
-            OutcomeIds(statuses));
+            evaluation.FormulaEmittedQueries == expectedFormulaQueries);
         UNIT_ASSERT(
             evaluation.FormulaEmittedQueries.contains(improvementQuery));
 
@@ -1425,7 +1431,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             report["required_verifier_entry_queries"].GetArraySafe().size(),
-            3);
+            4);
         size_t index = 0;
         for (const ui32 queryId :
              policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)
@@ -1445,7 +1451,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const auto statuses = FormulaFloorStatuses(policy, Tpch);
+        const auto statuses = FormulaDashboardFloorStatuses(policy, Tpch);
 
         auto verifierEntries = OutcomeIds(statuses);
         const auto current = EvaluateCoveragePolicy(
@@ -1481,7 +1487,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpch.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        const auto statuses = FormulaFloorStatuses(policy, Tpch);
+        const auto statuses = FormulaDashboardFloorStatuses(policy, Tpch);
         const auto current = EvaluateCoveragePolicy(
             policy,
             Tpch,
@@ -1523,12 +1529,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected.insert(queryId);
         }
 
-        TMap<ui32, TString> statuses;
-        for (const ui32 queryId :
-             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries)
-        {
-            statuses[queryId] = "FORMULA_EMITTED";
-        }
+        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
 
         for (const TString status : {"FORMULA_EMITTED", "VERIFIED_BOUNDED"}) {
             statuses[65] = status;
@@ -1563,12 +1564,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected.insert(queryId);
         }
 
-        TMap<ui32, TString> statuses;
-        for (const ui32 queryId :
-             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries)
-        {
-            statuses[queryId] = "FORMULA_EMITTED";
-        }
+        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         statuses[65] = "UNSUPPORTED";
         auto verifierEntries = OutcomeIds(statuses);
         verifierEntries.erase(65);
@@ -1622,7 +1618,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
             selected.insert(queryId);
         }
-        auto statuses = FormulaFloorStatuses(policy, Tpcds);
+        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         statuses[88] = "UNSUPPORTED";
         statuses.erase(96);
         auto verifierEntries = OutcomeIds(statuses);

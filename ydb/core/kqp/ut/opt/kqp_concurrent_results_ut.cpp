@@ -196,14 +196,10 @@ Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturning, EnableIndexSt
 
         auto results = CollectConcurrentResults(it);
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
-        AssertConcurrentResult(results, 0, R"([[[1];["existing"]]])"); // A bug, must be "overwritten". Need to fix it for both EnableIndexStreamWrite values.
+        AssertConcurrentResult(results, 0, R"([[[1];["overwritten"]]])");
     }
 
-    if (EnableIndexStreamWrite) {
-        CompareYson(R"([[[1];["overwritten"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
-    } else {
-        CompareYson(R"([[[1];["existing"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
-    }
+    CompareYson(R"([[[1];["overwritten"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
 }
 
 Y_UNIT_TEST_TWIN(ConcurrentStreamReturningThenReadSameTable, EnableIndexStreamWrite) {
@@ -346,6 +342,202 @@ Y_UNIT_TEST_TWIN(ConcurrentStreamNamedExprRandomConsistency, EnableIndexStreamWr
     }
 }
 
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningUpsert, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val) VALUES (1, "existing");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val) VALUES (1, "overwritten");
+            UPSERT INTO t (key) VALUES (1) RETURNING key, val;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["overwritten"]]])");
+    }
+
+    CompareYson(R"([[[1];["overwritten"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
 }
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningReplace, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, val2 String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val, val2) VALUES (1, "first", "second");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            REPLACE INTO t (key, val) VALUES (1, "updated");
+            REPLACE INTO t (key, val) VALUES (1, "final") RETURNING key, val, val2;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["final"];#]])");
+    }
+
+    CompareYson(R"([[[1];["final"];#]])", ReadTableViaQuery(session, "t", "key, val, val2", "key"));
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningUpdate, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val) VALUES (1, "existing");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val) VALUES (1, "overwritten");
+            UPDATE t SET val = "updated" WHERE key = 1 RETURNING key, val;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["updated"]]])");
+    }
+
+    CompareYson(R"([[[1];["updated"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningDelete, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val) VALUES (1, "existing");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val) VALUES (1, "overwritten");
+            DELETE FROM t WHERE key = 1 RETURNING key, val;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["overwritten"]]])");
+    }
+
+    CompareYson(R"([])", ReadTableViaQuery(session, "t", "key, val", "key"));
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningUpdateOn, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val) VALUES (1, "existing");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val) VALUES (1, "overwritten");
+            UPDATE t ON (key, val) VALUES (1, "updated") RETURNING key, val;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["updated"]]])");
+    }
+
+    CompareYson(R"([[[1];["updated"]]])", ReadTableViaQuery(session, "t", "key, val", "key"));
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningDeleteOn, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val) VALUES (1, "existing");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val) VALUES (1, "overwritten");
+            DELETE FROM t ON (key) VALUES (1) RETURNING key, val;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[1];["overwritten"]]])");
+    }
+
+    CompareYson(R"([])", ReadTableViaQuery(session, "t", "key, val", "key"));
+}
+
+Y_UNIT_TEST_TWIN(ConcurrentStreamSameTableBlindWriteThenReturningInsert, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    ExecuteSchemeQuery(session, R"(
+        CREATE TABLE t (key Int32, val String, val2 String, PRIMARY KEY(key));
+    )");
+
+    ExecuteDataQuery(session, R"(
+        INSERT INTO t (key, val, val2) VALUES (1, "existing", "other");
+    )");
+
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO t (key, val, val2) VALUES (1, "overwritten", "other2");
+            INSERT INTO t (key, val) VALUES (2, "new") RETURNING key, val, val2;
+        )", TTxControl::BeginTx().CommitTx(), ConcurrentStreamSettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto results = CollectConcurrentResults(it);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        AssertConcurrentResult(results, 0, R"([[[2];["new"];#]])");
+    }
+
+    CompareYsonUnordered(R"([[[1];["overwritten"];["other2"]];[[2];["new"];#]])", ReadTableViaQuery(session, "t", "key, val, val2", "key"));
+}
+
+} // Y_UNIT_TEST_SUITE(KqpConcurrentResults)
 
 } // namespace NKikimr::NKqp

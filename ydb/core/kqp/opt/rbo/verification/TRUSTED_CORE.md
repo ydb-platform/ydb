@@ -233,6 +233,34 @@ fails closed. C++ near-miss mutations, independent Python NULL/present
 references and semantic mutations, real-host initial/final normalization, and
 the q38/q87 bounded proofs cover this vertical path.
 
+Exact Decimal weak `SafeCast` crosses `semantic_snapshot.cpp`, `ir.py`,
+`decimal.py`, and `scalar.py`. The exporter admits nullable or non-null
+fixed-width integral sources and canonical Decimal sources whose scale is
+unchanged and whose precision does not decrease. It requires source/result
+nullability parity, an exactly matching canonical target descriptor and
+annotations, at least one target integral digit, and reviewed weak
+`CastResult<false>` semantics. Integral source NULL propagates; a present
+integer is scaled to the target coefficient and saturates out-of-range values
+to signed infinity rather than NULL. Same-scale Decimal widening is encoded
+identity: every finite coefficient, negative infinity, positive infinity, and
+NaN is preserved, while source NULL propagates.
+
+The exporter records the actual `source_type` on every explicit
+`cast_decimal`. The Python decoder independently requires that field to equal
+the inferred argument type before dispatching to integral conversion or
+Decimal identity widening. This required cross-language seam prevents a
+target-only encoding from silently applying the wrong source semantics.
+Missing or mismatched source type, `StrictCast`, `Convert` outside existing
+constant normalization, source/result nullability mismatch, Decimal scale
+change or narrowing, noncanonical Decimal, other source families, and targets
+without an integral digit fail closed. Exporter mutation tests, independent
+decoder and evaluator rejections, finite/special/NULL references, and
+solver-backed staged equivalence cover the path. A synthetic production-host
+snapshot pair containing both nullable source families is
+`VERIFIED_BOUNDED`; TPC-DS q18 only constructs a formula at this milestone, is
+not in the proof floor, and revealed no optimizer correctness bug. The
+complete verification subtree passes 34/34 suites and 934/934 tests.
+
 Decimal `MIN` crosses `ir.py`, `decimal.py`, and `relation.py`. The decoder
 admits only exact same-type Decimal input/output with phase-aware nullability;
 the kernel reduces non-NULL values in raw signed-code order and preserves a
@@ -243,18 +271,18 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-positive-nullable-`IN` 2026-07-24 physical-line audit records
-implementation, test, and diagnostic rows at source `dfd6546dfd5`;
+The post-nullable-Decimal-`SafeCast` 2026-07-24 physical-line audit records
+implementation, test, and diagnostic rows at source `5dafcc79a4e`;
 documentation includes this evidence update:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,835 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,952 |
-| **Proof-producing code total** | **19,787** |
-| Tests, outside the TCB | 48,280 |
-| Diagnostic/orchestration tools, outside the TCB | 5,178 |
-| Documentation, outside the TCB | 6,096 |
+| Nine trusted Python semantic modules | 10,896 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,005 |
+| **Proof-producing code total** | **19,901** |
+| Tests, outside the TCB | 48,872 |
+| Diagnostic/orchestration tools, outside the TCB | 5,182 |
+| Documentation, outside the TCB | 6,282 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
@@ -308,6 +336,10 @@ the SMT obligation itself:
   present Date zero, exactly like the accepted `Just(Date(0))` spelling, so
   the normalized missing branch is exact and the runtime error path is
   unreachable;
+- each accepted `cast_decimal` `source_type` names the actual runtime source,
+  weak integral-to-Decimal `SafeCast` propagates source NULL but saturates
+  present overflow to signed infinity, and same-scale non-decreasing-precision
+  Decimal `SafeCast` preserves every finite and special encoded value;
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
@@ -372,7 +404,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, and direct-Uint64-`Just` mutations and real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, and exact Decimal weak-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap and positive-nullable-context checks, real-host Decimal-AVG, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

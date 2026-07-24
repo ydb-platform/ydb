@@ -205,6 +205,18 @@ shares each deterministic total function and its ordered column/literal
 arguments across both plans. Cross-dialect exporter mutations and a
 solver-backed real-host fixture are the independent evidence.
 
+The pushed-predicate output-IU resolver also changes only
+`semantic_snapshot.cpp`. For every OLAP read output, it registers the physical
+read name, full output-IU name, and short output-IU name as references to the
+same logical scan output. Repeated spellings for that same typed, nullable
+output are equivalent aliases. If a predicate references a spelling registered
+for distinct outputs, export fails closed as ambiguous; an ambiguity that is
+never referenced is accepted because it cannot change the decoded predicate.
+Focused exporter tests cover all three spellings, same-output aliases,
+referenced collisions, and unused collisions. The complete benchmark
+dashboards independently move TPC-DS q2/q97 to formulas and q59 to the
+verifier's exact construction cap; none of these results is a bounded proof.
+
 The nullable Date-year bridge likewise changes only `semantic_snapshot.cpp`.
 It admits one direct visible `Optional<Date>` member, a complete cast to
 `Optional<Timestamp>`, and the exact reviewed unary
@@ -259,7 +271,8 @@ solver-backed staged equivalence cover the path. A synthetic production-host
 snapshot pair containing both nullable source families is
 `VERIFIED_BOUNDED`; TPC-DS q18 only constructs a formula at this milestone, is
 not in the proof floor, and revealed no optimizer correctness bug. The
-complete verification subtree passes 34/34 suites and 934/934 tests.
+complete verification subtree passed 34/34 suites and 934/934 tests at that
+milestone.
 
 Decimal `MIN` crosses `ir.py`, `decimal.py`, and `relation.py`. The decoder
 admits only exact same-type Decimal input/output with phase-aware nullability;

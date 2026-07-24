@@ -176,10 +176,46 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
     return true;
 }
 
-IGraphTransformer::TStatus CompileGeneratedLambdas(TKikimrTableMetadata& meta, const TString& cluster, TKikimrSessionContext& sessionCtx,
-    const TTypeAnnotationContext& typeCtx, TExprContext& ctx)
+IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
+    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
 {
-    for (auto& [name, col] : meta.Columns) {
+    if (!rowType) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    // Annotate a copy so the stored lambda is left as-is (and un-annotated) when no rewrite is needed
+    auto probe = ctx.DeepCopyLambda(*lambda);
+    if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+            << "Failed to infer the type of generated column " << columnName));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsSameAnnotation(RemoveOptionality(columnType), RemoveOptionality(*probe->GetTypeAnn()))) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TPtr converted = probe->TailPtr();
+    if (TryConvertTo(converted, columnType, ctx, typeCtx) == IGraphTransformer::TStatus::Error) {
+        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+            << "Generated column " << columnName << " expression is not convertible to the column type"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (converted != probe->TailPtr()) {
+        lambda = ctx.NewLambda(probe->Pos(), probe->HeadPtr(), std::move(converted));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription& table, const TString& cluster,
+    TKikimrSessionContext& sessionCtx, TTypeAnnotationContext& typeCtx, TExprContext& ctx)
+{
+    for (auto& [name, col] : table.Metadata->Columns) {
         if (!col.DefaultExpression || col.DefaultExpression->Expr) {
             continue;
         }
@@ -192,6 +228,14 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(TKikimrTableMetadata& meta, c
         auto lambda = CompileGeneratedExpr(generatedQuery, name, ctx, settingsBuilder, typeCtx.Modules);
         if (!lambda) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const auto* columnType = table.GetColumnType(name)) {
+            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
+            }
         }
 
         col.DefaultExpression->Expr = lambda;
@@ -237,7 +281,7 @@ private:
                     return TStatus::Error;
                 }
 
-                if (auto status = CompileGeneratedLambdas(*tableDesc->Metadata, cluster, *SessionCtx, Types, ctx);
+                if (auto status = CompileGeneratedLambdas(*tableDesc, cluster, *SessionCtx, Types, ctx);
                     status != TStatus::Ok)
                 {
                     return status;
@@ -748,6 +792,17 @@ namespace {
                 return status;
             }
 
+            if (const TTypeAnnotationNode* exprType = lambda->GetTypeAnn();
+                exprType && !IsSameAnnotation(RemoveOptionality(*columnAnnType), RemoveOptionality(*exprType)))
+            {
+                TExprNode::TPtr converted = lambda->TailPtr();
+                if (TryConvertTo(converted, *columnAnnType, ctx, typeCtx) != IGraphTransformer::TStatus::Error
+                    && converted != lambda->TailPtr())
+                {
+                    lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(converted));
+                }
+            }
+
             columnMeta.DefaultExpression->Expr = lambda;
         }
 
@@ -901,7 +956,7 @@ private:
 
         MaybeAutoBindRowIdSequence(*table->Metadata);
 
-        if (auto status = CompileGeneratedLambdas(*table->Metadata, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
             status != TStatus::Ok)
         {
             return status;
@@ -1213,7 +1268,7 @@ private:
 
         MaybeAutoBindRowIdSequence(*table->Metadata);
 
-        if (auto status = CompileGeneratedLambdas(*table->Metadata, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
             status != TStatus::Ok)
         {
             return status;

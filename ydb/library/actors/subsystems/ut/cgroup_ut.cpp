@@ -1,15 +1,15 @@
-#include <subsystems/cgroup/cgroup_events.h>
-#include <subsystems/cgroup/cgroup_oom.h>
-#include <subsystems/cgroup/cgroup_oom_trend.h>
-#include <subsystems/cgroup/cgroup_v1.h>
-#include <subsystems/cgroup/cgroup_v2.h>
+#include <ydb/library/actors/subsystems/cgroup/cgroup_events.h>
+#include <ydb/library/actors/subsystems/cgroup/cgroup_oom.h>
+#include <ydb/library/actors/subsystems/cgroup/cgroup_oom_trend.h>
+#include <ydb/library/actors/subsystems/cgroup/cgroup_v1.h>
+#include <ydb/library/actors/subsystems/cgroup/cgroup_v2.h>
 
-#include <actor_bootstrapped.h>
-#include <actorsystem.h>
-#include <executor_pool_basic.h>
-#include <executor_pool_io.h>
-#include <hfunc.h>
-#include <scheduler_basic.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

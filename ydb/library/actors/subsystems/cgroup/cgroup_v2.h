@@ -1,9 +1,9 @@
 #pragma once
 
 #include "cgroup_memory.h"
-#include "../defs.h"
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/subsystem.h>
 
 #include <util/datetime/base.h>

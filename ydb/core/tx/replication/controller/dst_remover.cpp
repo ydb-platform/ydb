@@ -168,7 +168,7 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
-        , LogPrefix("DstRemover", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
     }
 
@@ -204,7 +204,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
     TActorId PipeCache;

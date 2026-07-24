@@ -674,7 +674,7 @@ public:
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
-        , LogPrefix("DstCreator", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
     }
@@ -711,7 +711,7 @@ private:
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
     TString Database;

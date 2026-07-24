@@ -97,7 +97,7 @@ public:
         , SrcStreamPath(srcStreamPath)
         , SrcStreamConsumerName(srcStreamConsumerName)
         , DstPathId(dstPathId)
-        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("TableWorkerRegistar", ReplicationId, TargetId))
         , Config(config)
         , BatchingSettings(batchingSettings)
         , Database(database)
@@ -129,7 +129,7 @@ private:
     const TString SrcStreamPath;
     const TString SrcStreamConsumerName;
     const TPathId DstPathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;

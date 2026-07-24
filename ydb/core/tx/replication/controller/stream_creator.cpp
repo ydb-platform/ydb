@@ -260,7 +260,7 @@ public:
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
         , NeedCreate(needCreate)
-        , LogPrefix("StreamCreator", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
     {
     }
 
@@ -288,7 +288,7 @@ private:
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const bool NeedCreate;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamCreator
 

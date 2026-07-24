@@ -371,7 +371,7 @@ public:
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Config(config)
-        , LogPrefix("TargetDiscoverer", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("TargetDiscoverer", ReplicationId))
         , Backoff(5)
     {
         if (Config.HasSpecific()) {
@@ -411,7 +411,7 @@ private:
     const TActorId YdbProxy;
     const NKikimrReplication::TReplicationConfig Config;
     TVector<std::pair<TString, TString>> Paths;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 NextListingId = 1;
     THashMap<ui64, std::pair<TString, TString>> Listings;

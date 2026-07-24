@@ -82,7 +82,7 @@ public:
         , Ssl(ssl)
         , CaCert(caCert)
         , Token(token)
-        , LogPrefix("ResourceIdResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("ResourceIdResolver", ReplicationId))
         , Backoff(5)
     {
     }
@@ -109,7 +109,7 @@ private:
     const bool Ssl;
     const TString CaCert;
     const TString Token;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     TActorId YdbProxy;
     TBackoff Backoff;
 

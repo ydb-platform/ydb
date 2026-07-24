@@ -164,7 +164,7 @@ public:
         , Kind(kind)
         , DstPathId(dstPathId)
         , DesiredState(desiredState)
-        , LogPrefix("DstAlterer", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
 
@@ -206,7 +206,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TReplication::EState DesiredState;
-    const TActorLogPrefix LogPrefix;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
     TActorId PipeCache;

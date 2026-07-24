@@ -115,7 +115,7 @@ public:
         , SecretName(secretName)
         , Cookie(cookie)
         , Database(database)
-        , LogPrefix("SecretResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("SecretResolver", ReplicationId))
     {
     }
 
@@ -154,7 +154,7 @@ private:
     const TString SecretName;
     const ui64 Cookie;
     const TString Database;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
     NMetadata::NSecret::TSecretId SecretId;

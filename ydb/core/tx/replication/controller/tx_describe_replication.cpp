@@ -83,7 +83,7 @@ public:
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Targets (std::move(targets))
-        , LogPrefix("TargetDescriber", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("TargetDescriber", ReplicationId))
     {
     }
 
@@ -108,7 +108,7 @@ private:
     const ui64 ReplicationId;
     const TActorId YdbProxy;
     const THashMap<ui64, TString> Targets;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TEvPrivate::TEvDescribeTargetsResult::TResult Result;
 

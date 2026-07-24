@@ -99,7 +99,7 @@ public:
         , SrcPath(srcPath)
         , ConsumerName(consumerName)
         , NeedDrop(needDrop)
-        , LogPrefix("StreamConsumerRemover", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("StreamConsumerRemover", ReplicationId, TargetId))
     {
     }
 
@@ -133,7 +133,7 @@ private:
     const TString SrcPath;
     const TString ConsumerName;
     const bool NeedDrop;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamRemover
 

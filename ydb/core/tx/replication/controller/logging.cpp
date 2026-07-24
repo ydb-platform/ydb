@@ -23,30 +23,24 @@ void TTabletLogPrefix::Out(IOutputStream& output) const {
     output << " ";
 }
 
-TActorLogPrefix::TActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
-    : Activity(activity)
-    , ReplicationId(rid)
-    , TargetId(tid)
+
+NActors::NStructuredLog::TStructuredMessage CreateActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
 {
-}
-
-void TActorLogPrefix::Out(IOutputStream& output) const {
-    output << "[" << Activity << "]";
-    if (ReplicationId) {
-        output << "[rid " << ReplicationId << "]";
+    NStructuredLog::TStructuredMessage result;
+    YDB_LOG_UPDATE_MESSAGE(result,
+        {"activity", activity});
+    if (rid) {
+        YDB_LOG_UPDATE_MESSAGE(result,
+            {"replicationId", rid});
     }
-    if (TargetId) {
-        output << "[tid " << TargetId << "]";
+    if (tid) {
+        YDB_LOG_UPDATE_MESSAGE(result,
+            {"targetId", tid});
     }
-    output << " ";
+    return result;
 }
-
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TTabletLogPrefix, output, value) {
-    value.Out(output);
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TActorLogPrefix, output, value) {
     value.Out(output);
 }

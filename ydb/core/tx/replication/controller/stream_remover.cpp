@@ -103,7 +103,7 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , StreamName(streamName)
-        , LogPrefix("StreamRemover", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("StreamRemover", ReplicationId, TargetId))
     {
     }
 
@@ -131,7 +131,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamRemover
 

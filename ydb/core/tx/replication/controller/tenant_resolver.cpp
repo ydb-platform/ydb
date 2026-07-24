@@ -76,7 +76,7 @@ public:
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
-        , LogPrefix("TenantResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("TenantResolver", ReplicationId))
     {
     }
 
@@ -96,7 +96,7 @@ private:
     const TActorId Parent;
     const ui64 ReplicationId;
     const TPathId PathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
 

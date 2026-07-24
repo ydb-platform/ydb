@@ -1,12 +1,21 @@
 #! /bin/sh
 
+# YDB sample for TLS certificate generation.
+#   https://ydb.tech
+# Last updated at: 2026-JUL-24
+
 set -e
 set +u
 
-NODES_FILE=ydb-ca-nodes.txt
+if [ ! -f ydb-ca-nodes.txt ]; then
+    echo "** Missing file ydb-ca-nodes.txt - EXIT"
+    exit 1
+fi
+
+NODES_FILE=`readlink -f ydb-ca-nodes.txt`
 KEY_BITS=4096
 
-[ -d CA ] || mkdir CA
+[ -d CA ] || [ -f CA/ca.cnf ] || mkdir -pv CA
 cd CA
 
 [ -d secure ] || mkdir secure
@@ -20,7 +29,7 @@ cat >ca.cnf <<EOF
 default_ca = CA_default
 
 [ CA_default ]
-default_days = 365
+default_days = 731
 database = index.txt
 serial = serial.txt
 default_md = sha256
@@ -62,17 +71,11 @@ fi
 
 if [ ! -f certs/ca.crt ]; then
     echo "** Generating CA certificate"
-    openssl req -new -x509 -config ca.cnf -key secure/ca.key -out certs/ca.crt -days 1830 -batch
+    openssl req -new -x509 -config ca.cnf -key secure/ca.key -out certs/ca.crt -days 3660 -batch
 fi
 
 [ -f index.txt ] || touch index.txt
 [ -f serial.txt ] || (echo 01 >serial.txt)
-
-# The '..' part here is due to changed current directory
-if [ ! -f ../${NODES_FILE} ]; then
-    echo "** Missing file ${NODES_FILE} - EXIT"
-    exit 0
-fi
 
 make_node_conf() {
     mkdir -p nodes/"$1"
@@ -87,7 +90,7 @@ distinguished_name = distinguished_name
 req_extensions = extensions
 
 [ distinguished_name ]
-organizationName = YDB
+organizationName = YDB Self-Signed Authority
 
 [ extensions ]
 subjectAltName = @alt_names
@@ -140,7 +143,7 @@ move_node_files() {
 }
 
 # The '..' part here is due to changed current directory
-(cat ../${NODES_FILE}; echo "") | while read node node2; do
+(cat ${NODES_FILE}; echo "") | while read node node2; do
     if [ ! -z "$node" ]; then
         safe_node=`echo $node | tr '*$/' '___'`
         make_node_conf "$safe_node" "$node" "$node2"
@@ -152,3 +155,13 @@ move_node_files() {
 done
 
 echo "All done. Certificates are in CA/certs/$DEST_NAME"
+
+if [ -d current ]; then
+  mv -v current current.bak.`date '+%Y-%m-%d_%H-%M-%S'`
+fi
+rm -f current
+ln -sv certs/"$DEST_NAME" current
+
+echo "Link to the current version is provided as CA/current"
+
+# End Of File

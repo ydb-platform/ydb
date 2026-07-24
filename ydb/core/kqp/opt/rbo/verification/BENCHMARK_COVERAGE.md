@@ -218,23 +218,29 @@ queries and 28 optimizer-preparation failures. This is a useful end-to-end
 pre-physical optimizer sample, not a claim about the remaining 75 workload
 entries or larger inputs. Formula construction is not a bounded proof.
 
+A focused post-dashboard semantic slice canonicalizes generic
+`EndsWith`/`StringContains` with their executed OLAP spellings and adds exact
+same-type Decimal `MIN`. It does not change the 46/121 formula floor: TPCH q2
+now passes both exporters and `MIN` but fails closed at a 32,640-pair Merge
+construction above the 16,384-pair cap, while q9 reaches unsupported scalar
+`Map` in both snapshots. A small real-host column-store fixture containing both
+String predicates returns `VERIFIED_BOUNDED`.
+
 ### TPCH inventory
 
 Optimizer preparation fails closed for q17 and q20 in correlated scalar
 inlining because their computed aggregate results require general empty-row
-reconstruction. Eight other queries fail closed at a snapshot boundary as
-follows; a query can have both an initial and final reason.
+reconstruction. Seven other queries fail closed at a snapshot boundary as
+follows; a query can have both an initial and final reason. q2 passes both
+snapshot boundaries and fails closed inside verifier construction as recorded
+below.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | `EXISTS` does not have exactly one outer dependency | q21 | - |
 | Dynamic `IN` subplan | q16, q18 | - |
 | `Apply` | q13 | - |
-| `StringContains` | q9 | - |
-| Scalar callable `EndsWith` | q2 | - |
-| Callable `Map` | q7, q8 | q7, q8 |
-| OLAP `ends_with` | - | q2 |
-| OLAP `string_contains` | - | q9 |
+| Callable `Map` | q7, q8, q9 | q7, q8, q9 |
 | `KqpOlapApply` | - | q13 |
 | Join inputs share an IU | - | q21 |
 
@@ -246,9 +252,9 @@ Neither row is a solver proof.
 
 At the equality-correlated milestone, q17 moved through formula construction.
 The later correlated-COUNT correctness repair intentionally rejects that
-broader computed empty-row shape before verification. q2 also passes the
-initial correlation gate but remains unsupported on the deeper initial scalar
-`EndsWith` and final OLAP `ends_with` expressions. Neither classification is a
+broader computed empty-row shape before verification. The subsequent canonical
+String-predicate bridge and Decimal `MIN` move q2 past both exporters to the
+32,640-pair Merge construction cap. This remains an unsupported result, not a
 solver proof.
 
 Exact Date literals and ordering removed the previous Date blockers and exposed

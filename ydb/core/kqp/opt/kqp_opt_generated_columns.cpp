@@ -175,12 +175,20 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     // Columns to fetch from the table: primary key + the missing dependency columns
     TVector<TCoAtom> lookupColumnNodes;
     lookupColumnNodes.reserve(pk.size() + missingDeps.size());
+
+    THashSet<TStringBuf> seen;
     for (const auto& key : pk) {
-        lookupColumnNodes.push_back(TCoAtom(ctx.NewAtom(pos, key)));
+        if (seen.insert(key).second) {
+            lookupColumnNodes.push_back(TCoAtom(ctx.NewAtom(pos, key)));
+        }
     }
+
     for (const auto& dep : missingDeps) {
-        lookupColumnNodes.push_back(TCoAtom(ctx.NewAtom(pos, dep)));
+        if (seen.insert(dep).second) {
+            lookupColumnNodes.push_back(TCoAtom(ctx.NewAtom(pos, dep)));
+        }
     }
+
     auto lookupColumns = Build<TCoAtomList>(ctx, pos).Add(lookupColumnNodes).Done();
 
     TKqpStreamLookupSettings lookupSettings;

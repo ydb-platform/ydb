@@ -39,8 +39,37 @@ namespace NYql::NConnector {
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
             case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_ABORTED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_ABORTED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAVAILABLE:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNAVAILABLE;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_OVERLOADED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_OVERLOADED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_GENERIC_ERROR:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_GENERIC_ERROR;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_TIMEOUT:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_TIMEOUT;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_PRECONDITION_FAILED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_PRECONDITION_FAILED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_CANCELLED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_CANCELLED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNDETERMINED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNDETERMINED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_EXTERNAL_ERROR:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_EXTERNAL_ERROR;
+
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_ALREADY_EXISTS:
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SESSION_EXPIRED:
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SESSION_BUSY:
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_SESSION:
             default:
-                ythrow yexception() << "Unexpected YDB status code: " << ::Ydb::StatusIds::StatusCode_Name(error.status());
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
         }
     }
 

@@ -1,3 +1,4 @@
+#include "simple_link_source.h"
 #include "source.h"
 #include "grafana_dashboard_source.h"
 #include "grafana_dashboard_search_source.h"
@@ -24,7 +25,8 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
 
 void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
     if (config.GetSource().empty()) {
-        ythrow yexception() << "source is required";
+        ValidateSimpleLinkSourceConfig(config, metaSettings);
+        return;
     }
 
     if (config.GetSource() == "grafana/dashboard") {
@@ -46,6 +48,9 @@ void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMeta
 std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {
     ValidateLinkSourceConfig(config, metaSettings);
 
+    if (config.GetSource().empty()) {
+        return MakeSimpleLinkSource(std::move(config), metaSettings);
+    }
     if (config.GetSource() == "grafana/dashboard") {
         return MakeGrafanaDashboardSource(std::move(config), metaSettings);
     }

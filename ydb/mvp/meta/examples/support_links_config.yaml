@@ -25,6 +25,18 @@ meta:
 
   support_links:
     cluster:
+      - title: Cluster Support
+        url: https://support.example.net/cluster?tab=overview
+        # When source is omitted, a simple URL source is used.
+        # Current request parameters are forwarded automatically.
+        # link_parameter_mappings can add extra params or override existing ones.
+        link_parameter_mappings:
+          - parameter: cluster_name
+            from_request: cluster
+          - parameter: workspace
+            from_cluster_info: k8s_namespace
+          - parameter: bucket
+            static_value: ydb
       - source: grafana/dashboard
         title: Cluster Overview
         url: /d/ydb_cluster/overview

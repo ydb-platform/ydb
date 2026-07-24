@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/mvp/meta/support_links)
 SIZE(SMALL)
 
 SRCS(
+    simple_link_source_ut.cpp
     grafana_dashboard_source_ut.cpp
     grafana_dashboard_search_source_ut.cpp
     grafana_logging_source_ut.cpp

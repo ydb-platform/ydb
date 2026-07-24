@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    simple_link_source.cpp
     entity.cpp
     grafana_dashboard_common.cpp
     grafana_dashboard_search_source.cpp

@@ -19,7 +19,7 @@ bool IsOldSecretType(const TString& typeId) {
 } // namespace
 
 const TString& GetOldSecretCreationDisabledMessage() {
-    static const TString message("Old secrets creation syntax is disabled now. Please use the new secrets");
+    static const TString message("Old secrets creation syntax is disabled now. Please use the new one");
     return message;
 }
 

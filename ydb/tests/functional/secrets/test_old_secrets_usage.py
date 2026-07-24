@@ -14,11 +14,11 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 DATABASE = "/Root"
-OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new secrets"
+OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new one"
 CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = (
-    "Old secrets are disabled for creating new objects. Please use the new secrets"
+    "Old secrets are disabled for creating new objects. Please use new secrets"
 )
-OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use the new secrets"
+OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use new secrets"
 
 
 def setup_s3():

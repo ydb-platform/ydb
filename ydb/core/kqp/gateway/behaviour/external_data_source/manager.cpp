@@ -62,12 +62,13 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
 }
 
 [[nodiscard]] TYqlConclusionStatus CheckOldSecretCreationAllowed(
-    bool disableOldSecretCreation, const TString& secretName)
+    bool disableOldSecretCreation,
+    const TString& secretName)
 {
     if (disableOldSecretCreation && secretName && !NSecret::IsSchemeSecret(secretName)) {
         return TYqlConclusionStatus::Fail(
             NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            "Old secrets are disabled for creating new objects. Please use the new secrets");
+            "Old secrets are disabled for creating new objects. Please use new secrets");
     }
     return TYqlConclusionStatus::Success();
 }
@@ -94,9 +95,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, sa.GetSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, sa.GetSecretName()); status.IsFail())
+        {
             return status;
         }
     } else if (authMethod == "BASIC") {
@@ -104,9 +105,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         basic.SetLogin(GetOrEmpty(settings, "login"));
         basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, basic.GetPasswordSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail())
+        {
             return status;
         }
     } else if (authMethod == "MDB_BASIC") {
@@ -116,15 +117,15 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail())
+        {
             return status;
         }
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetPasswordSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail())
+        {
             return status;
         }
     } else if (authMethod == "AWS") {
@@ -133,24 +134,24 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail())
+        {
             return status;
         }
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail())
+        {
             return status;
         }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail())
+        {
             return status;
         }
     } else if (authMethod == "IAM") {
@@ -160,9 +161,9 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         // Note: user must not be allowed to specify resource_id;
         // database authorization relies on resource_id lookup;
         if (const auto status =
-            CheckOldSecretCreationAllowed(disableOldSecretCreation, iam.GetInitialTokenSecretName());
-            status.IsFail()
-        ) {
+            CheckOldSecretCreationAllowed(
+                disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
+        {
             return status;
         }
     } else {

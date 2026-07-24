@@ -1095,7 +1095,7 @@ namespace {
                     ctx.AddError(
                         TIssue(
                             ctx.GetPosition(pos),
-                            "Old secrets are disabled for creating new objects. Please use the new secrets"
+                            "Old secrets are disabled for creating new objects. Please use new secrets"
                         )
                     );
                     return false;
@@ -3419,8 +3419,12 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx,
-                createReplication.Pos(), SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings,
+                createReplication.ReplicationSettings(),
+                ctx,
+                createReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
             ) {
                 return SyncError();
             }
@@ -3535,7 +3539,11 @@ public:
                 createTransfer.TransformLambda()
             };
 
-            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos(),
+            if (!ParseTransferSettings(
+                settings.Settings,
+                createTransfer.TransferSettings(),
+                ctx,
+                createTransfer.Pos(),
                 SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
             ) {
                 return SyncError();

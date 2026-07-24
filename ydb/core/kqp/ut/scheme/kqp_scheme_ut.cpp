@@ -15029,7 +15029,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new secrets",
+                "Old secrets creation syntax is disabled now. Please use the new one",
                 result.GetIssues().ToString());
         }
         { // upsert
@@ -15041,7 +15041,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new secrets",
+                "Old secrets creation syntax is disabled now. Please use the new one",
                 result.GetIssues().ToString());
         }
         { // alter
@@ -15093,7 +15093,7 @@ END DO)",
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(
             result.GetIssues().ToString(),
-            "Old secrets are disabled for creating new objects. Please use the new secrets",
+            "Old secrets are disabled for creating new objects. Please use new secrets",
             result.GetIssues().ToString());
     }
 

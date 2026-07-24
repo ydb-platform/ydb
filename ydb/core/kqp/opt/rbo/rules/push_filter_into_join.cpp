@@ -117,12 +117,27 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             TEquiJoinCondition cond(conj);
 
             // We cannot push filter into join conditions of a LeftOnly join - will break semantics
-            if(join->JoinKind != "LeftOnly") {
-                if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
-                    joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
+            if (join->JoinKind != "LeftOnly") {
+                const auto leftIU = cond.GetLeftIU();
+                const auto rightIU = cond.GetRightIU();
+                // A shared IU does not identify a side. Keep ambiguous predicates
+                // for the side-routing checks below instead of making them join keys.
+                const bool leftToRight =
+                    ContainsInfoUnit(leftIUs, leftIU) &&
+                    !ContainsInfoUnit(rightIUs, leftIU) &&
+                    ContainsInfoUnit(rightIUs, rightIU) &&
+                    !ContainsInfoUnit(leftIUs, rightIU);
+                const bool rightToLeft =
+                    ContainsInfoUnit(rightIUs, leftIU) &&
+                    !ContainsInfoUnit(leftIUs, leftIU) &&
+                    ContainsInfoUnit(leftIUs, rightIU) &&
+                    !ContainsInfoUnit(rightIUs, rightIU);
+
+                if (leftToRight) {
+                    joinConditions.emplace_back(leftIU, rightIU);
                     continue;
-                } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
-                    joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
+                } else if (rightToLeft) {
+                    joinConditions.emplace_back(rightIU, leftIU);
                     continue;
                 }
             }

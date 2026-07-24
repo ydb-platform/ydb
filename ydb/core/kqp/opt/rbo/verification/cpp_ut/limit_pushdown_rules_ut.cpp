@@ -14,6 +14,8 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <algorithm>
+
 namespace {
 
 using namespace NKikimr;
@@ -50,13 +52,19 @@ struct TRuleTestContext {
 TIntrusivePtr<TOpRead> MakeRead(
     NYql::EStorageType storage,
     TPositionHandle pos,
-    const TPhysicalOpProps& props = {},
-    const TString& column = "a")
+    const TPhysicalOpProps& props,
+    const TVector<TInfoUnit>& columns)
 {
+    TVector<TString> columnNames;
+    columnNames.reserve(columns.size());
+    for (const auto& column : columns) {
+        columnNames.push_back(column.GetFullName());
+    }
+
     return MakeIntrusive<TOpRead>(
         "",
-        TVector<TString>{column},
-        TVector<TInfoUnit>{TInfoUnit(column)},
+        columnNames,
+        columns,
         storage,
         nullptr,
         nullptr,
@@ -66,6 +74,19 @@ TIntrusivePtr<TOpRead> MakeRead(
         ESortDir::None,
         props,
         pos);
+}
+
+TIntrusivePtr<TOpRead> MakeRead(
+    NYql::EStorageType storage,
+    TPositionHandle pos,
+    const TPhysicalOpProps& props = {},
+    const TString& column = "a")
+{
+    return MakeRead(
+        storage,
+        pos,
+        props,
+        TVector<TInfoUnit>{TInfoUnit(column)});
 }
 
 void ComputeParents(
@@ -240,6 +261,101 @@ Y_UNIT_TEST_SUITE(KqpRboOrderSensitiveJoinRules) {
         UNIT_ASSERT_VALUES_EQUAL(result.Get(), filter.Get());
         UNIT_ASSERT_VALUES_EQUAL(markedJoin->JoinKind, "Cross");
         UNIT_ASSERT(markedJoin->JoinKeys.empty());
+    }
+
+    Y_UNIT_TEST(PushesSharedIUPredicateToLeftOfLeftSemiJoin) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit factItemSk("store_sales.ss_item_sk");
+        const TInfoUnit itemId("i_item_id");
+        const TInfoUnit itemSk("item.i_item_sk");
+
+        auto fact = MakeRead(
+            NYql::EStorageType::RowStorage,
+            pos,
+            {},
+            factItemSk.GetFullName());
+        auto outerItem = MakeRead(
+            NYql::EStorageType::RowStorage,
+            pos,
+            {},
+            TVector<TInfoUnit>{itemId, itemSk});
+        auto semiJoinInput = MakeIntrusive<TOpJoin>(
+            fact,
+            outerItem,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto innerItem = MakeRead(
+            NYql::EStorageType::RowStorage,
+            pos,
+            {},
+            TVector<TInfoUnit>{itemId, itemSk});
+        auto semiJoin = MakeIntrusive<TOpJoin>(
+            semiJoinInput,
+            innerItem,
+            pos,
+            "LeftSemi",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{itemId, itemId}});
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                factItemSk,
+                pos,
+                &ctx.ExprCtx,
+                &ctx.PlanProps),
+            MakeColumnAccess(
+                itemSk,
+                pos,
+                &ctx.ExprCtx,
+                &ctx.PlanProps));
+        auto filter = MakeIntrusive<TOpFilter>(
+            semiJoin,
+            pos,
+            equality);
+        TOpRoot root(
+            filter,
+            pos,
+            {
+                factItemSk.GetFullName(),
+                itemId.GetFullName(),
+                itemSk.GetFullName(),
+            });
+        root.ComputeParents();
+        UNIT_ASSERT(semiJoin->IsSingleConsumer());
+
+        TPushFilterIntoJoinRule pushFilter;
+        const auto result =
+            pushFilter.SimpleMatchAndApply(filter, ctx.RboCtx, ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), semiJoin.Get());
+        UNIT_ASSERT_VALUES_EQUAL(semiJoin->JoinKind, "LeftSemi");
+        UNIT_ASSERT(
+            semiJoin->JoinKeys ==
+            (TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+                itemId,
+                itemId,
+            }}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            semiJoin->GetRightInput().Get(),
+            innerItem.Get());
+        UNIT_ASSERT(
+            semiJoin->GetLeftInput()->Kind == EOperator::Filter);
+
+        auto pushedFilter =
+            CastOperator<TOpFilter>(semiJoin->GetLeftInput());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pushedFilter->GetInput().Get(),
+            semiJoinInput.Get());
+        const auto& pushedIUs =
+            pushedFilter->FilterExpr.GetInputIUs(true, true);
+        UNIT_ASSERT_VALUES_EQUAL(pushedIUs.size(), 2);
+        UNIT_ASSERT(
+            std::find(pushedIUs.begin(), pushedIUs.end(), factItemSk) !=
+            pushedIUs.end());
+        UNIT_ASSERT(
+            std::find(pushedIUs.begin(), pushedIUs.end(), itemSk) !=
+            pushedIUs.end());
     }
 }
 

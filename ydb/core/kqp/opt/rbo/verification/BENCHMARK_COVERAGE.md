@@ -116,8 +116,8 @@ floor. Any later formula or proof still satisfies every weaker floor. The
 formula-construction floor requires TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
 q25, q29,
-q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71,
-q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99.
+q37, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68,
+q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99.
 Both floors are enforced only for a complete formula-only suite. The proof
 floor requires TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS
 q3, q42, q48, q52, q55, q69, q90, q93, q95, and q96;
@@ -187,7 +187,8 @@ The latest complete formula-only dashboards were rerun on 2026-07-24 after the
 correlated-COUNT repair, exact `DistinctAll` support, and restoration of the
 production PostgreSQL parser/runtime in the benchmark host, then added exact
 uncorrelated dynamic `IN`, the exact nullable Date-year projection bridge, and
-the side-explicit shared-IU/q95 aggregate slice. Together they emit the 51-query
+the side-explicit shared-IU/q95 aggregate slice, followed by exact same-type
+String dynamic `IN`. Together they emit the 53-query
 floor below and record an outcome for every workload entry. The policy contains
 twenty proof obligations: ten TPCH queries including q18 and ten TPC-DS queries
 including q95. The refreshed proof-floor gate is policy-valid and green: TPCH
@@ -207,14 +208,23 @@ same fail-closed reconstruction gate instead of stopping in host preparation.
 | Suite | Formula emitted | Unsupported | Optimizer failure | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 16 (q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q22) | 4 | 2 | 22 |
-| TPCDS_YQL | 35 (q3, q5, q6, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, q99) | 38 | 26 | 99 |
+| TPCDS_YQL | 37 (q3, q5, q6, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, q99) | 36 | 26 | 99 |
 
-The current TPCH dashboard spent 3,004/31,688 ms in preparation/verifier
+The current TPCH dashboard spent 2,917/30,877 ms in preparation/verifier
 work and produced report SHA-256
-`9ba059ae97bc66d4fdbafa200ba9ce74f25f831d3651bf7d7c0ccbd2206a5774`.
-Its TPC-DS counterpart spent 65,034/193,746 ms and produced
+`6258b600c86ba214fd456f9b26855ab4834314bed5557e25a3923828f9befe05`.
+Its TPC-DS counterpart spent 69,312/193,036 ms and produced
+`baaac25acbbca3bd0c1d2d3fdccbca7d6d017bce404108707d25bcf5a617eafa`.
+TPC-DS q6, q56, q60, and q95 emitted after 369/12,812, 1,275/957, 1,308/950,
+and 520/477 ms, respectively.
+
+The preceding 51-formula q95-expanded TPCH run spent 3,004/31,688 ms and
+produced
+`9ba059ae97bc66d4fdbafa200ba9ce74f25f831d3651bf7d7c0ccbd2206a5774`;
+its TPC-DS counterpart spent 65,034/193,746 ms and produced
 `a31813a6a2f24365680b6209e14a062e75e575d781b43611ca62e998fd4b1c8e`.
-TPC-DS q6 emitted after 406/13,069 ms and q95 after 463/463 ms.
+Those digests remain historical artifacts of the integral-only dynamic-`IN`
+inventory.
 
 The preceding 50-formula policy-checked TPCH run spent 2,897/29,563 ms in
 preparation/verifier work and produced
@@ -223,18 +233,18 @@ report SHA-256
 Its TPC-DS counterpart spent 64,077/192,905 ms and produced
 `279318f3d46f585bba33ede252bf723a5ece36c989215015c0046eb6677e8f29`.
 Those are retained historical artifacts rather than digests of the current
-q95-expanded reports.
+String-expanded reports.
 At that checkpoint TPC-DS q6 emitted its formula after 347/11,882 ms. Its
 canonical direct render is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation; a 60-second solver experiment
 remains `UNKNOWN`.
 
-The supported formula slice is 51/121 queries (42.1%), with 42 unsupported
-queries and 28 optimizer-preparation failures. Fifty-seven queries pass both
-snapshot exporters and enter the formula verifier, and 51/57 (89.5%) construct
+The supported formula slice is 53/121 queries (43.8%), with 40 unsupported
+queries and 28 optimizer-preparation failures. Fifty-nine queries pass both
+snapshot exporters and enter the formula verifier, and 53/59 (89.8%) construct
 formulas. Relative to all 93 optimizer-successful queries, including
-snapshot-boundary failures, formula coverage is 51/93 (54.8%). This is a useful
-end-to-end pre-physical optimizer sample, not a claim about the remaining 70
+snapshot-boundary failures, formula coverage is 53/93 (57.0%). This is a useful
+end-to-end pre-physical optimizer sample, not a claim about the remaining 68
 workload entries or larger inputs. Formula construction is not a bounded proof.
 
 At the preceding focused post-dashboard checkpoint, a semantic slice
@@ -246,7 +256,7 @@ floor: TPCH q2 passed both exporters and `MIN` but failed closed at a
 unsupported scalar `Map` in both snapshots. A small real-host column-store
 fixture containing both String predicates returned `VERIFIED_BOUNDED`.
 
-The next exact slice accepts one uncorrelated dynamic-`IN` binding with one
+The initial exact slice accepted one uncorrelated dynamic-`IN` binding with one
 typed lookup column, one typed inner-result column, and exactly one Filter
 consumer. The two columns must have the same non-null fixed-width integral
 type, and the binding itself must be non-null `Bool`. `OuterBind`,
@@ -268,7 +278,8 @@ proof floor. The real-host integration captures initial
 PostgreSQL support because the dummy provider failed query preparation. TPCH
 q16 and TPC-DS q95 passed this binding gate but stopped at later blockers in
 that run;
-nullable, `String`, and `Date` workload bindings remain explicitly unsupported.
+nullable, `String`, and `Date` workload bindings remained unsupported at that
+checkpoint.
 
 The subsequent exact nullable Date-year slice accepts only an
 `Optional<Uint16>` `Map` over the complete cast of one direct visible
@@ -319,9 +330,23 @@ closed.
 TPC-DS q95 now emits a 288,499-byte, 1,269-line formula and the dedicated
 two-row/two-task proof-floor row returns `VERIFIED_BOUNDED` after 512/3,013 ms
 of preparation/verification. It is pinned in both policy floors. The other
-former shared-IU queries now expose their earlier initial binding boundaries:
-q16/q94 require exactly one outer `EXISTS` dependency, while q33/q56/q60
-require a non-null fixed-width integral dynamic-`IN` result.
+former shared-IU queries then exposed their earlier initial binding boundaries:
+q16/q94 required exactly one outer `EXISTS` dependency, while q33/q56/q60
+required a non-null fixed-width integral dynamic-`IN` result.
+
+The current extension admits only the same exact non-null `String` type on both
+sides of dynamic `IN`; it retains the same existential-equality model and
+independent C++/Python validation as the integral slice. `Utf8`, nullable or
+coercing comparisons, Bool, Date, Decimal, and mismatched types remain
+fail-closed. This moves q56/q60 through formula construction and q45 through
+initial export to its independent final Read range/ordering blocker. q33, q58,
+and q83 remain at the initial dynamic-`IN` type boundary.
+
+Focused solver runs returned `COUNTEREXAMPLE` candidates for q56 after
+1,260/2,356 ms and q60 after 1,260/2,072 ms. Fixed-witness inspection
+reproduces both symbolic mismatches, but independent real-YDB replay remains
+mandatory. Neither candidate is a proof, a proof-floor entry, or a confirmed
+optimizer defect.
 
 ### TPCH inventory
 
@@ -421,8 +446,8 @@ q30, q32, q36, q39, q41, q44, q47, q49, q51, q53, q57, q63, q67, q70, q81,
 q86, q89, q92, and q98. q1, q30, q32, q81, and q92 are the computed correlated
 aggregate shapes rejected by the general empty-row reconstruction gate.
 
-The exporter matrix below covers the recorded boundary failures among 33 of
-the 38 unsupported queries in the current complete run. IDs can appear in both
+The exporter matrix below covers the recorded boundary failures among 31 of
+the 36 unsupported queries in the current complete run. IDs can appear in both
 exporter columns or under more than one reason because both snapshots are
 audited independently. The five queries that pass export and fail closed inside
 the verifier are listed after the matrix.
@@ -430,7 +455,7 @@ the verifier are listed after the matrix.
 | Unsupported reason | Initial snapshot | Final snapshot |
 |---|---|---|
 | `EXISTS` does not have exactly one outer dependency | q16, q94 | - |
-| Dynamic `IN` lookup/result is not one same non-null fixed-width integral type | q33, q45, q56, q58, q60, q83 | - |
+| Dynamic `IN` result is not a non-null fixed-width integer or exact `String` | q33, q58, q83 | - |
 | Static `SqlIn` tuple item annotation is nullable | - | q83 |
 | Scalar callable `Map` | q24 | q24 |
 | Invalid Map rename source `_yql_source_5.segment` | q54 | - |
@@ -442,6 +467,7 @@ the verifier are listed after the matrix.
 | Unavailable physical column `year` | - | q66 |
 | Restricted `Concat` has no storage-bounded String member | q66 | - |
 | Nullable integral `SafeCast` to Decimal | q18 | q18 |
+| Ordinary count-distinct input is not exact non-null `Int64` | q28 | - |
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `/` | q73, q78 | q73, q78 |
 | Callable `Unwrap` | q8, q38, q87 | q8, q38, q87 |
@@ -485,14 +511,16 @@ q9 remains unsupported on final Read range/ordering semantics, q24 reaches
 `Unsupported scalar callable Map` at both boundaries, and q54 fails initial
 export with `Invalid Map rename source _yql_source_5.segment`.
 
-The exact dynamic-`IN` gate first moved q95 through initial export. The later
+The integral dynamic-`IN` gate first moved q95 through initial export. The later
 side-explicit join-key and exact aggregate slice now carries it through formula
-construction and bounded proof. The other former shared-IU cases stop at their
-independent initial binding restrictions: q16/q94 have an `EXISTS` binding
-without exactly one outer dependency, while q33/q56/q60 require a non-null
-fixed-width integral dynamic-`IN` result. q45, q58, and q83 likewise fail
-closed on nullable, `String`, or `Date` lookup/result identities rather than
-introducing coercion or SQL-NULL semantics into this first slice.
+construction and bounded proof. At that checkpoint the other former shared-IU
+cases stopped at their independent initial binding restrictions: q16/q94 had an
+`EXISTS` binding without exactly one outer dependency, while q33/q56/q60
+required a non-null fixed-width integral dynamic-`IN` result. q45, q58, and q83
+likewise failed closed on nullable, `String`, or `Date` lookup/result identities
+rather than introducing coercion or SQL-NULL semantics into that first slice.
+The later exact String extension moves q56/q60 to formulas and q45 to final
+range semantics; q33/q58/q83 remain fail-closed.
 
 The focused q10/q35/q69 report spent 513/11,387, 542/0, and 324/1,004 ms in
 preparation/verification. q10 and q69 emit formulas; q35 clears the subplan
@@ -663,8 +691,8 @@ leaked intermediate state, and broken direct lineage. Focused C++ exporter
 tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
-The current dashboards emit 16/22 TPCH and 35/99 TPC-DS formulas, for 51/121
-(42.1%). They record 42 unsupported and 28 optimizer-failure queries. Exact
+The current dashboards emit 16/22 TPCH and 37/99 TPC-DS formulas, for 53/121
+(43.8%). They record 40 unsupported and 28 optimizer-failure queries. Exact
 `DistinctAll` adds TPC-DS q6; the correlated-COUNT correctness repair moves
 TPCH q17 and TPC-DS q1/q30/q32/q81/q92 to intentional optimizer-side
 fail-closed results. The preceding relational `EXISTS` milestone added TPCH
@@ -673,7 +701,8 @@ proof floor. Exact uncorrelated dynamic `IN` adds TPCH q18 to formula
 construction and the proof policy. The exact nullable Date-year bridge adds
 TPCH q7, q8, and q9 to formula construction without changing that proof policy.
 The side-explicit shared-IU and exact q95 aggregate slice adds TPC-DS q95 to
-both policies.
+both policies. Exact String dynamic `IN` adds q56/q60 to formula construction
+without changing the proof floor.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -688,12 +717,12 @@ contains twenty confirmed `VERIFIED_BOUNDED` obligations.
   two tasks. These are twenty bounded proofs, 20/121 (16.5%) of the workload,
   for the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
   The refreshed policy gate passes 10/10 TPCH and 10/10 TPC-DS, all
-  `VERIFIED_BOUNDED`. The current TPCH proof-floor report spent 1,201/63,429 ms
+  `VERIFIED_BOUNDED`. The current TPCH proof-floor report spent 1,190/66,607 ms
   and has SHA-256
-  `dd8d77b71093e5d022a779afd63507db3ad7d2ab63a6d89554c6de5a6aaa2fd4`;
-  TPC-DS spent 1,950/39,140 ms and has
-  `f320d97fbae20af9724442671d4fee3be910292507d0697d3890c739f45f68b3`.
-  Its q95 row spent 506/3,025 ms in preparation/verification. A preceding
+  `d64a3940e165de2bd8e57b81492c99c6303ca6f8e6956c7e9f85d081f97d01dc`;
+  TPC-DS spent 1,955/41,249 ms and has
+  `05cdf3877c999262b34d094b9c411412fe0ef37ae200959af442960c42b364a7`.
+  Its q95 row spent 495/3,039 ms in preparation/verification. A preceding
   dedicated q95 run measured 512/3,013 ms. The preceding nineteen-query report
   SHA-256 values were
   `20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`
@@ -1164,10 +1193,11 @@ counterexample was claimed.
 Dynamic `IN` now has its own typed relational descriptor rather than being
 treated as generic `EXISTS`. It names exactly one lookup column from the one
 Filter consumer and one result column from the inner root. Both are non-null,
-have the same fixed-width integral type, and remain virtual. The binding is
-non-null `Bool` and uncorrelated, and rejects `OuterBind`, `AddDependencies`,
-observable `EnsureAtMostOne`, nesting, staging, fanout, tuple mappings,
-coercions, and nullable or nonintegral types.
+have the same fixed-width integral or exact `String` type, and remain virtual.
+The binding is non-null `Bool` and uncorrelated, and rejects `OuterBind`,
+`AddDependencies`, observable `EnsureAtMostOne`, nesting, staging, fanout,
+tuple mappings, coercions, nullable values, `Utf8`, Bool, Date, Decimal, and
+mismatched types.
 
 The evaluator computes one Boolean membership value per present outer row as
 the OR of equal present inner values. Duplicate inner rows collapse and empty
@@ -1177,9 +1207,10 @@ evaluating the inner root are eager, including when no outer row is present.
 The outer/inner product is charged to one cumulative shared 16,384-pair cap.
 Focused tests cover duplicates, empty input, `NOT`, cache reuse, left-semi and
 left-anti reference equivalence, inherited errors, mapping mutations, every
-descriptor gate, and the exact cap. The real-host fixture proves initial
-dynamic `IN` equivalent to the final ordinary `left_semi` StageGraph at two
-rows and two tasks.
+descriptor gate, and the exact cap. Real-host integral and String fixtures
+prove initial dynamic `IN` equivalent to the final ordinary `left_semi`
+StageGraph at two rows and two tasks. Exhaustive finite-domain String tests
+cover duplicates, empty inputs, `NOT`, row presence, and reference equality.
 
 Equality-correlated scalar aggregation admits one dependency and one Project
 or Filter consumer. The no-fanout root path is
@@ -1206,7 +1237,8 @@ Exact uncorrelated dynamic `IN` and the exact nullable Date-year bridge raise
 the formula floor to 50 queries after the correlated-COUNT repair's intentional
 fail-closed reclassification. Side-explicit one-sided join keys, exact direct
 Uint64 `Just`, scalar final Uint64 SUM unwrap, and direct scalar
-`COUNT(DISTINCT Int64)` now raise the current floor to 51. Multiple
+`COUNT(DISTINCT Int64)` then raise the floor to 51. Exact String dynamic `IN`
+raises the current floor to 53. Multiple
 dependencies, broader correlations, nullable/coercing dynamic `IN`, range
 reads, and other OLAP pushdowns remain later work;
 solver/formula-size work promotes supported queries only after reproducible

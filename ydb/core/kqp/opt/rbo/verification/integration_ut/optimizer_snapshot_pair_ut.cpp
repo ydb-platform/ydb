@@ -325,6 +325,25 @@ void CreateExistsColumnTables(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateStringInColumnTables(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboStringInOuter` (
+            Id Int64 NOT NULL,
+            MatchKey String NOT NULL,
+            Payload Int64,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+
+        CREATE TABLE `/Root/RboStringInInner` (
+            Id Int64 NOT NULL,
+            MatchKey String NOT NULL,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 TKikimrRunner MakeTpcdsRunner() {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
@@ -755,6 +774,40 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         };
         assertColumn(subplan["lookup"]);
         assertColumn(subplan["output"]);
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*joins[0])["kind"].GetStringSafe(),
+            "left_semi");
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesUncorrelatedNonNullStringDynamicInAsLeftSemi) {
+        TKikimrRunner kikimr;
+        CreateStringInColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Payload
+            FROM `/Root/RboStringInOuter` AS outer_row
+            WHERE outer_row.MatchKey IN (
+                SELECT inner_row.MatchKey
+                FROM `/Root/RboStringInInner` AS inner_row
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["lookup"]["type"].GetStringSafe(),
+            "String");
+        UNIT_ASSERT(!subplan["lookup"]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["output"]["type"].GetStringSafe(),
+            "String");
+        UNIT_ASSERT(!subplan["output"]["nullable"].GetBooleanSafe());
 
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
         const auto joins = PlanNodes(pair.Final, "join");

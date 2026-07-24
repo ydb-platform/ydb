@@ -2547,8 +2547,14 @@ struct TCorrelatedScalarExportFixture {
     TIntrusivePtr<TOpFilter> Consumer;
 };
 
+enum class EInSubplanColumnKind {
+    Int32,
+    String,
+};
+
 struct TInSubplanExportFixture {
-    TInSubplanExportFixture()
+    explicit TInSubplanExportFixture(
+        EInSubplanColumnKind columnKind = EInSubplanColumnKind::Int32)
         : Int32(ScalarType(Ctx, NUdf::EDataSlot::Int32))
         , OptionalInt32(ScalarType(
               Ctx,
@@ -2560,16 +2566,31 @@ struct TInSubplanExportFixture {
               Ctx,
               NUdf::EDataSlot::Bool,
               true))
+        , String(ScalarType(Ctx, NUdf::EDataSlot::String))
+        , OptionalString(ScalarType(
+              Ctx,
+              NUdf::EDataSlot::String,
+              true))
+        , Utf8(ScalarType(Ctx, NUdf::EDataSlot::Utf8))
+        , Date(ScalarType(Ctx, NUdf::EDataSlot::Date))
+        , ColumnType(
+              columnKind == EInSubplanColumnKind::String
+                  ? String
+                  : Int32)
     {
+        const TString columnType =
+            columnKind == EInSubplanColumnKind::String
+                ? TString("String")
+                : TString("Int32");
         const auto& outerTable = AddTable(
             Ctx,
             "/Root/InOuter",
-            {{"k", "Int32", true}});
+            {{"k", columnType, true}});
         const auto& innerTable = AddTable(
             Ctx,
             "/Root/InInner",
             {
-                {"k", "Int32", true},
+                {"k", columnType, true},
                 {"other", "Int32", true},
             });
         OuterRead = MakeRead(Ctx, outerTable, "outer", {"k"});
@@ -2579,10 +2600,10 @@ struct TInSubplanExportFixture {
             innerTable,
             "wide",
             {"k", "other"});
-        SetExactOutputType(Ctx, *OuterRead, {{"outer.k", Int32}});
-        SetExactOutputType(Ctx, *InnerRead, {{"inner.k", Int32}});
+        SetExactOutputType(Ctx, *OuterRead, {{"outer.k", ColumnType}});
+        SetExactOutputType(Ctx, *InnerRead, {{"inner.k", ColumnType}});
         SetExactOutputType(Ctx, *WideInnerRead, {
-            {"wide.k", Int32},
+            {"wide.k", ColumnType},
             {"wide.other", Int32},
         });
 
@@ -2609,7 +2630,7 @@ struct TInSubplanExportFixture {
             OuterRead,
             Pos,
             BindingValue);
-        SetExactOutputType(Ctx, *Consumer, {{"outer.k", Int32}});
+        SetExactOutputType(Ctx, *Consumer, {{"outer.k", ColumnType}});
         Root->SetInput(Consumer);
     }
 
@@ -2624,6 +2645,11 @@ struct TInSubplanExportFixture {
     const TTypeAnnotationNode* const Int64;
     const TTypeAnnotationNode* const Bool;
     const TTypeAnnotationNode* const OptionalBool;
+    const TTypeAnnotationNode* const String;
+    const TTypeAnnotationNode* const OptionalString;
+    const TTypeAnnotationNode* const Utf8;
+    const TTypeAnnotationNode* const Date;
+    const TTypeAnnotationNode* const ColumnType;
     const TInfoUnit Binding{"_rbo_in", true};
     const TInfoUnit Lookup{"outer.k"};
     TIntrusivePtr<TOpRead> OuterRead;
@@ -13331,6 +13357,109 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             FindNode(wrapped, "sort")["id"].GetStringSafe(),
             wrapped["plan"]["subplans"][0]["root"].GetStringSafe());
         fixture.Entry().Plan = fixture.InnerRead;
+    }
+
+    Y_UNIT_TEST(ExportsExactUncorrelatedNonNullStringInSubplan) {
+        TInSubplanExportFixture fixture(EInSubplanColumnKind::String);
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog));
+        const auto& descriptor =
+            snapshot["plan"]["subplans"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["binding"].GetStringSafe(),
+            "_rbo_in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["kind"].GetStringSafe(),
+            "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["type"].GetStringSafe(),
+            "Bool");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["lookup"]["column"].GetStringSafe(),
+            "outer.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["lookup"]["type"].GetStringSafe(),
+            "String");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["lookup"]["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["column"].GetStringSafe(),
+            "inner.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["type"].GetStringSafe(),
+            "String");
+        UNIT_ASSERT_VALUES_EQUAL(
+            descriptor["output"]["nullable"].GetBooleanSafe(),
+            false);
+    }
+
+    Y_UNIT_TEST(StringInSubplanDomainContractsFailClosed) {
+        TInSubplanExportFixture fixture(EInSubplanColumnKind::String);
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+        const auto setResultType = [&](const TTypeAnnotationNode* type) {
+            SetExactOutputType(
+                fixture.Ctx,
+                *fixture.InnerRead,
+                {{"inner.k", type}});
+        };
+        const auto setLookupType = [&](const TTypeAnnotationNode* type) {
+            SetExactOutputType(
+                fixture.Ctx,
+                *fixture.OuterRead,
+                {{"outer.k", type}});
+        };
+
+        setResultType(fixture.OptionalString);
+        reject("result must be a non-null fixed-width integer or String");
+        setResultType(fixture.Utf8);
+        reject("result must be a non-null fixed-width integer or String");
+        setResultType(fixture.Bool);
+        reject("result must be a non-null fixed-width integer or String");
+        setResultType(fixture.Date);
+        reject("result must be a non-null fixed-width integer or String");
+        setResultType(DecimalType(fixture.Ctx, "12", "2"));
+        reject("result must be a non-null fixed-width integer or String");
+        setResultType(fixture.String);
+
+        setLookupType(fixture.OptionalString);
+        reject("lookup and result must have the same supported non-null type");
+        setLookupType(fixture.Utf8);
+        reject("lookup and result must have the same supported non-null type");
+        setLookupType(fixture.Int32);
+        reject("lookup and result must have the same supported non-null type");
+        setLookupType(fixture.String);
+
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "restored String IN subplan must remain supported");
     }
 
     Y_UNIT_TEST(InSubplanContractsFailClosed) {

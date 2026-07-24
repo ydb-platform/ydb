@@ -862,6 +862,13 @@ bool IsStringType(TStringBuf type) {
     return type == "String" || type == "Utf8";
 }
 
+bool IsExactDynamicInColumnType(TStringBuf type) {
+    // Dynamic IN is modeled as same-type equality over one non-null scalar
+    // domain.  Keep this narrower than general comparison compatibility:
+    // Utf8 and coercing comparisons have not been audited for this lowering.
+    return IsIntegerType(type) || type == "String";
+}
+
 bool StringComparisonCompatible(TStringBuf left, TStringBuf right) {
     return IsStringType(left) && IsStringType(right);
 }
@@ -5896,10 +5903,12 @@ private:
         }
 
         const auto outputType = ExactType(OutputType(*plan, output));
-        if (outputType.Nullable || !IsIntegerType(outputType.Name)) {
+        if (outputType.Nullable ||
+            !IsExactDynamicInColumnType(outputType.Name))
+        {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << binding
-                << " result must be a non-null fixed-width integer");
+                << " result must be a non-null fixed-width integer or String");
         }
         return {
             .Binding = binding,
@@ -6172,8 +6181,8 @@ private:
         {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << subplan.Binding
-                << " lookup and result must have the same non-null "
-                   "fixed-width integer type");
+                << " lookup and result must have the same supported "
+                   "non-null type");
         }
     }
 

@@ -27,21 +27,18 @@ namespace {
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_WARN("Error of resolving topic Retry",
-                    {"logPrefix", LogPrefix},
                     {"srcStreamPath", SrcStreamPath},
                     {"ev", ev->Get()->ToString()});
                 return Retry();
             }
 
             YDB_LOG_ERROR("Error of resolving topic Stop",
-                {"logPrefix", LogPrefix},
                 {"srcStreamPath", SrcStreamPath},
                 {"ev", ev->Get()->ToString()});
             return; // TODO: hard error
@@ -63,8 +60,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     }
 
     void Retry() {
-        YDB_LOG_DEBUG("Retry",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 

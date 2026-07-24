@@ -230,12 +230,10 @@ public:
 
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     if (ev->Cookie != CommittingTxId) {
         YDB_LOG_ERROR_CTX(ctx, "Cookie mismatch",
-            {"logPrefix", LogPrefix},
             {"expected", CommittingTxId},
             {"got", ev->Cookie});
         return;

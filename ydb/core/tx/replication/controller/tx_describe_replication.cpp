@@ -23,12 +23,10 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         if (!Targets.contains(ev->Cookie)) {
             YDB_LOG_WARN("Unknown describe response",
-                {"logPrefix", LogPrefix},
                 {"cookie", ev->Cookie});
             return;
         }
@@ -38,7 +36,6 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
 
         if (Result.contains(id)) {
             YDB_LOG_WARN("Duplicate describe response",
-                {"logPrefix", LogPrefix},
                 {"id", id},
                 {"path", path});
             return;
@@ -47,14 +44,12 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
         auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe succeeded",
-                {"logPrefix", LogPrefix},
                 {"id", id},
                 {"path", path});
             Result.emplace(id, std::move(result));
         } else {
             YDB_LOG_ERROR("Describe failed",
-                {"logPrefix", LogPrefix},
-                {"id", id},
+                                {"id", id},
                 {"path", path},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});

@@ -59,7 +59,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void Handle(TEvPrivate::TEvAllowCreateStream::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         CreateStream();
     }
@@ -89,25 +88,21 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_DEBUG("Retry CreateStream",
-                    {"logPrefix", LogPrefix});
+                YDB_LOG_DEBUG("Retry CreateStream");
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             YDB_LOG_ERROR("Error",
-                {"logPrefix", LogPrefix},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
             return Reply(std::move(result));
         } else {
             YDB_LOG_INFO("Success",
-                {"logPrefix", LogPrefix},
                 {"issues", result.GetIssues().ToOneLineString()});
             return CreateConsumer();
         }
@@ -146,7 +141,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
@@ -156,18 +150,15 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_DEBUG("Retry CreateConsumer",
-                    {"logPrefix", LogPrefix});
+                YDB_LOG_DEBUG("Retry CreateConsumer");
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             YDB_LOG_ERROR("Error",
-                {"logPrefix", LogPrefix},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
         } else {
             YDB_LOG_INFO("Success",
-                {"logPrefix", LogPrefix},
                 {"issues", result.GetIssues().ToOneLineString()});
         }
 
@@ -191,21 +182,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_WARN("Error of resolving topic Retry",
-                    {"logPrefix", LogPrefix},
                     {"buildStreamPath", BuildStreamPath()},
                     {"ev", ev->Get()->ToString()});
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             YDB_LOG_ERROR("Error of resolving topic Stop",
-                {"logPrefix", LogPrefix},
                 {"buildStreamPath", BuildStreamPath()},
                 {"ev", ev->Get()->ToString()});
             NYdb::NIssue::TIssues issues = result.GetIssues();

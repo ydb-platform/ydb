@@ -176,7 +176,6 @@ void TController::RunTxAssignTxId(const TActorContext& ctx) {
 
 void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     std::copy(ev->Get()->TxIds.begin(), ev->Get()->TxIds.end(), std::back_inserter(AllocatedTxIds));

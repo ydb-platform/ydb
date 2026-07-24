@@ -32,7 +32,6 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         const auto& entry = response->ResultSet.front();
 
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()},
             {"entry", entry});
 
@@ -41,7 +40,6 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
             break;
         default:
             YDB_LOG_WARN("Unexpected status",
-                {"logPrefix", LogPrefix},
                 {"entry", entry});
             return Reply(false);
         }
@@ -49,7 +47,6 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         if (!DomainKey) {
             if (!entry.DomainInfo) {
                 YDB_LOG_ERROR("Empty domain info",
-                    {"logPrefix", LogPrefix},
                     {"entry", entry});
                 return Reply(false);
             }

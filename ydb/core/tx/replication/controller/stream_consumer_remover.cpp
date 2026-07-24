@@ -29,7 +29,6 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         DropStreamConsumer();
     }
@@ -52,24 +51,20 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_DEBUG("Retry",
-                    {"logPrefix", LogPrefix});
+                YDB_LOG_DEBUG("Retry");
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
             YDB_LOG_ERROR("Error",
-                {"logPrefix", LogPrefix},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
         } else {
             YDB_LOG_INFO("Success",
-                {"logPrefix", LogPrefix},
                 {"issues", result.GetIssues().ToOneLineString()});
         }
 

@@ -29,13 +29,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Unknown describe path response",
-                {"logPrefix", LogPrefix},
                 {"cookie", ev->Cookie});
             return;
         }
@@ -46,7 +44,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe path succeeded",
-                {"logPrefix", LogPrefix},
                 {"path", path.first});
 
             const auto& entry = result.GetEntry();
@@ -73,7 +70,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
 
             YDB_LOG_WARN("Unsupported entry type",
-                {"logPrefix", LogPrefix},
                 {"path", path.first},
                 {"type", entry.Type});
 
@@ -82,7 +78,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
         } else {
             YDB_LOG_ERROR("Describe path failed",
-                {"logPrefix", LogPrefix},
                 {"path", path.first},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()},
@@ -107,13 +102,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Unknown describe table response",
-                {"logPrefix", LogPrefix},
                 {"cookie", ev->Cookie});
             return;
         }
@@ -124,13 +117,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe table succeeded",
-                {"logPrefix", LogPrefix},
                 {"path", path.first});
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             YDB_LOG_INFO("Add target",
-                {"logPrefix", LogPrefix},
                 {"srcPath", target.Config->GetSrcPath()},
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
@@ -151,14 +142,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                         CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
                     ));
                 YDB_LOG_INFO("Add target",
-                    {"logPrefix", LogPrefix},
                     {"srcPath", target.Config->GetSrcPath()},
                     {"dstPath", target.Config->GetDstPath()},
                     {"kind", target.Kind});
             }
         } else {
             YDB_LOG_ERROR("Describe table failed",
-                {"logPrefix", LogPrefix},
                 {"path", path.first},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
@@ -182,13 +171,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
             YDB_LOG_WARN("Unknown describe topic response",
-                {"logPrefix", LogPrefix},
                 {"cookie", ev->Cookie});
             return;
         }
@@ -199,19 +186,16 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe topic succeeded",
-                {"logPrefix", LogPrefix},
                 {"path", path.first});
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
                 std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
             YDB_LOG_INFO("Add target",
-                {"logPrefix", LogPrefix},
                 {"srcPath", target.Config->GetSrcPath()},
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
         } else {
             YDB_LOG_ERROR("Describe topic failed",
-                {"logPrefix", LogPrefix},
                 {"path", path.first},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
@@ -267,13 +251,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         auto it = Listings.find(ev->Cookie);
         if (it == Listings.end()) {
             YDB_LOG_WARN("Unknown listing response",
-                {"logPrefix", LogPrefix},
                 {"cookie", ev->Cookie});
             return;
         }
@@ -282,7 +264,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Listing succeeded",
-                {"logPrefix", LogPrefix},
                 {"path", path.first});
 
             for (const auto& child : result.GetChildren()) {
@@ -307,7 +288,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         } else {
             YDB_LOG_ERROR("Listing failed",
-                {"logPrefix", LogPrefix},
                 {"path", path.first},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});

@@ -260,6 +260,8 @@ template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
 
+    static constexpr bool FlushOnYield = false;
+
     TInMemoryHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
                     TSides<const NPackedTuple::TTupleLayout*> layouts)
         : Logger_(ctx.MakeLogger())
@@ -371,6 +373,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
+
+    static constexpr bool FlushOnYield = false;
 
     struct Init {};
 
@@ -1048,6 +1052,12 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
             onFlush(output.Flush());
             return EFetchResult::One;
         case EFetchResult::Yield:
+            if constexpr (JoinType::FlushOnYield) {
+                if (output.SizeTuples() > 0) {
+                    onFlush(output.Flush());
+                    return EFetchResult::One;
+                }
+            }
             return EFetchResult::Yield;
         case EFetchResult::One:
             break;

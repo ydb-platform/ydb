@@ -42,6 +42,7 @@ jobs:
       binary-name: ydb-dstool
       additional-ya-make-args: "-DUSE_SSE4=no"
       version-argument: "--version"
+      windows-runner: "windows-2022"
       ref: ${{ inputs.commit_sha || github.ref }}
       build-linux-amd: ${{ inputs.build-linux-amd }}
       build-linux-arm: ${{ inputs.build-linux-arm }}

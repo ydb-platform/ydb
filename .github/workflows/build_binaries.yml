@@ -33,6 +33,10 @@ on:
         description: 'macOS runner to use'
         type: string
         default: 'macos-latest'
+      windows-runner:
+        description: 'Windows runner to use'
+        type: string
+        default: 'windows-latest'
       additional-ya-make-args:
         description: >-
           Extra ya make arguments as a single string. Separate multiple flags with a space;
@@ -60,6 +64,7 @@ jobs:
           BINARY="${{ inputs.binary-name }}"
           BINARY_WIN="${{ inputs.binary-name }}.exe"
           MACOS_RUNNER="${{ inputs.macos-runner }}"
+          WINDOWS_RUNNER="${{ inputs.windows-runner }}"
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux-amd }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-amd", "runner": "ubuntu-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-X86_64"}]')
@@ -78,7 +83,7 @@ jobs:
             echo "Matrix after adding darwin-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-windows-amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY_WIN" '.include += [{"os": "windows-amd", "runner": "windows-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-WIN-X86_64"}]')
+            MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY_WIN" --arg runner "$WINDOWS_RUNNER" '.include += [{"os": "windows-amd", "runner": $runner, "shell": "bash", "binary": $binary, "platform": "DEFAULT-WIN-X86_64"}]')
             echo "Matrix after adding windows-amd: $MATRIX"
           fi
           echo "Final output matrix: $MATRIX"

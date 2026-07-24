@@ -686,7 +686,10 @@ Implementation sequence:
 50. M4: bounded exact Sort/TopSort/Merge sorting networks with coherent
     whole-row transport, finite tie ranks, producer-order-preserving Merge,
     and TPCH q2 formula coverage;
-51. next: nested subplans exposed by TPC-DS q58/q83, q83's final static
+51. M4: one-constructor packed-row sorting-network transport, one exact shared
+    comparator definition per network outcome, exact present-prefix sequence
+    equality, and TPC-DS q59/q78 formula coverage;
+52. M4 next: nested subplans exposed by TPC-DS q58/q83, q83's final static
     nullable-Date `SqlIn`, more than two dependencies, broader correlations,
     coercing and nullable-String dynamic `IN`, range reads, and other OLAP
     pushdowns.
@@ -770,31 +773,41 @@ outcomes.
 When that pair representation is too large, or a TopSort prefix must be
 materialized before a downstream Merge, an audited bitonic sorting network
 uses one finite permutation rank per candidate. SQL key order dominates the
-rank and the rank orders exact ties; present rows dominate absent rows.
-Compare-exchange moves the complete row, including NULL flags and hidden
-Decimal AVG sum/count state, under one condition. Power-of-two false padding is
-unobservable, and the retained output slots form a proven present prefix, so
-ordered Limit can take its literal `offset:offset+count` slice directly. Merge
-uses the same network only with concrete producer ordinals and adds rank chains
-in each semantic producer order, yielding exactly the legal cross-producer
-interleavings. Small explicit permutation selection deliberately continues to
-use the full shaped row vector. The bounded-ordinal representation remains the
-latent-order model for unordered bags. Sort and Limit phases are preserved but
-do not independently change the modeled runtime semantics. If the initial root
-is ordered, results are compared as compressed sequences; otherwise they are
-compared as bags.
+rank and the rank orders exact ties; present rows dominate absent rows. Each
+nontrivial outcome encodes every live row as a value of one shared
+one-constructor SMT datatype containing its presence lane, every nullable flag
+and scalar value, and every hidden Decimal AVG sum/count lane. One
+quantifier-free `define-fun` per outcome contains the complete SQL key
+comparison over two payloads and their tie ranks. Each compare-exchange output
+consequently selects one whole payload with one `ite` and its rank with one
+`ite`, instead of rebuilding the same condition for every scalar lane.
+Power-of-two false padding is unobservable, and the retained output slots form
+a proven present prefix, so ordered Limit can take its literal
+`offset:offset+count` slice directly. When both result sequences have that
+invariant, equality compares aligned slots and requires any unmatched suffix to
+be absent; this is the exact compressed-sequence equality without the
+quadratic rank matrix. Merge uses the same network only with concrete producer
+ordinals and adds rank chains in each semantic producer order, yielding exactly
+the legal cross-producer interleavings. Small explicit permutation selection
+deliberately continues to use the full shaped row vector. The bounded-ordinal
+representation remains the latent-order model for unordered bags. Sort and
+Limit phases are preserved but do not independently change the modeled runtime
+semantics. If the initial root is ordered, results are compared as compressed
+sequences; otherwise they are compared as bags.
 
 Every materialized relation fails closed above 4096 candidate rows. Join
 matching/output, UnionAll, and grouped-aggregate sizes are checked before their
 large intermediates are allocated. Sort, Merge, and latent-sequence pair
 preflights charge only syntactically live slots. Sort and concrete-order Merge
-may instead use the exact network above, bounded by 32768 comparators and
-131072 comparator/column pairs; the latter is the stable row-transport
-construction metric. If neither exact representation fits, construction fails
-closed above 16384 pairs before allocating permutations or ordinals. Network
-Merge also replaces the later directional producer-order encoding when only
-that combined cost exceeds the pair cap. Representation selection and small
-explicit permutations/interleavings remain based on the full shaped row vector.
+may instead use the exact network above, bounded by 32768 comparators, 131072
+logical packed-payload cells, and 64 ordering columns. The payload metric is
+live input rows times scalar lanes; it is an auditably stable logical-width
+gate, not a Python-memory or formula-byte estimate. If neither exact
+representation fits, construction fails closed above 16384 pairs before
+allocating permutations or ordinals. Network Merge also replaces the later
+directional producer-order encoding when only that combined cost exceeds the
+pair cap. Representation selection and small explicit
+permutations/interleavings remain based on the full shaped row vector.
 Explicit outcome families separately fail closed above 256
 alternatives; that cap applies to non-singleton unordered-Limit masks,
 canonical checked-error outcomes, small enumerated ordered choices, and family
@@ -1572,32 +1585,52 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   239/8,940 ms and produced report SHA-256
   `2c9dd4e765f4507bd952189055d67a0db5cf818ecb84abe188bfcdd8a15122e0`.
 - Exact Sort/TopSort/Merge networks replace quadratic ordinal construction
-  only within explicit comparator and row-transport budgets. Finite distinct
-  tie ranks, present-before-absent comparison, coherent whole-row swaps, and
-  concrete producer-order rank chains make the representation exact.
-  Present-prefix metadata is preserved only through audited row-preserving
-  operations and lets ordered Limit compact a TopSort before Merge.
+  only within explicit comparator, logical payload-width, and key-width
+  budgets. Finite distinct tie ranks, present-before-absent comparison,
+  coherent whole-row swaps, and concrete producer-order rank chains make the
+  representation exact. Present-prefix metadata is preserved only through
+  audited row-preserving operations and lets ordered Limit compact a TopSort
+  before Merge.
 
-  Focused TPCH q2 now returns `FORMULA_EMITTED` at two rows and two tasks:
+  At the initial per-lane carrier milestone, focused TPCH q2 returned
+  `FORMULA_EMITTED` at two rows and two tasks:
   problem construction takes 11.469 seconds, canonical rendering takes 15.931
   seconds, and the formula is 62,274,331 bytes. Its two 128-row local networks
-  each cost 37,632 comparator/column pairs and its 200-row Merge costs 96,768,
-  all within the 131,072 cap. The policy adds q2 to preparation and formula
-  floors but not to bounded proof.
+  each cost 37,632 comparator/column transports and its 200-row Merge costs
+  96,768 under that carrier's cap. The policy added q2 to preparation and
+  formula floors but not to bounded proof.
 
-  Uncapped diagnostics establish why TPC-DS q59 and q78 remain entry-only.
-  q59's 256-row, 139-column initial network costs 640,512
-  comparator/column pairs; its problem took 150.767 seconds and 1,929,948 KiB
-  to construct before rendering. q78's 324-row, 22-column local network costs
-  253,440 pairs. Its complete diagnostic obligation took 58.349 seconds to
-  construct and 96.503 seconds to render, occupied 380,762,155 bytes, and
-  contained about 4.42 million unique SMT nodes. The audited cap rejects both
-  shapes quickly; a fused/factorized TopK carrier is still required before they
-  become practical formulas. In the current complete dashboard q59 and q78
-  fail closed after 869/1,356 and 1,171/14,122 ms of preparation/verifier work,
-  respectively. These diagnostics are not solver proofs. Complete validation
-  passes 551/551 Python verifier tests, 207/207 C++ exporter tests, and 14/14
-  coverage-policy tests.
+  The subsequent packed carrier removes that width multiplier from every
+  compare-exchange. Each nontrivial network outcome declares one
+  one-constructor product datatype over the complete row lanes and one closed,
+  quantifier-free `define-fun` for SQL ordering over two payloads and two tie
+  ranks. A cell then transports one payload and one rank. Layout validation
+  independently checks lane sorts, Decimal bounds, and complete AVG state; it
+  retains only occurrence and partition metadata common to every live input.
+  Zero- and one-live-row outcomes allocate neither declaration.
+
+  The separate 131,072-cell safety gate now charges live rows times packed
+  scalar lanes, not comparator count times column count and not estimated
+  memory. The observed q59 256-row/139-column initial shape costs 71,424 cells,
+  its 1,024-row/36-column final shape costs 74,752, and q78's
+  324-row/22-column shape costs 14,580. All remain below the logical payload
+  cap; the independent 32,768-comparator and 64-order-column gates remain.
+  Exact aligned present-prefix equality also avoids reconstructing a quadratic
+  compressed-rank matrix at the final comparison.
+
+  Focused production-host runs now return `FORMULA_EMITTED` for both TPC-DS
+  rows. q59 takes 44.66 seconds, peaks at 1,707,844 KiB RSS, and emits a
+  116,879,360-byte formula with four datatypes and four comparator definitions
+  (SHA-256
+  `3a140fcb1b5d6a5145c4aa30cbcd817167a27f21bed94d85ef969223dce73c8e`).
+  q78 takes 57.06 seconds, peaks at 2,006,884 KiB RSS, and emits a
+  202,469,546-byte formula with three datatypes and three comparator definitions
+  (SHA-256
+  `fb0eaebb95ea9bdfb3b0f815f5078a70d1c2e3765ed5d6675be1c4f06b8249c4`).
+  These are exact bounded obligations, but they were not solved: both results
+  are formula coverage only, add no bounded proof, and reveal no optimizer
+  correctness bug. The complete hermetic verifier target passes 564/564 tests,
+  and the updated coverage-policy target passes 14/14.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
   writes a structured timeout-aware version-five report, and preserves
   diagnostic artifacts for every captured boundary, correctness, unknown,
@@ -1607,7 +1640,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1 and TPC-DS q5, q59, q65, q78,
-  and q80 must reach the verifier, the 65-query formula floor must keep
+  and q80 must reach the verifier, the 67-query formula floor must keep
   constructing SMT, and the twenty-six-query hermetic proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
   entry tier; later formulas and proofs satisfy every weaker semantic tier
@@ -1618,24 +1651,29 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   remove the former factorial and repeated-structure construction gates.
 
   The current complete policy-checked formula dashboards, generated on
-  2026-07-24, include the bounded exact sorting-network slice used by TPCH q2.
+  2026-07-24, include the packed sorting-network carrier and both q59/q78
+  formulas.
   TPCH's semantic partition is 18 formulas, two unsupported queries, and two
-  no-pair optimizer failures; TPC-DS has 47 formulas, 34 unsupported queries,
+  no-pair optimizer failures; TPC-DS has 49 formulas, 32 unsupported queries,
   and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
-  73/99 TPC-DS queries and fails for the other 2 and 26. Eight failed TPC-DS
-  preparations retain exact pairs and overlap the unsupported inventory.
-  Across both suites, 65/121 queries construct formulas (53.7%), 65/101 exact
-  pairs do so (64.4%), 65/93 do so within the preparation-successful subset
-  (69.9%), and 65/72 verifier entrants do so (90.3%). The 36 unsupported rows
-  split by primary reason into 27 initial-export, two final-export, and seven
+  73/99 TPC-DS queries and fails for the other 2 and 26. TPCH retains 20 exact
+  pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 54
+  verifier entrants. Eight failed TPC-DS preparations retain exact pairs and
+  overlap the unsupported inventory.
+  Across both suites, 67/121 queries construct formulas (55.4%), 67/101 exact
+  pairs do so (66.3%), 67/93 do so within the preparation-successful subset
+  (72.0%), and 67/72 verifier entrants do so (93.1%). The 34 unsupported rows
+  split by primary reason into 27 initial-export, two final-export, and five
   verifier results.
 
-  The complete TPCH formula dashboard spent 2,955/80,517 ms in
+  The complete TPCH formula dashboard spent 2,857/31,100 ms in
   preparation/verifier work and produced report SHA-256
-  `9e8e82eda83f5c45a420111dd0326234f80677990064264614199b34618ed7a4`;
-  TPC-DS spent 69,308/318,193 ms and produced
-  `c45d82cacb38cffd3f0676da494394413715b967c80e64944d7fc1bfdb471453`.
-  Both complete formula-only policy runs are green.
+  `bfe8fd75c81e9eccd8b511f05f5e23e0e947b3e35d69b9d56d0304b0eb56ee0f`;
+  TPC-DS spent 65,258/475,399 ms and produced
+  `44254733785284105840e269653f3cae79384db985cf13260906df57cf1deaa6`.
+  Both complete formula-only policy runs are green. Within the TPC-DS run, q59
+  emits after 828/74,462 ms and q78 after 1,042/113,216 ms of
+  preparation/verifier work.
 
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
@@ -1644,18 +1682,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   It spent 3,186/0 ms and produced report SHA-256
   `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
-  The preparation-successful formula gap is estimated at 8--10 feature
-  families or 10--16 narrow milestones. The numeric primary-first-blocker
-  cluster is now nine `Double` queries; q73 emits, while q78 remains in
-  the factorized-construction cluster, which now has seven primary
-  blockers. Adding exact window semantics for the
-  newly visible failed-preparation pairs makes the full captured-pair gap
-  roughly 10--12 families or 14--22 milestones. Approximate projections from
-  the current 65 formulas are 71--77 after another 3--5 milestones, 81--89
-  after 8--12, and 89--94 preparation-successful formulas after 10--16. Later
+  The packed carrier removes one feature family and two queries from the prior
+  preparation-successful gap, leaving an estimated 7--9 feature families or
+  9--15 narrow milestones. The numeric primary-first-blocker cluster remains
+  nine `Double` queries; q78 now emits, and the factorized-construction cluster
+  falls from seven to five primary blockers. Adding exact window semantics for
+  the newly visible failed-preparation pairs makes the full captured-pair gap
+  roughly 9--11 families or 13--21 milestones. Approximate projections from
+  the current 67 formulas are 73--79 after another 3--5 milestones, 83--91
+  after 8--12, and 89--93 preparation-successful formulas after 9--15. Later
   blockers can change these workload-targeted ranges. A safer engineering
-  budget for clean, reusable implementations is about 13--20 milestones for
-  the preparation-successful gap and 18--28 for all captured pairs. The 20
+  budget for clean, reusable implementations is about 12--19 milestones for
+  the preparation-successful gap and 17--27 for all captured pairs. The 20
   no-pair entries require
   frontend/optimizer progress; the present captured-pair ceiling is 101/121,
   and formula construction is not solver proof.
@@ -1882,8 +1920,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   triangle at 16384 candidate-row pairs. Remaining verifier-side construction
   blockers include TPC-DS q4's 20,736-pair join match, q64's 8,192-row join
   output, q11/q74's 8,126,496-pair Sort constructions, q31's 8,386,560-pair
-  Sort construction, and q59/q78's 640,512- and 253,440-cell networks. q1, q5,
-  q25, q29, q46, q65, q68, q77,
+  Sort construction, and other shapes outside the comparator, logical payload,
+  or key-width network gates. q1, q5, q25, q29, q46, q59, q65, q68, q77, q78,
   q80, and q91 now construct complete formulas instead of stopping at their
   historical aggregate, Sort, or Merge gates.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
@@ -2426,7 +2464,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 65 formula-construction and twenty-six curated proof obligations have
+- The 67 formula-construction and twenty-six curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   twenty-six as `VERIFIED_BOUNDED`; four focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

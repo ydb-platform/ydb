@@ -80,8 +80,44 @@ namespace NActors {
             kChunkSerializer,
             kHeader,
         };
+        class TEventQueue {
+            IEventHandle *First = nullptr;
+            IEventHandle *Last = nullptr;
+
+        public:
+            ~TEventQueue() {
+                while (Peek()) {
+                    Pop();
+                }
+            }
+
+            bool Push(std::unique_ptr<IEventHandle> ev) {
+                const bool res = !First; // was this the first one
+                ev->NextLinkPtr.store(0, std::memory_order_relaxed);
+                if (Last) {
+                    Last->NextLinkPtr.store(reinterpret_cast<uintptr_t>(ev.get()), std::memory_order_relaxed);
+                } else {
+                    First = ev.get();
+                }
+                Last = ev.release();
+                return res;
+            }
+
+            IEventHandle *Peek() const {
+                return First;
+            }
+
+            void Pop() {
+                Y_DEBUG_ABORT_UNLESS(Last && First);
+                std::unique_ptr<IEventHandle> temp(First);
+                First = reinterpret_cast<IEventHandle*>(First->NextLinkPtr.load(std::memory_order_relaxed));
+                if (!First) {
+                    Last = nullptr;
+                }
+            }
+        };
         struct TPerChannelQueue {
-            std::deque<std::unique_ptr<IEventHandle>> Events;
+            TEventQueue Events;
             std::deque<TRcBuf> SystemRequests;
             TEventHeader EventHeader;
             size_t EventHeaderOffset = 0;

@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TPC-C bars · since 2026-07-13</title>
+<title>TPC-C Now</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
     --muted: #656d76; --bad: #cf222e; --warn: #bf8700; --ok: #1a7f37; --info: #0969da;
+    --broken: #a40e26; --broken-bg: #ffd7d5;
+    --regress: #bc4c00; --regress-bg: #fff1e5;
+    --miss: #8250df; --miss-bg: #fbefff;
   }
   * { box-sizing: border-box; }
   body {
@@ -16,1207 +19,705 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: var(--bg); color: var(--text); line-height: 1.4;
   }
-  .wrap { max-width: 1600px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 64px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   h2 { font-size: 16px; margin: 22px 0 10px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
-  .badge {
-    display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px;
-    text-transform: uppercase; white-space: nowrap;
-  }
-  .badge.regression, .badge.broken { background:#ffebe9; color:var(--bad); }
-  .badge.watch { background:#fff8c5; color:var(--warn); }
-  .badge.ok { background:#dafbe1; color:var(--ok); }
-  .badge.worse { background:#ffebe9; color:var(--bad); }
-  .badge.best { background:#dafbe1; color:var(--ok); }
-  .badge.solo { background:#eaeef2; color:var(--muted); }
-  .badge.high { background:#ffebe9; color:var(--bad); }
-  .badge.medium { background:#fff8c5; color:var(--warn); }
-  .badge.low { background:#eaeef2; color:var(--muted); }
   .note {
     background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 8px;
-    padding: 10px 12px; font-size: 13px; color: #0550ae; margin: 10px 0 14px;
+    padding: 10px 12px; font-size: 13px; color: #0550ae; margin: 0 0 14px;
   }
-  .legend {
-    display:flex; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--muted); margin: 8px 0 14px;
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 999px; text-transform: uppercase; white-space: nowrap;
   }
-  .legend i { display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:5px; vertical-align: -1px; }
-  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin: 0 0 14px; }
-  .toolbar button {
+  .badge.broken { background: var(--broken-bg); color: var(--broken); }
+  .badge.missing { background: var(--miss-bg); color: var(--miss); }
+  .badge.regression, .badge.both, .badge.lat, .badge.tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
+  .badge.in_progress { background: #ddf4ff; color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    background: #eaeef2; color: var(--muted); font-weight: 600;
+  }
+  .counters {
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px;
+  }
+  @media (max-width: 800px) { .counters { grid-template-columns: repeat(2, 1fr); } }
+  .counter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .counter .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .counter.hot .n { color: var(--broken); }
+  .counter.regress .n { color: var(--regress); }
+  .counter.miss .n { color: var(--miss); }
+  .counter.info .n { color: var(--info); }
+  .counter.warn .n { color: var(--warn); }
+  .counter.ok .n { color: var(--ok); }
+
+  .heat-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    overflow: auto; margin-bottom: 18px;
+  }
+  table.heat { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  table.heat th:first-child, table.heat td:first-child { text-align: left; position: sticky; left: 0; background: #fafbfc; }
+  table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+  .cell {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
+  }
+  .cell.ok { background: #dafbe1; color: var(--ok); }
+  .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
+  .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
+  .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
+  .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell .cnt { font-size: 11px; opacity: .85; }
+  .heat-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .heat-legend .swatch { display: inline-flex; align-items: center; gap: 6px; }
+  .heat-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 0 0 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+  select, input[type="date"] {
+    min-width: 140px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; font: inherit;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .toolbar button, .btn {
     border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
     padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
   }
-  .toolbar button:hover { border-color: var(--info); color: var(--info); }
-  .filters {
-    display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin: 0 0 14px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
-  }
-  label { display:grid; gap:3px; font-size:11px; color:var(--muted); }
-  select { min-width: 140px; padding: 6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; font:inherit; }
+  .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
 
-  /* regressions table */
-  .reg-tree { display: grid; gap: 10px; }
-  .reg-branch {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
-  }
-  .reg-branch.hot { border-color: #ff818266; }
-  .reg-branch > summary {
-    list-style: none; cursor: pointer; user-select: none;
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    padding: 11px 14px; background: #f6f8fa;
-  }
-  .reg-branch[open] > summary { border-bottom: 1px solid var(--border); }
-  .reg-branch > summary::-webkit-details-marker { display:none; }
-  .reg-branch-left { display:flex; align-items:center; gap:10px; }
-  .chev { width:18px; color:var(--muted); transition: transform .15s ease; display:inline-flex; justify-content:center; }
-  details[open] > summary > .reg-branch-left > .chev,
-  details[open] > summary > .rt-left > .chev,
-  details.branch[open] > summary .chev,
-  details.runtype[open] > summary .chev { transform: rotate(90deg); }
-  .branch-name, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--info); font-weight: 650; }
-  .reg-body { padding: 0; }
-  table.reg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.reg-table th {
+  table.inbox { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table.inbox th {
     text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
     padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
-    position: sticky; top: 0;
   }
-  table.reg-table td {
-    padding: 9px 10px; border-bottom: 1px solid var(--border);
-    vertical-align: top; font-variant-numeric: tabular-nums;
+  table.inbox td {
+    padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top;
+    font-variant-numeric: tabular-nums;
   }
-  table.reg-table tr:last-child td { border-bottom: 0; }
-  table.reg-table tr.row-regression { background: #fff8f8; }
-  table.reg-table tr.row-broken { background: #fff1f0; }
-  table.reg-table tr.row-watch { background: #fffcf0; }
-  table.reg-table tr.reg-main { cursor: pointer; }
-  table.reg-table tr.reg-main:hover { filter: brightness(0.985); }
-  table.reg-table tr.reg-main td:first-child .row-chev {
-    display: inline-block; width: 14px; color: var(--muted); transition: transform .15s ease;
-  }
-  table.reg-table tr.reg-main.open td:first-child .row-chev { transform: rotate(90deg); }
-  table.reg-table tr.reg-charts td {
-    background: #f6f8fa; padding: 12px;
-  }
-  table.reg-table tr.reg-charts.hidden { display: none; }
-  .reg-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  @media (max-width: 900px) { .reg-pair { grid-template-columns: 1fr; } }
-  .num { text-align: right; }
-  .cluster-cell { font-weight: 700; }
+  table.inbox tr:last-child td { border-bottom: 0; }
+  table.inbox tr.row { cursor: pointer; }
+  table.inbox tr.row:hover { filter: brightness(0.985); }
+  table.inbox tr.row.open { background: #f6f8fa; }
+  table.inbox tr.detail td { background: #f6f8fa; padding: 12px 14px; }
+  table.inbox tr.detail.hidden { display: none; }
+  .cluster { font-weight: 700; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
   .muted { color: var(--muted); font-size: 12px; }
-  .bad { color: var(--bad); } .flat { color: var(--muted); }
-  .commit { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .bad { color: var(--bad); }
+  .num { text-align: right; }
 
-  /* charts tree */
-  .branch {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    margin-bottom: 12px; overflow: hidden;
+  .dive { display: grid; gap: 12px; }
+  .runs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  @media (max-width: 800px) { .runs { grid-template-columns: 1fr; } }
+  .run-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
   }
-  .branch.hot { border-color: #ff818266; }
-  .branch > summary.branch-sum {
-    list-style: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 12px 14px; background: #f6f8fa; user-select: none;
-  }
-  .branch[open] > summary.branch-sum { border-bottom: 1px solid var(--border); }
-  .branch > summary.branch-sum::-webkit-details-marker { display: none; }
-  .branch-left { display:flex; align-items:center; gap:10px; min-width:0; }
-  .branch-stats { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
-  .branch-body { padding: 10px 12px 12px; }
-  .runtype {
-    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: #fff;
-  }
-  .runtype:last-child { margin-bottom: 0; }
-  .runtype.hot { border-color: #ff818266; }
-  .runtype > summary.rt-sum {
-    list-style: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 9px 12px; background: #fafbfc; user-select: none;
-  }
-  .runtype[open] > summary.rt-sum { border-bottom: 1px solid var(--border); }
-  .runtype > summary.rt-sum::-webkit-details-marker { display: none; }
-  .rt-left { display:flex; align-items:center; gap:8px; }
-  .rt-name { font-size: 13px; font-weight: 650; }
-  .rt-body { padding: 10px; }
-  .cluster-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
-  }
-  @media (max-width: 720px) {
-    .cluster-grid { grid-template-columns: 1fr; }
-  }
-  .cluster-block {
-    background: #f6f8fa; border: 1px solid var(--border); border-radius: 10px; padding: 10px;
-  }
-  .cluster-block.hot { border-color: #ff818266; background: #fff8f8; }
-  .cluster-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
-  }
-  .cluster-title { font-size: 14px; font-weight: 700; }
-  .cluster-meta { font-size: 11px; color: var(--muted); }
-  .pair { display: flex; flex-direction: column; gap: 8px; }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px;
-  }
-  .card.hot { border-color: #ff818266; box-shadow: 0 0 0 1px #ffebe9 inset; }
-  .card .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; margin-bottom: 2px; }
-  .card .ttl { font-size: 13px; font-weight: 650; }
-  .card .subttl { font-size: 11px; color: var(--muted); margin-bottom: 4px; min-height: 16px; }
-  .chart-box { position: relative; height: 220px; }
-  .pill { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #eaeef2; color: var(--muted); }
-
-  .tabs {
-    display: flex; gap: 6px; margin: 16px 0 18px; border-bottom: 1px solid var(--border);
-    padding-bottom: 0;
-  }
-  .tab-btn {
-    border: 1px solid transparent; border-bottom: none; background: transparent;
-    padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 650;
-    color: var(--muted); cursor: pointer; border-radius: 8px 8px 0 0; margin-bottom: -1px;
-  }
-  .tab-btn:hover { color: var(--text); background: #fff; }
-  .tab-btn.active {
-    color: var(--text); background: var(--panel);
-    border-color: var(--border); border-bottom-color: var(--panel);
-  }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-  .cmp-slice {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    margin-bottom: 12px; overflow: hidden;
-  }
-  .cmp-slice > summary {
-    list-style: none; cursor: pointer; user-select: none;
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    padding: 11px 14px; background: #f6f8fa;
-  }
-  .cmp-slice[open] > summary { border-bottom: 1px solid var(--border); }
-  .cmp-slice > summary::-webkit-details-marker { display: none; }
-  .cmp-body { padding: 12px; }
-  .cmp-charts {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;
-  }
-  @media (max-width: 900px) { .cmp-charts { grid-template-columns: 1fr; } }
-  .best { background: #dafbe1 !important; }
-  .worst { background: #ffebe9 !important; }
-  .ref-row { background: #f6f8fa; }
-
-  .branch-picker {
-    display: flex; flex-wrap: wrap; gap: 6px 10px;
-    max-width: 520px; max-height: 120px; overflow: auto;
-    padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff;
-  }
-  .branch-picker label.bp {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 12px; color: var(--text); font-weight: 500; cursor: pointer;
-    margin: 0;
-  }
-  .branch-picker input { margin: 0; }
+  .run-card .t { font-weight: 650; margin-bottom: 4px; }
+  .chart-box { height: 220px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  a { color: var(--info); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>TPC-C · bar charts с 13.07</h1>
-  <div class="sub">
-    <code>perfomance/tpcc</code> · 2026-07-13 → 2026-07-24
-  </div>
-
-  <div class="tabs" role="tablist">
-    <button type="button" class="tab-btn active" data-tab="overview">Обзор / регрессии</button>
-    <button type="button" class="tab-btn" data-tab="stable">Stable vs Stable</button>
-  </div>
-
-  <div class="tab-panel active" id="tab-overview">
-  <h2>Регрессии</h2>
+  <h1>TPC-C Now</h1>
+  <div class="sub" id="subtitle"></div>
   <div class="note">
-    Бейзлайн = среднее 13–14.07. Сейчас = с 21.07.
-    <b>Правило lat:</b> рост NewOrder p90 <b>&gt; +10%</b> = regression (7–10% = watch).
-    <b>tpmC:</b> tol от шума среза (обычно ±3%). Cap 32768 = broken.
-    <b>lat noise</b> в таблице порогов — справка, на порог +10% не влияет.
+    Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>
+    (median). <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000 или outlier &gt;3×.
+    <b>Missing</b> = slice нет в завершённой day-wave (Branch × Cluster × день).
   </div>
-  <details style="margin:0 0 14px; background:#fff; border:1px solid var(--border); border-radius:8px; padding:8px 12px;">
-    <summary style="cursor:pointer; font-size:13px; font-weight:650;">Пороги: lat tol = +10%; tpmC tol и noise по срезам</summary>
-    <div id="noiseTable" style="margin-top:8px; overflow:auto;"></div>
-  </details>
-  <div class="reg-tree" id="regs"></div>
 
-  <h2>Графики по веткам</h2>
-  <div class="legend">
-    <span><i style="background:#5b8def"></i>tpmC ok</span>
-    <span><i style="background:#d29922"></i>latency ok</span>
-    <span><i style="background:#e5534b"></i>регрессия</span>
-    <span><i style="background:#db6d28"></i>watch</span>
-    <span><i style="background:#3fb950"></i>лучше</span>
-    <span><i style="background:#8b0000"></i>capped</span>
+  <div class="filters" id="branchBar" style="margin-bottom:14px">
+    <label>Branch
+      <select id="fBranch"></select>
+    </label>
+    <label>From
+      <input type="date" id="winFrom" />
+    </label>
+    <label>To
+      <input type="date" id="winTo" />
+    </label>
+    <div class="toolbar" style="margin:0;align-self:end">
+      <button type="button" id="winApply">Apply dates</button>
+      <button type="button" id="winReset">Reset</button>
+    </div>
+    <label class="muted" style="align-self:end;padding-bottom:6px">
+      ветка → только её clusters · даты режут inbox / last wave / графики
+      (<span id="lblAllBranches">all</span>)
+    </label>
   </div>
-  <div class="toolbar">
-    <button type="button" id="expandAll">Expand all branches</button>
-    <button type="button" id="collapseAll">Collapse all branches</button>
-    <button type="button" id="expandProblems">Expand only problem branches</button>
+
+  <div class="counters" id="counters"></div>
+
+  <h2>Heatmap · Cluster × run_type</h2>
+  <div class="heat-wrap">
+    <div class="heat-legend">
+      <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · lat cap / outlier</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>regression · lat↑ / tpmC↓</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
+      <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
+      <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+    </div>
+    <div id="heatmap"></div>
   </div>
+
+  <h2>Problem inbox</h2>
   <div class="filters">
-    <label>Cluster <select id="fCluster"><option value="">all</option></select></label>
-    <label>Metric <select id="fKind">
-      <option value="">tpmC + latency</option>
-      <option value="tpmc">tpmC only</option>
-      <option value="lat">latency only</option>
-    </select></label>
-    <label>Show <select id="fStatus">
-      <option value="all">all slices</option>
-      <option value="problems">problems only</option>
-      <option value="regression">regression only</option>
-      <option value="broken">broken only</option>
-      <option value="watch">watch only</option>
-    </select></label>
+    <label>Issue
+      <select id="fIssue">
+        <option value="">all hot</option>
+        <option value="missing">missing</option>
+        <option value="in_progress">in progress</option>
+        <option value="broken">broken</option>
+        <option value="lat">lat↑</option>
+        <option value="tpmc">tpmC↓</option>
+        <option value="both">lat+tpmc</option>
+        <option value="stale">stale</option>
+      </select>
+    </label>
+    <label>Cluster
+      <select id="fDb"><option value="">all</option></select>
+    </label>
+    <label>Run type
+      <select id="fFam"><option value="">all</option></select>
+    </label>
   </div>
-  <div id="tree"></div>
-  </div><!-- /tab-overview -->
-
-  <div class="tab-panel" id="tab-stable">
-    <h2>Сравнение stable-веток</h2>
-    <div class="note">
-      Выбери ветки чекбоксами — сравниваем их на общих срезах
-      <code>cluster × run_type × warehouses</code> (если ветка одна на срезе — просто показываем её без сравнения).
-      Метрика: <b>взвешенное среднее</b>, вес = 0.5^(age_days / 2) (half-life 2 дня).
-      Cap 32768 в lat не участвует. Колонка <b>vs selected</b> — только относительно выбранных веток (не vs свой baseline с 13.07). worse = lat &gt; +10% vs лучшей в таблице; best = лучшая lat.
-    </div>
-    <div class="filters" style="align-items:start">
-      <label>Cluster <select id="cmpCluster"><option value="">all</option></select></label>
-      <label>Run type <select id="cmpRun"><option value="">all</option></select></label>
-      <label style="min-width:280px">Branches to compare
-        <div id="cmpBranchPicker" class="branch-picker"></div>
-      </label>
-      <div style="display:flex;flex-direction:column;gap:6px;padding-top:16px">
-        <button type="button" id="cmpSelectStables">only stable-*</button>
-        <button type="button" id="cmpSelectAll">all branches</button>
-        <button type="button" id="cmpClearBranches">clear</button>
-      </div>
-    </div>
-    <div id="stableCompare"></div>
-  </div><!-- /tab-stable -->
+  <div id="inbox"></div>
 </div>
+
 <script>
 const DATA = __TPCC_REPORT_DATA__;
-
-function fmt(n) {
-  if (n == null || Number.isNaN(n)) return '—';
-  return Math.round(n).toLocaleString('en-US');
-}
-function pct(n) {
-  if (n == null || Number.isNaN(n)) return '—';
-  return (n > 0 ? '+' : '') + n.toFixed(1) + '%';
-}
-/** Status for one chart metric only (not the whole slice). tpmC: higher better; lat: lower better. */
-function metricStatus(c) {
-  if (c.kind === 'lat' && c.status === 'broken') return 'broken';
-  const d = c.delta;
-  if (d == null) return 'ok';
-  if (c.kind === 'tpmc') {
-    const tol = c.tpmc_tol ?? 0.03;
-    if (d / 100 <= -tol) return 'regression';
-    if (d / 100 <= -(tol * 0.6)) return 'watch';
-    return 'ok';
-  }
-  // latency
-  const tol = c.lat_tol ?? 0.25;
-  if (d / 100 >= tol) return 'regression';
-  if (d / 100 >= tol * 0.6) return 'watch';
-  return 'ok';
-}
-function metricBadge(c) {
-  const st = metricStatus(c);
-  const deltaTxt = c.delta == null ? '' : ` · Δ ${pct(c.delta)}`;
-  return `<span class="badge ${st}">${st}${deltaTxt}</span>`;
-}
-function shortRun(rt) { return rt.replace('ydb_cli_', ''); }
-function shortBranch(b) { return (b || '').replace(/^origin\//, ''); }
-function unique(vals) {
-  return [...new Set(vals)].sort((a,b) => (''+a).localeCompare(''+b, undefined, {numeric:true}));
-}
-function statusRank(s) { return ({regression:0, broken:1, watch:2, ok:3}[s] ?? 9); }
-function worstStatus(statuses) {
-  return [...statuses].sort((a,b) => statusRank(a) - statusRank(b))[0] || 'ok';
-}
-function confRank(c) { return ({high:0, medium:1, low:2}[c] ?? 9); }
-
-function renderRegs() {
-  const el = document.getElementById('regs');
-  if (!DATA.regs.length) {
-    el.innerHTML = '<div class="note">Регрессий не найдено</div>';
-    return;
-  }
-  // branch -> rows sorted by cluster, run_type, wh
-  const byBranch = new Map();
-  for (const r of DATA.regs) {
-    if (!byBranch.has(r.branch)) byBranch.set(r.branch, []);
-    byBranch.get(r.branch).push(r);
-  }
-  const branchOrder = [
-    ...DATA.branches.filter(b => byBranch.has(b)),
-    ...[...byBranch.keys()].filter(b => !DATA.branches.includes(b)),
-  ];
-
-  el.innerHTML = branchOrder.map(branch => {
-    const rows = byBranch.get(branch).slice().sort((a,b) =>
-      a.cluster.localeCompare(b.cluster) ||
-      a.run_type.localeCompare(b.run_type) ||
-      a.warehouses - b.warehouses ||
-      statusRank(a.status) - statusRank(b.status)
-    );
-    const sc = {
-      regression: rows.filter(r => r.status==='regression').length,
-      broken: rows.filter(r => r.status==='broken').length,
-      watch: rows.filter(r => r.status==='watch').length,
-      high: rows.filter(r => r.confidence==='high').length,
-    };
-    const st = worstStatus(rows.map(r => r.status));
-    const pills = [
-      sc.regression ? `<span class="badge regression">${sc.regression} reg</span>` : '',
-      sc.broken ? `<span class="badge broken">${sc.broken} broken</span>` : '',
-      sc.watch ? `<span class="badge watch">${sc.watch} watch</span>` : '',
-      sc.high ? `<span class="badge high">${sc.high} high conf</span>` : '',
-    ].join(' ');
-
-    // visually group: show cluster rowspan-like via blank repeats
-    let prevCluster = null;
-    const body = rows.map((r, idx) => {
-      const showCluster = r.cluster !== prevCluster;
-      prevCluster = r.cluster;
-      const latCls = (r.lat_pct??0) >= 15 ? 'bad' : 'flat';
-      const tpmcCls = (r.tpmc_pct??0) <= -3 ? 'bad' : 'flat';
-      const rowId = `regrow_${branch.replace(/[^a-zA-Z0-9]+/g,'_')}_${idx}`;
-      const sliceCharts = DATA.charts.filter(c =>
-        c.branch === r.branch && c.cluster === r.cluster &&
-        c.run_type === r.run_type && c.warehouses === r.warehouses
-      );
-      const ordered = [...sliceCharts].sort((a,b) => (a.kind==='tpmc'?0:1) - (b.kind==='tpmc'?0:1));
-      const chartCells = ordered.map(c => {
-        const cid = `${rowId}_${c.kind}`;
-        const st = metricStatus(c);
-        const hot = st === 'regression' || st === 'broken';
-        return `<div class="card ${hot ? 'hot' : ''}">
-          <div class="top">
-            <div class="ttl">${c.title}</div>
-            ${metricBadge(c)}
-          </div>
-          <div class="subttl">${c.kind === 'tpmc' ? 'больше → лучше' : 'меньше → лучше'}</div>
-          <div class="chart-box"><canvas id="${cid}" data-src="${c.id}"></canvas></div>
-        </div>`;
-      }).join('');
-
-      return `<tr class="reg-main row-${r.status}" data-row="${rowId}" title="Открыть графики">
-        <td>
-          <span class="row-chev">▸</span>
-          ${showCluster ? `<span class="cluster-cell">${r.cluster}</span>` : `<span class="muted">${r.cluster}</span>`}
-        </td>
-        <td>
-          <div>${shortRun(r.run_type)}</div>
-          <div class="muted">${r.warehouses.toLocaleString('en-US')} wh · metric ${r.metric}</div>
-        </td>
-        <td><span class="badge ${r.status}">${r.status}</span></td>
-        <td>
-          <div>${r.started_day || '—'}</div>
-          <div class="commit">${r.started_commit || '—'}</div>
-        </td>
-        <td>
-          <span class="badge ${r.confidence}" title="${r.confidence_why || ''}">${r.confidence}</span>
-          <div class="muted">${r.confidence_why || ''}</div>
-        </td>
-        <td class="num">
-          <div class="${tpmcCls}">${pct(r.tpmc_pct)}</div>
-          <div class="muted">${fmt(r.tpmc_base)} → ${fmt(r.tpmc_now)}</div>
-          <div class="muted">tol ±${((r.tpmc_tol||0)*100).toFixed(0)}%</div>
-        </td>
-        <td class="num">
-          <div class="${latCls}">${pct(r.lat_pct)}</div>
-          <div class="muted">${fmt(r.lat_base)} → ${fmt(r.lat_now)}</div>
-          <div class="muted">tol +${((r.lat_tol||0)*100).toFixed(0)}%</div>
-        </td>
-        <td class="num">
-          <div>streak ${r.streak}</div>
-          <div class="muted">bad ${r.bad_total}/${r.n}</div>
-        </td>
-      </tr>
-      <tr class="reg-charts hidden" data-charts-for="${rowId}">
-        <td colspan="8">
-          <div class="reg-pair">${chartCells || '<div class="muted">Нет графиков для среза</div>'}</div>
-        </td>
-      </tr>`;
-    }).join('');
-
-    return `<details class="reg-branch ${st!=='ok'?'hot':''}" open>
-      <summary>
-        <div class="reg-branch-left">
-          <span class="chev">▸</span>
-          <span class="branch-name">${branch}</span>
-          <span class="pill">${rows.length} issue(s)</span>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${pills}</div>
-      </summary>
-      <div class="reg-body">
-        <table class="reg-table">
-          <thead>
-            <tr>
-              <th>Cluster</th>
-              <th>Run type</th>
-              <th>Status</th>
-              <th>Started</th>
-              <th>Confidence</th>
-              <th class="num">Δ tpmC</th>
-              <th class="num">Δ lat</th>
-              <th class="num">Evidence</th>
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-    </details>`;
-  }).join('');
-
-  // click row -> toggle charts
-  el.querySelectorAll('tr.reg-main').forEach(tr => {
-    tr.addEventListener('click', () => {
-      const id = tr.dataset.row;
-      const panel = el.querySelector(`tr.reg-charts[data-charts-for="${id}"]`);
-      if (!panel) return;
-      const opening = panel.classList.contains('hidden');
-      panel.classList.toggle('hidden', !opening);
-      tr.classList.toggle('open', opening);
-      if (opening) {
-        requestAnimationFrame(() => mountRegCharts(panel));
-      }
-    });
-  });
-}
-
-function mountRegCharts(panel) {
-  panel.querySelectorAll('canvas[data-src]').forEach(canvas => {
-    if (charts[canvas.id]) return;
-    const srcId = canvas.dataset.src;
-    const src = DATA.charts.find(c => c.id === srcId);
-    if (!src) return;
-    // clone chart spec with local canvas id
-    makeChart({ ...src, id: canvas.id });
-  });
-}
-
 const charts = {};
-function destroyAll() {
-  // keep regression-expand charts (ids start with regrow_)
+const UI = DATA.ui || {};
+let winFrom = UI.default_from || null;
+let winTo = UI.default_to || null;
+
+function fmt(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function pct(v) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '+' : '';
+  return s + v.toFixed(0) + '%';
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function destroyCharts(prefix) {
   for (const k of Object.keys(charts)) {
-    if (k.startsWith('regrow_')) continue;
-    try { charts[k].destroy(); } catch (_) {}
-    delete charts[k];
-  }
-}
-
-function filteredCharts() {
-  const fc = document.getElementById('fCluster').value;
-  const fk = document.getElementById('fKind').value;
-  const fs = document.getElementById('fStatus').value;
-  return DATA.charts.filter(c => {
-    if (fc && c.cluster !== fc) return false;
-    if (fk && c.kind !== fk) return false;
-    if (fs === 'problems' && !['regression','broken','watch'].includes(c.status)) return false;
-    if (fs && fs !== 'all' && fs !== 'problems' && c.status !== fs) return false;
-    return true;
-  });
-}
-
-function buildTree(list) {
-  const byBranch = new Map();
-  for (const c of list) {
-    if (!byBranch.has(c.branch)) byBranch.set(c.branch, new Map());
-    const byRt = byBranch.get(c.branch);
-    if (!byRt.has(c.run_type)) byRt.set(c.run_type, []);
-    byRt.get(c.run_type).push(c);
-  }
-  const orderedBranches = [
-    ...DATA.branches.filter(b => byBranch.has(b)),
-    ...[...byBranch.keys()].filter(b => !DATA.branches.includes(b)).sort(),
-  ];
-  return orderedBranches.map(branch => {
-    const byRt = byBranch.get(branch);
-    const runTypes = [...byRt.keys()].sort();
-    const all = runTypes.flatMap(rt => byRt.get(rt));
-    return {
-      branch,
-      status: worstStatus(all.map(c => c.status)),
-      statusCounts: {
-        regression: all.filter(c => c.status === 'regression' && c.kind === 'tpmc').length,
-        broken: all.filter(c => c.status === 'broken' && c.kind === 'tpmc').length,
-        watch: all.filter(c => c.status === 'watch' && c.kind === 'tpmc').length,
-        ok: all.filter(c => c.status === 'ok' && c.kind === 'tpmc').length,
-      },
-      runTypes: runTypes.map(rt => {
-        const charts = byRt.get(rt);
-        return {
-          run_type: rt,
-          status: worstStatus(charts.map(c => c.status)),
-          charts,
-          nSlices: new Set(charts.map(c => `${c.cluster}|${c.warehouses}`)).size,
-        };
-      }),
-    };
-  });
-}
-
-function makeChart(c) {
-  const ctx = document.getElementById(c.id);
-  if (!ctx) return;
-  const baseline = c.baseline;
-  charts[c.id] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: c.labels,
-      datasets: [{
-        data: c.values, backgroundColor: c.colors, borderSkipped: false,
-        barPercentage: 0.9, categoryPercentage: 0.92,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false,
-      layout: { padding: { top: 18 } },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: (items) => c.labels[items[0].dataIndex],
-            label: (item) => {
-              const v = item.raw;
-              const cap = c.capped && c.capped[item.dataIndex];
-              return `${c.kind === 'tpmc' ? 'tpmC' : 'lat90'}: ${fmt(v)}${cap ? ' (CAPPED)' : ''}`;
-            },
-            afterLabel: (item) => {
-              const lines = [`commit: ${c.versions[item.dataIndex] || '—'}`];
-              if (baseline != null) lines.push(`baseline: ${fmt(baseline)}`);
-              return lines;
-            }
-          }
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 90, minRotation: 90, font: { size: 8 }, color: '#656d76',
-            callback: function(val, idx) {
-              const lab = c.labels[idx] || '';
-              const parts = lab.split('_');
-              return parts.length >= 2 ? parts[0].slice(5) + '\\n' + parts[1] : lab;
-            }
-          },
-          grid: { display: false }
-        },
-        y: {
-          beginAtZero: c.kind === 'lat', grace: '8%',
-          ticks: { font: { size: 10 }, color: '#656d76' },
-          grid: { color: 'rgba(0,0,0,0.06)' }
-        }
-      }
-    },
-    plugins: [{
-      id: 'datalabels',
-      afterDatasetsDraw(chart) {
-        const meta = chart.getDatasetMeta(0);
-        const ctx = chart.ctx;
-        ctx.save();
-        ctx.font = 'bold 9px sans-serif';
-        ctx.fillStyle = '#1f2328';
-        meta.data.forEach((bar, i) => {
-          const v = c.values[i];
-          if (v == null) return;
-          const text = c.kind === 'tpmc' ? Math.round(v).toLocaleString('en-US') : String(Math.round(v));
-          const { x, y } = bar.tooltipPosition();
-          ctx.save(); ctx.translate(x, y - 4); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'left';
-          ctx.fillText(text, 0, 3); ctx.restore();
-        });
-        if (baseline != null && Number.isFinite(baseline)) {
-          const y = chart.scales.y.getPixelForValue(baseline);
-          const { left, right } = chart.chartArea;
-          ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
-          ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }]
-  });
-}
-
-function renderCard(c) {
-  const st = metricStatus(c);
-  const hot = st === 'regression' || st === 'broken';
-  return `<div class="card ${hot ? 'hot' : ''}">
-    <div class="top">
-      <div class="ttl">${c.title}</div>
-      ${metricBadge(c)}
-    </div>
-    <div class="subttl">${c.kind === 'tpmc' ? 'больше → лучше' : 'меньше → лучше'}</div>
-    <div class="chart-box"><canvas id="${c.id}"></canvas></div>
-  </div>`;
-}
-
-function renderClusterBlocks(charts) {
-  const groups = new Map();
-  for (const c of charts) {
-    const key = `${c.cluster}|${c.warehouses}`;
-    if (!groups.has(key)) groups.set(key, { cluster: c.cluster, warehouses: c.warehouses, charts: [] });
-    groups.get(key).charts.push(c);
-  }
-  const keys = [...groups.keys()].sort((a, b) => {
-    const ga = groups.get(a), gb = groups.get(b);
-    return ga.cluster.localeCompare(gb.cluster) || ga.warehouses - gb.warehouses;
-  });
-  return `<div class="cluster-grid">${keys.map(key => {
-    const g = groups.get(key);
-    const ordered = [...g.charts].sort((a, b) => (a.kind === 'tpmc' ? 0 : 1) - (b.kind === 'tpmc' ? 0 : 1));
-    const st = worstStatus(ordered.map(c => c.status));
-    const hot = st === 'regression' || st === 'broken' || st === 'watch';
-    const deltas = ordered.map(c => c.delta == null ? null : `${c.kind === 'tpmc' ? 'tpmC' : 'lat'} ${pct(c.delta)}`).filter(Boolean).join(' · ');
-    return `<div class="cluster-block ${hot ? 'hot' : ''}">
-      <div class="cluster-head">
-        <div>
-          <div class="cluster-title">${g.cluster}</div>
-          <div class="cluster-meta">${g.warehouses.toLocaleString('en-US')} warehouses${deltas ? ' · ' + deltas : ''}</div>
-        </div>
-        <span class="badge ${st}">${st}</span>
-      </div>
-      <div class="pair">${ordered.map(renderCard).join('')}</div>
-    </div>`;
-  }).join('')}</div>`;
-}
-
-function statusPills(sc) {
-  const parts = [];
-  if (sc.regression) parts.push(`<span class="badge regression">${sc.regression} reg</span>`);
-  if (sc.broken) parts.push(`<span class="badge broken">${sc.broken} broken</span>`);
-  if (sc.watch) parts.push(`<span class="badge watch">${sc.watch} watch</span>`);
-  if (sc.ok) parts.push(`<span class="badge ok">${sc.ok} ok</span>`);
-  return parts.join(' ');
-}
-
-function renderTree() {
-  destroyAll();
-  const list = filteredCharts();
-  const tree = buildTree(list);
-  const root = document.getElementById('tree');
-  if (!tree.length) {
-    root.innerHTML = '<div class="note">Нет данных под текущие фильтры</div>';
-    return;
-  }
-  const prevOpenBranches = new Set([...document.querySelectorAll('details.branch[open]')].map(d => d.dataset.branch));
-  const prevOpenRt = new Set([...document.querySelectorAll('details.runtype[open]')].map(d => d.dataset.key));
-  const firstRender = !document.querySelector('details.branch');
-
-  root.innerHTML = tree.map(br => {
-    const problem = ['regression','broken','watch'].includes(br.status);
-    const openBranch = firstRender ? problem : prevOpenBranches.has(br.branch);
-    const rtHtml = br.runTypes.map(rt => {
-      const rtKey = br.branch + '||' + rt.run_type;
-      const rtProblem = ['regression','broken','watch'].includes(rt.status);
-      const openRt = firstRender ? rtProblem : (prevOpenRt.has(rtKey) || (openBranch && rtProblem));
-      return `<details class="runtype ${rtProblem ? 'hot' : ''}" data-key="${rtKey}" ${openRt ? 'open' : ''}>
-        <summary class="rt-sum">
-          <div class="rt-left">
-            <span class="chev">▸</span>
-            <span class="rt-name">${shortRun(rt.run_type)}</span>
-            <span class="pill">${rt.nSlices} cluster slice(s)</span>
-          </div>
-          <span class="badge ${rt.status}">${rt.status}</span>
-        </summary>
-        <div class="rt-body">${renderClusterBlocks(rt.charts)}</div>
-      </details>`;
-    }).join('');
-
-    return `<details class="branch ${problem ? 'hot' : ''}" data-branch="${br.branch}" data-problem="${problem ? '1' : '0'}" ${openBranch ? 'open' : ''}>
-      <summary class="branch-sum">
-        <div class="branch-left">
-          <span class="chev">▸</span>
-          <span class="branch-name">${br.branch}</span>
-          <span class="pill">${br.statusCounts.regression + br.statusCounts.broken + br.statusCounts.watch + br.statusCounts.ok} slices</span>
-        </div>
-        <div class="branch-stats">${statusPills(br.statusCounts)}</div>
-      </summary>
-      <div class="branch-body">${rtHtml}</div>
-    </details>`;
-  }).join('');
-
-  function mountVisible() {
-    document.querySelectorAll('details.branch[open] details.runtype[open] canvas').forEach(canvas => {
-      if (charts[canvas.id]) return;
-      const c = list.find(x => x.id === canvas.id);
-      if (c) makeChart(c);
-    });
-  }
-  mountVisible();
-  root.querySelectorAll('details.branch, details.runtype').forEach(d => {
-    d.addEventListener('toggle', () => { if (d.open) requestAnimationFrame(mountVisible); });
-  });
-}
-
-document.getElementById('fCluster').innerHTML = '<option value="">all</option>' +
-  unique(DATA.charts.map(c => c.cluster)).map(c => `<option value="${c}">${c}</option>`).join('');
-['fCluster','fKind','fStatus'].forEach(id => document.getElementById(id).addEventListener('change', renderTree));
-
-document.getElementById('expandAll').addEventListener('click', () => {
-  document.querySelectorAll('details.branch, details.runtype').forEach(d => d.open = true);
-  requestAnimationFrame(() => {
-    destroyAll();
-    filteredCharts().forEach(c => { if (document.getElementById(c.id)) makeChart(c); });
-  });
-});
-document.getElementById('collapseAll').addEventListener('click', () => {
-  document.querySelectorAll('details.branch, details.runtype').forEach(d => d.open = false);
-});
-document.getElementById('expandProblems').addEventListener('click', () => {
-  document.querySelectorAll('details.branch').forEach(d => { d.open = d.dataset.problem === '1'; });
-  document.querySelectorAll('details.runtype').forEach(d => {
-    d.open = d.classList.contains('hot') && d.closest('details.branch')?.open;
-  });
-  requestAnimationFrame(() => {
-    destroyAll();
-    document.querySelectorAll('details.branch[open] details.runtype[open] canvas').forEach(canvas => {
-      const c = filteredCharts().find(x => x.id === canvas.id);
-      if (c) makeChart(c);
-    });
-  });
-});
-
-function renderNoise() {
-  const el = document.getElementById('noiseTable');
-  if (!el || !DATA.noise) return;
-  const rows = [...DATA.noise].sort((a,b) =>
-    a.cluster.localeCompare(b.cluster) || a.run_type.localeCompare(b.run_type) || a.warehouses - b.warehouses
-  );
-  el.innerHTML = `<table class="reg-table">
-    <thead><tr>
-      <th>Cluster</th><th>Run type</th><th class="num">WH</th>
-      <th class="num">lat noise</th><th class="num">lat tol</th>
-      <th class="num">tpmC noise</th><th class="num">tpmC tol</th>
-      <th class="num">branches</th><th class="num">points</th>
-    </tr></thead>
-    <tbody>${rows.map(n => `<tr>
-      <td class="cluster-cell">${n.cluster}</td>
-      <td>${shortRun(n.run_type)}</td>
-      <td class="num">${n.warehouses}</td>
-      <td class="num">${n.lat_noise==null?'—':(n.lat_noise*100).toFixed(1)+'%'}</td>
-      <td class="num"><b>+${(n.lat_tol*100).toFixed(0)}%</b></td>
-      <td class="num">${n.tpmc_noise==null?'—':(n.tpmc_noise*100).toFixed(1)+'%'}</td>
-      <td class="num"><b>±${(n.tpmc_tol*100).toFixed(0)}%</b></td>
-      <td class="num">${n.n_branches}</td>
-      <td class="num">${n.n_points}</td>
-    </tr>`).join('')}</tbody></table>`;
-}
-
-
-function setupTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + btn.dataset.tab));
-      if (btn.dataset.tab === 'stable') {
-        renderStableCompare();
-      }
-    });
-  });
-}
-
-function latestOf(chart) {
-  if (!chart || !chart.values || !chart.values.length) return null;
-  const i = chart.values.length - 1;
-  return {
-    value: chart.values[i],
-    label: chart.labels[i],
-    version: chart.versions[i],
-    day: (chart.labels[i] || '').slice(0, 10),
-  };
-}
-
-function meanOf(chart) {
-  if (!chart || !chart.values) return null;
-  const vals = chart.values.filter(v => v != null);
-  if (!vals.length) return null;
-  return vals.reduce((a,b) => a+b, 0) / vals.length;
-}
-
-/** Recency-weighted average. halfLifeDays=2 → weight halves every 2 days from newest point. */
-const WEIGHT_HALF_LIFE_DAYS = 2;
-function parseLabelDay(label) {
-  // labels like 2026-07-22_1052786
-  if (!label) return null;
-  const d = String(label).slice(0, 10);
-  const t = Date.parse(d + 'T00:00:00Z');
-  return Number.isFinite(t) ? t : null;
-}
-function weightedMetric(chart) {
-  if (!chart || !chart.values || !chart.values.length) return null;
-  const points = [];
-  for (let i = 0; i < chart.values.length; i++) {
-    const v = chart.values[i];
-    if (v == null) continue;
-    // skip capped latency sentinels if present via colors/raw — values already null for capped in lat series? 
-    // In our data capped may still be 32768 in values for lat charts
-    if (chart.kind === 'lat' && v >= 30000) continue;
-    const ts = parseLabelDay(chart.labels[i]);
-    if (ts == null) continue;
-    points.push({ v, ts, i, label: chart.labels[i], version: chart.versions[i] });
-  }
-  if (!points.length) return null;
-  const newest = Math.max(...points.map(p => p.ts));
-  let wSum = 0, vSum = 0;
-  const detail = points.map(p => {
-    const ageDays = (newest - p.ts) / 86400000;
-    const w = Math.pow(0.5, ageDays / WEIGHT_HALF_LIFE_DAYS);
-    wSum += w; vSum += p.v * w;
-    return { ...p, ageDays, w };
-  });
-  const last = points[points.length - 1];
-  // effective n: sum of weights
-  return {
-    value: vSum / wSum,
-    weightSum: wSum,
-    n: points.length,
-    halfLifeDays: WEIGHT_HALF_LIFE_DAYS,
-    day: last.label ? String(last.label).slice(0, 10) : '—',
-    version: last.version || '—',
-    newestDay: new Date(newest).toISOString().slice(0, 10),
-  };
-}
-
-
-
-function allBranchesInData() {
-  return unique(DATA.charts.map(c => c.branch));
-}
-
-function defaultSelectedBranches() {
-  // stables + main + origin/26 if present
-  const all = allBranchesInData();
-  const pref = all.filter(b => b.startsWith('origin/stable-') || b === 'origin/main' || b === 'origin/26');
-  return pref.length ? pref : all.slice(0, Math.min(4, all.length));
-}
-
-let cmpSelected = null; // Set of branch names
-
-function ensureCmpSelected() {
-  if (cmpSelected) return cmpSelected;
-  cmpSelected = new Set(defaultSelectedBranches());
-  return cmpSelected;
-}
-
-function renderBranchPicker() {
-  const box = document.getElementById('cmpBranchPicker');
-  if (!box) return;
-  ensureCmpSelected();
-  const branches = allBranchesInData().sort((a,b) => {
-    const rank = (x) => x.startsWith('origin/stable-') ? 0 : x === 'origin/main' ? 1 : x === 'origin/26' ? 2 : 3;
-    return rank(a) - rank(b) || a.localeCompare(b);
-  });
-  box.innerHTML = branches.map(b => {
-    const checked = cmpSelected.has(b) ? 'checked' : '';
-    return `<label class="bp"><input type="checkbox" data-branch="${b}" ${checked}/> ${shortBranch(b)}</label>`;
-  }).join('');
-  box.querySelectorAll('input[type=checkbox]').forEach(inp => {
-    inp.addEventListener('change', () => {
-      if (inp.checked) cmpSelected.add(inp.dataset.branch);
-      else cmpSelected.delete(inp.dataset.branch);
-      renderStableCompare();
-    });
-  });
-}
-
-function collectSliceMap(selected) {
-  const bySlice = new Map();
-  for (const c of DATA.charts) {
-    if (!selected.has(c.branch)) continue;
-    const key = `${c.cluster}|${c.run_type}|${c.warehouses}`;
-    if (!bySlice.has(key)) bySlice.set(key, { cluster: c.cluster, run_type: c.run_type, warehouses: c.warehouses, branches: {} });
-    const slot = bySlice.get(key);
-    if (!slot.branches[c.branch]) slot.branches[c.branch] = {};
-    slot.branches[c.branch][c.kind] = c;
-  }
-  return bySlice;
-}
-
-function buildCompareRows() {
-  ensureCmpSelected();
-  const rows = [];
-  for (const slot of collectSliceMap(cmpSelected).values()) {
-    const present = Object.keys(slot.branches);
-    if (present.length >= 1) rows.push(slot);
-  }
-  rows.sort((a,b) => a.cluster.localeCompare(b.cluster) || a.run_type.localeCompare(b.run_type) || a.warehouses - b.warehouses);
-  return rows;
-}
-
-function branchStatsFor(slot, branchOrder) {
-  return branchOrder.map(br => {
-    const pair = slot.branches[br] || {};
-    const t = pair.tpmc, l = pair.lat;
-    const tW = weightedMetric(t), lW = weightedMetric(l);
-    const tLast = latestOf(t), lLast = latestOf(l);
-    return {
-      branch: br,
-      tpmc_w: tW?.value ?? null,
-      lat_w: lW?.value ?? null,
-      tpmc_last: tLast?.value ?? null,
-      lat_last: lLast?.value ?? null,
-      day: lW?.newestDay || tW?.newestDay || '—',
-      commit: lLast?.version || tLast?.version || '—',
-      n: Math.max(t?.n || 0, l?.n || 0),
-      status: t?.status || l?.status || 'ok',
-    };
-  });
-}
-
-function renderCompareSlot(slot, idx, prefix) {
-  const order = Object.keys(slot.branches).sort((a,b) => {
-    const rank = (x) => x.startsWith('origin/stable-') ? 0 : x === 'origin/main' ? 1 : x === 'origin/26' ? 2 : 3;
-    return rank(a) - rank(b) || a.localeCompare(b);
-  });
-  const branchStats = branchStatsFor(slot, order);
-  const scoreSet = branchStats;
-
-  const tpmcs = scoreSet.map(b => b.tpmc_w).filter(v => v != null);
-  const lats = scoreSet.map(b => b.lat_w).filter(v => v != null);
-  const bestTpmc = tpmcs.length ? Math.max(...tpmcs) : null;
-  const worstLat = lats.length ? Math.max(...lats) : null;
-  const bestLat = lats.length ? Math.min(...lats) : null;
-  const medLat = lats.length ? [...lats].sort((a,b)=>a-b)[Math.floor(lats.length/2)] : null;
-  const medTpmc = tpmcs.length ? [...tpmcs].sort((a,b)=>a-b)[Math.floor(tpmcs.length/2)] : null;
-
-  const tableRows = branchStats.map(b => {
-    const near = (a,x) => a != null && x != null && Math.abs(a-x) <= 1e-6 * Math.max(1, Math.abs(x));
-    const soloRow = order.length < 2;
-    const tCls = (!soloRow && near(b.tpmc_w, bestTpmc)) ? 'best' : '';
-    const lCls = soloRow ? '' : (near(b.lat_w, worstLat) ? 'worst' : (near(b.lat_w, bestLat) ? 'best' : ''));
-    const dLatBest = (b.lat_w != null && bestLat) ? (b.lat_w - bestLat) / bestLat * 100 : null;
-    const dTpmcMed = (b.tpmc_w != null && medTpmc) ? (b.tpmc_w - medTpmc) / medTpmc * 100 : null;
-    const dLatMed = (b.lat_w != null && medLat) ? (b.lat_w - medLat) / medLat * 100 : null;
-    const solo = order.length < 2;
-    const latBad = !solo && dLatBest != null && dLatBest > 10;
-    let relStatus = 'ok';
-    if (solo) relStatus = 'solo';
-    else if (latBad) relStatus = 'worse';
-    else if (near(b.lat_w, bestLat) && bestLat != null) relStatus = 'best';
-    else if (dLatBest != null && dLatBest > 5) relStatus = 'watch';
-    return `<tr class="${latBad ? 'row-regression' : ''}">
-      <td class="mono">${shortBranch(b.branch)}</td>
-      <td>
-        <div>${b.day}</div>
-        <div class="commit">${b.commit}</div>
-      </td>
-      <td class="num ${tCls}">
-        <div>${fmt(b.tpmc_w)}</div>
-        <div class="muted">last ${fmt(b.tpmc_last)} · vs med ${pct(dTpmcMed)}</div>
-      </td>
-      <td class="num ${lCls}">
-        <div class="${latBad ? 'bad' : ''}">${fmt(b.lat_w)}</div>
-        <div class="muted">last ${fmt(b.lat_last)} · vs best ${pct(dLatBest)} · vs med ${pct(dLatMed)}</div>
-      </td>
-      <td>
-        <span class="badge ${relStatus}">${relStatus}</span>
-        <div class="muted">${solo ? "нет пары на срезе" : `vs best lat ${pct(dLatBest)}`} · n=${b.n}</div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  const spreadLat = (bestLat && worstLat) ? ((worstLat - bestLat) / bestLat * 100) : null;
-  const minT = tpmcs.length ? Math.min(...tpmcs) : null;
-  const spreadTpmc = (bestTpmc && minT) ? ((bestTpmc - minT) / minT * 100) : null;
-  const idBase = `${prefix}_${idx}`;
-  return {
-    html: `<details class="cmp-slice" open data-cmp="${idBase}">
-      <summary>
-        <div class="reg-branch-left">
-          <span class="chev">▸</span>
-          <span class="cluster-cell">${slot.cluster}</span>
-          <span class="rt-name">${shortRun(slot.run_type)}</span>
-          <span class="pill">${slot.warehouses.toLocaleString('en-US')} wh</span>
-          <span class="pill">${order.length < 2 ? "solo · без сравнения" : order.length + " branches"}</span>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
-          <span>lat spread vs best: <b class="${(spreadLat||0)>10?'bad':''}">${pct(spreadLat)}</b></span>
-          <span>tpmC spread: <b>${pct(spreadTpmc)}</b></span>
-        </div>
-      </summary>
-      <div class="cmp-body">
-        <table class="reg-table">
-          <thead>
-            <tr>
-              <th>Branch</th>
-              <th>Newest point</th>
-              <th class="num">tpmC weighted</th>
-              <th class="num">lat90 weighted</th>
-              <th>vs selected</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-        <div class="cmp-charts">
-          <div class="card">
-            <div class="top"><div class="ttl">tpmC weighted by branch</div><span class="pill">больше → лучше</span></div>
-            <div class="chart-box"><canvas id="${idBase}_tpmc"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="top"><div class="ttl">Latency 90p weighted by branch</div><span class="pill">меньше → лучше</span></div>
-            <div class="chart-box"><canvas id="${idBase}_lat"></canvas></div>
-          </div>
-        </div>
-      </div>
-    </details>`,
-    idBase,
-    order,
-    slot,
-  };
-}
-
-function drawCompareBars(rendered) {
-  rendered.forEach(item => {
-    const { idBase, order, slot } = item;
-    const labels = order.map(shortBranch);
-    const tpmcVals = order.map(br => weightedMetric(slot.branches[br]?.tpmc)?.value ?? null);
-    const latVals = order.map(br => weightedMetric(slot.branches[br]?.lat)?.value ?? null);
-
-    const multi = order.length >= 2;
-    const tpmcColors = tpmcVals.map((v) => {
-      if (!multi) return '#5b8def';
-      const pool = tpmcVals.filter(x => x != null);
-      const best = pool.length ? Math.max(...pool) : null;
-      return (v != null && best != null && Math.abs(v-best) <= 1e-6*Math.max(1,Math.abs(best))) ? '#3fb950' : '#5b8def';
-    });
-    const latColors = latVals.map((v) => {
-      if (!multi) return '#d29922';
-      const pool = latVals.filter(x => x != null);
-      const best = pool.length ? Math.min(...pool) : null;
-      const worst = pool.length ? Math.max(...pool) : null;
-      if (v != null && best != null && Math.abs(v-best) <= 1e-6*Math.max(1,Math.abs(best))) return '#3fb950';
-      if (v != null && worst != null && best != null && Math.abs(v-worst) <= 1e-6*Math.max(1,Math.abs(worst)) && (v-best)/best > 0.10) return '#e5534b';
-      return '#d29922';
-    });
-
-    function bar(id, vals, colors, label) {
-      const ctx = document.getElementById(id);
-      if (!ctx) return;
-      charts[id] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.7 }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: (item) => `${label}: ${fmt(item.raw)}` } }
-          },
-          scales: {
-            x: { ticks: { color: '#656d76', font: { size: 11 } }, grid: { display: false } },
-            y: { beginAtZero: label === 'lat90', grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,0.06)' } }
-          }
-        },
-        plugins: [{
-          id: 'vals',
-          afterDatasetsDraw(chart) {
-            const meta = chart.getDatasetMeta(0);
-            const c = chart.ctx;
-            c.save(); c.font = 'bold 11px sans-serif'; c.fillStyle = '#1f2328'; c.textAlign = 'center';
-            meta.data.forEach((bar, i) => {
-              if (vals[i] == null) return;
-              const {x,y} = bar.tooltipPosition();
-              c.fillText(fmt(vals[i]), x, y - 6);
-            });
-            c.restore();
-          }
-        }]
-      });
-    }
-    bar(`${idBase}_tpmc`, tpmcVals, tpmcColors, 'tpmC');
-    bar(`${idBase}_lat`, latVals, latColors, 'lat90');
-  });
-}
-
-function fillCmpFilters(allSlots) {
-  const clusters = unique(allSlots.map(r => r.cluster));
-  const runs = unique(allSlots.map(r => r.run_type));
-  const clEl = document.getElementById('cmpCluster');
-  const rnEl = document.getElementById('cmpRun');
-  // Always refresh options from current selection coverage, keep value
-  const keepC = clEl.value, keepR = rnEl.value;
-  clEl.innerHTML = '<option value="">all</option>' + clusters.map(c => `<option value="${c}">${c}</option>`).join('');
-  rnEl.innerHTML = '<option value="">all</option>' + runs.map(r => `<option value="${r}">${shortRun(r)}</option>`).join('');
-  if ([...clEl.options].some(o => o.value === keepC)) clEl.value = keepC;
-  if ([...rnEl.options].some(o => o.value === keepR)) rnEl.value = keepR;
-}
-
-function renderStableCompare() {
-  const root = document.getElementById('stableCompare');
-  if (!root) return;
-  renderBranchPicker();
-  ensureCmpSelected();
-
-  const fc = document.getElementById('cmpCluster').value;
-  const fr = document.getElementById('cmpRun').value;
-
-  // destroy old
-  for (const k of Object.keys(charts)) {
-    if (k.startsWith('cmp_')) {
-      try { charts[k].destroy(); } catch(_) {}
+    if (!prefix || k.startsWith(prefix)) {
+      try { charts[k].destroy(); } catch (_) {}
       delete charts[k];
     }
   }
+}
+function dayOf(ts) {
+  if (!ts) return null;
+  return String(ts).slice(0, 10);
+}
+function dayInRange(day, from, to) {
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+function itemInWindow(r) {
+  const days = [dayOf(r.last_ts), dayOf(r.last_seen)].filter(Boolean);
+  for (const run of (r.now_runs || [])) {
+    if (run.day) days.push(run.day);
+    else if (run.ts) days.push(dayOf(run.ts));
+    else if (run.label) days.push(dayOf(run.label));
+  }
+  for (const lab of ((r.history && r.history.labels) || [])) days.push(dayOf(lab));
+  if (!days.length) return true;
+  return days.some(d => dayInRange(d, winFrom, winTo));
+}
+function liveCell(branch, db, fam) {
+  const rows = (DATA.inbox || []).filter(r => {
+    if (branch && r.branch !== branch) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    return itemInWindow(r);
+  });
+  if (!rows.length) return { status: 'ok', n_hot: 0 };
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    lat: 3, tpmc: 3, stale: 2, in_progress: 1, ok: 0, watch: 2,
+  };
+  let best = null;
+  for (const r of rows) {
+    const st = r.status || r.issue || 'ok';
+    if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+  }
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return { status: best || 'ok', n_hot: hot.length };
+}
+function cellLabel(st, live) {
+  if (st === 'regression' || st === 'broken' || st === 'missing' || st === 'stale' || st === 'in_progress') {
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  return esc(st);
+}
+function sliceHist(hist) {
+  if (!hist || !(hist.labels || []).length) return hist;
+  if (!winFrom && !winTo) return hist;
+  const out = { labels: [], tpmc: [], lat90: [], markers: [], versions: [] };
+  for (let i = 0; i < hist.labels.length; i++) {
+    const day = dayOf(hist.labels[i]);
+    if (!dayInRange(day, winFrom, winTo)) continue;
+    out.labels.push(hist.labels[i]);
+    out.tpmc.push(hist.tpmc ? hist.tpmc[i] : null);
+    out.lat90.push(hist.lat90 ? hist.lat90[i] : null);
+    out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+    out.versions.push(hist.versions ? hist.versions[i] : null);
+  }
+  return out;
+}
+function selectedBranch() {
+  return document.getElementById('fBranch')?.value || '';
+}
+function summarizeRows(rows) {
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return {
+    missing: rows.filter(r => r.issue === 'missing').length,
+    in_progress: rows.filter(r => r.issue === 'in_progress').length,
+    broken: rows.filter(r => (r.issue === 'broken' || r.issue === 'both') && r.status === 'broken').length,
+    lat: rows.filter(r => r.issue === 'lat' || r.issue === 'both').length,
+    tpmc: rows.filter(r => r.issue === 'tpmc' || r.issue === 'both').length,
+    stale: rows.filter(r => r.issue === 'stale').length,
+    ok_slices: (currentSummaryBase().ok_slices) || 0,
+    hot: hot.length,
+    slices: currentSummaryBase().slices || 0,
+  };
+}
+function currentSummaryBase() {
+  const br = selectedBranch();
+  if (!br) return DATA.summary || {};
+  return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
+}
+function currentSummary() {
+  const br = selectedBranch();
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  const rows = (DATA.inbox || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+  const s = summarizeRows(rows);
+  const base = currentSummaryBase();
+  s.ok_slices = base.ok_slices || 0;
+  s.slices = base.slices || 0;
+  return s;
+}
+function renderHeader() {
+  const ui = DATA.ui || {};
+  const s = currentSummary();
+  const br = selectedBranch();
+  document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
+  document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
+  document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
+  document.getElementById('subtitle').innerHTML =
+    `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
+    `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
+    `branch <b>${esc(br || 'all')}</b> · hot ${s.hot || 0}`;
 
-  if (cmpSelected.size < 1) {
-    root.innerHTML = '<div class="note">Выбери хотя бы одну ветку.</div>';
-    fillCmpFilters([]);
+  document.getElementById('counters').innerHTML = `
+    <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
+    <div class="counter hot"><div class="n">${s.broken || 0}</div><div class="lbl">Broken</div></div>
+    <div class="counter regress"><div class="n">${s.lat || 0}</div><div class="lbl">Lat↑</div></div>
+    <div class="counter regress"><div class="n">${s.tpmc || 0}</div><div class="lbl">tpmC↓</div></div>
+    <div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>
+    <div class="counter ok"><div class="n">${s.ok_slices || 0}</div><div class="lbl">OK slices</div></div>
+  `;
+}
+function formatWave(w) {
+  if (!w) return '—';
+  const day = w.day || String(w.max_ts || '').slice(0, 10) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : 'activity';
+  const age = (w.age_hours != null) ? `${w.age_hours}h` : '—';
+  const only = w.activity_only ? ' <span class="pill">no wave</span>' : '';
+  return `${esc(day)} · ${esc(cov)} · ${esc(age)}${only}`;
+}
+function waveInWindow(w) {
+  if (!w) return null;
+  const day = w.day || dayOf(w.max_ts);
+  if (!dayInRange(day, winFrom, winTo)) return null;
+  return w;
+}
+function waveFor(branch, db) {
+  const waves = DATA.waves || {};
+  const act = DATA.last_activity || {};
+  let w = null;
+  if (branch && waves[`${branch}|${db}`]) w = waves[`${branch}|${db}`];
+  else if (branch && act[`${branch}|${db}`]) w = act[`${branch}|${db}`];
+  else if (!branch) {
+    const byDb = DATA.waves_by_db || {};
+    if (byDb[db]) w = byDb[db];
+    else if (act[db]) w = act[db];
+  }
+  return waveInWindow(w);
+}
+function dbsForBranch(branch) {
+  const h = DATA.heatmap || {};
+  const map = h.dbs_by_branch || (DATA.ui && DATA.ui.dbs_by_branch) || {};
+  if (branch && map[branch] && map[branch].length) return map[branch];
+  if (!branch) {
+    const all = new Set(h.dbs || []);
+    Object.values(map).forEach(list => (list || []).forEach(d => all.add(d)));
+    return [...all].sort();
+  }
+  return [];
+}
+function uiBranches() {
+  return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
+}
+function renderHeatmap() {
+  const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
+  let br = selectedBranch();
+  const branches = br ? [br] : (h.branches || uiBranches());
+  let html = '';
+  for (const branch of branches) {
+    const dbs = dbsForBranch(branch);
+    if (branches.length > 1) {
+      html += `<div class="muted" style="padding:10px 12px 0;font-weight:650">${esc(branch)} · ${dbs.length} clusters</div>`;
+    }
+    if (!dbs.length) {
+      html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
+      continue;
+    }
+    html += `<table class="heat"><thead><tr><th>Cluster</th>`;
+    for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
+    html += `<th>Last wave</th></tr></thead><tbody>`;
+    for (const db of dbs) {
+      html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
+      for (const fam of h.families) {
+        const live = liveCell(branch, db, fam);
+        const st = live.status || 'ok';
+        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}">${cellLabel(st, live)}</div></td>`;
+      }
+      html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(waveFor(branch, db))}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const root = document.getElementById('heatmap');
+  root.innerHTML = html || '<div class="empty">нет данных</div>';
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress').forEach(el => {
+    el.addEventListener('click', () => {
+      if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
+      document.getElementById('fDb').value = el.dataset.db || '';
+      document.getElementById('fFam').value = el.dataset.fam || '';
+      document.getElementById('fIssue').value = '';
+      renderAll();
+      document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+function filteredInbox() {
+  const issue = document.getElementById('fIssue').value;
+  const db = document.getElementById('fDb').value;
+  const fam = document.getElementById('fFam').value;
+  const br = selectedBranch();
+  return (DATA.inbox || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (issue && r.issue !== issue) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+function medianOf(nums) {
+  const a = nums.filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+/** Higher-worse metric (lat): red if above trailing median. */
+function colorsLatVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    if (n >= 30000) return '#8a1f1a';
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n > ref * 3) return '#8a1f1a';
+    if (n > ref * 1.1) return '#e5534b';
+    if (n < ref * 0.93) return '#3fb950';
+    return '#5b8def';
+  });
+}
+/** Higher-better metric (tpmC): red if below trailing median. */
+function colorsTpmcVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n < ref * (1 / 3)) return '#8a1f1a';
+    if (n < ref * 0.9) return '#e5534b';
+    if (n > ref * 1.07) return '#3fb950';
+    return '#5b8def';
+  });
+}
+function mountHistory(item, id) {
+  const hist = sliceHist(item.history || {});
+  const box = document.getElementById(id + '_hist');
+  if (!box) return;
+  if (!(hist.labels || []).length) {
+    box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
     return;
   }
+  destroyCharts(id + '_');
+  box.innerHTML = `<div class="pair">
+    <div class="chart-box"><canvas id="${id}_tpmc"></canvas></div>
+    <div class="chart-box"><canvas id="${id}_lat"></canvas></div>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Сырые прогоны · цвет vs median mavg(prev7) · тёмно-красный = lat cap ·
+    синий = synthetic in_progress · оранжевый = synthetic missing
+  </div>`;
 
-  let rows = buildCompareRows();
-  fillCmpFilters(rows);
-  rows = rows.filter(r => (!fc || r.cluster === fc) && (!fr || r.run_type === fr));
+  const markers = hist.markers || [];
+  function bar(cid, vals, label, colors) {
+    const el = document.getElementById(cid);
+    if (!el) return;
+    charts[cid] = new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: hist.labels,
+        datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+          tooltip: {
+            callbacks: {
+              afterLabel: (it) => {
+                const m = markers[it.dataIndex];
+                if (m === 'in_progress') return 'SYNTHETIC · day-wave in progress';
+                if (m === 'missing') return 'SYNTHETIC · missing in completed wave';
+                if (m === 'capped') return 'lat capped';
+                return '';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+          y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+        }
+      }
+    });
+  }
+  const paint = (colors, markers) => colors.map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    if (m === 'capped') return '#8a1f1a';
+    return c;
+  });
+  bar(id + '_tpmc', hist.tpmc || [], 'tpmC · raw runs (↑ better)', paint(colorsTpmcVsMavg(hist.tpmc), markers));
+  bar(id + '_lat', hist.lat90 || [], 'NewOrder p90 · raw runs (↓ better)', paint(colorsLatVsMavg(hist.lat90), markers));
+}
+function diveHtml(r, id) {
+  const runs = (r.now_runs || []).map(run => {
+    const lat = run.lat_capped
+      ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}</span>`
+      : fmt(run.lat90);
+    return `<div class="run-card">
+      <div class="t">${esc(run.label)}</div>
+      <div>tpmC ${fmt(run.tpmc)} · lat ${lat}</div>
+      <div class="muted">${esc(run.version || '')}</div>
+    </div>`;
+  }).join('') || `<div class="muted">${
+    r.issue === 'in_progress'
+      ? `Day-wave <code>${esc(r.wave || '')}</code> ещё едет` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+      : r.issue === 'missing'
+        ? `Нет в завершённой day-wave <code>${esc(r.wave || '')}</code>` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+        : 'Нет последних прогонов (missing/stale)'
+  }</div>`;
 
+  return `<div class="dive">
+    <div class="muted">${esc((r.reasons || []).join(' · '))}</div>
+    <div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> (Now window)</div>
+      <div class="runs">${runs}</div>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button type="button" class="btn" data-hist="${id}">Show history</button>
+    </div>
+    <div id="${id}_hist"></div>
+  </div>`;
+}
+function renderInbox() {
+  destroyCharts();
+  const rows = filteredInbox();
+  const root = document.getElementById('inbox');
   if (!rows.length) {
-    root.innerHTML = `<div class="note">Нет срезов для выбранных веток (${[...cmpSelected].map(shortBranch).join(', ')}).</div>`;
+    root.innerHTML = '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
     return;
   }
+  const body = rows.map((r, idx) => {
+    const id = 'dive_' + idx;
+    const latDelta = r.lat_pct == null ? '—' : `<span class="${r.lat_pct >= 10 ? 'bad' : ''}">${pct(r.lat_pct)}</span>`;
+    const tpmcDelta = r.tpmc_pct == null ? '—' : `<span class="${r.tpmc_pct <= -10 ? 'bad' : ''}">${pct(r.tpmc_pct)}</span>`;
+    return `
+      <tr class="row" data-idx="${idx}" data-id="${id}">
+        <td><span class="badge ${esc(r.status)}">${esc(r.status)}</span>
+          <div class="pill" style="margin-top:4px">${esc(r.issue)}</div></td>
+        <td><span class="cluster">${esc(r.db)}</span>
+          <div class="muted">${esc(r.branch)}</div></td>
+        <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
+          <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div></td>
+        <td class="num">${fmt(r.lat_base)} → ${fmt(r.lat_now)}<div class="muted">${latDelta}</div></td>
+        <td class="num">${fmt(r.tpmc_base)} → ${fmt(r.tpmc_now)}<div class="muted">${tpmcDelta}</div></td>
+        <td class="muted">${esc(r.last_ts || '—')}
+          ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
+        </td>
+      </tr>
+      <tr class="detail hidden" data-detail="${id}"><td colspan="6">${diveHtml(r, id)}</td></tr>`;
+  }).join('');
 
-  const rendered = rows.map((slot, idx) => renderCompareSlot(slot, idx, 'cmp'));
-  const soloN = rows.filter(r => Object.keys(r.branches).length === 1).length;
-  const cmpN = rows.length - soloN;
-  root.innerHTML = `<div class="muted" style="margin-bottom:10px">Выбрано: ${[...cmpSelected].map(shortBranch).join(', ')} · срезов: ${rows.length}` +
-    (soloN ? ` · без сравнения: ${soloN}` : '') +
-    (cmpN ? ` · с сравнением: ${cmpN}` : '') +
-    `</div>` + rendered.map(r => r.html).join('');
-  drawCompareBars(rendered);
+  root.innerHTML = `<table class="inbox">
+    <thead><tr>
+      <th>Status</th><th>Cluster</th><th>Slice</th>
+      <th class="num">Lat p90</th><th class="num">tpmC</th><th>Wave / last</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="muted" style="margin-top:8px">Показано ${rows.length} · клик = deep dive</div>`;
+
+  root.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.id;
+      const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      const open = tr.classList.toggle('open');
+      detail.classList.toggle('hidden', !open);
+      if (!open) destroyCharts(id + '_');
+      else {
+        const idx = Number(tr.dataset.idx);
+        const item = rows[idx];
+        if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
+          mountHistory(item, id);
+        }
+      }
+    });
+  });
+  root.querySelectorAll('button[data-hist]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.hist;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (item) mountHistory(item, id);
+    });
+  });
+}
+function renderAll() {
+  renderHeader();
+  renderHeatmap();
+  renderInbox();
+}
+function setupDateBar() {
+  const fromEl = document.getElementById('winFrom');
+  const toEl = document.getElementById('winTo');
+  fromEl.value = winFrom || UI.default_from || '';
+  toEl.value = winTo || UI.default_to || '';
+  if (UI.default_from) { fromEl.min = UI.default_from; toEl.min = UI.default_from; }
+  if (UI.default_to) { fromEl.max = UI.default_to; toEl.max = UI.default_to; }
+  document.getElementById('winApply').addEventListener('click', () => {
+    let a = fromEl.value || null;
+    let b = toEl.value || null;
+    if (a && b && a > b) { const t = a; a = b; b = t; }
+    winFrom = a; winTo = b;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  document.getElementById('winReset').addEventListener('click', () => {
+    winFrom = UI.default_from || null;
+    winTo = UI.default_to || null;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  [fromEl, toEl].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') document.getElementById('winApply').click();
+    });
+  });
+}
+function setupFilters() {
+  const ui = DATA.ui || {};
+  const branches = uiBranches();
+  const def = ui.default_branch || 'main';
+  document.getElementById('fBranch').innerHTML =
+    `<option value="">all</option>` +
+    branches.map(b => `<option value="${esc(b)}"${b === def ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  if (branches.includes(def)) document.getElementById('fBranch').value = def;
+
+  const fams = [...new Set([
+    ...((DATA.heatmap && DATA.heatmap.families) || []),
+    ...(DATA.inbox || []).map(r => r.family).filter(Boolean),
+  ])].sort();
+  document.getElementById('fFam').innerHTML = '<option value="">all</option>' +
+    fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  refreshDbFilter();
+  setupDateBar();
+  ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'fBranch') refreshDbFilter();
+      renderAll();
+    });
+  });
+}
+function refreshDbFilter() {
+  const br = selectedBranch();
+  const keep = document.getElementById('fDb').value;
+  const dbs = br
+    ? dbsForBranch(br)
+    : [...new Set((DATA.inbox || []).map(r => r.db).filter(Boolean))].sort();
+  document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
+    dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if (dbs.includes(keep)) document.getElementById('fDb').value = keep;
 }
 
-['cmpCluster','cmpRun'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('change', renderStableCompare);
-});
-document.getElementById('cmpSelectStables')?.addEventListener('click', () => {
-  cmpSelected = new Set(allBranchesInData().filter(b => b.startsWith('origin/stable-')));
-  renderStableCompare();
-});
-document.getElementById('cmpSelectAll')?.addEventListener('click', () => {
-  cmpSelected = new Set(allBranchesInData());
-  renderStableCompare();
-});
-document.getElementById('cmpClearBranches')?.addEventListener('click', () => {
-  cmpSelected = new Set();
-  renderStableCompare();
-});
-
-setupTabs();
-renderRegs();
-renderNoise();
-renderTree();
+setupFilters();
+renderAll();
 </script>
 </body>
 </html>

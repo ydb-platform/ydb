@@ -1,36 +1,33 @@
-# TPC-C performance report
+# TPC-C Now report
 
-Pull rows from `perfomance/tpcc`, build an interactive HTML report
-(regressions + bar charts + branch compare).
+Now-first status for TPC-C: **broken / lat↑ / tpmC↓ / missing** on the last
+few runs, with deep dive + history on demand.
 
-**Path:** `ydb/tools/perfomance_tests_status/tpcc`
+**Path:** `ydb/tools/perfomance_tests_status/tpcc`  
+Sibling of [`../olap`](../olap).
 
 ## Quick start
 
-1. Fetch data with [`queries/fetch_tpcc.sql`](queries/fetch_tpcc.sql)
-   (MCP `user-ydb-qa` / `ydb_query`, or any YDB client).
-2. Save JSON as `out/raw.json`.
-3. Generate:
+1. Dump: [`queries/fetch_tpcc.sql`](queries/fetch_tpcc.sql) → `out/raw.json`
+2. Generate:
 
 ```bash
 cd ydb/tools/perfomance_tests_status/tpcc
-python3 generate.py --input out/raw.json --since 2026-07-13 --output out/tpcc-report.html --open
+python3 generate.py --input out/raw.json --since 2026-07-01 --output out/tpcc-report.html --open
 ```
 
-## Rules
+## Now rules
 
 | Rule | Value |
 |------|--------|
-| Latency regression | NewOrder p90 **> +10%** vs early baseline |
-| Latency watch | **+7…10%** |
-| tpmC regression | drop beyond noise-based tol (usually ±3%) |
-| Cap | `lat90 >= 32768` → broken |
-| Baseline window | first **2 days** after `--since` |
-| Recent window | from day 8 after `--since` (or `--recent-from`) |
-| Branch compare | recency-weighted mean, weight `0.5^(age_days/2)` |
+| Now | last **3** runs |
+| Baseline | previous **7** runs |
+| Lat↑ | NewOrder p90 **≥ +10%**; **>3×** → broken |
+| Broken | lat **≥ 30000** (cap) |
+| tpmC↓ | tpmC **≤ −10%** |
+| Wave / missing | day × Branch × Cluster; expected = ≥50% of day-waves / 14d |
+| Scope | `main` + stables with enough points; inbox = hot only |
 
-## Ask an LLM
+UI: counters → heatmap → problem inbox → deep dive → Show history.
 
-> Сгенерируй TPC-C report с 13.07
-
-Follow [`AGENTS.md`](AGENTS.md).
+See [`AGENTS.md`](AGENTS.md).

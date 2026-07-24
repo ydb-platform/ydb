@@ -1,26 +1,70 @@
-# Agent instructions — TPC-C report
+# Agent instructions — TPC-C Now report
 
 Toolkit: `ydb/tools/perfomance_tests_status/tpcc`
 
-When the user asks for a TPC-C / tpcc / perf latency report:
+When the user asks for a TPC-C / tpcc / lat90 / tpmC performance report:
+
+## Goal (Now-first)
+
+Answer **what is red right now**, not historical dips:
+
+1. **Broken / Lat↑ / tpmC↓** — last **3** runs vs previous **7** (median)
+2. **Missing** — expected slice absent from latest **day × Branch × Cluster** wave
+3. **Stale** — no fresh day-wave on a focus cluster
+
+History charts are deep-dive only (do not drive alerts).
 
 ## 1. Fetch data
 
-Use MCP `user-ydb-qa` → `ydb_query` with SQL from `queries/fetch_tpcc.sql`.
-Replace `{{SINCE}}` with `YYYY-MM-DDT00:00:00Z`.
+SQL: `queries/fetch_tpcc.sql` (replace `{{SINCE}}`).
 
-Save the full tool JSON to `out/raw.json` under this directory.
+Prefer MCP `user-ydb-qa` → `ydb_query`, or ydb CLI. Save MCP-shaped JSON:
+
+```json
+{"result_sets":[{"columns":[...],"rows":[...]}]}
+```
+
+→ `out/raw.json`
+
+Endpoint/DB: see `.github/config/ydb_qa_config.json`.
+
+Default lookback: from `--since` (e.g. ~3–4 weeks).
 
 ## 2. Generate HTML
 
 ```bash
 cd ydb/tools/perfomance_tests_status/tpcc
-python3 generate.py --input out/raw.json --since YYYY-MM-DD --output out/tpcc-report.html --open
+python3 generate.py \
+  --input out/raw.json \
+  --since YYYY-MM-DD \
+  --output out/tpcc-report.html --open
 ```
 
 ## 3. Deliver
 
 - Path to `out/tpcc-report.html`
-- Short summary: regressions / broken; top latency Δ
+- Summary counts: **missing / broken / lat↑ / tpmC↓ / stale**
+- Note window + that Now uses last-3 vs prev-7 runs
 
-Do not invent dashboard baselines; do not change the +10% lat rule unless asked.
+## Rules (v1)
+
+| Signal | Rule |
+|--------|------|
+| Now | last 3 runs / slice |
+| Baseline | previous 7 runs |
+| Lat↑ | NewOrder p90 ≥ **+10%** vs baseline; **>3×** → broken |
+| Broken | `lat ≥ 30000` (cap) in recent runs |
+| tpmC↓ | tpmC ≤ **−10%** vs baseline |
+| Wave | calendar day × Branch × Cluster |
+| Expected slice | present in ≥50% of day-waves for that Branch×Cluster over ~14d |
+| Missing | expected slice absent from last completed day-wave |
+| Stale | no day-wave ≥36h on focus cluster |
+| Scope | `main` + `stable-*` / `prestable-*` / `26*` with enough points; inbox = hot only |
+| Slice | `Branch × Cluster × run_type@warehouses` |
+| Date interval | From/To; filters inbox, heatmap, history; Reset → full `--since..until` |
+
+## UI layers
+
+1. **Now** — counters + Cluster×run_type heatmap + problem inbox
+2. **Deep dive** — click inbox row → last 3 runs
+3. **History** — “Show history” charts (tpmC + lat)

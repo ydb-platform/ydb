@@ -1,5 +1,5 @@
--- TPC-C runs for the report window.
--- Replace {{SINCE}} with ISO timestamp, e.g. 2026-07-13T00:00:00Z
+-- TPC-C runs for the Now report window.
+-- Replace {{SINCE}} with ISO timestamp, e.g. 2026-07-01T00:00:00Z
 SELECT
   cluster,
   run_type,

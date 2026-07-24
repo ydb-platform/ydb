@@ -120,6 +120,10 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
@@ -506,8 +510,6 @@ common:
     to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
     to: /reference/ydb-cli/scan-query.md
-  - from: /yql/reference/syntax/analyze.md
-    to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
 

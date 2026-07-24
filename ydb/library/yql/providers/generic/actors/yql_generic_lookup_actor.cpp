@@ -13,6 +13,7 @@
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -45,16 +46,6 @@ namespace NYql::NDq {
             return resultTypeBuilder.Build();
         }
 
-        template <typename T>
-        T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            // We want to avoid making a copy of data stored in a future.
-            // But there is no direct way to extract data from a const future
-            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            // It destructs the value in the original future, but this trick is legal and documented here:
-            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
-            return NThreading::TFuture<T>(f).ExtractValueSync();
-        }
-
         using ILookupRetryPolicy = IRetryPolicy<const NYdbGrpc::TGrpcStatus&>;
         using ILookupRetryState = ILookupRetryPolicy::IRetryState;
         struct TLookupState {
@@ -77,6 +68,10 @@ namespace NYql::NDq {
         using TBase = TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr>;
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
+            explicit TEvLookupRetry(TLookupState::TPtr state)
+                : State(std::move(state))
+            {}
+
             TLookupState::TPtr State;
         };
 
@@ -162,7 +157,7 @@ namespace NYql::NDq {
     public:
 
         void Bootstrap() {
-            auto dsi = LookupSource.data_source_instance();
+            const auto& dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
                                             << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                                             << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -194,6 +189,7 @@ namespace NYql::NDq {
     private: // events
         STRICT_STFUNC_EXC(StateFunc,
             hFunc(TEvLookupRequest, Handle)
+            hFunc(TEvGotCredentials, Handle)
             hFunc(TEvListSplitsIterator, Handle)
             hFunc(TEvListSplitsPart, Handle)
             hFunc(TEvReadSplitsIterator, Handle)
@@ -233,28 +229,33 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            auto error = CredentialsProvider->FillCredentials(*readRequest.mutable_data_source_instance());
-            if (error) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
-                return;
-            }
-
             *readRequest.add_splits() = std::move(split);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            Connector->ReadSplits(readRequest, RequestTimeout).Subscribe([
+            CredentialsProvider->AsyncCredentials().Apply([
+                    connector = Connector,
+                    readRequest = std::move(readRequest),
+                    requestTimeout = RequestTimeout
+            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+                *readRequest.mutable_data_source_instance()->mutable_credentials() = ExtractFromConstFuture(future);
+                return connector->ReadSplits(readRequest, requestTimeout);
+            }).Subscribe([
                     actorSystem = TActivationContext::ActorSystem(),
                     selfId = SelfId(),
                     state = std::move(ev->Get()->State)
             ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
-                auto result = ExtractFromConstFuture(asyncResult);
-                if (result.Status.Ok()) {
-                    auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
-                    ev->State = std::move(state);
-                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                } else {
-                    SendRetryOrError(actorSystem, selfId, result.Status, state);
+                try {
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
+                    auto result = ExtractFromConstFuture(asyncResult);
+                    if (result.Status.Ok()) {
+                        auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
+                        ev->State = std::move(state);
+                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+                    } else {
+                        SendRetryOrError(actorSystem, selfId, result.Status, state);
+                    }
+                } catch (std::exception& ex) {
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
                 }
             });
         }
@@ -365,16 +366,32 @@ namespace NYql::NDq {
             SendRequest(state);
         }
 
-        // must be called with bound Alloc
         void SendRequest(TLookupState::TPtr state) {
+            CredentialsProvider->AsyncCredentials().Subscribe([
+                    actorSystem = TActivationContext::ActorSystem(),
+                    selfId = SelfId(),
+                    state = std::move(state)
+            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+                try {
+                    actorSystem->Send(
+                        selfId,
+                        new TEvGotCredentials(ExtractFromConstFuture(future), std::move(state)));
+                } catch (std::exception& ex) {
+                    SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
+                }
+            });
+        }
+
+        void Handle(TEvGotCredentials::TPtr ev) {
             auto startCycleCount = GetCycleCountFast();
+            auto state = std::move(ev->Get()->State);
             NConnector::NApi::TListSplitsRequest splitRequest;
 
-            auto error = FillSelect(*splitRequest.add_selects(), state);
+            auto error = FillSelect(*splitRequest.add_selects(), state, std::move(ev->Get()->Credentials));
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
-            };
+            }
 
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
@@ -525,9 +542,8 @@ namespace NYql::NDq {
             auto nextRetry = state->RetryState->GetNextRetryDelay(status);
             if (nextRetry) {
                 YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-                auto ev = new TEvLookupRetry();
-                ev->State = std::move(state);
-                actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, ev));
+                actorSystem->Schedule(*nextRetry,
+                        new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(state))));
                 return;
             }
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
@@ -582,14 +598,10 @@ namespace NYql::NDq {
             }
         }
 
-        // must be called with bound Alloc
-        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state) {
+        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state, TGenericCredentials&& credentials) {
             auto dsi = LookupSource.data_source_instance();
-            auto error = CredentialsProvider->FillCredentials(dsi);
-            if (error) {
-                return error;
-            }
-            *select.mutable_data_source_instance() = dsi;
+            *dsi.mutable_credentials() = std::move(credentials);
+            *select.mutable_data_source_instance() = std::move(dsi);
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
@@ -607,6 +619,7 @@ namespace NYql::NDq {
             }
 
             NConnector::NApi::TPredicate::TDisjunction disjunction;
+            auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
             if (!request) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";

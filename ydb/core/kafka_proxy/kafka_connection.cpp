@@ -381,7 +381,7 @@ protected:
             Context->ConnectionId,
             Context->DatabasePath,
             Context->ResourceDatabasePath,
-            Context->InitialServerlessTransactionsFlagValue.value()
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -392,7 +392,7 @@ protected:
             Context->ConnectionId,
             Context->DatabasePath,
             Context->ResourceDatabasePath,
-            Context->InitialServerlessTransactionsFlagValue.value()
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -403,7 +403,7 @@ protected:
             Context->ConnectionId,
             Context->DatabasePath,
             Context->ResourceDatabasePath,
-            Context->InitialServerlessTransactionsFlagValue.value()
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -414,7 +414,7 @@ protected:
             Context->ConnectionId,
             Context->DatabasePath,
             Context->ResourceDatabasePath,
-            Context->InitialServerlessTransactionsFlagValue.value()
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 

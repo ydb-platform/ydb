@@ -354,9 +354,9 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const 
 
     if (status == Ydb::StatusIds::ALREADY_EXISTS) {
         LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
-            "Kafka metadata table '" << msg->TableName << "' already exists, skipping modifications and migration");
-        ++ProcessedRequests;
-        ReplyIfRequired(ctx);
+            "Kafka metadata table '" << msg->TableName << "' already exists, skipping migration but enabling autopartitioning and ACL");
+        AlreadyExistedTables.insert(msg->TableName);
+        SendEnableAutopartitioningRequest(msg->TableName);
         return;
     }
 
@@ -380,7 +380,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const 
     }
 
     if ((msg->TableName == "kafka_consumer_groups" || msg->TableName == "kafka_consumer_members"
-            || msg->TableName == "kafka_transactional_producers") && ShouldMigrate()) {
+            || msg->TableName == "kafka_transactional_producers") && ShouldMigrate() && !AlreadyExistedTables.contains(msg->TableName)) {
         LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
             "Kafka metadata table '" << msg->TableName << "' autopartitioning enabled (status "
                 << Ydb::StatusIds::StatusCode_Name(status) << "), migrating rows from '"

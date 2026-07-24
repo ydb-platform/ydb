@@ -138,6 +138,7 @@ private:
     const ETables TablesType;
     ui32 TablesToCreate = 0;
     ui32 ProcessedRequests = 0;
+    TSet<TString> AlreadyExistedTables;
 };
 
 bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const NActors::TActorContext& ctx);

@@ -4921,6 +4921,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(TransactionsFailAfterEnablingServerlessTransactionsFlagAtRuntime) {
         TInsecureTestServer testServer("1", false, true);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
         TKafkaTestClient kafkaClient(testServer.Port);
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
@@ -4973,12 +4974,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto initProducerIdResp = kafkaClient.InitProducerId(TStringBuilder() << "tx-producer-flag-on-" << RandomNumber<ui64>(), 30000);
         UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::INVALID_TXN_STATE);
 
-        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
+        TKafkaTestClient newConnectionClient(testServer.Port);
+        auto fetchResponse = newConnectionClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
         UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
 
-        TKafkaTestClient newConnectionClient(testServer.Port);
         runTransaction(newConnectionClient, TStringBuilder() << "tx-producer-flag-on-" << RandomNumber<ui64>(), 2, {"out-key-2", "out-val-2"});
     }
 

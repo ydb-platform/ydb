@@ -2596,6 +2596,7 @@ class InSubplanEvaluationTest(unittest.TestCase):
     def test_exact_membership_handles_duplicates_empty_not_and_repeated_use(self):
         domains = (
             ("Int32", (1, 2, 3), (2, 2, 9)),
+            ("Date", (1, 2, 3), (2, 2, 9)),
             ("String", ("a", "b", "c"), ("b", "b", "z")),
         )
         cases = (
@@ -2651,7 +2652,7 @@ class InSubplanEvaluationTest(unittest.TestCase):
                     self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
                     self.assertEqual(observed.count("inner_scan"), 1)
 
-    def test_nullable_integral_membership_is_positive_filter_truth(self):
+    def test_nullable_fixed_width_membership_is_positive_filter_truth(self):
         cases = (
             (
                 True,
@@ -2686,39 +2687,45 @@ class InSubplanEvaluationTest(unittest.TestCase):
                 [],
             ),
         )
-        for (
-            lookup_nullable,
-            output_nullable,
-            outer,
-            inner,
-            inner_present,
-            expected,
-        ) in cases:
-            with self.subTest(
-                lookup_nullable=lookup_nullable,
-                output_nullable=output_nullable,
-                outer=outer,
-                inner=inner,
-                inner_present=inner_present,
-            ):
-                evaluator, database, family = self._evaluate(
-                    _in_snapshot(
-                        lookup_nullable=lookup_nullable,
-                        output_nullable=output_nullable,
-                    )
-                )
-                constants = _in_constants(
-                    database,
-                    outer,
-                    inner,
+        for scalar_type in ("Int32", "Date"):
+            for (
+                lookup_nullable,
+                output_nullable,
+                outer,
+                inner,
+                inner_present,
+                expected,
+            ) in cases:
+                with self.subTest(
+                    scalar_type=scalar_type,
+                    lookup_nullable=lookup_nullable,
+                    output_nullable=output_nullable,
+                    outer=outer,
+                    inner=inner,
                     inner_present=inner_present,
-                )
+                ):
+                    evaluator, database, family = self._evaluate(
+                        _in_snapshot(
+                            scalar_type=scalar_type,
+                            lookup_nullable=lookup_nullable,
+                            output_nullable=output_nullable,
+                        )
+                    )
+                    constants = _in_constants(
+                        database,
+                        outer,
+                        inner,
+                        inner_present=inner_present,
+                    )
 
-                self.assertEqual(
-                    self._present_values(family.certain(), constants),
-                    expected,
-                )
-                self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
+                    self.assertEqual(
+                        self._present_values(family.certain(), constants),
+                        expected,
+                    )
+                    self.assertEqual(
+                        set(evaluator.subplan_families),
+                        {IN_BINDING},
+                    )
 
     def test_string_membership_matches_the_finite_reference_exhaustively(self):
         values = ("a", "b", "c")
@@ -2927,7 +2934,7 @@ class InSubplanSolverTest(unittest.TestCase):
         return solve(problem, SOLVER, row_bound, 10_000)
 
     def test_in_is_bounded_equivalent_to_left_semi(self):
-        for scalar_type in ("Int32", "String"):
+        for scalar_type in ("Int32", "Date", "String"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
 
@@ -2938,27 +2945,30 @@ class InSubplanSolverTest(unittest.TestCase):
 
                 self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
-    def test_nullable_integral_in_is_bounded_equivalent_to_left_semi(self):
-        for lookup_nullable, output_nullable in (
-            (True, False),
-            (False, True),
-            (True, True),
-        ):
-            with self.subTest(
-                lookup_nullable=lookup_nullable,
-                output_nullable=output_nullable,
+    def test_nullable_fixed_width_in_is_bounded_equivalent_to_left_semi(self):
+        for scalar_type in ("Int32", "Date"):
+            for lookup_nullable, output_nullable in (
+                (True, False),
+                (False, True),
+                (True, True),
             ):
-                raw = _in_snapshot(
+                with self.subTest(
+                    scalar_type=scalar_type,
                     lookup_nullable=lookup_nullable,
                     output_nullable=output_nullable,
-                )
+                ):
+                    raw = _in_snapshot(
+                        scalar_type=scalar_type,
+                        lookup_nullable=lookup_nullable,
+                        output_nullable=output_nullable,
+                    )
 
-                result = self._solve(
-                    raw,
-                    _lower_in_snapshot(raw, "left_semi"),
-                )
+                    result = self._solve(
+                        raw,
+                        _lower_in_snapshot(raw, "left_semi"),
+                    )
 
-                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+                    self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_not_in_is_bounded_equivalent_to_left_anti(self):
         for scalar_type in ("Int32", "String"):
@@ -3763,7 +3773,7 @@ class InSubplanValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
 
-    def test_lookup_and_output_accept_independent_nullable_integral_types(self):
+    def test_lookup_and_output_accept_audited_dynamic_in_types(self):
         integral_types = (
             "Int8",
             "Int16",
@@ -3793,6 +3803,22 @@ class InSubplanValidationTest(unittest.TestCase):
                     )
 
         parse_snapshot(_in_snapshot(scalar_type="String"))
+        for lookup_nullable, output_nullable in product(
+            (False, True),
+            repeat=2,
+        ):
+            with self.subTest(
+                scalar_type="Date",
+                lookup_nullable=lookup_nullable,
+                output_nullable=output_nullable,
+            ):
+                parse_snapshot(
+                    _in_snapshot(
+                        scalar_type="Date",
+                        lookup_nullable=lookup_nullable,
+                        output_nullable=output_nullable,
+                    )
+                )
         for lookup_nullable, output_nullable in (
             (True, False),
             (False, True),
@@ -3805,7 +3831,7 @@ class InSubplanValidationTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "nullable.*fixed-width integral",
+                    "nullable.*fixed-width integral or Date",
                 ):
                     parse_snapshot(
                         _in_snapshot(
@@ -3832,12 +3858,12 @@ class InSubplanValidationTest(unittest.TestCase):
                 ):
                     parse_snapshot(raw)
 
-        for scalar_type in ("Bool", "Utf8", "Date", "Decimal(7,2)"):
+        for scalar_type in ("Bool", "Utf8", "Decimal(7,2)"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only fixed-width integral or String",
+                    "only fixed-width integral, Date, or String",
                 ):
                     parse_snapshot(raw)
 

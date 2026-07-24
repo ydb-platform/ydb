@@ -864,10 +864,15 @@ bool IsStringType(TStringBuf type) {
 
 bool IsExactDynamicInColumnType(TStringBuf type) {
     // Dynamic IN is modeled as same-type equality over one scalar domain.
-    // Nullable integers are admitted only under the separately validated
-    // positive-Filter contract.  Keep this narrower than general comparison
-    // compatibility: Utf8 and coercing comparisons have not been audited.
-    return IsIntegerType(type) || type == "String";
+    // Nullable integers and Date are admitted only under the separately
+    // validated positive-Filter contract.  Keep this narrower than general
+    // comparison compatibility: Utf8 and coercing comparisons have not been
+    // audited.
+    return IsIntegerType(type) || type == "Date" || type == "String";
+}
+
+bool IsExactNullableDynamicInColumnType(TStringBuf type) {
+    return IsIntegerType(type) || type == "Date";
 }
 
 bool StringComparisonCompatible(TStringBuf left, TStringBuf right) {
@@ -6273,11 +6278,13 @@ private:
 
         const auto outputType = ExactType(OutputType(*plan, output));
         if (!IsExactDynamicInColumnType(outputType.Name) ||
-            (outputType.Nullable && !IsIntegerType(outputType.Name)))
+            (outputType.Nullable &&
+             !IsExactNullableDynamicInColumnType(outputType.Name)))
         {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << binding
-                << " result must be a fixed-width integer or non-null String");
+                << " result must be a fixed-width integer, Date, or "
+                   "non-null String");
         }
         return {
             .Binding = binding,
@@ -6674,10 +6681,12 @@ private:
                 << "IN subplan binding " << subplan.Binding
                 << " lookup and result must have the same supported type");
         }
-        if (lookupType.Nullable && !IsIntegerType(lookupType.Name)) {
+        if (lookupType.Nullable &&
+            !IsExactNullableDynamicInColumnType(lookupType.Name))
+        {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << subplan.Binding
-                << " nullable lookup must be a fixed-width integer");
+                << " nullable lookup must be a fixed-width integer or Date");
         }
         details.LookupNullable = lookupType.Nullable;
         if (details.LookupNullable || details.OutputNullable) {

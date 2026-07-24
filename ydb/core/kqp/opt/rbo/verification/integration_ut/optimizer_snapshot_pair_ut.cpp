@@ -819,6 +819,42 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             "left_semi");
     }
 
+    Y_UNIT_TEST(RealHostVerifiesPositiveNullableDateDynamicInAsLeftSemi) {
+        TKikimrRunner kikimr;
+        CreateDateColumnTable(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT outer_row.Id
+            FROM `/Root/RboDate` AS outer_row
+            WHERE outer_row.D IN (
+                SELECT inner_row.D
+                FROM `/Root/RboDate` AS inner_row
+            );
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "in");
+        UNIT_ASSERT_VALUES_EQUAL(subplan["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(!subplan["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["lookup"]["type"].GetStringSafe(),
+            "Date");
+        UNIT_ASSERT(subplan["lookup"]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["output"]["type"].GetStringSafe(),
+            "Date");
+        UNIT_ASSERT(subplan["output"]["nullable"].GetBooleanSafe());
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*joins[0])["kind"].GetStringSafe(),
+            "left_semi");
+    }
+
     Y_UNIT_TEST(RealHostVerifiesUncorrelatedNonNullStringDynamicInAsLeftSemi) {
         TKikimrRunner kikimr;
         CreateStringInColumnTables(kikimr);

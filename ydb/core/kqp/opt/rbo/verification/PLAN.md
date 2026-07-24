@@ -646,8 +646,12 @@ Implementation sequence:
     referenced-ambiguity rejection;
 44. M4: exact ordered two-dependency relational `EXISTS` with one strict direct
     equality and one strict direct inequality in separate conjuncts;
-45. next: more than two dependencies, broader correlations, coercing or other
-    nullable dynamic `IN`, range reads, and other OLAP pushdowns.
+45. M4: exact uncorrelated same-type `Date` dynamic `IN`, with independent
+    lookup/output nullability only at a direct positive top-level Filter
+    conjunct;
+46. next: nested subplans exposed by TPC-DS q58, q83's static nullable-Date
+    `SqlIn`, more than two dependencies, broader correlations, coercing and
+    nullable-String dynamic `IN`, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -1313,10 +1317,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   exact representation selector moves q68 through formula construction.
 - Exact uncorrelated dynamic `IN` has one typed lookup column, one typed
   inner-result column, and one Filter consumer. Non-null lookup/output columns
-  may have the same fixed-width integral identity or exact `String` type.
-  Fixed-width integral lookup/output columns may instead be independently
-  nullable while retaining the same underlying identity, but only when the
-  binding appears only in direct positive top-level conjuncts of that Filter.
+  may have the same fixed-width integral identity, exact `String` type, or
+  Date. Fixed-width integral or Date lookup/output columns may instead be
+  independently nullable while retaining the same underlying identity, but
+  only when the binding appears only in direct positive top-level conjuncts of
+  that Filter.
   At this positive truth boundary, SQL membership is exactly existential
   equality over a non-NULL lookup and a present, non-NULL inner value:
   duplicates collapse,
@@ -1325,13 +1330,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   nullable identities fail closed because false and SQL UNKNOWN are
   distinguishable outside the positive Filter-truth position. `OuterBind`,
   `AddDependencies`, observable `EnsureAtMostOne`, nesting, staging, fanout,
-  tuples, `Utf8`, Bool, Date, Decimal, and mismatched identities also fail
+  tuples, `Utf8`, Bool, Decimal, and mismatched identities also fail
   closed. Non-null consumer `NOT` continues to supply anti-membership, repeated
   references share one cached subplan family, and inherited root errors remain
   eager. The membership product is cumulatively capped at 16,384 outer/inner
-  pairs across alternatives and nested evaluation. Real-host integer and
-  String cases prove initial dynamic `IN` equivalent to final `left_semi` at
-  two rows and two tasks; TPC-DS q33 exercises the nullable positive contract.
+  pairs across alternatives and nested evaluation. Real-host integer, String,
+  and nullable-Date cases prove initial dynamic `IN` equivalent to final
+  `left_semi` at two rows and two tasks; TPC-DS q33 exercises the nullable
+  positive contract.
 - Exact nullable Date-year projection accepts only an
   `Optional<Uint16>` `Map` over a complete `SafeCast` from one direct visible
   `Optional<Date>` member to `Optional<Timestamp>`. Its unary non-null
@@ -2009,13 +2015,13 @@ and `UNKNOWN`.
 Exact uncorrelated dynamic `IN` is a separate typed subplan kind. Its descriptor
 records one lookup column from its sole Filter consumer and one output column
 from the inner root. They have the same underlying fixed-width integral or
-exact `String` identity. String lookup/output must both be non-null. Integral
-lookup/output may be independently nullable, but if either is nullable the
-binding may occur only in direct positive top-level conjuncts in its sole
-Filter consumer. The binding is non-null `Bool`, has no dependencies, and
-remains virtual. Export and decoding reject `OuterBind`, `AddDependencies`,
-observable `EnsureAtMostOne`, multiple consumers, nesting, staging, tuple mappings,
-coercions, nullable `String`, and `Utf8`, Bool, Date, Decimal, other nullable
+exact `String` or `Date` identity. String lookup/output must both be non-null.
+Integral and Date lookup/output may be independently nullable, but if either is
+nullable the binding may occur only in direct positive top-level conjuncts in
+its sole Filter consumer. The binding is non-null `Bool`, has no dependencies,
+and remains virtual. Export and decoding reject `OuterBind`, `AddDependencies`,
+observable `EnsureAtMostOne`, multiple consumers, nesting, staging, tuple
+mappings, coercions, nullable `String`, `Utf8`, Bool, Decimal, other nullable
 identities, or mismatched identities.
 
 For each present consumer row, the evaluator ORs equality with every present
@@ -2027,6 +2033,9 @@ a Filter: NULL or unmatched-with-NULL evaluates to UNKNOWN rather than TRUE,
 and therefore does not pass. `NOT` fails closed because replacing UNKNOWN with
 false changes truth under negation; `OR` and other embedded nullable uses
 remain unreviewed and fail closed.
+Date values use the existing exact bounded `[0, NUdf::MAX_DATE)` domain; the
+membership condition remains true exactly when one present inner row carries
+the same non-NULL Date as the present outer lookup.
 Repeated uses share a cached subplan family; errors inherited from the root
 remain eager even with an empty outer input. The membership product is
 preflighted at 16,384 pairs cumulatively across alternatives. Focused Python
@@ -2048,6 +2057,18 @@ both old witnesses are invalid and the corrected obligations are `UNKNOWN`, so
 the then-current twenty-query proof floor was unchanged. The nullable positive
 integral extension adds q33 formula construction after 1,551/1,158 ms, but no
 proof or optimizer finding; q58 and q83 remain outside the admitted contract.
+
+The subsequent exact Date extension reuses that descriptor and evaluator only
+for uncorrelated, same-type Date lookup/output columns. Their nullability may
+vary independently; any nullable case must remain a direct positive top-level
+Filter conjunct. Focused C++ gates and a real-host nullable-Date
+`IN`-to-`left_semi` obligation are green. A fresh focused TPC-DS q58 run now
+passes the Date-type gate and fails closed later because
+`IN subplan binding _rbo_arg_1 contains a nested subplan reference`. It still
+does not construct a formula, so the recorded coverage and proof policies do
+not change. q58's nested subplan, q83's static nullable-Date `SqlIn`,
+coercions, nullable String, and nullable non-positive Boolean contexts remain
+separate work.
 
 The exact nullable Date-year projection bridge accepts only the reviewed
 `Map(SafeCast(Optional<Date> -> Optional<Timestamp>), lambda Timestamp:
@@ -2087,11 +2108,13 @@ without changing the sequence language. A 60-second solver experiment remains
 parser/runtime now backs both the coverage host and benchmark-mode prefix
 capture, exposing dynamic `IN` as a verifier boundary instead of a dummy-host
 preparation failure. Exact uncorrelated same-type non-null integral and String
-slices are now implemented, as is the exact nullable Date-year projection
-bridge and exact proven-total Date `Unwrap`.
-Coercing dynamic `IN`, nullable String/Date and non-positive nullable uses,
-more than two `EXISTS` dependencies, broader correlated predicates, range
-reads, and other OLAP pushdowns remain future work. The
+slices are now implemented, as are the exact nullable Date dynamic-`IN`
+positive-Filter slice, the exact nullable Date-year projection bridge, and
+exact proven-total Date `Unwrap`.
+Nested subplans exposed by q58, q83's static nullable-Date `SqlIn`, coercing
+dynamic `IN`, nullable String and non-positive nullable uses, more than two
+`EXISTS` dependencies, broader correlated predicates, range reads, and other
+OLAP pushdowns remain future work. The
 proof policy adds TPCH q18 to the previous eighteen obligations; the expanded
 gate confirmed all nineteen at that checkpoint. The later q95 slice adds the
 twentieth obligation. The Date `Unwrap` slice adds q38 and q87 as the

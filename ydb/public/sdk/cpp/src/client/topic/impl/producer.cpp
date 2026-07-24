@@ -5,6 +5,7 @@
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
 #include <util/generic/guid.h>
+#include <library/cpp/threading/future/core/coroutine_traits.h>
 
 #include <format>
 
@@ -2230,6 +2231,45 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
         }
 
         return WriteInternal(std::move(*continuationToken), std::move(message));
+    }
+}
+
+NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message) {
+    TWriteMessage ownedMessage(std::move(message));
+    auto remainingTimeout = Settings.MaxBlockTimeout_;
+    auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
+    for (;;) {
+        if (Closed.load()) {
+            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+            co_return TWriteResult{
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "producer is closed",
+                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+            };
+        }
+        
+        auto continuationToken = EventsWorker->GetContinuationToken();
+        if (!continuationToken) {
+            if (remainingTimeout > TDuration::Zero()) {
+                auto toSleep = Min(sleepTimeMs, remainingTimeout);
+                co_await this->Connections->Delay(TDeadline::SafeDurationCast(toSleep));
+                sleepTimeMs *= 2;
+                if (remainingTimeout > toSleep) {
+                    remainingTimeout -= toSleep;
+                    continue;
+                }
+
+                co_return TWriteResult{
+                    .Status = EWriteStatus::Timeout,
+                };
+            }
+
+            co_return TWriteResult{
+                .Status = EWriteStatus::Timeout,
+            };
+        }
+
+        co_return WriteInternal(std::move(*continuationToken), std::move(ownedMessage));
     }
 }
 

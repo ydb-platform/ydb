@@ -141,6 +141,13 @@ public:
     //! If write was not successful because of closed session, returns ProducerClosed.
     //! DO NOT IGNORE THE RETURN VALUE.
     [[nodiscard]] virtual TWriteResult Write(TWriteMessage&& message) = 0;
+    //! Write single message to partition asynchronously.
+    //! Returns future that is set when write is complete.
+    //! If write was successful, returns TWriteResult with Status Queued.
+    //! If write was not successful due to overloaded buffer, returns TWriteResult with Status Overloaded.
+    //! If write was not successful because of closed session, returns TWriteResult with Status ProducerClosed and ClosedDescription set to the description why session was closed.
+    //! If write was not successful because of timeout, returns TWriteResult with Status Timeout.
+    [[nodiscard]] virtual NThreading::TFuture<TWriteResult> WriteAsync(TWriteMessage&& message) = 0;
 
     //! Flush all messages to the server.
     //! Returns future that is set when flush is complete.
@@ -178,6 +185,16 @@ public:
         return Impl_->Write(TWriteMessage(std::forward<T>(message)));
     }
 
+    //! Write single message asynchronously. T converts to TWriteMessage, then IProducer::WriteAsync is called.
+    [[nodiscard]] NThreading::TFuture<TWriteResult> WriteAsync(T&& message) {
+        return Impl_->WriteAsync(TWriteMessage(std::forward<T>(message)));
+    }
+
+    //! Flush all messages to the server.
+    //! Returns future that is set when flush is complete.
+    //! If flush was successful, returns TFlushResult with Status Success and LastWrittenSeqNo set to the last written sequence number.
+    //! If flush was not successful because of closed session, returns TFlushResult with Status ProducerClosed and ClosedDescription set to the description why session was closed.
+    //! If flush was not successful because of timeout, returns TFlushResult with Status Timeout.
     [[nodiscard]] NThreading::TFuture<TFlushResult> Flush() {
         return Impl_->Flush();
     }

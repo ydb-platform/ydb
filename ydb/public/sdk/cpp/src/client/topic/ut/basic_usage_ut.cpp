@@ -2025,6 +2025,107 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
+
+    Y_UNIT_TEST(Producer_AsyncWrite) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxMemoryUsage(100_KB);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
+
+        auto producer = client.CreateProducer(writeSettings);
+        const std::string message(1_MB, 'a');
+        constexpr ui64 messageCount = 10;
+        std::vector<NThreading::TFuture<TWriteResult>> writeFutures;
+        writeFutures.reserve(messageCount);
+
+        for (ui64 i = 0; i < messageCount; ++i) {
+            TWriteMessage writeMessage("key", message);
+            writeFutures.push_back(producer->WriteAsync(std::move(writeMessage)));
+        }
+
+        for (const auto& writeFuture : writeFutures) {
+            UNIT_ASSERT(writeFuture.GetValueSync().IsQueued());
+        }
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, messageCount);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(TypedProducer_AsyncWrite) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("typed_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
+
+        auto producer = client.CreateTypedProducer<TExample>(writeSettings);
+
+        UNIT_ASSERT(producer->WriteAsync(TExample{.Payload = "message"}).GetValueSync().IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 1);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_AsyncWriteTimeout) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("async_producer_timeout");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxMemoryUsage(100_KB);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_MB, 'a');
+
+        UNIT_ASSERT(producer->WriteAsync(TWriteMessage(msgData)).GetValueSync().IsQueued());
+        auto writeFuture = producer->WriteAsync(TWriteMessage(msgData));
+        UNIT_ASSERT(writeFuture.GetValueSync().IsTimeout());
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_AsyncWriteToClosedProducer) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        auto client = setup.MakeClient();
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("closed_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+
+        auto producer = client.CreateProducer(writeSettings);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+
+        auto result = producer->WriteAsync(TWriteMessage("message")).GetValueSync();
+        UNIT_ASSERT(result.IsError());
+        UNIT_ASSERT_VALUES_EQUAL(result.ErrorMessage, "producer is closed");
+        UNIT_ASSERT(result.ClosedDescription);
+        UNIT_ASSERT_VALUES_EQUAL(result.ClosedDescription->GetStatus(), EStatus::SUCCESS);
+    }
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

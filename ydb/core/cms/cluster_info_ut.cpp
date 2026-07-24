@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
     Y_UNIT_TEST(SysTabletMultipleTypesOnSameNode) {
         TEvInterconnect::TNodeInfo nodeInfo = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
         const ui64 bscTabletId = MakeBSControllerID();
-        const ui64 ssTabletId = 201;  // arbitrary SchemeShard tablet id
+        const ui64 ssTabletId = 201;
 
         auto makeCluster = [&]() {
             TClusterInfoPtr cluster(new TClusterInfo);

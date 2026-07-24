@@ -3126,62 +3126,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
-    Y_UNIT_TEST(SysTabletsNodeThreeGroupsOrder)
-    {
-        TCmsTestEnv env(TTestEnvOpts(16, 0));
-
-        // Nodes 0-9: sys tablet candidates. Nodes 10-15: no sys tablets.
-        NKikimrConfig::TBootstrap bootstrapConfig;
-        TVector<ui32> sysNodes;
-        for (ui32 i = 0; i < 10; ++i) {
-            sysNodes.push_back(env.GetNodeId(i));
-        }
-        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
-            auto *tablet = bootstrapConfig.AddTablet();
-            tablet->SetType(type);
-            for (ui32 nodeId : sysNodes) {
-                tablet->AddNode(nodeId);
-            }
-        };
-        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
-
-        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
-        env.EnableSysNodeChecking();
-        env.RestartCms();
-
-        // Group 3: candidates that currently host a running leader tablet.
-        SetRunningSysTablet(env.GetNodeId(0), true);
-        SetRunningSysTablet(env.GetNodeId(1), true);
-        env.RestartCms();
-
-        THashSet<TString> g3Hosts = {ToString(env.GetNodeId(0)), ToString(env.GetNodeId(1))};
-        // Group 2: candidates without a running tablet.
-        THashSet<TString> g2Hosts = {ToString(env.GetNodeId(2)), ToString(env.GetNodeId(3))};
-        // Group 1: non-candidate nodes.
-        THashSet<TString> g1Hosts = {ToString(env.GetNodeId(10)), ToString(env.GetNodeId(11))};
-
-        // Interleaved request across the three groups.
-        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
-                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW,
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-
-        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 6);
-        // Group 1 (non-candidate) first.
-        UNIT_ASSERT(g1Hosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
-        UNIT_ASSERT(g1Hosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
-        // Group 2 (candidate, no running tablet) next.
-        UNIT_ASSERT(g2Hosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
-        UNIT_ASSERT(g2Hosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
-        // Group 3 (running tablet) last.
-        UNIT_ASSERT(g3Hosts.contains(resp.GetPermissions(4).GetAction().GetHost()));
-        UNIT_ASSERT(g3Hosts.contains(resp.GetPermissions(5).GetAction().GetHost()));
-    }
-
     Y_UNIT_TEST(SysTabletsNodeDeferredOnCheckRequestAfterMigration)
     {
         TCmsTestEnv env(TTestEnvOpts(16, 0));

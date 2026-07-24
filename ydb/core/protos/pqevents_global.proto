@@ -88,6 +88,8 @@ message TReadSessionsInfoResponse {
 
 message TGetPartitionsLocation {
     repeated uint64 Partitions = 1;
+    // How long PQRB may keep the request queued waiting for pipes.
+    optional uint64 TimeoutMs = 2 [default = 5000];
 }
 
 message TPartitionsLocationResponse {

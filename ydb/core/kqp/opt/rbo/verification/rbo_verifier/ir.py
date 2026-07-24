@@ -2373,8 +2373,13 @@ def _is_exact_nested_subplan(owner: Subplan, nested: Subplan) -> bool:
 
     return (
         isinstance(owner, InSubplan)
-        and isinstance(nested, ScalarSubplan)
-        and nested.dependency is None
+        and (
+            isinstance(nested, InSubplan)
+            or (
+                isinstance(nested, ScalarSubplan)
+                and nested.dependency is None
+            )
+        )
     )
 
 
@@ -2948,6 +2953,15 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     all_bindings = frozenset(
         subplan.binding for subplan in snapshot.plan.subplans
     )
+    nested_bindings_by_owner = {
+        owner_binding: frozenset(
+            nested_binding
+            for node_id in owner_nodes
+            for nested_binding in _node_expression_columns(nodes[node_id])
+            if nested_binding in all_bindings
+        )
+        for owner_binding, owner_nodes in subplan_nodes.items()
+    }
     outer_bind_owners: dict[str, list[str]] = {
         node.id: []
         for node in snapshot.plan.nodes
@@ -3335,19 +3349,24 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 f"{path}.root",
                 "nested subplans are not modeled",
             )
-        nested_bindings = frozenset().union(
-            *(
-                _node_expression_columns(nodes[node_id])
-                for node_id in subplan_nodes[subplan.binding]
-            )
-        ) & all_bindings
-        for nested_binding in sorted(nested_bindings):
+        for nested_binding in sorted(
+            nested_bindings_by_owner[subplan.binding]
+        ):
             nested = subplans_by_binding[nested_binding]
             if not _is_exact_nested_subplan(subplan, nested):
                 _fail(
                     f"{path}.root",
-                    "only an uncorrelated scalar binding may be consumed "
-                    "inside an IN subplan",
+                    "only an uncorrelated scalar or a one-level closed IN "
+                    "binding may be consumed inside an IN subplan",
+                )
+            if (
+                isinstance(nested, InSubplan)
+                and nested_bindings_by_owner[nested.binding]
+            ):
+                _fail(
+                    f"{path}.root",
+                    "a nested IN binding must be closed and may not consume "
+                    "another subplan binding",
                 )
         if (
             isinstance(subplan, ExistsSubplan)
@@ -3377,8 +3396,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if not _is_exact_nested_subplan(owner, subplan):
                     _fail(
                         f"{path}.consumers",
-                        "only an uncorrelated scalar binding may be consumed "
-                        "inside an IN subplan",
+                        "only an uncorrelated scalar or a one-level closed "
+                        "IN binding may be consumed inside an IN subplan",
                     )
     for node_id, owners in outer_bind_owners.items():
         if len(owners) != 1:

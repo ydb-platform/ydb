@@ -314,8 +314,16 @@ class OperatorRendererTest(unittest.TestCase):
                 'phase=intermediate distinct_all=false',
             ),
             (
-                ir.Join("join", "left", "right", "inner", predicate),
+                ir.Join(
+                    "join",
+                    "left",
+                    "right",
+                    "inner",
+                    (ir.JoinKey("a.k", "b.k"),),
+                    predicate,
+                ),
                 'node "join" join left="left" right="right" kind=inner '
+                'keys=[{left="a.k", right="b.k"}] '
                 'predicate=eq(left=column("a.k"), '
                 'right=literal(type="Int64", value=1), null_safe=false)',
             ),
@@ -413,6 +421,7 @@ def _stage_snapshot():
             "a",
             "b",
             "inner",
+            (ir.JoinKey("a.k", "b.k"),),
             ir.Expr(kind="eq", args=(_column("a.k"), _column("b.k")), null_safe=False),
         ),
     )
@@ -460,7 +469,7 @@ plan root="join" output=["b.k", "a.k"] subplans=0
   output_schema=[{name="b.k", type="Int64", nullable}, {name="a.k", type="Int64", not_null}]
   node "a" scan table="A" columns=[{source="k", output="a.k"}] predicate=none pushed_limit=none
   node "b" scan table="B" columns=[{source="k", output="b.k"}] predicate=none pushed_limit=none
-  node "join" join left="a" right="b" kind=inner predicate=eq(left=column("a.k"), right=column("b.k"), null_safe=false)
+  node "join" join left="a" right="b" kind=inner keys=[{left="a.k", right="b.k"}] predicate=eq(left=column("a.k"), right=column("b.k"), null_safe=false)
 stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
   stage "sa" tasks=2 source_storage="column" nodes=["a"] inputs=[] outputs=[{index=0, node="a"}]
   stage "sb" tasks=2 source_storage="row" nodes=["b"] inputs=[] outputs=[{index=0, node="b"}]
@@ -744,6 +753,21 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
         self.assertEqual(len(digest), 64)
         self.assertEqual(digest, snapshot_digest(snapshot))
         self.assertNotEqual(digest, snapshot_digest(replace(snapshot, stage_graph=None)))
+
+        join = snapshot.plan.nodes[-1]
+        self.assertIsInstance(join, ir.Join)
+        changed_join = replace(
+            join,
+            keys=(),
+        )
+        changed_plan = replace(
+            snapshot.plan,
+            nodes=(*snapshot.plan.nodes[:-1], changed_join),
+        )
+        self.assertNotEqual(
+            digest,
+            snapshot_digest(replace(snapshot, plan=changed_plan)),
+        )
 
 
 if __name__ == "__main__":

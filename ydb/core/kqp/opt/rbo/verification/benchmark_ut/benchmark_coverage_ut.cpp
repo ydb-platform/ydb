@@ -1257,7 +1257,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({1}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredFormulaQueries ==
-            std::set<ui32>({1, 3, 4, 5, 6, 10, 11, 12, 14, 15, 18, 19, 22}));
+            std::set<ui32>({1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 22}));
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
             std::set<ui32>({3, 4, 6, 11, 12, 14, 15, 18, 19, 22}));
@@ -1266,10 +1266,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({5, 65, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
-            std::set<ui32>({3, 5, 6, 10, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 65, 68, 69, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 96, 99}));
+            std::set<ui32>({3, 5, 6, 10, 15, 19, 25, 29, 37, 40, 42, 43, 46, 48, 50, 52, 55, 61, 62, 65, 68, 69, 71, 76, 77, 79, 80, 82, 88, 90, 91, 93, 95, 96, 99}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
-            std::set<ui32>({3, 42, 48, 52, 55, 69, 90, 93, 96}));
+            std::set<ui32>({3, 42, 48, 52, 55, 69, 90, 93, 95, 96}));
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
         const auto policy = LoadCoveragePolicy();
         const std::set<ui32> selected = {
-            3, 42, 48, 52, 55, 69, 90, 93, 96};
+            3, 42, 48, 52, 55, 69, 90, 93, 95, 96};
         const TMap<ui32, TString> statuses = {
             {3, "VERIFIED_BOUNDED"},
             {42, "VERIFIED_BOUNDED"},
@@ -1658,6 +1658,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {69, "VERIFIED_BOUNDED"},
             {90, "VERIFIED_BOUNDED"},
             {93, "VERIFIED_BOUNDED"},
+            {95, "VERIFIED_BOUNDED"},
             {96, "VERIFIED_BOUNDED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
@@ -1701,11 +1702,12 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {69, "VERIFIED_BOUNDED"},
             {90, "VERIFIED_BOUNDED"},
             {93, "UNSUPPORTED"},
+            {95, "VERIFIED_BOUNDED"},
         };
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 42, 48, 52, 55, 69, 90, 93, 96},
+            {3, 42, 48, 52, 55, 69, 90, 93, 95, 96},
             statuses,
             {},
             ECoverageMode::ProofFloor);
@@ -1725,7 +1727,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto optimizerFailure = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 42, 48, 52, 55, 69, 90, 93, 96},
+            {3, 42, 48, 52, 55, 69, 90, 93, 95, 96},
             optimizerFailureStatuses,
             {},
             ECoverageMode::ProofFloor);
@@ -1777,7 +1779,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto coincidentalProofSelection = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 42, 48, 52, 55, 69, 90, 93, 96},
+            {3, 42, 48, 52, 55, 69, 90, 93, 95, 96},
             statuses,
             {},
             ECoverageMode::SolverExperiment);
@@ -1829,7 +1831,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(config.Mode == ECoverageMode::ProofFloor);
         UNIT_ASSERT(
             config.Selected ==
-            std::set<ui32>({3, 42, 48, 52, 55, 69, 90, 93, 96}));
+            std::set<ui32>({3, 42, 48, 52, 55, 69, 90, 93, 95, 96}));
         UNIT_ASSERT(config.Solver);
         UNIT_ASSERT_STRING_CONTAINS(
             *config.Solver,

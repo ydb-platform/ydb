@@ -241,6 +241,26 @@ def _join_plan(kind):
     }
 
 
+def _shared_join_plan(kind):
+    left = _scan("a_scan", "A", "v", "shared")
+    right = _scan("b_scan", "B", "v", "shared")
+    join = {
+        "id": "join",
+        "op": "join",
+        "left": "a_scan",
+        "right": "b_scan",
+        "kind": kind,
+        "keys": [{"left": "shared", "right": "shared"}],
+        "predicate": _literal(True),
+    }
+    return {
+        "nodes": [left, right, join],
+        "root": "join",
+        "output": ["shared"],
+        "subplans": [],
+    }
+
+
 def _expression(expression, row):
     kind = expression["kind"]
     if kind == "column":
@@ -360,11 +380,25 @@ class ConcreteEvaluator:
         right = self._node(node["right"])
         left_columns = self._columns(node["left"])
         right_columns = self._columns(node["right"])
+
+        def keys_match(left_row, right_row):
+            for key in node.get("keys", ()):
+                left_value = left_row[key["left"]]
+                right_value = right_row[key["right"]]
+                if (
+                    left_value is None
+                    or right_value is None
+                    or left_value != right_value
+                ):
+                    return False
+            return True
+
         pairs = [
             (left_index, right_index, left_row | right_row)
             for left_index, left_row in enumerate(left)
             for right_index, right_row in enumerate(right)
-            if _expression(node["predicate"], left_row | right_row) is True
+            if keys_match(left_row, right_row)
+            and _expression(node["predicate"], left_row | right_row) is True
         ]
         matched_left = {left_index for left_index, _, _ in pairs}
         matched_right = {right_index for _, right_index, _ in pairs}
@@ -583,6 +617,17 @@ class LogicalKernelReferenceTest(unittest.TestCase):
                             PRESENT_ZERO,
                             (PRESENT_ZERO, PRESENT_ZERO),
                         ),
+                    ],
+                )
+
+    def test_side_explicit_keys_keep_shared_semi_join_inputs_distinct(self):
+        for kind in ("left_semi", "left_anti", "right_semi", "right_anti"):
+            with self.subTest(kind=kind):
+                self._check(
+                    _shared_join_plan(kind),
+                    [
+                        (f"{kind}:a={a},b={b}", a, b)
+                        for a, b in product(ONE_COLUMN_SLOTS, repeat=2)
                     ],
                 )
 

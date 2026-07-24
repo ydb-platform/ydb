@@ -28,8 +28,11 @@ subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
 exact uncorrelated single-column dynamic `IN`,
 the exact nullable
 `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection shape,
-exact row-level `DistinctAll` aggregation, plus the benchmark-dashboard parts
-of M4. The reviewed exact wrapper forms
+exact row-level `DistinctAll` aggregation, side-explicit join keys including
+the narrow shared-IU one-sided join slice, exact direct non-null Uint64
+`Just`, exact scalar-final Uint64 sum unwrap, and exact direct scalar
+`COUNT(DISTINCT Int64)`, plus the benchmark-dashboard parts of M4. The reviewed
+exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
 being erased. The exporter also exactly folds the reviewed constant
 String/Utf8-to-Date plus-or-minus `DateTime2.IntervalFromDays` shape, erases
@@ -48,20 +51,55 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-24
-after the correlated-COUNT repair, exact `DistinctAll` support, and restoration
-of the production PostgreSQL parser/runtime in the benchmark host, then added
-the exact uncorrelated dynamic-`IN` and nullable Date-year slices. They
+after the correlated-COUNT repair, exact `DistinctAll` support, restoration of
+the production PostgreSQL parser/runtime in the benchmark host, and the exact
+dynamic-`IN`, nullable Date-year, and q95 multi-distinct slices. They
 establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
 q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
-q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 50/121 workload
-queries (41.3%). TPCH has sixteen formulas, four unsupported queries, and two
-optimizer failures; TPC-DS has thirty-four formulas, thirty-nine unsupported
-queries, and twenty-six optimizer failures. Across both suites that is 43
+q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, and q99: 51/121 workload
+queries (42.1%). TPCH has sixteen formulas, four unsupported queries, and two
+optimizer failures; TPC-DS has thirty-five formulas, thirty-eight unsupported
+queries, and twenty-six optimizer failures. Across both suites that is 42
 unsupported queries and 28 optimizer failures.
-Of the 93 queries that reach verifier classification rather than failing
-during optimizer preparation, 50 construct formulas (53.8%).
+
+There are two useful denominators behind that workload-wide number.
+Ninety-three queries complete optimizer preparation, so 51/93 (54.8%) of
+optimizer-successful queries construct formulas. Seventeen TPCH and forty
+TPC-DS queries actually enter the Python verifier; 51/57 (89.5%) of those
+entrants construct the full bounded obligation. The difference is the
+deliberately fail-closed C++ export boundary, not an SMT construction failure.
+
+The q95 bridge is a composition of four narrow exact contracts rather than a
+query-specific equivalence shortcut. Join keys are serialized as ordered
+side-explicit `(left, right)` descriptors, so an IU name shared by both inputs
+cannot collapse a left/right equality. Shared names are admitted only for
+`left_semi`, `left_anti`, `right_semi`, or `right_anti`, with no JoinFilters
+and a literal-true residual; the output contains only the selected side.
+StageGraph child occurrences remain separate streams, and the existing
+occurrence provenance and routing guards prevent either accidental stream
+aliasing or unsound copy deduplication.
+
+The exporter also normalizes only
+`Just(direct non-null Uint64 member) -> Optional<Uint64>` to an explicit
+always-present `if`, preserving its raw Optional schema. A keyless, final,
+non-distinct `sum(Optional<Uint64>)` with `unwrap` and a raw
+`Optional<Uint64>` output receives the physical coalesce contract: its
+effective result schema is non-null and empty or all-NULL input returns zero.
+Finally, one direct keyless phase-`undefined`
+`count(distinct non-null Int64) -> non-null Uint64` trait is exact; duplicates
+are suppressed by first present equal representative, with its
+`N*(N-1)/2` equality checks charged to the normal relation-pair ceiling before
+construction. Every nearby type, phase, grouping, second distinct trait,
+unwrap, or residual shape still fails closed.
+
+Together these contracts model q95 before and after its multi-distinct rewrite.
+Its focused formula is 288,499 bytes and 1,269 lines. A preceding dedicated
+two-row, two-task proof-floor run returned `VERIFIED_BOUNDED` after
+512/3,013 ms of preparation/verification. The enforced floor is now 10/10
+TPCH and 10/10 TPC-DS, including q95: 20/121 workload queries (16.5%).
+The complete verification-subtree gate passes 34/34 suites and 906/906 tests.
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -98,8 +136,10 @@ nested evaluation.
 
 TPCH q18 now emits a complete formula and a focused two-row/two-task solver
 experiment returned `VERIFIED_BOUNDED` after about 155/3,035 ms of
-preparation/verification. TPCH q16 and TPC-DS q95 pass the new binding gate but
-stop at later unrelated blockers. Dynamic-`IN` bindings with nullable,
+preparation/verification. At that dynamic-`IN` checkpoint, TPCH q16 and TPC-DS
+q95 passed the new binding gate but stopped at later unrelated blockers. q16 is
+now classified at an outer-dependency `EXISTS`; q95's later boundary is closed
+by the exact bridge above. Dynamic-`IN` bindings with nullable,
 `String`, or `Date` lookup/result columns continue to fail closed. A real-host
 fixture captures uncorrelated `IN` in the initial plan and an ordinary
 `left_semi` join in the final plan, then proves the normal bounded obligation.
@@ -128,8 +168,9 @@ preparation/verifier work. Separate focused 60-second solver experiments all
 returned `UNKNOWN`: q7 after 230/64,641 ms at branch 4/4
 `right_outcome_0_unmatched`, q8 after 280/65,107 ms at branch 4/28
 `left_outcome_1_unmatched`, and q9 after 181/62,461 ms at branch 4/4
-`right_outcome_0_unmatched`. They extend the formula floor, not the unchanged
-nineteen-query proof floor. Focused C++ mutations exercise the material
+`right_outcome_0_unmatched`. At that Date-year checkpoint they extended the
+formula floor, not its then unchanged nineteen-query proof floor. Focused C++
+mutations exercise the material
 Date-year-specific type, UDF, setting, flag, and binder gates, while shared
 exporter tests retain the generic UDF-envelope and scalar-safety checks. Python
 tests check exact NULL propagation and prove that the opaque fingerprint and
@@ -138,14 +179,14 @@ optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
 32/32 real-host integration tests.
 
-The final policy-checked TPCH run spent 2,897/29,563 ms in
-preparation/verifier work and
-produced report SHA-256
-`6a8cbbeb316d128880ae97295efcc763cdc5ce14d648adec3411e6b0bb8fa214`;
-TPC-DS spent 64,077/192,905 ms and produced
-`279318f3d46f585bba33ede252bf723a5ece36c989215015c0046eb6677e8f29`.
-TPC-DS q6 itself emitted its formula after 347/11,882 ms. The preceding
-milestone reports and their timings/hashes remain historical records in
+The current policy-checked TPCH formula dashboard spent 3,004/31,688 ms in
+preparation/verifier work and produced report SHA-256
+`9ba059ae97bc66d4fdbafa200ba9ce74f25f831d3651bf7d7c0ccbd2206a5774`;
+TPC-DS spent 65,034/193,746 ms and produced
+`a31813a6a2f24365680b6209e14a062e75e575d781b43611ca62e998fd4b1c8e`.
+TPC-DS q6 itself emitted its formula after 406/13,069 ms, while q95 emitted
+after 463/463 ms. The preceding milestone reports and their timings/hashes
+remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 The canonical q6 formula is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation, down from 627,951,195 bytes
@@ -154,13 +195,18 @@ returned `UNKNOWN` after 327/72,599 ms, with the global deadline exhausted
 before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
-requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19,
-and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: nineteen
-obligations (15.7% of the workload). The expanded proof-floor gate is green
-and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after 1,226/59,673 ms
-and produced report SHA-256
-`20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`;
-TPC-DS passes 9/9 after 1,448/36,162 ms and produced
+requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
+q19, and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, q95, and
+q96: twenty obligations (16.5% of the workload). The expanded proof-floor gate is
+green and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after
+1,201/63,429 ms and produced report SHA-256
+`dd8d77b71093e5d022a779afd63507db3ad7d2ab63a6d89554c6de5a6aaa2fd4`;
+TPC-DS passes 10/10 after 1,950/39,140 ms and produced
+`f320d97fbae20af9724442671d4fee3be910292507d0697d3890c739f45f68b3`.
+The preceding nineteen-query proof floor used the same ten TPCH obligations
+and nine TPC-DS obligations without q95. It spent 1,226/59,673 ms for TPCH and
+1,448/36,162 ms for TPC-DS, producing report SHA-256 values
+`20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1` and
 `62d7539a519ae370278b313d50e83b30a7d50d279cd12f6347b3b1e011163a95`.
 The preceding retained eighteen-query canonical-first exact-branch TPCH run
 spent 1,145/56,389 ms and produced report SHA-256
@@ -207,10 +253,12 @@ The complete formula dashboard also enforces a monotonic verifier-entry floor
 for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
 and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
-The complete nineteen-obligation proof floor is confirmed after the dynamic
-`IN` slice: 19/121 workload queries (15.7%) are `VERIFIED_BOUNDED` at two rows
-and two tasks. After the later nullable Date-year bridge, formula coverage is
-50/121 (41.3%); the proof floor remains unchanged.
+The complete nineteen-obligation proof floor was confirmed after the dynamic
+`IN` slice: 19/121 workload queries (15.7%) were `VERIFIED_BOUNDED` at two rows
+and two tasks. After the later nullable Date-year bridge, formula coverage was
+50/121 (41.3%) and that proof floor remained unchanged. These are retained
+historical checkpoints; the q95 bridge raises the current figures to 51
+formulas and twenty enforced proofs as recorded above.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -252,6 +300,16 @@ and copies it into every per-query transform context created by the host.
 Supported final plans include exact stage membership and Map, HashShuffle,
 Broadcast, serial or parallel UnionAll, and ordered Merge connections.
 
+Logical Join no longer synthesizes key equalities into an ambiguous scalar
+column namespace. Each key is an ordered `{"left": ..., "right": ...}`
+descriptor and evaluation reads the two values from their declared input rows
+before applying ordinary SQL equality; a NULL key therefore does not match.
+The residual `predicate` contains only JoinFilters. Exported snapshots always
+include `keys`; legacy version-one snapshots may omit it only as the empty
+list. A shared IU name is accepted solely for a one-sided semi/anti join with
+an exact literal-true residual. Output-both joins and a shared-IU join with a
+residual filter fail closed.
+
 Stage execution uses at most two bounded source/shuffle tasks. Source-row task
 placement and hash routing are shared symbolic functions, so a two-task source
 covers both partitions instead of fixing rows to one convenient task. Map
@@ -266,12 +324,14 @@ enumeration would cross the ordinary outcome cap. The final stage is gathered
 before root column projection.
 
 Rows carry structural occurrence provenance and facts about symbolic source or
-hash routing. When a non-Merge gather sees task copies of the same occurrence
-with contradictory routing facts, those guards are mutually exclusive and the copies
-can be coalesced exactly, including conditional task-local values. Broadcast
-copies have no such proof and retain their bag multiplicity; distinct or unknown
-occurrences also remain separate. This keeps routed StageGraphs compact without
-silently deduplicating SQL rows.
+hash routing. Separate StageGraph child occurrences remain separate even when
+their schemas contain the same IU name. When a non-Merge gather sees task
+copies of the same occurrence with contradictory routing facts, those guards
+are mutually exclusive and the copies can be coalesced exactly, including
+conditional task-local values. Broadcast copies have no such proof and retain
+their bag multiplicity; distinct or unknown occurrences also remain separate.
+This keeps routed StageGraphs compact without silently aliasing input streams
+or deduplicating SQL rows.
 
 The exporter and decoder both validate the StageGraph independently: plan nodes
 partition into stages, each stage has one logical sink, every cross-stage child
@@ -422,6 +482,15 @@ the existing `if(true, value, typed-null)` Optional-preserving form. Nonzero or
 special fallbacks, dynamic or incomplete casts, `Convert`, computed first
 children, mismatched types, and broader `Coalesce` shapes remain opaque when
 the closed-world safety audit admits them; malformed or unsafe trees fail
+closed.
+
+A separate exact Uint64 wrapper admits only
+`Just(direct non-null Uint64 member) -> Optional<Uint64>` for the current row
+and a visible column. The exporter validates the complete wrapper, member, row
+argument, types, metadata, and scalar budgets, then lowers it to
+`if(true, member, null Uint64)`. The explicit dead NULL branch preserves the
+static Optional result while making runtime presence exact. Nullable,
+computed, missing, foreign-row, wrong-result-type, or unsafe variants fail
 closed.
 
 Scalar syntax outside the explicit Boolean, equality, ordering, integer
@@ -960,8 +1029,8 @@ correlations, nullable/coercing dynamic `IN`, range reads, and other OLAP
 pushdowns remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy now adds
-TPCH q18 as its nineteenth obligation; the complete 10/10 TPCH and 9/9 TPC-DS
-gate is `VERIFIED_BOUNDED`.
+TPC-DS q95 after the earlier TPCH q18 addition; the complete 10/10 TPCH and
+10/10 TPC-DS gate is `VERIFIED_BOUNDED`.
 
 The audit has found eight production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -1141,7 +1210,8 @@ Every complete normalized scalar tree has a separate 1,024-expanded-node and
 128-level structural-depth budget, with its root at level one. Repeated source
 DAG uses count as separate emitted occurrences. A scan or filter predicate,
 each projection, and each literal count or offset reset the budget; generated
-join-key equalities and residuals share one synthesized join-predicate budget,
+side-explicit join-key equalities and residuals share one effective
+conjunction budget, including its implicit conjunction,
 while chained pushed OLAP filters share one assembled scan-predicate budget.
 The C++ exporter charges before expansion, guards source recursion, and then
 audits the completed normalized JSON iteratively. The Python parser
@@ -1203,9 +1273,10 @@ outside the exact integral-`SafeCast` and constant normalization gates, and
 aggregate functions outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
-`sum`, Decimal-only `min`/`max`, phase-aware same-type Decimal `avg`, and
-row-level `DistinctAll`, including NULL grouping and inputs and
-optimizer-generated intermediate/final phases.
+`sum`, Decimal-only `min`/`max`, phase-aware same-type Decimal `avg`, row-level
+`DistinctAll`, one exact direct scalar Int64 count-distinct shape, and one
+exact scalar-final Uint64 sum-unwrap shape, including NULL grouping and inputs
+and optimizer-generated intermediate/final phases.
 Signed inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both
 integer sums use the runtime's exact 64-bit modular overflow.
 `sum(Decimal(p,s))` widens every input, partial state, and result to
@@ -1251,15 +1322,35 @@ exposing that unit fails closed. `Void` is not a catalog, literal, NULL, or
 opaque-result type.
 `DistinctAll` accepts a nonempty ordered key list with exactly one positional
 plain `distinct` alias per key. Each alias must preserve the key's exact type
-and nullability; trait-level `distinct`/`unwrap` flags fail closed. Evaluation
-emits one representative renamed key tuple per null-safe composite group, so
-empty input remains empty and duplicate NULL-containing tuples collapse.
+and nullability; within this shape, trait-level `distinct`/`unwrap` flags fail
+closed. Evaluation emits one representative renamed key tuple per null-safe
+composite group, so empty input remains empty and duplicate NULL-containing
+tuples collapse.
 Undefined, intermediate, and final phases use the same local deduplication
 semantics. StageGraph routing remains observable: partial per-task
 deduplication followed by HashShuffle on every intermediate key and final
 deduplication is equivalent, while a non-shuffled split can expose duplicate
-rows normally. Ordinary aggregate `distinct`, `unwrap`, non-Decimal min/max,
-non-Decimal or distinct average, and variance remain `UNSUPPORTED`.
+rows normally.
+
+Outside `DistinctAll`, `distinct` is exact only for one keyless,
+phase-`undefined`, non-unwrapped
+`count(non-null Int64) -> non-null Uint64` trait per Aggregate. Other ordinary
+traits may coexist. For each present input slot, evaluation counts the value
+only when no earlier present slot is equal, so duplicates collapse and empty
+input returns zero. The exact upper-triangular comparison count
+`N*(N-1)/2` is charged before construction; crossing the relation-pair ceiling
+returns `UNSUPPORTED`.
+
+`unwrap` is exact only for a keyless, final, non-`DistinctAll`, non-distinct
+`sum(Optional<Uint64>)` whose raw trait output is
+`Optional<Uint64>`. The snapshot retains that raw nullability for auditing,
+while validation exposes a non-null effective node column and evaluation
+returns zero for empty or all-NULL input, matching the physical builder's
+coalesce. The wrapping and non-wrapping sum cases are independently tested so
+the contract cannot silently spread to ordinary nullable `SUM`.
+
+All other ordinary aggregate `distinct` or `unwrap` shapes, non-Decimal
+min/max, non-Decimal or distinct average, and variance remain `UNSUPPORTED`.
 Intermediate aggregation models the pre-physical logical state per task and
 key; memory-pressure batching performed later by a physical hash combiner is
 outside the snapshot boundary.

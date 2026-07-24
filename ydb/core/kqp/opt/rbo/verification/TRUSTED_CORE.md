@@ -120,6 +120,24 @@ Independent duplicate/empty/negation, cache, left-semi/left-anti, inherited
 error, mapping-mutation, descriptor-boundary, pair-cap, exporter, inspector,
 and real-host `IN`-to-`left_semi` tests cover the vertical path.
 
+The side-explicit Join-key slice crosses `semantic_snapshot.cpp`, `ir.py`,
+`scalar.py`, `relation.py`, and the ordinary `stages.py` execution path.
+The exporter records each JoinKey as an ordered left/right IU pair and keeps
+JoinFilters in a separate residual expression. The decoder independently
+checks side membership, equality compatibility, and the exact combined
+node/depth budget. Evaluation reads each key value from its declared input row
+and applies ordinary SQL equality, so a NULL key does not match and a repeated
+IU spelling cannot overwrite one side before comparison.
+
+Input schemas may overlap only for left/right semi or anti joins. Such a join
+must have a literal-true residual; the exporter additionally requires no
+JoinFilters. Output-both joins fail closed because their schema would be
+ambiguous. StageGraph child occurrences remain structurally distinct when
+their IU names match, while source-task placement and HashShuffle guards retain
+the existing runtime correlations. Exhaustive one-sided join references,
+shared-name mutations, key node/depth boundaries, and two-task
+occurrence/routing checks cover this vertical path.
+
 The correlated-COUNT repair has no new Python semantics. The C++ exporter
 recognizes only the optimizer-generated
 `Just(Coalesce(Optional<Uint64> direct-member, Uint64(0)))` shape and lowers it
@@ -138,6 +156,32 @@ by the normal StageGraph model rather than a special equivalence rule.
 Independent nullable composite-key enumeration, malformed exporter/IR shapes,
 staged routing, a non-shuffled duplicate witness, solver checks, and a
 real-host transformation cover the vertical path.
+
+The q95 aggregate bridge deliberately reuses those general relations. First,
+`semantic_snapshot.cpp` normalizes only an exact
+`Just(non-null Uint64 direct member) -> Optional<Uint64>` from the current row
+to existing `if(true, member, typed-null)` IR. This preserves the raw Optional
+schema while proving runtime presence; wrong types, nullable or computed
+members, a foreign row, unsafe metadata, and budget crossings fail closed.
+
+Second, `semantic_snapshot.cpp`, `ir.py`, and `relation.py` admit one keyless,
+final, non-distinct `sum(Optional<Uint64>)` trait with `unwrap` and a raw
+Optional Uint64 output. The raw trait remains inspectable in the snapshot, but
+IR schema validation exposes its physical effective column as non-null and
+evaluation returns non-null zero for empty or all-NULL input. Every other
+unwrap shape remains closed.
+
+Third, those same files plus `scalar.py` admit at most one direct ordinary
+distinct trait per Aggregate, and only when it is a keyless
+phase-`undefined`, non-unwrapped
+`count(non-null Int64) -> non-null Uint64`. Evaluation keeps a present value
+only if no earlier present value is equal. This directional representative
+test counts every distinct value once without imposing an order on SQL
+results. Its exact `N*(N-1)/2` equality count is charged before construction.
+Small exhaustive duplicate/absence references, pair-cap boundaries, exporter
+and IR near-miss matrices, wrapping-versus-unwrapping sum references, and the
+focused q95 bounded proof cover the composition. There is no q95-specific
+equivalence axiom.
 
 The canonical String-predicate bridge adds no evaluator-specific truth table.
 `semantic_snapshot.cpp` alone must establish the narrow generic and OLAP
@@ -169,20 +213,26 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-Date-year 2026-07-24 physical-line audit recorded:
+The post-q95-bridge 2026-07-24 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
-| Nine trusted Python semantic modules | 10,577 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,574 |
-| **Proof-producing code total** | **19,151** |
-| Tests, outside the TCB | 45,110 |
-| Diagnostic/orchestration tools, outside the TCB | 5,131 |
-| Documentation, outside the TCB | 5,287 |
+| Nine trusted Python semantic modules | 10,791 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,760 |
+| **Proof-producing code total** | **19,551** |
+| Tests, outside the TCB | 46,575 |
+| Diagnostic/orchestration tools, outside the TCB | 5,136 |
+| Documentation, outside the TCB | 5,583 |
 
-These figures are a review baseline, not a generated invariant. The trusted
-core is a medium-sized verification subsystem, so it should be audited by
-vertical semantic slice rather than treated as one small script.
+These are raw physical `wc -l` counts over tracked files. The Python and C++
+rows enumerate the trusted files in the table above. Tests are source files
+under `ut/`, `*_ut/`, and `prefix_capture/ut/`; documentation is every tracked
+Markdown file. The diagnostic row is the remaining non-test, non-document,
+non-TCB source. Build/configuration metadata (`ya.make`, `.gitignore`, and the
+coverage policy) is excluded. These figures are a review baseline, not a
+generated invariant. The trusted core is a medium-sized verification
+subsystem, so it should be audited by vertical semantic slice rather than
+treated as one small script.
 
 ## External assumptions
 
@@ -204,6 +254,18 @@ the SMT obligation itself:
   existential membership test over the recorded lookup/result columns, with
   no hidden NULL, coercion, correlation, cardinality-error, or fanout
   semantics;
+- each accepted side-explicit JoinKey names the actual left and right runtime
+  values, each admitted shared-IU semi/anti join exposes only its selected
+  side, and StageGraph occurrences with equal IU spellings remain distinct
+  runtime streams;
+- each accepted direct Uint64 `Just` is always present at runtime and the
+  synthetic typed-NULL branch preserves its exact static Optional schema;
+- each accepted scalar-final Uint64 `unwrap` denotes the physical builder's
+  coalesce-to-zero result and therefore has a non-null effective output for
+  empty, all-NULL, and populated inputs;
+- each accepted direct Int64 count-distinct uses ordinary Int64 equality,
+  ignores absent/NULL rows as modeled, and returns one non-null Uint64 count
+  without overflow within the declared relation-row bound;
 - each accepted `yql-datetime-year-v1` shape denotes the same complete
   Date-to-Timestamp cast and deterministic, total Split/GetYear operation on
   the bound Date payload;
@@ -271,9 +333,9 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate and Date-year mutations and real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, and direct-Uint64-`Just` mutations and real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/DistinctAll exporter and IR mutations; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap, real-host Decimal-AVG, and `IN`-to-`left_semi` cases |
-| StageGraph and routing | `semantic_snapshot.cpp`; `ir.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; C++ topology/task mutations; real-host integration |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap, real-host Decimal-AVG, and `IN`-to-`left_semi` cases |
+| StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

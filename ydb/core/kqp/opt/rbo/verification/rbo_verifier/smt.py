@@ -626,7 +626,7 @@ class Script:
         self._declarations.append(Declaration(name, checked_arguments, checked_result, hint))
         return Function(name, checked_arguments, checked_result)
 
-    def assert_(self, term: Term) -> None:
+    def assert_term(self, term: Term) -> None:
         _require(term, BOOL)
         self._assertions.append(term)
         self._ordinary_assertions.append(term)
@@ -636,7 +636,7 @@ class Script:
 
         if self._obligation_index is not None:
             raise SmtError("SMT script already has a marked proof obligation")
-        self.assert_(term)
+        self.assert_term(term)
         self._obligation_index = len(self._ordinary_assertions) - 1
 
     def assert_global(self, term: Term) -> None:

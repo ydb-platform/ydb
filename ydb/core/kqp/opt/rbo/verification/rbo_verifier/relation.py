@@ -766,10 +766,6 @@ class Evaluator:
         raise AssertionError(f"unknown plan node {type(node).__name__}")
 
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
-        if any(trait.distinct for trait in node.aggregates):
-            raise RelationError("distinct aggregate semantics are not modeled")
-        if any(trait.unwrap for trait in node.aggregates):
-            raise RelationError("unwrapped aggregate semantics are not modeled")
         modeled_functions = (
             {"distinct"}
             if node.distinct_all
@@ -1016,6 +1012,31 @@ class Evaluator:
             smt.and_(matches[index], smt.not_(row.values[trait.input].is_null))
             for index, row in enumerate(source.rows)
         )
+        if trait.distinct:
+            pair_count = len(source.rows) * (len(source.rows) - 1) // 2
+            _require_relation_row_pairs(
+                pair_count,
+                "distinct aggregate",
+            )
+            distinct_non_null: list[smt.Term] = []
+            for index, (guard, row) in enumerate(zip(non_null, source.rows)):
+                earlier_equal = tuple(
+                    smt.and_(
+                        non_null[earlier_index],
+                        self.scalar.is_true(self.scalar.equal(
+                            row.values[trait.input],
+                            source.rows[earlier_index].values[trait.input],
+                        )),
+                    )
+                    for earlier_index in range(index)
+                )
+                distinct_non_null.append(
+                    smt.and_(
+                        guard,
+                        smt.not_(smt.or_(*earlier_equal)),
+                    )
+                )
+            non_null = tuple(distinct_non_null)
         if trait.function == "count":
             return Value(
                 trait.output_type,
@@ -1089,7 +1110,11 @@ class Evaluator:
             )
             return Value(
                 trait.output_type,
-                smt.not_(smt.or_(*non_null)) if trait.output_nullable else smt.FALSE,
+                (
+                    smt.not_(smt.or_(*non_null))
+                    if trait.output_nullable and not trait.unwrap
+                    else smt.FALSE
+                ),
                 _wrap_sum(total, trait.output_type),
             )
         if trait.function == "avg":
@@ -1647,10 +1672,20 @@ class Evaluator:
             match_row: list[smt.Term] = []
             for right_row in right.rows:
                 values = dict(left_row.values) | dict(right_row.values)
+                key_matches = tuple(
+                    self.scalar.is_true(
+                        self.scalar.equal(
+                            left_row.values[key.left],
+                            right_row.values[key.right],
+                        )
+                    )
+                    for key in node.keys
+                )
                 match_row.append(
                     smt.and_(
                         left_row.present,
                         right_row.present,
+                        *key_matches,
                         self.scalar.is_true(self.scalar.evaluate(node.predicate, values)),
                     )
                 )

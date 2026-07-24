@@ -180,6 +180,10 @@ def _average_state(state: ir.AverageStateType | None) -> str:
     )
 
 
+def _join_key(key: ir.JoinKey) -> str:
+    return f"{{left={_quote(key.left)}, right={_quote(key.right)}}}"
+
+
 def render_node(node: ir.PlanNode) -> str:
     """Render one plan operator, including all fields specific to its variant."""
 
@@ -248,7 +252,8 @@ def render_node(node: ir.PlanNode) -> str:
     if isinstance(node, ir.Join):
         return (
             prefix + f"join left={_quote(node.left)} right={_quote(node.right)} "
-            f"kind={node.kind} predicate={render_expression(node.predicate)}"
+            f"kind={node.kind} keys={_list(node.keys, _join_key)} "
+            f"predicate={render_expression(node.predicate)}"
         )
     if isinstance(node, ir.UnionAll):
         inputs = _list(

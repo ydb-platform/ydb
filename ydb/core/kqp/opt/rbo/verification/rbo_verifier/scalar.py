@@ -309,6 +309,12 @@ class Encoder:
         return smt.and_(smt.not_(value.is_null), value.value)
 
     @staticmethod
+    def equal(left: Value, right: Value) -> Value:
+        """Return ordinary SQL equality for two validated-compatible values."""
+
+        return Encoder._comparison("eq", left, right, null_safe=False)
+
+    @staticmethod
     def not_distinct(left: Value, right: Value) -> smt.Term:
         assert left.type == right.type
         return smt.or_(

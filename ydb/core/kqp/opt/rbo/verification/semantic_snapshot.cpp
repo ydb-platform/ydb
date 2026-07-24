@@ -2236,6 +2236,49 @@ bool IsExactDataAnnotation(
         !dynamic_cast<const TDataExprParamsType*>(data);
 }
 
+const TExprNode* ExactUint64DirectMemberJustArgument(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
+        return nullptr;
+    }
+
+    const auto& member = *node.Child(0);
+    if (!member.IsCallable("Member") ||
+        member.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            member.GetTypeAnn(),
+            NUdf::EDataSlot::Uint64,
+            false))
+    {
+        return nullptr;
+    }
+    if (!IsExactDataAnnotation(
+            node.GetTypeAnn(),
+            NUdf::EDataSlot::Uint64,
+            true))
+    {
+        Unsupported(
+            "Exact Uint64 member Just requires an Optional<Uint64> result");
+    }
+    if (!rowArgument ||
+        member.Child(0) != rowArgument ||
+        !member.Child(1)->IsAtom() ||
+        !visibleColumns.contains(TString(member.Child(1)->Content())))
+    {
+        Unsupported(
+            "Exact Uint64 member Just requires a direct visible input member");
+    }
+
+    CheckScalarSafetyMetadata(node);
+    CheckScalarSafetyMetadata(member);
+    CheckScalarSafetyMetadata(*rowArgument);
+    CheckScalarSafetyMetadata(*member.Child(1));
+    return &member;
+}
+
 constexpr TStringBuf DateTimeTmResource = "DateTime2.TM";
 
 struct TReviewedDateTimeType {
@@ -3759,6 +3802,44 @@ NJson::TJsonValue ExportExprNode(
         result["condition"] = std::move(condition);
         result["then"] = std::move(repaired);
         result["else"] = std::move(unreachable);
+        result["type"] = "Uint64";
+        result["nullable"] = true;
+        return result;
+    }
+
+    if (const auto* member = ExactUint64DirectMemberJustArgument(
+            node,
+            rowArgument,
+            visibleColumns))
+    {
+        // Just of a non-null value is always present. Keep the static
+        // Optional<Uint64> result in the normalized IR, but expose its exact
+        // runtime presence instead of hiding it behind an opaque fingerprint.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
+        auto condition = JsonMap();
+        condition["kind"] = "literal";
+        condition["type"] = "Bool";
+        condition["value"] = true;
+        auto missing = JsonMap();
+        missing["kind"] = "null";
+        missing["type"] = "Uint64";
+
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = std::move(condition);
+        result["then"] = ExportExprNode(
+            *member,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["else"] = std::move(missing);
         result["type"] = "Uint64";
         result["nullable"] = true;
         return result;
@@ -7060,6 +7141,16 @@ private:
                 if (traits.empty()) {
                     Unsupported("Aggregate has no traits");
                 }
+                const size_t ordinaryDistinctTraits = std::count_if(
+                    traits.begin(),
+                    traits.end(),
+                    [](const TOpAggregationTraits& trait) {
+                        return trait.Distinct;
+                    });
+                if (ordinaryDistinctTraits > 1) {
+                    Unsupported(
+                        "Aggregate supports at most one ordinary distinct trait");
+                }
                 if (aggregate.IsDistinctAll() &&
                     (keyColumns.empty() || traits.size() != keyColumns.size()))
                 {
@@ -7110,6 +7201,78 @@ private:
                     const TString outputType = TypeName(
                         OutputType(aggregate, output),
                         &outputNullable);
+                    if (trait.Distinct && trait.Unwrap) {
+                        Unsupported(
+                            "Aggregate unwrap requires distinct=false");
+                    }
+                    if (trait.Distinct && !aggregate.IsDistinctAll()) {
+                        if (!keyColumns.empty()) {
+                            Unsupported(
+                                "Ordinary count-distinct requires a keyless Aggregate");
+                        }
+                        if (aggregate.GetAggregationPhase() != EOpPhase::Undefined) {
+                            Unsupported(
+                                "Ordinary count-distinct requires undefined phase");
+                        }
+                        if (trait.AggFunction != "count") {
+                            Unsupported(
+                                "Ordinary distinct requires the count function");
+                        }
+                        if (!IsExactDataAnnotation(
+                                OutputType(*aggregate.GetInput(), input),
+                                NUdf::EDataSlot::Int64,
+                                false))
+                        {
+                            Unsupported(
+                                "Ordinary count-distinct requires an exact non-null Int64 input");
+                        }
+                        if (!IsExactDataAnnotation(
+                                OutputType(aggregate, output),
+                                NUdf::EDataSlot::Uint64,
+                                false))
+                        {
+                            Unsupported(
+                                "Ordinary count-distinct requires an exact non-null Uint64 output");
+                        }
+                    }
+                    if (trait.Unwrap) {
+                        if (aggregate.IsDistinctAll()) {
+                            Unsupported(
+                                "Aggregate unwrap is not supported for DistinctAll");
+                        }
+                        if (!keyColumns.empty()) {
+                            Unsupported(
+                                "Aggregate unwrap requires a keyless Aggregate");
+                        }
+                        if (aggregate.GetAggregationPhase() != EOpPhase::Final) {
+                            Unsupported(
+                                "Aggregate unwrap requires final phase");
+                        }
+                        if (trait.AggFunction != "sum") {
+                            Unsupported(
+                                "Aggregate unwrap requires the sum function");
+                        }
+                        if (trait.Distinct) {
+                            Unsupported(
+                                "Aggregate unwrap requires distinct=false");
+                        }
+                        if (!IsExactDataAnnotation(
+                                OutputType(*aggregate.GetInput(), input),
+                                NUdf::EDataSlot::Uint64,
+                                true))
+                        {
+                            Unsupported(
+                                "Aggregate unwrap requires an exact Optional<Uint64> input");
+                        }
+                        if (!IsExactDataAnnotation(
+                                OutputType(aggregate, output),
+                                NUdf::EDataSlot::Uint64,
+                                true))
+                        {
+                            Unsupported(
+                                "Aggregate unwrap requires an exact Optional<Uint64> raw output");
+                        }
+                    }
                     if (aggregate.IsDistinctAll()) {
                         const TString key = keyColumns[index].GetFullName();
                         if (trait.AggFunction != "distinct" ||
@@ -7214,61 +7377,84 @@ private:
                 auto& join = static_cast<TOpJoin&>(base);
                 const auto leftNames = OutputNames(*join.GetLeftInput());
                 const auto rightNames = OutputNames(*join.GetRightInput());
+                const TString kind = JoinKind(join.JoinKind);
+                THashSet<TString> sharedNames;
                 for (const auto& name : leftNames) {
                     if (rightNames.contains(name)) {
-                        Unsupported(TStringBuilder() << "Join inputs share IU " << name);
+                        sharedNames.insert(name);
+                    }
+                }
+                if (!sharedNames.empty()) {
+                    if (kind != "left_semi" && kind != "left_anti" &&
+                        kind != "right_semi" && kind != "right_anti")
+                    {
+                        Unsupported(
+                            "Join inputs may share IUs only when exactly one "
+                            "side is present in the output");
+                    }
+                    if (!join.JoinFilters.empty()) {
+                        Unsupported(
+                            "Join filters cannot disambiguate shared input IUs");
                     }
                 }
                 auto visibleNames = leftNames;
                 visibleNames.insert(rightNames.begin(), rightNames.end());
 
-                const size_t conjunctCount =
-                    join.JoinKeys.size() + join.JoinFilters.size();
                 TExactScalarBudget budget;
-                const bool combined = conjunctCount > 1;
-                if (combined) {
-                    budget.Charge(1); // Synthetic conjunction of join conditions.
-                }
-                const size_t conjunctDepth = combined ? 2 : 1;
-                auto conjuncts = JsonArray();
+                auto keys = JsonArray();
                 for (const auto& [left, right] : join.JoinKeys) {
                     const TString leftName = left.GetFullName();
                     const TString rightName = right.GetFullName();
                     if (!leftNames.contains(leftName) || !rightNames.contains(rightName)) {
                         Unsupported(TStringBuilder() << "Join key is absent from its declared input");
                     }
-                    budget.Charge(conjunctDepth); // Synthetic equality.
-                    budget.Charge(conjunctDepth + 1, 2); // Key columns.
-                    auto equality = JsonMap();
-                    equality["kind"] = "eq";
-                    equality["left"] = ColumnExpr(leftName);
-                    equality["right"] = ColumnExpr(rightName);
-                    conjuncts.AppendValue(std::move(equality));
+                    budget.Charge(1); // Side-explicit equality.
+                    budget.Charge(2, 2); // Left and right key columns.
+                    auto key = JsonMap();
+                    key["left"] = leftName;
+                    key["right"] = rightName;
+                    keys.AppendValue(std::move(key));
                 }
+
+                size_t residualDepth = 1;
+                if (!join.JoinKeys.empty()) {
+                    // Join matching is the effective conjunction of the
+                    // side-explicit keys and this residual expression.
+                    budget.Charge(1);
+                    residualDepth = 2;
+                }
+                const bool residualCombined = join.JoinFilters.size() > 1;
+                if (residualCombined) {
+                    budget.Charge(residualDepth);
+                }
+                const size_t filterDepth =
+                    residualCombined ? residualDepth + 1 : residualDepth;
+                auto filters = JsonArray();
                 for (const auto& filter : join.JoinFilters) {
-                    conjuncts.AppendValue(ExportExprWithBudget(
+                    filters.AppendValue(ExportExprWithBudget(
                         filter,
                         visibleNames,
                         budget,
-                        conjunctDepth));
+                        filterDepth));
                 }
 
                 NJson::TJsonValue predicate;
-                if (conjunctCount == 0) {
-                    budget.Charge(1);
+                if (join.JoinFilters.empty()) {
+                    budget.Charge(residualDepth);
                     predicate = TrueExpr();
-                } else if (conjunctCount == 1) {
-                    predicate = std::move(conjuncts[0]);
+                } else if (join.JoinFilters.size() == 1) {
+                    predicate = std::move(filters[0]);
                 } else {
                     predicate = JsonMap();
                     predicate["kind"] = "and";
-                    predicate["args"] = std::move(conjuncts);
+                    predicate["args"] = std::move(filters);
                 }
                 AuditExactScalarExpression(predicate);
                 node["op"] = "join";
                 node["left"] = children[0];
                 node["right"] = children[1];
-                node["kind"] = JoinKind(join.JoinKind);
+                node["kind"] = kind;
+                node["keys"] = std::move(keys);
                 node["predicate"] = std::move(predicate);
                 return node;
             }

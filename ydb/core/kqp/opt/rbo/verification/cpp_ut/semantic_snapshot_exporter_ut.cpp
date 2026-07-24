@@ -410,6 +410,63 @@ TIntrusivePtr<TOpMap> MakeCopyMap(
         &ctx.ExpressionProps)});
 }
 
+TSemanticSnapshotExportResult ExportSharedInputJoin(
+    TStringBuf joinKind,
+    bool withFilter = false)
+{
+    TExportTestContext ctx;
+    AddTable(ctx, "/Root/Left", {{"k", "Int32", true}});
+    AddTable(ctx, "/Root/Right", {{"k", "Int32", true}});
+    auto left = MakeRead(
+        ctx,
+        ctx.Tables->ExistingTable("ut", "/Root/Left"),
+        "shared",
+        {"k"});
+    auto right = MakeRead(
+        ctx,
+        ctx.Tables->ExistingTable("ut", "/Root/Right"),
+        "shared",
+        {"k"});
+    SetOutputType(ctx, *left, {
+        {"shared.k", NUdf::EDataSlot::Int32},
+    });
+    SetOutputType(ctx, *right, {
+        {"shared.k", NUdf::EDataSlot::Int32},
+    });
+
+    const auto pos = TPositionHandle();
+    TVector<TExpression> filters;
+    if (withFilter) {
+        filters.push_back(MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                TInfoUnit("shared.k"),
+                pos,
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps),
+            MakeColumnAccess(
+                TInfoUnit("shared.k"),
+                pos,
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps)));
+    }
+    auto join = MakeIntrusive<TOpJoin>(
+        left,
+        right,
+        pos,
+        TString(joinKind),
+        TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+            TInfoUnit("shared.k"),
+            TInfoUnit("shared.k"),
+        }},
+        std::move(filters));
+    SetOutputType(ctx, *join, {
+        {"shared.k", NUdf::EDataSlot::Int32},
+    });
+    TOpRoot root(join, pos, {"shared.k"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 const TTypeAnnotationNode* ScalarType(
     TExportTestContext& ctx,
     NUdf::EDataSlot slot,
@@ -3545,14 +3602,61 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             return ExportSemanticSnapshotV1(root, ctx.RboCtx);
         };
 
-        // One synthesized AND plus 341 three-node key equalities is 1024.
-        const auto accepted = exportJoin(341);
+        // 340 three-node keys, their effective AND, and literal-true residual
+        // consume 1022 nodes. One more key crosses the 1024-node limit.
+        const auto accepted = exportJoin(340);
         UNIT_ASSERT_C(accepted.IsSupported(), accepted.UnsupportedReason);
-        const auto rejected = exportJoin(342);
+        const auto rejected = exportJoin(341);
         UNIT_ASSERT(!rejected.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             rejected.UnsupportedReason,
             "Exact scalar expression exceeds the node audit limit");
+    }
+
+    Y_UNIT_TEST(ExactScalarAuditCoversImplicitJoinConjunctionDepth) {
+        const auto exportJoin = [](bool withKey) {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/JoinDepthLeft", {{"k", "Int32", true}});
+            AddTable(ctx, "/Root/JoinDepthRight", {{"k", "Int32", true}});
+            auto left = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinDepthLeft"),
+                "a",
+                {"k"});
+            auto right = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/JoinDepthRight"),
+                "b",
+                {"k"});
+            TVector<std::pair<TInfoUnit, TInfoUnit>> keys;
+            if (withKey) {
+                keys.emplace_back(TInfoUnit("a.k"), TInfoUnit("b.k"));
+            }
+            const auto pos = TPositionHandle();
+            auto join = MakeIntrusive<TOpJoin>(
+                left,
+                right,
+                pos,
+                "Inner",
+                std::move(keys),
+                TVector<TExpression>{TExpression(
+                    DeepBooleanNot(ctx, 128),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)});
+            TOpRoot root(join, pos, {"a.k", "b.k"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto standalone = exportJoin(false);
+        UNIT_ASSERT_C(standalone.IsSupported(), standalone.UnsupportedReason);
+
+        // The residual fits exactly at the standalone depth boundary. A join
+        // key adds an implicit effective conjunction above it.
+        const auto combined = exportJoin(true);
+        UNIT_ASSERT(!combined.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            combined.UnsupportedReason,
+            "Exact scalar expression exceeds the depth audit limit");
     }
 
     Y_UNIT_TEST(ExportsSchemaScanAndExactMapProjection) {
@@ -5239,6 +5343,244 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 encoded["kind"].GetStringSafe(),
                 "opaque",
                 test.Name);
+        }
+    }
+
+    Y_UNIT_TEST(LowersOnlyExactDirectUint64MemberJust) {
+        const auto exportExpression = [](
+            TExportTestContext& ctx,
+            TExpression expression)
+        {
+            const auto& table = AddTable(ctx, "/Root/DirectJust", {
+                {"x", "Uint64", true},
+                {"n", "Uint64", false},
+                {"i", "Int64", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x", "n", "i"});
+            SetExactOutputType(ctx, *read, {
+                {"a.x", ScalarType(ctx, NUdf::EDataSlot::Uint64)},
+                {"a.n", ScalarType(ctx, NUdf::EDataSlot::Uint64, true)},
+                {"a.i", ScalarType(ctx, NUdf::EDataSlot::Int64)},
+            });
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    std::move(expression))});
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+        const auto directJust = [](
+            TExportTestContext& ctx,
+            TStringBuf member,
+            NUdf::EDataSlot slot,
+            bool memberNullable = false)
+        {
+            return TypedCallable(
+                ctx,
+                "Just",
+                {TypedMember(
+                    ctx,
+                    member,
+                    ScalarType(ctx, slot, memberNullable))},
+                ScalarType(ctx, slot, true));
+        };
+
+        {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                TExpression(
+                    directJust(
+                        ctx,
+                        "a.x",
+                        NUdf::EDataSlot::Uint64),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)));
+            const auto& expression = FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "if");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["condition"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["column"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["type"].GetStringSafe(),
+                "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Uint64");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                TExpression(
+                    directJust(
+                        ctx,
+                        "a.i",
+                        NUdf::EDataSlot::Int64),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "project")
+                    ["columns"].GetArraySafe().back()["expression"]
+                    ["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(exportExpression(
+                ctx,
+                TExpression(
+                    directJust(
+                        ctx,
+                        "a.n",
+                        NUdf::EDataSlot::Uint64,
+                        true),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "project")
+                    ["columns"].GetArraySafe().back()["expression"]
+                    ["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto expression = directJust(
+                ctx,
+                "a.x",
+                NUdf::EDataSlot::Uint64);
+            expression->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Uint64));
+            const auto result = exportExpression(
+                ctx,
+                TExpression(
+                    std::move(expression),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "requires an Optional<Uint64> result");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = exportExpression(
+                ctx,
+                TExpression(
+                    directJust(
+                        ctx,
+                        "a.missing",
+                        NUdf::EDataSlot::Uint64),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "requires a direct visible input member");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto pos = TPositionHandle();
+            auto row = ctx.ExprCtx.NewArgument(pos, "row");
+            auto foreign = ctx.ExprCtx.NewArgument(pos, "foreign");
+            auto member = ctx.ExprCtx.NewCallable(
+                pos,
+                "Member",
+                {foreign, ctx.ExprCtx.NewAtom(pos, "a.x")});
+            member->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Uint64));
+            auto body = TypedCallable(
+                ctx,
+                "Just",
+                {std::move(member)},
+                ScalarType(ctx, NUdf::EDataSlot::Uint64, true));
+            const auto result = exportExpression(
+                ctx,
+                TExpression(
+                    ctx.ExprCtx.NewLambda(
+                        pos,
+                        ctx.ExprCtx.NewArguments(pos, {row}),
+                        std::move(body)),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "requires a direct visible input member");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto pos = TPositionHandle();
+            auto row = ctx.ExprCtx.NewArgument(pos, "row");
+            row->SetSideEffects(ESideEffects::General);
+            auto member = ctx.ExprCtx.NewCallable(
+                pos,
+                "Member",
+                {row, ctx.ExprCtx.NewAtom(pos, "a.x")});
+            member->SetTypeAnn(
+                ScalarType(ctx, NUdf::EDataSlot::Uint64));
+            auto body = TypedCallable(
+                ctx,
+                "Just",
+                {std::move(member)},
+                ScalarType(ctx, NUdf::EDataSlot::Uint64, true));
+            const auto result = exportExpression(
+                ctx,
+                TExpression(
+                    ctx.ExprCtx.NewLambda(
+                        pos,
+                        ctx.ExprCtx.NewArguments(pos, {row}),
+                        std::move(body)),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        for (const bool unsafeMember : {false, true}) {
+            TExportTestContext ctx;
+            TExpression expression(
+                directJust(
+                    ctx,
+                    "a.x",
+                    NUdf::EDataSlot::Uint64),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            TExprNode* unsafe = unsafeMember
+                ? expression.GetExpressionBody()->Child(0)
+                : expression.GetExpressionBody().Get();
+            unsafe->SetSideEffects(ESideEffects::General);
+            const auto result = exportExpression(
+                ctx,
+                std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
         }
     }
 
@@ -10324,16 +10666,67 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
         const auto& joinJson = FindNode(snapshot, "join");
         UNIT_ASSERT_VALUES_EQUAL(joinJson["kind"].GetStringSafe(), "inner");
+        const auto& keys = joinJson["keys"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys[0].GetMapSafe().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(keys[0]["left"].GetStringSafe(), "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(keys[0]["right"].GetStringSafe(), "b.k");
         const auto& predicate = joinJson["predicate"];
-        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "and");
-        const auto& conjuncts = predicate["args"].GetArraySafe();
-        UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "eq");
         UNIT_ASSERT_VALUES_EQUAL(
-            EqualityColumns(conjuncts[0]),
-            (std::pair<TString, TString>{"a.k", "b.k"}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            EqualityColumns(conjuncts[1]),
+            EqualityColumns(predicate),
             (std::pair<TString, TString>{"a.flag", "b.flag"}));
+    }
+
+    Y_UNIT_TEST(ExportsSharedJoinInputIUsForSingleOutputKinds) {
+        struct TCase {
+            TStringBuf SourceKind;
+            TStringBuf SnapshotKind;
+        };
+        const TCase cases[] = {
+            {"LeftSemi", "left_semi"},
+            {"LeftOnly", "left_anti"},
+            {"RightSemi", "right_semi"},
+            {"RightOnly", "right_anti"},
+        };
+
+        for (const auto& test : cases) {
+            const auto snapshot =
+                ParseSupported(ExportSharedInputJoin(test.SourceKind));
+            const auto& joinJson = FindNode(snapshot, "join");
+            UNIT_ASSERT_VALUES_EQUAL(
+                joinJson["kind"].GetStringSafe(),
+                test.SnapshotKind);
+            const auto& keys = joinJson["keys"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(keys[0]["left"].GetStringSafe(), "shared.k");
+            UNIT_ASSERT_VALUES_EQUAL(keys[0]["right"].GetStringSafe(), "shared.k");
+            UNIT_ASSERT_VALUES_EQUAL(
+                joinJson["predicate"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                joinJson["predicate"]["type"].GetStringSafe(),
+                "Bool");
+            UNIT_ASSERT(joinJson["predicate"]["value"].GetBooleanSafe());
+        }
+    }
+
+    Y_UNIT_TEST(SharedJoinInputIUsFailClosedForTwoOutputsAndFilters) {
+        {
+            const auto result = ExportSharedInputJoin("Inner");
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "only when exactly one side is present in the output");
+        }
+
+        {
+            const auto result = ExportSharedInputJoin("LeftSemi", true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Join filters cannot disambiguate shared input IUs");
+        }
     }
 
     Y_UNIT_TEST(ExportsAggregateTraitsTypesAndSplitPhases) {
@@ -10725,15 +11118,15 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(PreservesNonDefaultAggregateTraitFlags) {
+    Y_UNIT_TEST(ExportsExactDirectCountDistinctContract) {
         TExportTestContext ctx;
-        const auto& table = AddTable(ctx, "/Root/A", {
-            {"x", "Int64", false},
+        const auto& table = AddTable(ctx, "/Root/DirectCountDistinct", {
+            {"x", "Int64", true},
             {"y", "Int64", false},
         });
         auto read = MakeRead(ctx, table, "a", {"x", "y"});
         SetOutputType(ctx, *read, {
-            {"a.x", NUdf::EDataSlot::Int64, true},
+            {"a.x", NUdf::EDataSlot::Int64},
             {"a.y", NUdf::EDataSlot::Int64, true},
         });
         const auto pos = TPositionHandle();
@@ -10742,9 +11135,189 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TVector<TOpAggregationTraits>{
                 TOpAggregationTraits(
                     TInfoUnit("a.x"),
-                    "sum",
-                    TInfoUnit("distinct_result"),
+                    "count",
+                    TInfoUnit("distinct_count"),
                     true,
+                    false),
+                TOpAggregationTraits(
+                    TInfoUnit("a.y"),
+                    "sum",
+                    TInfoUnit("ordinary_sum")),
+            },
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"distinct_count", NUdf::EDataSlot::Uint64},
+            {"ordinary_sum", NUdf::EDataSlot::Int64, true},
+        });
+        TOpRoot root(
+            aggregate,
+            pos,
+            {"distinct_count", "ordinary_sum"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["phase"].GetStringSafe(),
+            "undefined");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["distinct_all"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT(node["keys"].GetArraySafe().empty());
+        const auto& traits = node["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(traits.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["input"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["function"].GetStringSafe(),
+            "count");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["output"].GetStringSafe(),
+            "distinct_count");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["type"].GetStringSafe(),
+            "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["distinct"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["unwrap"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[1]["function"].GetStringSafe(),
+            "sum");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[1]["distinct"].GetBooleanSafe(),
+            false);
+    }
+
+    Y_UNIT_TEST(DirectCountDistinctContractFailsClosedForEveryLocalMutation) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DirectCountDistinct", {
+            {"x", "Int64", true},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x"});
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "count",
+                TInfoUnit("result"),
+                true,
+                false)},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        TOpRoot root(aggregate, pos, {"result"});
+        ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+
+        const auto reject = [&](TStringBuf expectedReason) {
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReason);
+        };
+
+        aggregate->AggregationTraitsList.push_back(
+            TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "count",
+                TInfoUnit("second_result"),
+                true,
+                false));
+        reject("at most one ordinary distinct trait");
+        aggregate->AggregationTraitsList.pop_back();
+
+        aggregate->KeyColumns.push_back(TInfoUnit("a.x"));
+        SetOutputType(ctx, *aggregate, {
+            {"a.x", NUdf::EDataSlot::Int64},
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        reject("requires a keyless Aggregate");
+        aggregate->KeyColumns.clear();
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+
+        aggregate->AggregationPhase = EOpPhase::Intermediate;
+        reject("requires undefined phase");
+        aggregate->AggregationPhase = EOpPhase::Final;
+        reject("requires undefined phase");
+        aggregate->AggregationPhase = EOpPhase::Undefined;
+
+        aggregate->DistinctAll = true;
+        aggregate->KeyColumns.push_back(TInfoUnit("a.x"));
+        reject("plain distinct aliases");
+        aggregate->KeyColumns.clear();
+        aggregate->DistinctAll = false;
+
+        aggregate->AggregationTraitsList.front().AggFunction = "sum";
+        reject("Ordinary distinct requires the count function");
+        aggregate->AggregationTraitsList.front().AggFunction = "count";
+
+        aggregate->AggregationTraitsList.front().Unwrap = true;
+        reject("Aggregate unwrap requires distinct=false");
+        aggregate->AggregationTraitsList.front().Unwrap = false;
+
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+        });
+        reject("requires an exact non-null Int64 input");
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Uint64},
+        });
+        reject("requires an exact non-null Int64 input");
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64},
+        });
+
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64, true},
+        });
+        reject("requires an exact non-null Uint64 output");
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Int64},
+        });
+        reject("requires an exact non-null Uint64 output");
+    }
+
+    Y_UNIT_TEST(ExportsExactFinalScalarUint64UnwrapContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"x", "Int64", false},
+            {"y", "Uint64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x", "y"});
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+            {"a.y", NUdf::EDataSlot::Uint64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"),
+                    "sum",
+                    TInfoUnit("ordinary_sum_result"),
+                    false,
                     false),
                 TOpAggregationTraits(
                     TInfoUnit("a.y"),
@@ -10754,29 +11327,144 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     true),
             },
             TVector<TInfoUnit>{},
-            EOpPhase::Undefined,
+            EOpPhase::Final,
             false,
             pos);
         SetOutputType(ctx, *aggregate, {
-            {"distinct_result", NUdf::EDataSlot::Int64, true},
-            {"unwrap_result", NUdf::EDataSlot::Int64, true},
+            {"ordinary_sum_result", NUdf::EDataSlot::Int64, true},
+            {"unwrap_result", NUdf::EDataSlot::Uint64, true},
         });
-        TOpRoot root(aggregate, pos, {"distinct_result", "unwrap_result"});
+        TOpRoot root(aggregate, pos, {"ordinary_sum_result", "unwrap_result"});
 
         const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
         const auto& node = FindNode(snapshot, "aggregate");
         const auto& traits = node["aggregates"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(traits.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(traits[0]["input"].GetStringSafe(), "a.x");
-        UNIT_ASSERT_VALUES_EQUAL(traits[0]["output"].GetStringSafe(), "distinct_result");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["output"].GetStringSafe(),
+            "ordinary_sum_result");
         UNIT_ASSERT_VALUES_EQUAL(traits[0]["nullable"].GetBooleanSafe(), true);
-        UNIT_ASSERT_VALUES_EQUAL(traits[0]["distinct"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["distinct"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(traits[0]["unwrap"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["input"].GetStringSafe(), "a.y");
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["output"].GetStringSafe(), "unwrap_result");
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["nullable"].GetBooleanSafe(), true);
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["distinct"].GetBooleanSafe(), false);
         UNIT_ASSERT_VALUES_EQUAL(traits[1]["unwrap"].GetBooleanSafe(), true);
+    }
+
+    Y_UNIT_TEST(AggregateUnwrapContractFailsClosedForEveryLocalMutation) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Unwrap", {
+            {"x", "Uint64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x"});
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Uint64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "sum",
+                TInfoUnit("result"),
+                false,
+                true)},
+            TVector<TInfoUnit>{},
+            EOpPhase::Final,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64, true},
+        });
+        TOpRoot root(aggregate, pos, {"result"});
+
+        const auto reject = [&](TStringBuf expectedReason) {
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReason);
+        };
+
+        aggregate->AggregationPhase = EOpPhase::Intermediate;
+        reject("Aggregate unwrap requires final phase");
+        aggregate->AggregationPhase = EOpPhase::Final;
+
+        aggregate->AggregationTraitsList.front().AggFunction = "count";
+        reject("Aggregate unwrap requires the sum function");
+        aggregate->AggregationTraitsList.front().AggFunction = "sum";
+
+        aggregate->AggregationTraitsList.front().Distinct = true;
+        reject("Aggregate unwrap requires distinct=false");
+        aggregate->AggregationTraitsList.front().Distinct = false;
+
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Uint64},
+        });
+        reject("requires an exact Optional<Uint64> input");
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+        });
+        reject("requires an exact Optional<Uint64> input");
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Uint64, true},
+        });
+
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        reject("requires an exact Optional<Uint64> raw output");
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Int64, true},
+        });
+        reject("requires an exact Optional<Uint64> raw output");
+
+        {
+            TExportTestContext groupedCtx;
+            const auto& groupedTable = AddTable(
+                groupedCtx,
+                "/Root/GroupedUnwrap",
+                {{"x", "Uint64", false}});
+            auto groupedRead = MakeRead(
+                groupedCtx,
+                groupedTable,
+                "a",
+                {"x"});
+            SetOutputType(groupedCtx, *groupedRead, {
+                {"a.x", NUdf::EDataSlot::Uint64, true},
+            });
+            auto grouped = MakeIntrusive<TOpAggregate>(
+                groupedRead,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.x"),
+                    "sum",
+                    TInfoUnit("result"),
+                    false,
+                    true)},
+                TVector<TInfoUnit>{TInfoUnit("a.x")},
+                EOpPhase::Final,
+                false,
+                pos);
+            SetOutputType(groupedCtx, *grouped, {
+                {"a.x", NUdf::EDataSlot::Uint64, true},
+                {"result", NUdf::EDataSlot::Uint64, true},
+            });
+            TOpRoot groupedRoot(
+                grouped,
+                pos,
+                {"a.x", "result"});
+            const auto result = ExportSemanticSnapshotV1(
+                groupedRoot,
+                groupedCtx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Aggregate unwrap requires a keyless Aggregate");
+        }
     }
 
     Y_UNIT_TEST(DistinctAllContractIsExactAndPositional) {
@@ -10884,7 +11572,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         distinctAll->AggregationTraitsList.front().Distinct = false;
 
         distinctAll->AggregationTraitsList.front().Unwrap = true;
-        assertDistinctUnsupported("plain distinct aliases");
+        assertDistinctUnsupported(
+            "Aggregate unwrap is not supported for DistinctAll");
         distinctAll->AggregationTraitsList.front().Unwrap = false;
 
         SetOutputType(ctx, *distinctAll, {

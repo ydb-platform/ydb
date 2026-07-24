@@ -175,8 +175,8 @@ class Evaluator:
                 connected = self._connect(edge, source, task_count, parallel_offset)
                 inputs.append(connected)
                 if self.edge_observer is not None:
-                    for task, family in enumerate(connected.relations):
-                        self.edge_observer(edge, task, family)
+                    for task, relation_family in enumerate(connected.relations):
+                        self.edge_observer(edge, task, relation_family)
                 if edge.kind == "union_all" and edge.parallel:
                     parallel_offset = (parallel_offset + len(source.relations)) % task_count
             slots = stage_input_slots(self.snapshot.plan, stage)

@@ -63,6 +63,68 @@ def minimal_snapshot():
     }
 
 
+def shared_join_snapshot(kind="left_semi"):
+    return {
+        "format": "ydb-rbo-semantic-snapshot",
+        "version": 1,
+        "schema": {
+            "tables": [
+                {
+                    "name": "A",
+                    "columns": [
+                        {"name": "k", "type": "Int64", "nullable": True},
+                    ],
+                    "unique_keys": [],
+                },
+                {
+                    "name": "B",
+                    "columns": [
+                        {"name": "k", "type": "Int64", "nullable": True},
+                    ],
+                    "unique_keys": [],
+                },
+            ]
+        },
+        "plan": {
+            "nodes": [
+                {
+                    "id": "left",
+                    "op": "scan",
+                    "table": "A",
+                    "columns": [{"source": "k", "output": "shared.k"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "right",
+                    "op": "scan",
+                    "table": "B",
+                    "columns": [{"source": "k", "output": "shared.k"}],
+                    "predicate": None,
+                    "pushed_limit": None,
+                },
+                {
+                    "id": "join",
+                    "op": "join",
+                    "left": "left",
+                    "right": "right",
+                    "kind": kind,
+                    "keys": [{"left": "shared.k", "right": "shared.k"}],
+                    "predicate": {
+                        "kind": "literal",
+                        "type": "Bool",
+                        "value": True,
+                    },
+                },
+            ],
+            "root": "join",
+            "output": ["shared.k"],
+            "subplans": [],
+        },
+        "stage_graph": None,
+    }
+
+
 def count_star_snapshot():
     value = minimal_snapshot()
     value["plan"]["nodes"] = [
@@ -96,6 +158,68 @@ def count_star_snapshot():
                 }
             ],
             "phase": "undefined",
+            "distinct_all": False,
+        },
+    ]
+    value["plan"]["root"] = "aggregate"
+    value["plan"]["output"] = ["result"]
+    return value
+
+
+def count_distinct_int64_snapshot():
+    value = minimal_snapshot()
+    value["plan"]["nodes"] = [
+        value["plan"]["nodes"][0],
+        {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "count",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": True,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        },
+    ]
+    value["plan"]["root"] = "aggregate"
+    value["plan"]["output"] = ["result"]
+    return value
+
+
+def unwrapped_uint64_sum_snapshot():
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"][0].update(
+        type="Uint64",
+        nullable=True,
+    )
+    value["plan"]["nodes"] = [
+        value["plan"]["nodes"][0],
+        {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "sum",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": True,
+                    "distinct": False,
+                    "unwrap": True,
+                }
+            ],
+            "phase": "final",
             "distinct_all": False,
         },
     ]
@@ -276,6 +400,26 @@ class SnapshotTest(unittest.TestCase):
             "expression structural depth exceeds the audit limit of 128",
         ):
             parse_snapshot(rejected)
+
+    def test_join_keys_charge_an_effective_conjunction_depth(self):
+        standalone = shared_join_snapshot()
+        standalone["plan"]["nodes"][1]["columns"][0]["output"] = "right.k"
+        standalone["plan"]["nodes"][-1]["keys"] = []
+        predicate = {"kind": "literal", "type": "Bool", "value": True}
+        for _ in range(MAX_EXPR_DEPTH - 1):
+            predicate = {"kind": "not", "arg": predicate}
+        standalone["plan"]["nodes"][-1]["predicate"] = predicate
+        parse_snapshot(standalone)
+
+        combined = copy.deepcopy(standalone)
+        combined["plan"]["nodes"][-1]["keys"] = [
+            {"left": "shared.k", "right": "right.k"}
+        ]
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "expression structural depth exceeds the audit limit of 128",
+        ):
+            parse_snapshot(combined)
 
     def test_expression_node_budget_is_shared_by_sibling_subtrees(self):
         value = minimal_snapshot()
@@ -550,6 +694,144 @@ class SnapshotTest(unittest.TestCase):
         value["plan"]["nodes"][1]["predicate"] = {"kind": "column", "column": "missing"}
         with self.assertRaisesRegex(SnapshotError, "column 'missing' is not available"):
             parse_snapshot(value)
+
+    def test_side_explicit_join_keys_admit_shared_one_sided_inputs(self):
+        for kind in ("left_semi", "left_anti", "right_semi", "right_anti"):
+            with self.subTest(kind=kind):
+                snapshot = parse_snapshot(shared_join_snapshot(kind))
+                join = snapshot.plan.nodes[-1]
+                self.assertEqual(
+                    [(key.left, key.right) for key in join.keys],
+                    [("shared.k", "shared.k")],
+                )
+
+    def test_shared_join_inputs_remain_distinct_stage_occurrences(self):
+        value = shared_join_snapshot()
+        value["stage_graph"] = {
+            "root_stage": "join_stage",
+            "stages": [
+                {
+                    "id": "left_stage",
+                    "nodes": ["left"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "left"}],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "right_stage",
+                    "nodes": ["right"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "right"}],
+                    "source_storage": "row",
+                },
+                {
+                    "id": "join_stage",
+                    "nodes": ["join"],
+                    "inputs": ["left", "right"],
+                    "outputs": [{"index": 0, "node": "join"}],
+                    "source_storage": None,
+                },
+            ],
+            "edges": [
+                {
+                    "id": "left_edge",
+                    "producer": "left_stage",
+                    "consumer": "join_stage",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 0,
+                    "kind": "map",
+                },
+                {
+                    "id": "right_edge",
+                    "producer": "right_stage",
+                    "consumer": "join_stage",
+                    "occurrence": 0,
+                    "producer_output": 0,
+                    "consumer_input": 1,
+                    "kind": "broadcast",
+                },
+            ],
+            "assumptions": [],
+        }
+
+        snapshot = parse_snapshot(value)
+
+        self.assertEqual(
+            [(edge.consumer_input, edge.kind) for edge in snapshot.stage_graph.edges],
+            [(0, "map"), (1, "broadcast")],
+        )
+
+    def test_shared_join_inputs_fail_closed_outside_the_exact_shape(self):
+        for kind in ("cross", "inner", "left", "right", "full", "exclusion"):
+            value = shared_join_snapshot(kind)
+            with self.subTest(kind=kind):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "share columns outside a one-sided join",
+                ):
+                    parse_snapshot(value)
+
+        residual = shared_join_snapshot()
+        residual["plan"]["nodes"][-1]["predicate"] = {
+            "kind": "eq",
+            "left": {"kind": "column", "column": "shared.k"},
+            "right": {"kind": "literal", "type": "Int64", "value": 1},
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "requires a literal true residual predicate",
+        ):
+            parse_snapshot(residual)
+
+    def test_join_key_descriptor_and_sides_are_strict(self):
+        valid = shared_join_snapshot()
+
+        for side in ("left", "right"):
+            missing = copy.deepcopy(valid)
+            del missing["plan"]["nodes"][-1]["keys"][0][side]
+            with self.subTest(missing=side):
+                with self.assertRaisesRegex(SnapshotError, f"missing fields: {side}"):
+                    parse_snapshot(missing)
+
+            unavailable = copy.deepcopy(valid)
+            unavailable["plan"]["nodes"][-1]["keys"][0][side] = "missing"
+            with self.subTest(unavailable=side):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    f"not available from the {side} input",
+                ):
+                    parse_snapshot(unavailable)
+
+        extra = copy.deepcopy(valid)
+        extra["plan"]["nodes"][-1]["keys"][0]["null_safe"] = False
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: null_safe"):
+            parse_snapshot(extra)
+
+        not_an_array = copy.deepcopy(valid)
+        not_an_array["plan"]["nodes"][-1]["keys"] = {}
+        with self.assertRaisesRegex(SnapshotError, "expected an array"):
+            parse_snapshot(not_an_array)
+
+        mismatch = copy.deepcopy(valid)
+        mismatch["schema"]["tables"][1]["columns"][0]["type"] = "Bool"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "join key equality type mismatch",
+        ):
+            parse_snapshot(mismatch)
+
+        at_limit = copy.deepcopy(valid)
+        at_limit["plan"]["nodes"][-1]["keys"] *= 340
+        parse_snapshot(at_limit)
+
+        above_limit = copy.deepcopy(valid)
+        above_limit["plan"]["nodes"][-1]["keys"] *= 341
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "expanded expression node count exceeds the audit limit",
+        ):
+            parse_snapshot(above_limit)
 
     def test_expression_types_are_checked(self):
         value = minimal_snapshot()
@@ -1118,6 +1400,138 @@ class SnapshotTest(unittest.TestCase):
         bad_phase["plan"]["nodes"][-1]["phase"] = "partial"
         with self.assertRaisesRegex(SnapshotError, "unsupported aggregate phase"):
             parse_snapshot(bad_phase)
+
+    def test_direct_count_distinct_has_one_exact_logical_contract(self):
+        value = count_distinct_int64_snapshot()
+        self.assertEqual(
+            [
+                (column.name, column.type, column.nullable)
+                for column in parse_snapshot(value).output_schema()
+            ],
+            [("result", "Uint64", False)],
+        )
+
+        ordinary = copy.deepcopy(value)
+        ordinary["plan"]["nodes"][-1]["aggregates"][0]["distinct"] = False
+        parse_snapshot(ordinary)
+
+        mutations = []
+        grouped = copy.deepcopy(value)
+        grouped["plan"]["nodes"][-1]["keys"] = ["a.flag"]
+        grouped["plan"]["output"] = ["a.flag", "result"]
+        mutations.append(("grouped", grouped))
+
+        final = copy.deepcopy(value)
+        final["plan"]["nodes"][-1]["phase"] = "final"
+        mutations.append(("phase", final))
+
+        wrong_function = copy.deepcopy(value)
+        wrong_function["plan"]["nodes"][-1]["aggregates"][0]["function"] = "sum"
+        wrong_function["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+        mutations.append(("function", wrong_function))
+
+        unwrapped = copy.deepcopy(value)
+        unwrapped["plan"]["nodes"][-1]["aggregates"][0]["unwrap"] = True
+        mutations.append(("unwrap", unwrapped))
+
+        nullable_input = copy.deepcopy(value)
+        nullable_input["schema"]["tables"][0]["columns"][0]["nullable"] = True
+        mutations.append(("input nullability", nullable_input))
+
+        wrong_input_type = copy.deepcopy(value)
+        wrong_input_type["schema"]["tables"][0]["columns"][0]["type"] = "Uint64"
+        mutations.append(("input type", wrong_input_type))
+
+        nullable_output = copy.deepcopy(value)
+        nullable_output["plan"]["nodes"][-1]["aggregates"][0]["nullable"] = True
+        mutations.append(("output nullability", nullable_output))
+
+        for label, malformed in mutations:
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    (
+                        "unwrap is modeled only for a keyless final"
+                        if label == "unwrap"
+                        else "direct distinct is modeled only for a keyless"
+                    ),
+                ):
+                    parse_snapshot(malformed)
+
+        repeated = copy.deepcopy(value)
+        repeated_trait = copy.deepcopy(
+            repeated["plan"]["nodes"][-1]["aggregates"][0]
+        )
+        repeated_trait["output"] = "second"
+        repeated["plan"]["nodes"][-1]["aggregates"].append(repeated_trait)
+        repeated["plan"]["output"].append("second")
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "at most one direct distinct aggregate trait",
+        ):
+            parse_snapshot(repeated)
+
+    def test_scalar_uint64_unwrap_has_one_exact_physical_contract(self):
+        value = unwrapped_uint64_sum_snapshot()
+        snapshot = parse_snapshot(value)
+        trait = snapshot.plan.nodes[-1].aggregates[0]
+        self.assertTrue(trait.output_nullable)
+        self.assertEqual(
+            [
+                (column.name, column.type, column.nullable)
+                for column in snapshot.output_schema()
+            ],
+            [("result", "Uint64", False)],
+        )
+
+        ordinary = copy.deepcopy(value)
+        ordinary["plan"]["nodes"][-1]["aggregates"][0]["unwrap"] = False
+        self.assertEqual(
+            [
+                (column.name, column.type, column.nullable)
+                for column in parse_snapshot(ordinary).output_schema()
+            ],
+            [("result", "Uint64", True)],
+        )
+
+        mutations = []
+        grouped = copy.deepcopy(value)
+        grouped["plan"]["nodes"][-1]["keys"] = ["a.flag"]
+        grouped["plan"]["output"] = ["a.flag", "result"]
+        mutations.append(("grouped", grouped))
+
+        intermediate = copy.deepcopy(value)
+        intermediate["plan"]["nodes"][-1]["phase"] = "intermediate"
+        mutations.append(("phase", intermediate))
+
+        wrong_function = copy.deepcopy(value)
+        wrong_function["plan"]["nodes"][-1]["aggregates"][0]["function"] = "count"
+        mutations.append(("function", wrong_function))
+
+        distinct = copy.deepcopy(value)
+        distinct["plan"]["nodes"][-1]["aggregates"][0]["distinct"] = True
+        mutations.append(("distinct", distinct))
+
+        non_nullable_input = copy.deepcopy(value)
+        non_nullable_input["schema"]["tables"][0]["columns"][0]["nullable"] = False
+        mutations.append(("input nullability", non_nullable_input))
+
+        wrong_input_type = copy.deepcopy(value)
+        wrong_input_type["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
+        wrong_input_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+        mutations.append(("type", wrong_input_type))
+
+        non_nullable_output = copy.deepcopy(value)
+        non_nullable_output["plan"]["nodes"][-1]["aggregates"][0]["nullable"] = False
+        mutations.append(("output nullability", non_nullable_output))
+
+        for label, malformed in mutations:
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "unwrap is modeled only for a keyless final",
+                ):
+                    parse_snapshot(malformed)
 
     def test_distinct_all_contract_is_exact_and_positional(self):
         value = minimal_snapshot()

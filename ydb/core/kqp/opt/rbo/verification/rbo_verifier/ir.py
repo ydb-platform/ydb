@@ -211,11 +211,18 @@ class Aggregate:
 
 
 @dataclass(frozen=True, slots=True)
+class JoinKey:
+    left: str
+    right: str
+
+
+@dataclass(frozen=True, slots=True)
 class Join:
     id: str
     left: str
     right: str
     kind: str
+    keys: tuple[JoinKey, ...]
     predicate: Expr
 
 
@@ -954,16 +961,52 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         )
 
     if operation == "join":
-        _keys(obj, {"id", "op", "left", "right", "kind", "predicate"}, path)
+        _keys(
+            obj,
+            {"id", "op", "left", "right", "kind", "predicate"},
+            path,
+            {"keys"},
+        )
         kind = _string(obj["kind"], f"{path}.kind")
         if kind not in JOIN_KINDS:
             _fail(f"{path}.kind", f"unsupported join kind {kind!r}")
+        keys: list[JoinKey] = []
+        budget = _ExprBudget()
+        for index, raw_key in enumerate(
+            _array(obj.get("keys", []), f"{path}.keys")
+        ):
+            key_path = f"{path}.keys[{index}]"
+            key = _object(raw_key, key_path)
+            _keys(key, {"left", "right"}, key_path)
+            # Preserve the old complete-predicate audit bound: one equality
+            # and its two column leaves became this side-explicit descriptor.
+            for _ in range(3):
+                budget.charge(key_path, 1)
+            keys.append(
+                JoinKey(
+                    _string(key["left"], f"{key_path}.left"),
+                    _string(key["right"], f"{key_path}.right"),
+                )
+            )
+        predicate_depth = 1
+        if keys:
+            # Matching is the conjunction of every side-explicit key and the
+            # residual predicate, even though that outer AND is not serialized
+            # as an ordinary scalar expression.
+            budget.charge(path, 1)
+            predicate_depth = 2
         return Join(
             node_id,
             _string(obj["left"], f"{path}.left"),
             _string(obj["right"], f"{path}.right"),
             kind,
-            _parse_expr(obj["predicate"], f"{path}.predicate"),
+            tuple(keys),
+            _parse_expr(
+                obj["predicate"],
+                f"{path}.predicate",
+                budget=budget,
+                structural_depth=predicate_depth,
+            ),
         )
 
     if operation == "union_all":
@@ -1527,6 +1570,54 @@ def _is_final_count_sum(node: Aggregate, nodes: Mapping[str, PlanNode], input_na
             trait.output == input_name and trait.function == "count"
             for trait in child.aggregates
         )
+    )
+
+
+def _is_exact_scalar_uint64_unwrap(
+    node: Aggregate,
+    trait: AggregateTrait,
+    input_column: Column,
+) -> bool:
+    """Recognize the scalar physical Coalesce(..., Uint64(0)) contract.
+
+    TPhysicalAggregationBuilder lowers a scalar trait with Unwrap set through
+    NeedToWrapWithCoalesce.  Keep the admitted prephysical shape deliberately
+    narrower than that implementation hook: this is the reviewed scalar
+    count-to-sum coalesce shape, and every other Unwrap remains closed.
+    """
+
+    return (
+        not node.keys
+        and node.phase == "final"
+        and not node.distinct_all
+        and trait.function == "sum"
+        and not trait.distinct
+        and trait.unwrap
+        and input_column.type == "Uint64"
+        and input_column.nullable
+        and trait.output_type == "Uint64"
+        and trait.output_nullable
+    )
+
+
+def _is_exact_scalar_int64_count_distinct(
+    node: Aggregate,
+    trait: AggregateTrait,
+    input_column: Column,
+) -> bool:
+    """Recognize the direct logical COUNT(DISTINCT Int64) boundary."""
+
+    return (
+        not node.keys
+        and node.phase == "undefined"
+        and not node.distinct_all
+        and trait.function == "count"
+        and trait.distinct
+        and not trait.unwrap
+        and input_column.type == "Int64"
+        and not input_column.nullable
+        and trait.output_type == "Uint64"
+        and not trait.output_nullable
     )
 
 
@@ -2397,6 +2488,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"node {node.id!r}",
                     "DistinctAll requires one distinct trait for each ordered key",
                 )
+            if sum(trait.distinct for trait in node.aggregates) > 1:
+                _fail(
+                    f"node {node.id!r}.aggregates",
+                    "at most one direct distinct aggregate trait is modeled",
+                )
 
             output_names = (() if node.distinct_all else node.keys) + tuple(
                 trait.output for trait in node.aggregates
@@ -2422,6 +2518,34 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(
                         trait_path,
                         "void may only flow transparently to a canonical count aggregate",
+                    )
+                exact_scalar_uint64_unwrap = _is_exact_scalar_uint64_unwrap(
+                    node,
+                    trait,
+                    input_column,
+                )
+                if trait.unwrap and not exact_scalar_uint64_unwrap:
+                    _fail(
+                        trait_path,
+                        "unwrap is modeled only for a keyless final "
+                        "sum(Optional<Uint64>) with a raw Optional<Uint64> output",
+                    )
+                exact_scalar_int64_count_distinct = (
+                    _is_exact_scalar_int64_count_distinct(
+                        node,
+                        trait,
+                        input_column,
+                    )
+                )
+                if (
+                    trait.distinct
+                    and not node.distinct_all
+                    and not exact_scalar_int64_count_distinct
+                ):
+                    _fail(
+                        trait_path,
+                        "direct distinct is modeled only for a keyless, "
+                        "phase-undefined count of non-null Int64",
                     )
 
                 if node.distinct_all:
@@ -2532,16 +2656,65 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 result[trait.output] = Column(
                     trait.output,
                     trait.output_type,
-                    trait.output_nullable,
+                    False
+                    if exact_scalar_uint64_unwrap
+                    else trait.output_nullable,
                 )
 
         elif isinstance(node, Join):
             left = schema_for(node.left)
             right = schema_for(node.right)
             overlap = left.keys() & right.keys()
-            if overlap:
-                _fail(f"node {node.id!r}", f"join inputs share columns: {', '.join(sorted(overlap))}")
-            predicate_type = _infer_expr(node.predicate, left | right, f"node {node.id!r}.predicate")
+            if overlap and node.kind not in {
+                "left_semi",
+                "left_anti",
+                "right_semi",
+                "right_anti",
+            }:
+                _fail(
+                    f"node {node.id!r}",
+                    "join inputs share columns outside a one-sided join: "
+                    f"{', '.join(sorted(overlap))}",
+                )
+            if overlap and not (
+                node.predicate.kind == "literal"
+                and node.predicate.result_type == BOOL
+                and node.predicate.nullable is False
+                and node.predicate.value is True
+            ):
+                _fail(
+                    f"node {node.id!r}.predicate",
+                    "a one-sided join with shared input columns requires "
+                    "a literal true residual predicate",
+                )
+            for index, key in enumerate(node.keys):
+                key_path = f"node {node.id!r}.keys[{index}]"
+                left_column = left.get(key.left)
+                if left_column is None:
+                    _fail(
+                        f"{key_path}.left",
+                        f"column {key.left!r} is not available from the left input",
+                    )
+                right_column = right.get(key.right)
+                if right_column is None:
+                    _fail(
+                        f"{key_path}.right",
+                        f"column {key.right!r} is not available from the right input",
+                    )
+                if not equality_comparison_compatible(
+                    left_column.type,
+                    right_column.type,
+                ):
+                    _fail(
+                        key_path,
+                        "join key equality type mismatch: "
+                        f"{left_column.type!r} and {right_column.type!r}",
+                    )
+            predicate_type = _infer_expr(
+                node.predicate,
+                left | right,
+                f"node {node.id!r}.predicate",
+            )
             if predicate_type.name != BOOL:
                 _fail(f"node {node.id!r}.predicate", "join predicate must be Boolean")
 

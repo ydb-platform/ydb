@@ -1053,6 +1053,8 @@ void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
         }
 
         for (const auto &[_, tablet] : tablets) {
+            // Match by type intentionally: this also covers tenant system tablets
+            // that are not explicitly listed in BootstrapConfig.
             if (tablet.Leader
                 && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
                 && SystemTabletTypes.contains(tablet.Type))

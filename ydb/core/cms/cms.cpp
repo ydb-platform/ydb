@@ -407,8 +407,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             "MaxPermissionCount cap exhausted: complete in-flight actions before requesting new ones");
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
+    TVector<const TAction*> sysTabletDeferredActions;
 
-    auto buildOpts = [&](const TAction &action) {
+    enum class EActionResult {
+        Ok,
+        Stop,
+        CapHit,
+    };
+
+    auto processAction = [&](const TAction &action, bool allowDefer) -> EActionResult {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -421,17 +428,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.PartialPermissionAllowed = allowPartial;
         opts.Priority = request.GetPriority();
         opts.RequestId = requestId;
-        opts.CapEnabled = capEnabled;
-        return opts;
-    };
-
-    TVector<const TAction*> sysTabletDeferredActions;
-
-    auto processAction = [&](const TAction &action, bool allowDefer) -> bool {
-        TActionOptions opts = buildOpts(action);
-        if (!allowDefer) {
-            opts.CapEnabled = false;
-        }
+        opts.CapEnabled = allowDefer && capEnabled;
 
         TErrorInfo error;
 
@@ -457,44 +454,44 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
                 YDB_LOG_DEBUG_CTX(ctx, "MaxPermissionCount cap reached, deferring remaining actions",
                     {"maxPermissions", maxPermissions});
-                capHit = true;
+                return EActionResult::CapHit;
             }
-        } else if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+            return EActionResult::Ok;
+        }
+
+        if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "Result: DISALLOW_TEMP_SYS_TABLET, deferring action: %s",
                       action.ShortDebugString().data());
             sysTabletDeferredActions.push_back(&action);
-        } else {
-            YDB_LOG_DEBUG_CTX(ctx, "Result",
-                {"error", ToString(error.Code)},
-                {"reason", error.Reason.GetMessage()});
-
-            if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
-                response.MutableStatus()->SetCode(error.Code);
-                response.MutableStatus()->SetReason(error.Reason.GetMessage());
-                if (error.Code == TStatus::DISALLOW_TEMP
-                    || error.Code == TStatus::ERROR_TEMP)
-                    response.SetDeadline(error.Deadline.GetValue());
-            }
-
-            if (schedule) {
-                auto *scheduledAction = scheduled.AddActions();
-                scheduledAction->CopyFrom(action);
-
-                // Limit stored issues to avoid overloading the local database
-                if (storedIssues < MAX_ISSUES_TO_STORE) {
-                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
-                    ++storedIssues;
-                } else {
-                    scheduledAction->ClearIssue();
-                }
-            }
-
-            if (!allowPartial)
-                return false;
+            return EActionResult::Ok;
         }
 
-        return true;
+        LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
+                  ToString(error.Code).data(), error.Reason.GetMessage().data());
+
+        if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
+            response.MutableStatus()->SetCode(error.Code);
+            response.MutableStatus()->SetReason(error.Reason.GetMessage());
+            if (error.Code == TStatus::DISALLOW_TEMP
+                || error.Code == TStatus::ERROR_TEMP)
+                response.SetDeadline(error.Deadline.GetValue());
+        }
+
+        if (schedule) {
+            auto *scheduledAction = scheduled.AddActions();
+            scheduledAction->CopyFrom(action);
+
+            // Limit stored issues to avoid overloading the local database
+            if (storedIssues < MAX_ISSUES_TO_STORE) {
+                *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                ++storedIssues;
+            } else {
+                scheduledAction->ClearIssue();
+            }
+        }
+
+        return allowPartial ? EActionResult::Ok : EActionResult::Stop;
     };
 
     for (const auto &action : request.GetActions()) {
@@ -502,8 +499,12 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             break;
         }
 
-        if (!processAction(action, /* allowDefer = */ true)) {
+        const EActionResult result = processAction(action, /* allowDefer = */ true);
+        if (result == EActionResult::Stop) {
             break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
         }
 
         ++processedActions;
@@ -512,8 +513,12 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
         const TAction *deferredAction = sysTabletDeferredActions.back();
         sysTabletDeferredActions.pop_back();
-        if (!processAction(*deferredAction, /* allowDefer = */ false)) {
+        const EActionResult result = processAction(*deferredAction, /* allowDefer = */ false);
+        if (result == EActionResult::Stop) {
             break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
         }
     }
 

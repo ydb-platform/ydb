@@ -76,6 +76,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 45904:* Add Windows support for cpu_topology library
+* Add support for cores without L3 cache [#45904](https://github.com/ydb-platform/ydb/pull/45904) ([Nursan](https://github.com/tindarid))
+* 45733:Add CPU topology library to consume data from `/sys/devices/system/cpu/cpu*/topology` [#45733](https://github.com/ydb-platform/ydb/pull/45733) ([Nursan](https://github.com/tindarid))
+* 45683:Make `HAS_APP_NAME` a regex-aware predicate for workload manager resource pool classifiers [#45683](https://github.com/ydb-platform/ydb/pull/45683) ([Slusarenko Igor](https://github.com/buhtr))
+* 45437:Added metering to SQS topics [#45437](https://github.com/ydb-platform/ydb/pull/45437) ([Sergey](https://github.com/shokhor))
 
 ### Bug fixes
 
@@ -146,12 +151,33 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 46192:Fixing error when retrieving metadata regarding columnar statistics
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+Error image
+<img width="1383" height="276" alt="Screenshot 2026-07-11 at 00 08 28" src="https://github.com/user-attachments/assets/d556b7f3-6052-4505-a35d-4b50bee9e90e" /> [#46192](https://github.com/ydb-platform/ydb/pull/46192) ([Yesdaulet Izenov](https://github.com/yizenov))
+* 46154:Fix ydbd linker failure caused by DWARF-32 4 GB limit on `.debug_info` references from `.debug_aranges`. [#46154](https://github.com/ydb-platform/ydb/pull/46154) ([Maxim Yurchuk](https://github.com/maximyurchuk))
+* 45734:Issue  #45735
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Summary
+
+Supportive (transaction) topic partitions no longer create topics_per_partition monitoring subgroups.
+
+Problem
+
+TPartition::SetupDetailedMetrics() skipped supportive partitions, but TUsersInfoStorage::GetPartitionCounterSubgroupImpl() and TPartition::GetPerPartitionCounterSubgroup() did not. GetSubgroup("partition_id", ...) created empty counter tree nodes for every supportive partition.
+
+Fix
+
+Guard GetPerPartitionCounterSubgroup() with IsSupportive()
+Pass IsSupportive into TUsersInfoStorage and skip subgroup creation in GetPartitionCounterSubgroupImpl()
+Note
+
+Existing empty partition_id nodes on running nodes are not removed; restart is required to clear accumulated monitoring data. [#45734](https://github.com/ydb-platform/ydb/pull/45734) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 45671:Fix false-positive VERIFY assertion in testshard triggered by Key deletion.
+https://github.com/ydb-platform/ydb/issues/45337 [#45671](https://github.com/ydb-platform/ydb/pull/45671) ([Sergey Belyakov](https://github.com/serbel324))
+* 45654:Fix leaking buffer in PDisk
+https://github.com/ydb-platform/ydb/issues/45133 [#45654](https://github.com/ydb-platform/ydb/pull/45654) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 

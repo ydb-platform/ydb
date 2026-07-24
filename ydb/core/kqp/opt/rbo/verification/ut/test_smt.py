@@ -32,7 +32,16 @@ class SmtTest(unittest.TestCase):
         second = _deep_shared_term(smt.symbol("value", smt.INT))
 
         self.assertEqual(hash(first), hash(second))
-        self.assertEqual(hash(first), hash(first))
+        self.assertEqual(first, second)
+        self.assertEqual(len({first, second}), 1)
+
+    def test_term_structural_equality_resolves_deep_hash_collisions(self):
+        first = _deep_shared_term(smt.int_value(-1))
+        second = _deep_shared_term(smt.int_value(-2))
+
+        self.assertEqual(hash(first), hash(second))
+        self.assertNotEqual(first, second)
+        self.assertEqual(len({first, second}), 2)
 
     def test_script_timeout_requires_a_positive_exact_integer(self):
         for value in (0, -1, True, 1.0):

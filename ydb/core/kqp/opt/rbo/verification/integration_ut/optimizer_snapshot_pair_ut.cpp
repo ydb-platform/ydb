@@ -2433,6 +2433,122 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         assertYearExpression(*finalYear);
     }
 
+    Y_UNIT_TEST(RealHostVerifiesProvenTotalDateUnwrap) {
+        TKikimrRunner kikimr;
+        CreateDateColumnTable(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(
+            moduleContext,
+            moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(
+            kikimr.GetTestServer(),
+            std::move(moduleResolver),
+            sink);
+        const TString query = R"(--!syntax_v1
+            SELECT
+                Id,
+                UNWRAP(COALESCE(CAST(D AS Date), CAST(0 AS Date))) AS FilledDate
+            FROM `/Root/RboDate`;
+        )";
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+            host,
+            query,
+            settings
+        ] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(
+            results[0].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            results[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::Final);
+
+        TSnapshotPair pair{
+            .Initial = ParseSnapshot(results[0]),
+            .Final = ParseSnapshot(results[1]),
+            .Verdict = BuildVerificationProblem(results[0], results[1]),
+        };
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            pair.Verdict["status"].GetStringSafe(),
+            "VERIFIED_BOUNDED",
+            NJson::WriteJson(pair.Verdict, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            pair.Verdict["row_bound"].GetIntegerSafe(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            pair.Verdict["task_bound"].GetIntegerSafe(),
+            2);
+
+        const auto dateExpression = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> expressions;
+            CollectExpressions(snapshot["plan"], "if_present", expressions);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                expressions.size(),
+                1,
+                NJson::WriteJson(snapshot, false));
+            return expressions.front();
+        };
+
+        const auto assertDateExpression = [](
+            const NJson::TJsonValue& expression)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+
+            const auto& optional = expression["optional"];
+            UNIT_ASSERT_VALUES_EQUAL(optional.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                optional["kind"].GetStringSafe(),
+                "column");
+
+            const auto& present = expression["present"];
+            UNIT_ASSERT_VALUES_EQUAL(present.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["depth"].GetUIntegerSafe(),
+                0);
+
+            const auto& missing = expression["missing"];
+            UNIT_ASSERT_VALUES_EQUAL(missing.GetMapSafe().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(
+                missing["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                missing["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                missing["value"].GetUIntegerSafe(),
+                0);
+        };
+
+        const auto* initialDate = dateExpression(pair.Initial);
+        const auto* finalDate = dateExpression(pair.Final);
+        assertDateExpression(*initialDate);
+        assertDateExpression(*finalDate);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NJson::WriteJson(*initialDate, false, true),
+            NJson::WriteJson(*finalDate, false, true));
+    }
+
     Y_UNIT_TEST(RealHostVerifiesConstantDateIntervalPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateDateColumnTable(kikimr);

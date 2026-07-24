@@ -1033,6 +1033,32 @@ class IntegerDomainTest(unittest.TestCase):
 
 
 class DateScalarTest(unittest.TestCase):
+    def test_if_present_date_payload_or_zero_is_exact_and_non_null(self):
+        expression = _if_present(
+            Expr(kind="column", column="optional"),
+            Expr(kind="bound", depth=0),
+            _literal(DATE, 0),
+            DATE,
+        )
+        for optional_is_null, expected in (
+            (False, MAX_DATE - 1),
+            (True, 0),
+        ):
+            with self.subTest(optional_is_null=optional_is_null):
+                result = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "optional": Value(
+                            DATE,
+                            smt.bool_value(optional_is_null),
+                            smt.int_value(MAX_DATE - 1),
+                        )
+                    },
+                )
+                self.assertEqual(result.type, DATE)
+                self.assertFalse(_ground(result.is_null))
+                self.assertEqual(_ground(result.value), expected)
+
     def test_every_non_null_opaque_date_result_is_range_constrained(self):
         for nullable in (False, True):
             script = smt.Script()

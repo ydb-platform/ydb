@@ -2769,6 +2769,101 @@ ui16 ParseDirectDateLiteral(const TExprNode& node) {
     return static_cast<ui16>(literal["value"].GetUIntegerSafe());
 }
 
+void CheckExactDateZeroFallback(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    if (!IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported(
+            "Exact Date Unwrap fallback must be Optional<Date>");
+    }
+
+    if (node.IsCallable("Just")) {
+        if (node.ChildrenSize() != 1 ||
+            ParseDirectDateLiteral(*node.Child(0)) != 0)
+        {
+            Unsupported(
+                "Exact Date Unwrap Just fallback must contain Date zero");
+        }
+        return;
+    }
+
+    if (!node.IsCallable("SafeCast") || node.ChildrenSize() != 2) {
+        Unsupported(
+            "Exact Date Unwrap fallback must be Just(Date(0)) or "
+            "SafeCast(Int32(0), Optional<Date>)");
+    }
+    CheckDataDescriptor(
+        *node.Child(1),
+        NUdf::EDataSlot::Date,
+        true,
+        "Exact Date Unwrap SafeCast target");
+    if (ParseExactInt32Literal(
+            *node.Child(0), "Exact Date Unwrap SafeCast source") != 0)
+    {
+        Unsupported(
+            "Exact Date Unwrap SafeCast source must be Int32 zero");
+    }
+
+    const auto& dateType = DescribedType(
+        *node.Child(1)->Child(0),
+        "Exact Date Unwrap SafeCast target item");
+    if (CastResult<false>(node.Child(0)->GetTypeAnn(), &dateType) !=
+        NUdf::ECastOptions::MayFail)
+    {
+        Unsupported(
+            "Exact Date Unwrap SafeCast is not the reviewed "
+            "Int32-to-Date conversion");
+    }
+}
+
+const TExprNode* CheckExactDateUnwrapCoalesceZero(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Unwrap") || node.ChildrenSize() != 1 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Date, false))
+    {
+        Unsupported(
+            "Exact Date Unwrap requires one Optional<Date> Coalesce "
+            "and a non-null Date result");
+    }
+
+    const auto& coalesce = *node.Child(0);
+    CheckScalarSafetyMetadata(coalesce);
+    if (!coalesce.IsCallable("Coalesce") ||
+        coalesce.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            coalesce.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported(
+            "Exact Date Unwrap requires a binary Optional<Date> Coalesce");
+    }
+
+    const auto& optional = *coalesce.Child(0);
+    CheckScalarSafetyMetadata(optional);
+    if (!optional.IsCallable("Member") ||
+        optional.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            optional.GetTypeAnn(), NUdf::EDataSlot::Date, true) ||
+        !rowArgument ||
+        optional.Child(0) != rowArgument ||
+        !optional.Child(1)->IsAtom() ||
+        !visibleColumns.contains(TString(optional.Child(1)->Content())))
+    {
+        Unsupported(
+            "Exact Date Unwrap requires a direct visible Optional<Date> "
+            "input member");
+    }
+    CheckScalarSafetyMetadata(*rowArgument);
+    CheckScalarSafetyMetadata(*optional.Child(1));
+    CheckExactDateZeroFallback(*coalesce.Child(1));
+    return &optional;
+}
+
 i64 ParseDirectIntervalLiteral(const TExprNode& node) {
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("Interval") || node.ChildrenSize() != 1 ||
@@ -3736,6 +3831,46 @@ NJson::TJsonValue ExportExprNode(
 
     if (IsConstantShiftedDate(node)) {
         return ConstantShiftedDateExpr(node);
+    }
+
+    if (node.IsCallable("Unwrap")) {
+        const auto* optional = CheckExactDateUnwrapCoalesceZero(
+            node,
+            rowArgument,
+            visibleColumns);
+
+        // The source spells this total value as either
+        // Unwrap(Coalesce(member, SafeCast(Int32(0), Optional<Date>))) or
+        // Unwrap(Coalesce(member, Just(Date(0)))).  Int32-to-Date SafeCast
+        // accepts and preserves zero, so both fallbacks are present Date zero
+        // and the Unwrap error path is unreachable.  Validate the complete
+        // Coalesce subtree with the closed opaque audit; validating Unwrap
+        // itself would deliberately fail that audit's positive callable list.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(*node.Child(0));
+        if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+            Unsupported(
+                "Exact Date Unwrap binding depth exceeds the audit limit");
+        }
+
+        budget.Charge(normalizedDepth + 1, 2); // Bound value and Date zero.
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportExprNode(
+            *optional,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 2);
+        result["present"] = BoundExpr(0);
+        result["missing"] = ConstantDateValue(static_cast<ui16>(0));
+        result["type"] = "Date";
+        result["nullable"] = false;
+        return result;
     }
 
     if (node.IsCallable("Decimal")) {

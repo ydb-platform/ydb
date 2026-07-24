@@ -311,6 +311,7 @@ private:
                                     EKafkaErrors error, TString message = "");
 
     NActors::NStructuredLog::TStructuredMessage LogPrefix();
+    TString GetMetadataDatabasePath() const;
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

@@ -111,6 +111,7 @@ namespace NKafka {
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
             TString GetFullTopicPath(const TString& topicName);
+            TString GetMetadataDatabasePath() const;
             TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);

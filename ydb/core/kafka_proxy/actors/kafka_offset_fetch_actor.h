@@ -98,6 +98,7 @@ public:
     void FillMapWithGroupRequests();
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
+    TString GetMetadataDatabasePath() const;
 
     NStructuredLog::TStructuredMessage LogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(

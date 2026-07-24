@@ -90,6 +90,7 @@ private:
     void SendFailedForAllPartitions(EKafkaErrors error, const TActorContext& ctx);
     void SendCommits(const TActorContext& ctx);
     void SendGenerationCheckRequest(const TActorContext& ctx);
+    TString GetMetadataDatabasePath() const;
 
 private:
     const TContext::TPtr Context;

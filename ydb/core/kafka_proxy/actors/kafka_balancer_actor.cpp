@@ -1,4 +1,5 @@
 #include "kafka_balancer_actor.h"
+#include "kafka_metadata_service.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -8,7 +9,11 @@ using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
 void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
-    Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+    } else {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+    }
 
     if (RequestType == JOIN_GROUP && MemberId.empty()) {
         MemberId = SelfId().ToString();
@@ -23,9 +28,20 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseFail(ctx, EKafkaErrors::MEMBER_ID_REQUIRED, TStringBuilder() << "Empty MemberId.");
         return;
     }
-    if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+        YDB_LOG_DEBUG("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
+        SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+        return;
+    }
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+        } else {
+            Kqp->SendCreateSessionRequest(ctx);
+        }
     } else {
         Kqp->SendCreateSessionRequest(ctx);
     }
@@ -46,6 +62,10 @@ void TKafkaBalancerActor::Die(const TActorContext& ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString TKafkaBalancerActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 static EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {
@@ -106,6 +126,12 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
 
     const auto& record = ev->Get()->Record;
     auto status = record.GetYdbStatus();
+
+    if (TryRequestConsumerMetadataTablesCreation(status, GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
+        return;
+    }
+
     if (status == Ydb::StatusIds::ABORTED) {
         if ((CurrentStep == JOIN_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS || CurrentStep == JOIN_UPDATE_GROUP_STATE_AND_PROTOCOL) && CurrentTxAbortRetryNumber < TX_ABORT_RETRY_MAX_COUNT) {
             CurrentTxAbortRetryNumber++;
@@ -371,7 +397,7 @@ void TKafkaBalancerActor::JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
     CurrentStep = JOIN_CHECK_STATE_AND_GENERATION;
     NYdb::TParamsBuilder params = BuildCheckGroupStateParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -417,7 +443,7 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
         LastSuccessGeneration = std::numeric_limits<ui64>::max();
         NYdb::TParamsBuilder params = BuildCheckGroupsCountParams();
         Kqp->SendYqlRequest(Sprintf(CHECK_GROUPS_COUNT.c_str(),
-                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx);
     } else if (groupStatus->State != GROUP_STATE_JOIN) {
         KqpReqCookie++;
@@ -427,7 +453,7 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
         GenerationId = groupStatus->Generation + 1;
         NYdb::TParamsBuilder params = BuildUpdateOrInsertNewGroupParams();
         Kqp->SendYqlRequest(Sprintf(UPDATE_GROUP.c_str(),
-                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx);
     } else {
         IsMaster = MemberId == groupStatus->MasterId;
@@ -455,7 +481,7 @@ void TKafkaBalancerActor::JoinStepCheckGroupsCount(NKqp::TEvKqp::TEvQueryRespons
 
     NYdb::TParamsBuilder params = BuildUpdateOrInsertNewGroupParams();
     Kqp->SendYqlRequest(Sprintf(INSERT_NEW_GROUP.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -465,7 +491,7 @@ void TKafkaBalancerActor::JoinStepInsertNewMember(NKqp::TEvKqp::TEvQueryResponse
 
     NYdb::TParamsBuilder params = BuildInsertMemberParams();
     Kqp->SendYqlRequest(Sprintf(INSERT_MEMBER.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx, true);
 }
 
@@ -490,7 +516,7 @@ void TKafkaBalancerActor::JoinStepCheckMasterAlive(NKqp::TEvKqp::TEvQueryRespons
         Kqp->ResetTxId();
         NYdb::TParamsBuilder params = BuildCheckMasterAlive();
         Kqp->SendYqlRequest(Sprintf(CHECK_MASTER_ALIVE.c_str(),
-                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx);
     } else {
         Kqp->BeginTransaction(KqpReqCookie, ctx);
@@ -512,7 +538,7 @@ void TKafkaBalancerActor::JoinStepReCheckGroupState(NKqp::TEvKqp::TEvQueryRespon
             KqpReqCookie++;
             NYdb::TParamsBuilder params = BuildSetMasterDeadParams();
             Kqp->SendYqlRequest(Sprintf(UPDATE_GROUP_STATE.c_str(),
-                                TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                                TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                                 params.Build(), KqpReqCookie, ctx, true);
             return;
         }
@@ -523,7 +549,7 @@ void TKafkaBalancerActor::JoinStepReCheckGroupState(NKqp::TEvKqp::TEvQueryRespon
 
     NYdb::TParamsBuilder params = BuildCheckGroupStateParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx, !IsMaster);
 }
 
@@ -548,7 +574,7 @@ void TKafkaBalancerActor::JoinStepSelectPrevMembers(NKqp::TEvKqp::TEvQueryRespon
     CurrentStep = JOIN_GET_PREV_MEMBERS;
     NYdb::TParamsBuilder params = BuildSelectMembersParams(LastSuccessGeneration);
     Kqp->SendYqlRequest(Sprintf(SELECT_ALIVE_MEMBERS.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -570,7 +596,7 @@ void TKafkaBalancerActor::JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryRespo
     KqpReqCookie++;
     CurrentStep  = JOIN_GET_CUR_MEMBERS;
     NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
-    auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str());
+    auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str());
     Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
 }
 
@@ -617,12 +643,12 @@ void TKafkaBalancerActor::JoinStepCheckPrevGenerationMembers(NKqp::TEvKqp::TEvQu
         CurrentStep  = JOIN_GET_CUR_MEMBERS;
         NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
         auto sql = Sprintf(SELECT_WORKER_STATES.c_str(),
-                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str());
+                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str());
         Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
     } else {
         NYdb::TParamsBuilder params = BuildSelectMembersParams(LastSuccessGeneration);
         auto sql = Sprintf(SELECT_ALIVE_MEMBERS.c_str(),
-                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str());
+                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str());
         Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
     }
 }
@@ -674,7 +700,7 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
             CurrentStep = JOIN_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS;
             NYdb::TParamsBuilder params = BuildUpdateLastHeartbeatsParams();
             Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_MEMBER_HEARTBEAT.c_str(),
-                                TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                                TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                                 params.Build(), KqpReqCookie, ctx, true);
             return;
         }
@@ -687,12 +713,12 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
         NYdb::TParamsBuilder params = BuildUpdateGroupStateAndProtocolParams();
         CurrentStep  = JOIN_UPDATE_GROUP_STATE_AND_PROTOCOL;
         Kqp->SendYqlRequest(Sprintf(UPDATE_GROUP_STATE_AND_PROTOCOL.c_str(),
-                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx, true);
     } else {
         NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
         auto sql = Sprintf(SELECT_WORKER_STATES.c_str(),
-                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str());
+                                    TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str());
         Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
     }
 }
@@ -703,7 +729,7 @@ void TKafkaBalancerActor::SyncStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
 
     NYdb::TParamsBuilder params = BuildCheckGroupStateParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -755,8 +781,8 @@ void TKafkaBalancerActor::SyncStepBuildAssignmentsIfMaster(NKqp::TEvKqp::TEvQuer
         KqpReqCookie++;
         NYdb::TParamsBuilder params = BuildAssignmentsParams();
         Kqp->SendYqlRequest(Sprintf(UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE.c_str(),
-                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str(),
-                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str(),
+                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx);
     } else {
         SyncGroupNextStep(nullptr, ctx);
@@ -776,7 +802,7 @@ void TKafkaBalancerActor::SyncStepReCheckGroupState(NKqp::TEvKqp::TEvQueryRespon
 
     NYdb::TParamsBuilder params = BuildCheckGroupStateParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -826,7 +852,7 @@ void TKafkaBalancerActor::SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse
 
     NYdb::TParamsBuilder params = BuildFetchAssignmentsParams();
     Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -849,8 +875,8 @@ void TKafkaBalancerActor::HeartbeatStepCheckDeadMembers(NKqp::TEvKqp::TEvQueryRe
 
     NYdb::TParamsBuilder params = BuildCheckDeadsParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_DEAD_MEMBERS.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str(),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx);
 }
 
@@ -885,7 +911,7 @@ void TKafkaBalancerActor::HeartbeatStepCheckGroupState(NKqp::TEvKqp::TEvQueryRes
 
     NYdb::TParamsBuilder params = BuildCheckGroupStateParams();
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx, true);
 }
 
@@ -918,12 +944,12 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
     NYdb::TParamsBuilder params = BuildUpdateLastHeartbeatsParams();
     if (IsMaster) {
         Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_MEMBER_AND_GROUP_HEARTBEATS.c_str(),
-                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str(),
-                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str(),
+                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx, true);
     } else {
         Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_MEMBER_HEARTBEAT.c_str(),
-                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                            TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                             params.Build(), KqpReqCookie, ctx, true);
     }
 }
@@ -934,7 +960,7 @@ void TKafkaBalancerActor::LeaveStepGetMemberGeneration(NKqp::TEvKqp::TEvQueryRes
 
     NYdb::TParamsBuilder params = BuildGetMemberParams();
     Kqp->SendYqlRequest(Sprintf(GET_GENERATION_BY_MEMBER.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx, true);
 }
 
@@ -949,8 +975,8 @@ void TKafkaBalancerActor::LeaveStepLeaveGroup(NKqp::TEvKqp::TEvQueryResponse::TP
 
     NYdb::TParamsBuilder params = BuildLeaveGroupParams();
     Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_HEARTBEAT_AND_STATE_TO_LEAVE_GROUP.c_str(),
-                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str(),
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
                         params.Build(), KqpReqCookie, ctx, true);
 }
 

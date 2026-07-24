@@ -1,6 +1,9 @@
 #include "kafka_offset_fetch_actor.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_service.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include "ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -241,9 +244,18 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
     if (!GroupsToFetch.empty()) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, std::make_shared<TOffsetFetchResponseData>(), EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            Die(ctx);
+            return;
+        }
         // if topics were not specified for some groups,
         // topics for such groups will be retrieved from the table
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
         Kqp->SendCreateSessionRequest(ctx);
         YDB_LOG_DEBUG("Creating KQP Session",
             {LogPrefix()});
@@ -398,13 +410,20 @@ void TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr
         return;
     }
     NYdb::TParamsBuilder params = BuildFetchAssignmentsParams(GroupsToFetch);
-    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()), params.Build(), KqpCookie, ctx);
+    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()), params.Build(), KqpCookie, ctx);
 }
 
 void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>> assignments;
     YDB_LOG_DEBUG("Received KQP response",
         {LogPrefix()});
+    if (ev && TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        auto response = GetOffsetFetchResponse();
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+        Die(ctx);
+        return;
+    }
+
     ParseGroupsAssignments(ev, assignments);
 
     if (assignments.empty()) {
@@ -667,6 +686,10 @@ void NKafka::TKafkaOffsetFetchActor::Die(const TActorContext &ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString NKafka::TKafkaOffsetFetchActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 }

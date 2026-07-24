@@ -9742,6 +9742,147 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(FoldsProvenPresentDateSafeCastsInStaticSqlInTuple) {
+        TExportTestContext ctx;
+        const auto* optionalDateType = ScalarType(
+            ctx, NUdf::EDataSlot::Date, true);
+        const auto* optionalBoolType = ScalarType(
+            ctx, NUdf::EDataSlot::Bool, true);
+        const TVector<std::pair<TStringBuf, ui16>> dates = {
+            {"1998-01-02", 10'228},
+            {"1998-10-15", 10'514},
+            {"1998-11-10", 10'540},
+        };
+
+        TExprNode::TListType items;
+        for (const auto& date : dates) {
+            items.push_back(TypedTextLiteralDateCast(
+                ctx, "SafeCast", "String", date.first));
+        }
+        const auto expression = ExportTypedMapExpression(
+            ctx,
+            "a",
+            "Date",
+            true,
+            TypedSqlIn(
+                ctx,
+                TypedStaticTuple(
+                    ctx, std::move(items), optionalDateType),
+                TypedMember(ctx, "a.x", optionalDateType),
+                SqlInOptions(ctx, {}),
+                optionalBoolType));
+
+        const auto& exportedItems = expression["items"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(exportedItems.size(), dates.size());
+        for (size_t index = 0; index < dates.size(); ++index) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                exportedItems[index]["kind"].GetStringSafe(), "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                exportedItems[index]["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                exportedItems[index]["value"].GetUIntegerSafe(),
+                dates[index].second);
+        }
+    }
+
+    Y_UNIT_TEST(NullableDateStaticSqlInItemsFailClosedOutsideExactTupleFold) {
+        const auto checkUnsupported = [](
+            TStringBuf label,
+            TStringBuf sourceType,
+            bool useAsList,
+            TStringBuf expectedReason,
+            auto&& makeItem)
+        {
+            TExportTestContext ctx;
+            const auto* optionalDateType = ScalarType(
+                ctx, NUdf::EDataSlot::Date, true);
+            const auto* optionalBoolType = ScalarType(
+                ctx, NUdf::EDataSlot::Bool, true);
+            TExprNode::TListType items{
+                makeItem(ctx, optionalDateType),
+            };
+            auto collection = useAsList
+                ? TypedStaticAsList(
+                    ctx, std::move(items), optionalDateType)
+                : TypedStaticTuple(
+                    ctx, std::move(items), optionalDateType);
+
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                sourceType,
+                false,
+                TypedSqlIn(
+                    ctx,
+                    std::move(collection),
+                    TypedCallable(ctx, "Nothing", {}, optionalDateType),
+                    SqlInOptions(ctx, {}),
+                    optionalBoolType));
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder() << label << " unexpectedly exported "
+                                 << result.Json);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason, expectedReason);
+        };
+
+        checkUnsupported(
+            "invalid Date",
+            "Date",
+            false,
+            "tuple item annotation is nullable",
+            [](TExportTestContext& ctx, const TTypeAnnotationNode*) {
+                return TypedTextLiteralDateCast(
+                    ctx, "SafeCast", "String", "1998-02-30");
+            });
+        checkUnsupported(
+            "dynamic source",
+            "String",
+            false,
+            "source is not a direct String or Utf8 literal",
+            [](TExportTestContext& ctx, const TTypeAnnotationNode* optionalDate) {
+                const auto* stringType = ScalarType(
+                    ctx, NUdf::EDataSlot::String);
+                const auto* dateType = ScalarType(
+                    ctx, NUdf::EDataSlot::Date);
+                return TypedCallable(
+                    ctx,
+                    "SafeCast",
+                    {
+                        TypedMember(ctx, "a.x", stringType),
+                        OptionalDataTypeDescriptor(
+                            ctx, "Date", dateType, optionalDate),
+                    },
+                    optionalDate);
+            });
+        checkUnsupported(
+            "Nothing",
+            "Date",
+            false,
+            "tuple item annotation is nullable",
+            [](TExportTestContext& ctx, const TTypeAnnotationNode* optionalDate) {
+                return TypedCallable(ctx, "Nothing", {}, optionalDate);
+            });
+        checkUnsupported(
+            "StrictCast",
+            "Date",
+            false,
+            "tuple item annotation is nullable",
+            [](TExportTestContext& ctx, const TTypeAnnotationNode*) {
+                return TypedTextLiteralDateCast(
+                    ctx, "StrictCast", "String", "1998-01-02");
+            });
+        checkUnsupported(
+            "AsList",
+            "Date",
+            true,
+            "AsList item annotation is nullable",
+            [](TExportTestContext& ctx, const TTypeAnnotationNode*) {
+                return TypedTextLiteralDateCast(
+                    ctx, "SafeCast", "Utf8", "1998-01-02");
+            });
+    }
+
     Y_UNIT_TEST(ExportsLosslessMixedIntegerStaticSqlIn) {
         for (const bool useAsList : {false, true}) {
             TExportTestContext ctx;

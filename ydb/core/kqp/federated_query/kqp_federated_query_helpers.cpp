@@ -52,14 +52,9 @@ namespace {
         const TString& endpoint,
         const TString& database,
         bool useTls,
-        const TString& structuredTokenJson,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const TString& path,
         bool addRoot) {
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
-        }
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;
@@ -72,12 +67,12 @@ namespace {
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
         return schemeClient->DescribePath(addRoot ? "/Root" + path : path)
-            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, structuredTokenJson, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, credentialsProviderFactory, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 TGetSchemeEntryResult res;
                 if (!describePathResult.IsSuccess()) {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
-                        return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, structuredTokenJson, p, true);
+                        return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, message + describePathResult.GetIssues().ToString());
@@ -455,7 +450,19 @@ namespace {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path) {
-        return GetSchemeEntryTypeImpl(NActors::TActivationContext::ActorSystem(), federatedQuerySetup, endpoint, NKikimr::CanonizePath(database), useTls, structuredTokenJson, path, false);
+        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
+            LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
+        }
+        return GetSchemeEntryTypeImpl(
+                NActors::TActivationContext::ActorSystem(),
+                federatedQuerySetup,
+                endpoint,
+                NKikimr::CanonizePath(database),
+                useTls,
+                NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false),
+                path,
+                false);
     };
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {

@@ -93,6 +93,30 @@ class Fixture:
     def write_report(self):
         self.report.write_text(json.dumps(self.report_value), encoding="utf-8")
 
+    def use_version_five(self, prepare_statuses=None):
+        if prepare_statuses is None:
+            prepare_statuses = ("SUCCEEDED",) * len(self.report_value["queries"])
+        if len(prepare_statuses) != len(self.report_value["queries"]):
+            raise AssertionError("one prepare status is required for every report row")
+        prepare_summary = {}
+        for row, prepare_status in zip(
+            self.report_value["queries"],
+            prepare_statuses,
+            strict=True,
+        ):
+            row["prepare_status"] = prepare_status
+            row["prepare_reason"] = (
+                "host preparation outcome is unavailable"
+                if prepare_status == "UNKNOWN"
+                else "host preparation failed after snapshot capture"
+                if prepare_status == "FAILED"
+                else ""
+            )
+            prepare_summary[prepare_status] = prepare_summary.get(prepare_status, 0) + 1
+        self.report_value["version"] = 5
+        self.report_value["prepare_summary"] = prepare_summary
+        self.write_report()
+
     def set_witness(self, query_id, witness):
         row = next(
             item for item in self.report_value["queries"]
@@ -245,6 +269,111 @@ class FakeCommands:
 
 
 class ConfirmationTest(unittest.TestCase):
+    def test_version_four_report_remains_supported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary), ("VERIFIED_BOUNDED",))
+            result = confirm(fixture.config(), run=self.fail)
+            self.assertEqual(result["status"], "NO_COUNTEREXAMPLES")
+
+    def test_version_five_failed_prepare_keeps_counterexample_logic(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            fixture.use_version_five(("FAILED",))
+            commands = FakeCommands(fixture.witnesses)
+            result = confirm(fixture.config(), run=commands)
+            self.assertEqual(result["status"], "ALL_NOT_REPRODUCED")
+            self.assertEqual(len(commands.calls), 2)
+            self.assertEqual(result["candidates"][0]["query_id"], 1)
+
+    def test_version_five_allows_not_run_only_for_query_zero(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary), ("HARNESS_ERROR",))
+            fixture.report_value["queries"][0]["query_id"] = 0
+            fixture.use_version_five(("NOT_RUN",))
+            result = confirm(fixture.config(), run=self.fail)
+            self.assertEqual(result["status"], "NO_COUNTEREXAMPLES")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary), ("HARNESS_ERROR",))
+            fixture.use_version_five(("NOT_RUN",))
+            with self.assertRaisesRegex(ConfirmationError, "invalid prepare_status"):
+                confirm(fixture.config(), run=self.fail)
+            self.assertFalse(fixture.config().artifacts.exists())
+
+    def test_version_five_allows_unknown_preparation_for_query_harness_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary), ("HARNESS_ERROR",))
+            fixture.use_version_five(("UNKNOWN",))
+            result = confirm(fixture.config(), run=self.fail)
+            self.assertEqual(result["status"], "NO_COUNTEREXAMPLES")
+
+    def test_version_five_prepare_contract_fails_closed(self):
+        mutations = {
+            "missing_status": (
+                lambda report: report["queries"][0].pop("prepare_status"),
+                "invalid prepare_status",
+            ),
+            "unknown_status": (
+                lambda report: report["queries"][0].update(
+                    prepare_status="BROKEN"
+                ),
+                "invalid prepare_status",
+            ),
+            "non_string_status": (
+                lambda report: report["queries"][0].update(prepare_status=[]),
+                "invalid prepare_status",
+            ),
+            "missing_reason": (
+                lambda report: report["queries"][0].pop("prepare_reason"),
+                "invalid prepare_reason",
+            ),
+            "non_string_reason": (
+                lambda report: report["queries"][0].update(prepare_reason=None),
+                "invalid prepare_reason",
+            ),
+            "empty_failed_reason": (
+                lambda report: report["queries"][0].update(prepare_reason=""),
+                "invalid prepare_reason",
+            ),
+            "nonempty_succeeded_reason": (
+                lambda report: report["queries"][0].update(
+                    prepare_status="SUCCEEDED",
+                    prepare_reason="unexpected",
+                    prepare_summary={"SUCCEEDED": 1},
+                ),
+                "invalid prepare_reason",
+            ),
+            "missing_summary": (
+                lambda report: report.pop("prepare_summary"),
+                "prepare_summary is invalid",
+            ),
+            "non_object_summary": (
+                lambda report: report.update(prepare_summary=[]),
+                "prepare_summary is invalid",
+            ),
+            "unknown_summary_status": (
+                lambda report: report.update(prepare_summary={"BROKEN": 1}),
+                "prepare_summary is invalid",
+            ),
+            "boolean_summary_count": (
+                lambda report: report.update(prepare_summary={"FAILED": True}),
+                "prepare_summary is invalid",
+            ),
+            "mismatched_summary": (
+                lambda report: report.update(prepare_summary={"SUCCEEDED": 1}),
+                "prepare_summary does not match",
+            ),
+        }
+        for name, (mutate, reason) in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary), ("VERIFIED_BOUNDED",))
+                fixture.use_version_five(("FAILED",))
+                mutate(fixture.report_value)
+                fixture.write_report()
+                with self.assertRaisesRegex(ConfirmationError, reason):
+                    confirm(fixture.config(), run=self.fail)
+                self.assertFalse(fixture.config().artifacts.exists())
+
     def test_no_candidates_is_success_and_runs_no_children(self):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary), ("VERIFIED_BOUNDED",))

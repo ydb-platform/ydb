@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 from .model import (
     COVERAGE_FORMAT,
-    COVERAGE_VERSION,
+    COVERAGE_VERSIONS,
     SHA256,
     Candidate,
     CandidateInputs,
@@ -183,8 +183,15 @@ def write_json(path: Path, value: Any) -> None:
 def _decode_report(value: Any) -> tuple[str, int, int, tuple[Candidate, ...]]:
     if not isinstance(value, Mapping):
         raise ConfirmationError("coverage report must be a JSON object")
-    if value.get("format") != COVERAGE_FORMAT or value.get("version") != COVERAGE_VERSION:
-        raise ConfirmationError("confirmation requires a version-four benchmark coverage report")
+    version = value.get("version")
+    if (
+        value.get("format") != COVERAGE_FORMAT
+        or type(version) is not int
+        or version not in COVERAGE_VERSIONS
+    ):
+        raise ConfirmationError(
+            "confirmation requires a version-four or version-five benchmark coverage report"
+        )
     suite = value.get("suite")
     row_bound = value.get("row_bound")
     task_bound = value.get("task_bound")
@@ -199,6 +206,7 @@ def _decode_report(value: Any) -> tuple[str, int, int, tuple[Candidate, ...]]:
         raise ConfirmationError("coverage report queries must be an array")
 
     observed: dict[str, int] = {}
+    observed_prepare: dict[str, int] = {}
     seen_ids: set[int] = set()
     candidates: list[Candidate] = []
     for index, row in enumerate(rows):
@@ -217,6 +225,31 @@ def _decode_report(value: Any) -> tuple[str, int, int, tuple[Candidate, ...]]:
         if row.get("suite") != suite:
             raise ConfirmationError(f"coverage query row {index} has the wrong suite")
         observed[status] = observed.get(status, 0) + 1
+        if version == 5:
+            prepare_status = row.get("prepare_status")
+            allowed_prepare_statuses = {"SUCCEEDED", "FAILED", "UNKNOWN"}
+            if query_id == 0:
+                allowed_prepare_statuses.add("NOT_RUN")
+            if (
+                not isinstance(prepare_status, str)
+                or prepare_status not in allowed_prepare_statuses
+            ):
+                raise ConfirmationError(
+                    f"coverage query row {index} has an invalid prepare_status"
+                )
+            prepare_reason = row.get("prepare_reason")
+            if (
+                not isinstance(prepare_reason, str)
+                or (prepare_status == "SUCCEEDED" and prepare_reason)
+                or (
+                    prepare_status in {"FAILED", "UNKNOWN"}
+                    and not prepare_reason
+                )
+            ):
+                raise ConfirmationError(
+                    f"coverage query row {index} has an invalid prepare_reason"
+                )
+            observed_prepare[prepare_status] = observed_prepare.get(prepare_status, 0) + 1
         if status != "COUNTEREXAMPLE":
             continue
         if query_id <= 0:
@@ -249,6 +282,19 @@ def _decode_report(value: Any) -> tuple[str, int, int, tuple[Candidate, ...]]:
         raise ConfirmationError("coverage report summary is invalid")
     if dict(summary) != observed:
         raise ConfirmationError("coverage report summary does not match its query rows")
+    if version == 5:
+        prepare_summary = value.get("prepare_summary")
+        if not isinstance(prepare_summary, Mapping) or any(
+            status not in {"SUCCEEDED", "FAILED", "UNKNOWN", "NOT_RUN"}
+            or type(count) is not int
+            or count < 0
+            for status, count in prepare_summary.items()
+        ):
+            raise ConfirmationError("coverage report prepare_summary is invalid")
+        if dict(prepare_summary) != observed_prepare:
+            raise ConfirmationError(
+                "coverage report prepare_summary does not match its query rows"
+            )
     if candidates and value.get("solver_present") is not True:
         raise ConfirmationError("coverage counterexamples require solver_present:true")
     return suite, row_bound, task_bound, tuple(sorted(candidates, key=lambda item: item.query_id))

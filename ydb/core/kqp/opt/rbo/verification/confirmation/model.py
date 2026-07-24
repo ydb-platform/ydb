@@ -11,7 +11,8 @@ from typing import Any, Mapping
 FORMAT = "ydb-rbo-counterexample-confirmation"
 VERSION = 1
 COVERAGE_FORMAT = "ydb-rbo-benchmark-coverage"
-COVERAGE_VERSION = 4
+COVERAGE_VERSION = 5
+COVERAGE_VERSIONS = frozenset({4, COVERAGE_VERSION})
 TRACE_FORMAT = "ydb-rbo-concrete-trace"
 TRACE_VERSION = 1
 REPLAY_FORMAT = "ydb-rbo-real-replay"

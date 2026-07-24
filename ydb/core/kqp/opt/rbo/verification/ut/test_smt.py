@@ -27,6 +27,13 @@ def _deep_shared_term(leaf, depth=2000):
 
 
 class SmtTest(unittest.TestCase):
+    def test_term_structural_hash_is_cached_for_deep_shared_dags(self):
+        first = _deep_shared_term(smt.symbol("value", smt.INT))
+        second = _deep_shared_term(smt.symbol("value", smt.INT))
+
+        self.assertEqual(hash(first), hash(second))
+        self.assertEqual(hash(first), hash(first))
+
     def test_script_timeout_requires_a_positive_exact_integer(self):
         for value in (0, -1, True, 1.0):
             with self.subTest(value=value):

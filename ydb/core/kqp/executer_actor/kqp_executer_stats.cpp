@@ -1270,28 +1270,19 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                 if (CollectUserFacingTaskStats) {
                     auto& stageTasks = UserFacingTaskStats[taskStats.GetStageId()];
                     if (auto taskIt = stageTasks.find(taskId); taskIt != stageTasks.end()) {
-                        taskIt->second.CopyFrom(stats);
+                        taskIt->second = MakeUserFacingTaskSnapshot(taskStats);
                     } else if (stageTasks.size() < MaxUserFacingTraceTasksPerStage) {
-                        stageTasks[taskId].CopyFrom(stats);
+                        stageTasks[taskId] = MakeUserFacingTaskSnapshot(taskStats);
                     } else if (taskDuration > TDuration::Zero()) {
                         // Over the cap keep top-N by duration, not first-come: the tasks worth
                         // showing are the stragglers, and they report last. Evict the shortest
                         // retained task when a longer one arrives; a still-running task loses
                         // now (zero duration) but is reconsidered on its final report.
-                        auto durationOf = [](const std::pair<const ui64, NYql::NDqProto::TDqComputeActorStats>& entry) -> ui64 {
-                            for (const auto& t : entry.second.GetTasks()) {
-                                if (t.GetTaskId() == entry.first && t.GetFinishTimeMs() >= t.GetStartTimeMs()
-                                        && t.GetStartTimeMs() != 0) {
-                                    return t.GetFinishTimeMs() - t.GetStartTimeMs();
-                                }
-                            }
-                            return 0;
-                        };
                         auto minIt = std::min_element(stageTasks.begin(), stageTasks.end(),
-                            [&](const auto& a, const auto& b) { return durationOf(a) < durationOf(b); });
-                        if (minIt != stageTasks.end() && taskDuration.MilliSeconds() > durationOf(*minIt)) {
+                            [](const auto& a, const auto& b) { return a.second.DurationMs() < b.second.DurationMs(); });
+                        if (minIt != stageTasks.end() && taskDuration.MilliSeconds() > minIt->second.DurationMs()) {
                             stageTasks.erase(minIt);
-                            stageTasks[taskId].CopyFrom(stats);
+                            stageTasks[taskId] = MakeUserFacingTaskSnapshot(taskStats);
                         }
                     }
                 }

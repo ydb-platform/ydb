@@ -97,107 +97,83 @@ TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
 // Task start/finish are ABSOLUTE epoch ms (raw from the compute actor), unlike the stage
 // aggregate which is offset from BaseTimeMs — so no base is added here.
 void EmitTaskSpans(const NWilson::TTraceId& stageParent,
-        const std::unordered_map<ui64, NYql::NDqProto::TDqComputeActorStats>& tasks, ui64 stageStartMs) {
-    for (const auto& [retainedTaskId, ca] : tasks) {
-        for (const auto& task : ca.GetTasks()) {
-            // A CA snapshot can carry sibling tasks; emit each task only under its own key.
-            if (task.GetTaskId() != retainedTaskId) {
-                continue;
-            }
-            // Write tasks (datashard) report FinishTimeMs but leave StartTimeMs unset; fall back to
-            // creation time, then to the stage's start, so the task still gets a span in-window.
-            const ui64 startMs = task.GetStartTimeMs() ? task.GetStartTimeMs()
-                : task.GetCreateTimeMs() ? task.GetCreateTimeMs()
-                : stageStartMs;
-            const ui64 finishMs = task.GetFinishTimeMs();
-            if (startMs == 0 || finishMs < startMs) {
-                continue;
-            }
-            NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
-                stageParent, stageParent.Span(stageParent.GetVerbosity()),
-                TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
-                NWilson::NTraceProto::Status::STATUS_CODE_OK,
-                TStringBuilder() << "Task " << task.GetTaskId());
-            if (!span) {
-                continue;
-            }
-            span.Attribute("ydb.task_id", static_cast<i64>(task.GetTaskId()));
-            if (task.GetNodeId()) {
-                span.Attribute("ydb.node_id", static_cast<i64>(task.GetNodeId()));
-            }
-            span.Attribute("ydb.cpu_us", static_cast<i64>(task.GetCpuTimeUs()));
-            span.Attribute("ydb.input_rows", static_cast<i64>(task.GetInputRows()));
-            span.Attribute("ydb.output_rows", static_cast<i64>(task.GetOutputRows()));
-            // Stated explicitly because the span's own duration rounds to zero for sub-ms tasks.
-            span.Attribute("ydb.duration_us", static_cast<i64>((finishMs - startMs) * 1000));
-            if (task.GetCreateTimeMs() && task.GetStartTimeMs() > task.GetCreateTimeMs()) {
-                span.Attribute("ydb.queue_delay_us",
-                    static_cast<i64>((task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000));
-            }
-            if (task.GetComputeCpuTimeUs() > 0) {
-                span.Attribute("ydb.compute_cpu_us", static_cast<i64>(task.GetComputeCpuTimeUs()));
-            }
-            if (task.GetBuildCpuTimeUs() > 0) {
-                span.Attribute("ydb.build_cpu_us", static_cast<i64>(task.GetBuildCpuTimeUs()));
-            }
-            const ui64 waitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
-            if (waitUs > 0) {
-                span.Attribute("ydb.wait_us", static_cast<i64>(waitUs));
-            }
-            const ui64 spilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
-            if (spilledBytes > 0) {
-                span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytes));
-            }
-            ui64 affectedShards = 0;
-            for (const auto& table : task.GetTables()) {
-                affectedShards += table.GetAffectedPartitions();
-            }
-            if (affectedShards > 0) {
-                span.Attribute("ydb.affected_shards", static_cast<i64>(affectedShards));
-            }
-            // Shard read retries explain latency the timings alone don't: each retry is a full
-            // re-resolve + re-read of a shard. Reported by the read actor (ReadRetriesCount) and
-            // the scan path (ScanTaskExtraStats).
-            if (task.HasExtra()) {
-                NKqpProto::TKqpTaskExtraStats extra;
-                if (task.GetExtra().UnpackTo(&extra)) {
-                    const ui64 retries = extra.GetReadRetriesCount()
-                        + extra.GetScanTaskExtraStats().GetRetriesCount();
-                    if (retries > 0) {
-                        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
-                    }
-                    // Per-shard reads (collected only at profile level). Sub-ms reads render as
-                    // zero-length spans; the attributes still carry the detail.
-                    for (const auto& shard : extra.GetShardReads()) {
-                        if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
-                            continue;
-                        }
-                        NWilson::TSpan shardSpan = NWilson::TSpan::ConstructTerminated(
-                            span.GetTraceId(), span.GetTraceId().Span(span.GetTraceId().GetVerbosity()),
-                            TInstant::MilliSeconds(shard.GetStartTimeMs()),
-                            TInstant::MilliSeconds(shard.GetFinishTimeMs()),
-                            NWilson::NTraceProto::Status::STATUS_CODE_OK,
-                            TStringBuilder() << "Shard " << shard.GetShardId());
-                        if (!shardSpan) {
-                            continue;
-                        }
-                        shardSpan.Attribute("ydb.shard_id", static_cast<i64>(shard.GetShardId()));
-                        shardSpan.Attribute("ydb.rows", static_cast<i64>(shard.GetRows()));
-                        if (shard.GetRetries() > 0) {
-                            shardSpan.Attribute("ydb.read_retries", static_cast<i64>(shard.GetRetries()));
-                        }
-                        if (shard.GetNodeId()) {
-                            shardSpan.Attribute("ydb.node_id", static_cast<i64>(shard.GetNodeId()));
-                        }
-                        shardSpan.End();
-                    }
-                    if (extra.GetShardReadsTruncated() > 0) {
-                        span.Attribute("ydb.shards_truncated", static_cast<i64>(extra.GetShardReadsTruncated()));
-                    }
-                }
-            }
-            span.End();
+        const std::unordered_map<ui64, TUserFacingTaskSnapshot>& tasks, ui64 stageStartMs) {
+    for (const auto& [taskId, task] : tasks) {
+        // Write tasks (datashard) report FinishTimeMs but leave StartTimeMs unset; fall back to
+        // creation time, then to the stage's start, so the task still gets a span in-window.
+        const ui64 startMs = task.StartTimeMs ? task.StartTimeMs
+            : task.CreateTimeMs ? task.CreateTimeMs
+            : stageStartMs;
+        const ui64 finishMs = task.FinishTimeMs;
+        if (startMs == 0 || finishMs < startMs) {
+            continue;
         }
+        NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
+            stageParent, stageParent.Span(stageParent.GetVerbosity()),
+            TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
+            NWilson::NTraceProto::Status::STATUS_CODE_OK,
+            TStringBuilder() << "Task " << task.TaskId);
+        if (!span) {
+            continue;
+        }
+        span.Attribute("ydb.task_id", static_cast<i64>(task.TaskId));
+        if (task.NodeId) {
+            span.Attribute("ydb.node_id", static_cast<i64>(task.NodeId));
+        }
+        span.Attribute("ydb.cpu_us", static_cast<i64>(task.CpuTimeUs));
+        span.Attribute("ydb.input_rows", static_cast<i64>(task.InputRows));
+        span.Attribute("ydb.output_rows", static_cast<i64>(task.OutputRows));
+        // Stated explicitly because the span's own duration rounds to zero for sub-ms tasks.
+        span.Attribute("ydb.duration_us", static_cast<i64>((finishMs - startMs) * 1000));
+        if (task.CreateTimeMs && task.StartTimeMs > task.CreateTimeMs) {
+            span.Attribute("ydb.queue_delay_us",
+                static_cast<i64>((task.StartTimeMs - task.CreateTimeMs) * 1000));
+        }
+        if (task.ComputeCpuTimeUs > 0) {
+            span.Attribute("ydb.compute_cpu_us", static_cast<i64>(task.ComputeCpuTimeUs));
+        }
+        if (task.BuildCpuTimeUs > 0) {
+            span.Attribute("ydb.build_cpu_us", static_cast<i64>(task.BuildCpuTimeUs));
+        }
+        const ui64 waitUs = task.WaitInputTimeUs + task.WaitOutputTimeUs;
+        if (waitUs > 0) {
+            span.Attribute("ydb.wait_us", static_cast<i64>(waitUs));
+        }
+        if (task.SpilledBytes > 0) {
+            span.Attribute("ydb.spilled_bytes", static_cast<i64>(task.SpilledBytes));
+        }
+        if (task.ReadRetries > 0) {
+            span.Attribute("ydb.read_retries", static_cast<i64>(task.ReadRetries));
+        }
+        // Per-shard reads (collected only at profile level). Sub-ms reads render as
+        // zero-length spans; the attributes still carry the detail.
+        for (const auto& shard : task.ShardReads) {
+            if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
+                continue;
+            }
+            NWilson::TSpan shardSpan = NWilson::TSpan::ConstructTerminated(
+                span.GetTraceId(), span.GetTraceId().Span(span.GetTraceId().GetVerbosity()),
+                TInstant::MilliSeconds(shard.GetStartTimeMs()),
+                TInstant::MilliSeconds(shard.GetFinishTimeMs()),
+                NWilson::NTraceProto::Status::STATUS_CODE_OK,
+                TStringBuilder() << "Shard " << shard.GetShardId());
+            if (!shardSpan) {
+                continue;
+            }
+            shardSpan.Attribute("ydb.shard_id", static_cast<i64>(shard.GetShardId()));
+            shardSpan.Attribute("ydb.rows", static_cast<i64>(shard.GetRows()));
+            if (shard.GetRetries() > 0) {
+                shardSpan.Attribute("ydb.read_retries", static_cast<i64>(shard.GetRetries()));
+            }
+            if (shard.GetNodeId()) {
+                shardSpan.Attribute("ydb.node_id", static_cast<i64>(shard.GetNodeId()));
+            }
+            shardSpan.End();
+        }
+        if (task.ShardReadsTruncated > 0) {
+            span.Attribute("ydb.shards_truncated", static_cast<i64>(task.ShardReadsTruncated));
+        }
+        span.End();
     }
 }
 

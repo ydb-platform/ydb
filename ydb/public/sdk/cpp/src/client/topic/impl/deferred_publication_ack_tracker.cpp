@@ -1,7 +1,5 @@
 #include "deferred_publication_ack_tracker.h"
 
-#include "transaction.h"
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
 
 namespace NYdb::inline Dev::NTopic {
@@ -10,6 +8,10 @@ namespace {
 
 std::shared_ptr<TDeferredPublicationAckState> MakeAckState() {
     return std::make_shared<TDeferredPublicationAckState>();
+}
+
+TStatus MakeDeferredFinalizeSuccess() {
+    return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues{});
 }
 
 TStatus MakeDeferredFinalizeAbortedError() {
@@ -99,7 +101,7 @@ bool TDeferredPublicationAckState::TryOnWrite() {
 
 std::pair<ui64, ui64> TDeferredPublicationAckState::OnAck() {
     std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
-    TStatus statusToSet = MakeCommitTransactionSuccess();
+    TStatus statusToSet = MakeDeferredFinalizeSuccess();
     ui64 writeCount = 0;
     ui64 ackCount = 0;
     with_lock (Lock_) {
@@ -109,7 +111,7 @@ std::pair<ui64, ui64> TDeferredPublicationAckState::OnAck() {
         ackCount = AckCount_;
         if (WriteCount_ == AckCount_ && WaitCalled_) {
             promiseToComplete = AllAcksReceived_;
-            statusToSet = MakeCommitTransactionSuccess();
+            statusToSet = MakeDeferredFinalizeSuccess();
         }
     }
     if (promiseToComplete) {
@@ -142,13 +144,13 @@ void TDeferredPublicationAckState::OnUnackedAbort(ui64 unackedCount) {
 
 NThreading::TFuture<TStatus> TDeferredPublicationAckState::WaitAllAcks() {
     std::optional<NThreading::TPromise<TStatus>> promiseToComplete;
-    TStatus statusToSet = MakeCommitTransactionSuccess();
+    TStatus statusToSet = MakeDeferredFinalizeSuccess();
     NThreading::TFuture<TStatus> future;
 
     with_lock (Lock_) {
         if (WriteCount_ == 0) {
             // No local writes on this handle: do not seal, do not wait.
-            return NThreading::MakeFuture(MakeCommitTransactionSuccess());
+            return NThreading::MakeFuture(MakeDeferredFinalizeSuccess());
         }
 
         if (WaitCalled_) {

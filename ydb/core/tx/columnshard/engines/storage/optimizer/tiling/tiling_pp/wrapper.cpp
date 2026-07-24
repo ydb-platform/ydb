@@ -16,6 +16,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/hash_set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
@@ -28,7 +30,7 @@ struct TPlannerSettings {
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
     ui32 CompactionThreads = 2;
 
-    void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
+    NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue json(NJson::JSON_MAP);
         json["accumulator_portion_size_limit"] = TilingSettings.AccumulatorPortionSizeLimit;
         json["k"] = (ui64)TilingSettings.K;
@@ -48,7 +50,11 @@ struct TPlannerSettings {
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
         json["compaction_threads"] = CompactionThreads;
         json["enable_compatibility_mode"] = TilingSettings.EnableCompatibilityMode;
-        proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
+        return json;
+    }
+
+    void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
+        proto.SetJson(NJson::WriteJson(SerializeToJson(), /*formatOutput=*/false));
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) {
@@ -166,7 +172,9 @@ struct TPlannerSettings {
                 }
                 TilingSettings.EnableCompatibilityMode = value.GetBoolean();
             } else {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling_core_unknown_setting_ignored")("setting", name);
+                YDB_LOG_ERROR("",
+                    {"event", "tiling_core_unknown_setting_ignored"},
+                    {"setting", name});
             }
         }
         return TConclusionStatus::Success();
@@ -180,6 +188,7 @@ TTilingSettings MakeCoreSettings(const TPlannerSettings& settings) {
 class TOptimizerPlannerAdapter: public IOptimizerPlanner {
 private:
     using TBase = IOptimizerPlanner;
+    TPlannerSettings Settings;
     TCounters Counters;
     TCoreTiling Core;
     std::shared_ptr<IStoragesManager> StoragesManager;
@@ -248,11 +257,24 @@ protected:
         return {};
     }
 
+    TString DoDebugString() const override {
+        return DoSerializeToJsonVisual().GetString();
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue compaction_info = NJson::JSON_MAP;
+        compaction_info.InsertValue("1-Name", "TILING++");
+        compaction_info.InsertValue("2-Settings", Settings.SerializeToJson());
+        compaction_info.InsertValue("3-Levels", Core.DoSerializeToJsonVisual());
+        return compaction_info;
+    }
+
 public:
     TOptimizerPlannerAdapter(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings,
         const std::optional<ui64>& nodePortionsCountLimit)
         : TBase(pathId, nodePortionsCountLimit)
+        , Settings(settings)
         , Counters()
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
@@ -276,14 +298,16 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "proto", proto.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling++ compaction optimizer from proto"},
+                {"proto", proto.DebugString()});
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling++ compaction optimizer from proto"},
+                {"description", status.GetErrorDescription()});
             return false;
         }
         return true;
@@ -299,7 +323,8 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling++ compaction optimizer");
+        YDB_LOG_DEBUG("",
+            {"message", "creating tiling++ compaction optimizer"});
         return std::make_shared<TOptimizerPlannerAdapter>(
             context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings, GetNodePortionsCountLimit());
     }

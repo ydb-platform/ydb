@@ -1,5 +1,6 @@
 #include "uuid.h"
 
+#include <util/generic/yexception.h>
 #include <util/stream/str.h>
 
 #include <array>
@@ -32,7 +33,7 @@ void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) {
 
 } // namespace
 
-TString UuidBytesToString(const TString& in) {
+TString UuidBytesToString(TStringBuf in) {
     TStringStream ss;
 
     UuidBytesToString(in, ss);
@@ -40,10 +41,19 @@ TString UuidBytesToString(const TString& in) {
     return ss.Str();
 }
 
-void UuidBytesToString(const TString& in, IOutputStream& out) {
+void UuidBytesToString(TStringBuf in, IOutputStream& out) {
+    Y_ENSURE(in.size() == UUID_LEN, "Invalid uuid bytes size");
     std::array<ui16, 8> dw;
     std::memcpy(dw.data(), in.data(), sizeof(dw));
     NUuid::UuidToString(dw.data(), out);
+}
+
+TString UuidBytesToString(const TString& in) {
+    return UuidBytesToString(TStringBuf(in));
+}
+
+void UuidBytesToString(const TString& in, IOutputStream& out) {
+    UuidBytesToString(TStringBuf(in), out);
 }
 
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out) {

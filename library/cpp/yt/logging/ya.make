@@ -4,6 +4,8 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
     logger.cpp
+    tagged_payload.cpp
+    structured_payload.cpp
 )
 
 PEERDIR(

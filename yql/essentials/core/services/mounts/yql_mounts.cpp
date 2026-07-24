@@ -119,7 +119,7 @@ TUserDataTable GetYqlModuleResolverImpl(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     THolder<TExprContext> ownedCtx,
     TModuleResolver::TModuleChecker moduleChecker)
@@ -130,12 +130,25 @@ TUserDataTable GetYqlModuleResolverImpl(
     TUserDataTable mounts;
     LoadYqlDefaultMounts(mounts);
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    NSQLTranslation::TTranslationSettings settings;
+    NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
+
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+    };
+
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
@@ -160,7 +173,7 @@ TUserDataTable GetYqlModuleResolver(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     TModuleResolver::TModuleChecker moduleChecker) {
     return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr, moduleChecker);

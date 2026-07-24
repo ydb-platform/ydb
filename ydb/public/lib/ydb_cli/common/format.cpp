@@ -84,6 +84,35 @@ namespace {
         }
         return choices;
     }
+
+    bool IsConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        return node.contains("PlanNodeType")
+            && node.at("PlanNodeType").GetStringSafe() == "Connection";
+    }
+
+    TString FormatConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        const TString displayName = node.at("Node Type").GetStringSafe() + " connection";
+
+        TVector<TString> info;
+        auto appendField = [&](TStringBuf field) {
+            if (auto it = node.find(field); it != node.end()) {
+                info.emplace_back(TStringBuilder() << field << ": " << it->second.GetStringRobust());
+            }
+        };
+
+        appendField("KeyColumns");
+        appendField("HashFunc");
+        appendField("SortColumns");
+        appendField("Parallel");
+        appendField("Blocks");
+
+        if (info.empty()) {
+            return displayName;
+        }
+        return TStringBuilder() << displayName << " (" << JoinStrings(info, ", ") << ")";
+    }
 } // anonymous namespace
 
 void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) {
@@ -490,8 +519,8 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
                      << " (" << JoinStrings(info, ", ") << ")" << Endl;
             }
         }
-    } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") {
-        Output << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
+    } else if (IsConnectionPlanNode(plan)) {
+        Output << prefix << "<" << FormatConnectionPlanNode(plan) << ">" << Endl;
     } else {
         Output << prefix << node.at("Node Type").GetString() << Endl;
     }
@@ -687,7 +716,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
+        operation << arrowOffset << colors.LightCyan();
+        if (IsConnectionPlanNode(plan)) {
+            operation << FormatConnectionPlanNode(plan);
+        } else {
+            operation << node.at("Node Type").GetString();
+        }
+        operation << colors.Default();
         newRow.WriteToLastColumn(std::move(operation));
     }
 

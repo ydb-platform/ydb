@@ -394,7 +394,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -671,7 +671,9 @@
     },
     "DeviceName":{
       "type":"string",
-      "pattern":"[0-9\\p{IsAlphabetic}+:,.@'\" -]{1,64}",
+      "max":64,
+      "min":0,
+      "pattern":"$|^[0-9\\p{IsAlphabetic}+:,.@'\" -]*",
       "sensitive":true
     },
     "DeviceSoftwareSetComplianceStatus":{
@@ -770,7 +772,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -853,7 +855,9 @@
     },
     "EnvironmentName":{
       "type":"string",
-      "pattern":"[0-9\\p{IsAlphabetic}+:,.@'\" -][0-9\\p{IsAlphabetic}+=:,.@'\" -]{0,63}",
+      "max":64,
+      "min":0,
+      "pattern":"$|^[0-9\\p{IsAlphabetic}+:,.@'\" -][0-9\\p{IsAlphabetic}+=:,.@'\" -]*",
       "sensitive":true
     },
     "EnvironmentSoftwareSetComplianceStatus":{
@@ -877,7 +881,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",
@@ -1136,6 +1140,7 @@
     },
     "MaintenanceWindow":{
       "type":"structure",
+      "required":["type"],
       "members":{
         "type":{
           "shape":"MaintenanceWindowType",
@@ -1521,7 +1526,7 @@
         },
         "desktopArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Web, or AppStream 2.0.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the desktop to stream from Amazon WorkSpaces, WorkSpaces Secure Browser, or AppStream 2.0.</p>"
         },
         "desktopEndpoint":{
           "shape":"DesktopEndpoint",

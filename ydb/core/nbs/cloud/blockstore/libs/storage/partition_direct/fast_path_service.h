@@ -1,13 +1,14 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "partition_direct_service.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -20,6 +21,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TFastPathService
     : public IStorage
+    , public ITraceService
     , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
@@ -53,6 +55,10 @@ private:
     };
 
     TPBufferCleanupGather CleanupGather;
+
+    // Result of the last finished cleanup round: the minimum safe barrier
+    // across all DBGs. 0 until the first round finishes.
+    std::atomic<ui64> LastSafeBarrier{0};
 
 public:
     TFastPathService(
@@ -97,9 +103,11 @@ public:
 
     void ReportIOError() override;
 
+    // ITraceService implementation
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
 
     void ScheduleAfterDelay(
         NYdb::NBS::TExecutorPtr executor,
@@ -108,12 +116,23 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    void RequestAddHost(size_t directBlockGroupId) override;
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
     ui64 GenerateLsn() override;
 
+    void StopTablet(const TString& reason) override;
+
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
+
+    // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+    [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
+        std::optional<size_t> dbgIndex) const;
+
+    // Snapshot of one vchunk by its global index, built on the owning DBG's
+    // executor. Resolves to nullopt when there is no such vchunk.
+    [[nodiscard]] NThreading::TFuture<std::optional<TVChunkSnapshot>>
+    GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
 
 private:
     void ScheduleDirtyMapDebugPrint();
@@ -127,5 +146,11 @@ private:
         std::optional<ui64> safeBarrier);
     void FinishPBufferCleanup();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

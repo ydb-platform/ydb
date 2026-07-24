@@ -129,9 +129,9 @@ void TPingableTransaction::Ping() const
     RawClient_->PingTransaction(TransactionId_);
 }
 
-void TPingableTransaction::Commit()
+void TPingableTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    Stop(EStopAction::Commit);
+    Stop(EStopAction::Commit, options);
 }
 
 void TPingableTransaction::Abort()
@@ -144,7 +144,7 @@ void TPingableTransaction::Detach()
     Stop(EStopAction::Detach);
 }
 
-void TPingableTransaction::Stop(EStopAction action)
+void TPingableTransaction::Stop(EStopAction action, const TCommitTransactionOptions& commitOptions)
 {
     if (Finalized_) {
         return;
@@ -161,8 +161,8 @@ void TPingableTransaction::Stop(EStopAction action)
         case EStopAction::Commit:
             NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                [this] (TMutationId& mutationId) {
-                    RawClient_->CommitTransaction(mutationId, TransactionId_);
+                [this, &commitOptions] (TMutationId& mutationId) {
+                    RawClient_->CommitTransaction(mutationId, TransactionId_, commitOptions);
                 });
             break;
         case EStopAction::Abort:

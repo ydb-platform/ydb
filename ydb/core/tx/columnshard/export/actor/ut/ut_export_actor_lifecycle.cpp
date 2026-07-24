@@ -238,6 +238,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(AliveCounterReturnsToZeroAfterExportCancel) {
@@ -281,6 +282,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(SaveSessionProgressSurvivesTabletReboot) {
@@ -318,6 +320,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(RepeatedCopyExportDropCycle) {
@@ -366,6 +369,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
         UNIT_ASSERT_C(csControllerGuard->GetFinishedExportsCount() >= kCycleCount, "expected at least " << kCycleCount << " finished exports");
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(CancelDuringSlowS3Operations) {
@@ -422,6 +426,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
         blockExportBatch.Stop().Unblock();
     }
@@ -525,6 +530,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(CancelAfterDuplicateProposeDoesNotCrash) {

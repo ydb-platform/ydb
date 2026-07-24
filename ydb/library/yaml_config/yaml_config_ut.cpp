@@ -2812,7 +2812,8 @@ selector_config:
       list_1: !inherit:name       # shall remove/replace existing elements (by key 'name') and append new
       - name: a                   # shall be replaced
         field_2: l1af2-new
-        map_1:
+        map_1: !inherit           # shall be added "as is" with tag !inherit
+                                  # (whole list element is replaced, list element's internals tags are non-functional)
           field_2: l1am1f2-new
         map_2:
           field_1: l1am2f1-new
@@ -2846,7 +2847,7 @@ subconfig_1:
   list_1:
   - name: a
     field_2: l1af2-new
-    map_1:
+    map_1: !inherit
       field_2: l1am1f2-new
     map_2:
       field_1: l1am2f1-new
@@ -3633,12 +3634,12 @@ Y_UNIT_TEST_SUITE(YamlDatabaseConfigResolve) {
  *  1. Empty                  - Successfull no-change resolving with empty config
  *  2. NoSelectors            - Successfull no-change resolving with no selectors
  *  3. DropLabelsAndSelectors - Drop 'allowed_labels' and 'selector_config' sections after resolving
- *  4. PreserveExistingTags   - Preserve existing elements tags at all levels
+ *  4. PreserveExistingTags   - Preserve existing elements tags
  *  5. SingleSelector         - Single selector applying
  *  6. MultipleSelectors      - Multiple selectors layering
  *
  * Notes:
- *  - tests 1-4 performed both without and with labels passed into ResolveDatabaseConfig() function
+ *  - tests 1-3 performed both without and with labels passed into ResolveDatabaseConfig() function
  */
 
      Y_UNIT_TEST(Empty)
@@ -3769,14 +3770,14 @@ config:
       field_1: 1
       list_1: !inherit:name
       - name: a
-        map_1: !inherit
+        map_1: !inherit       # list elements internals tags are non-functional - will not be preserved
           field_1: 1
       - !remove
         name: b
 
     list_1: !inherit:name
     - name: a
-      map_1: !inherit
+      map_1: !inherit         # list elements internals tags are non-functional - will not be preserved
         field_1: 1
     - !remove
       name: b
@@ -3812,7 +3813,7 @@ selector_config:
         map_1:
           field_1: 2
 
-      # all tags of new element shall not be preserved
+      # all tags of new elements shall not be preserved
       # (except errorneous '!remove', see Y_UNIT_TEST(ModifyAbsentInList))
 
       list_3: !append
@@ -3840,7 +3841,7 @@ config:
     map_1: !inherit
       list_1: !inherit:name
       - name: a
-        map_1: !inherit
+        map_1:
           field_1: 1
       - !remove
         name: b
@@ -3850,7 +3851,7 @@ config:
       field_1: 2
     list_1: !inherit:name
     - name: a
-      map_1: !inherit
+      map_1:
         field_1: 2
     - !remove
       name: b

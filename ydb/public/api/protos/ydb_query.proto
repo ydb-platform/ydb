@@ -142,6 +142,10 @@ message CommitTransactionRequest {
 message CommitTransactionResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Commit timestamp (PlanStep, TxId) for StrictSerializableRW write transactions.
+    // Present only on SUCCESS and when the transaction had write effects.
+    Ydb.VirtualTimestamp commit_timestamp = 3;
 }
 
 message RollbackTransactionRequest {
@@ -159,7 +163,7 @@ message RollbackTransactionResponse {
 enum Syntax {
     SYNTAX_UNSPECIFIED = 0;
     SYNTAX_YQL_V1 = 1; // YQL
-    SYNTAX_PG = 2; // PostgresQL
+    SYNTAX_PG = 2 [deprecated = true]; // Removed: PostgreSQL syntax is no longer supported
 }
 
 message QueryContent {
@@ -255,6 +259,10 @@ message ExecuteQueryResponsePart {
 
     TransactionMeta tx_meta = 6;
     VirtualTimestamp snapshot_timestamp = 7;
+
+    // Commit timestamp (PlanStep, TxId) for StrictSerializableRW write transactions.
+    // Present only in the final (trailing) part on SUCCESS and when the transaction had write effects.
+    VirtualTimestamp commit_timestamp = 8;
 }
 
 message ExecuteScriptRequest {

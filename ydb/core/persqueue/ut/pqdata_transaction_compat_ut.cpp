@@ -135,6 +135,29 @@ Y_UNIT_TEST(DowngradeToLegacyKafkaWrite) {
     AssertKafkaWriteDualWrite(op, false, 7, 3);
 }
 
+Y_UNIT_TEST(DowngradeToLegacyDeferredPublicationWriteClearsLegacy) {
+    NKikimrPQ::TPartitionOperation op;
+    op.SetPath("topic");
+    op.SetPartitionId(0);
+
+    auto* write = op.MutableWrite();
+    write->SetSkipConflictCheck(true);
+    write->MutableDeferredPublication()->SetOp(
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Publish);
+
+    DowngradeToLegacy(op);
+
+    UNIT_ASSERT(op.HasWrite());
+    UNIT_ASSERT(op.GetWrite().HasDeferredPublication());
+    UNIT_ASSERT(op.HasSkipConflictCheck());
+    UNIT_ASSERT(op.GetSkipConflictCheck());
+    UNIT_ASSERT_EQUAL(op.GetSkipConflictCheck(), op.GetWrite().GetSkipConflictCheck());
+    UNIT_ASSERT(!op.GetKafkaTransaction());
+    UNIT_ASSERT(!op.HasConsumer());
+    UNIT_ASSERT(!op.HasSupportivePartition());
+    UNIT_ASSERT(!op.HasKafkaProducerInstanceId());
+}
+
 Y_UNIT_TEST(UpgradeFromLegacyTopicReadRoundTrip) {
     NKikimrPQ::TPartitionOperation legacy;
     legacy.SetPath("topic");

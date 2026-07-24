@@ -287,6 +287,7 @@ message TEvTabletStateUpdate {
 }
 
 message TEvMoveData {
+    repeated uint32 Groups = 1;
 }
 
 message TEvMoveDataResponse {

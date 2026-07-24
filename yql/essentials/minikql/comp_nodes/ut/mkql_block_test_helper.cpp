@@ -131,7 +131,7 @@ private:
 } // namespace
 
 TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode list, ui64 fuzzId) {
-    auto blockStream = Pb_.FromFlow(Pb_.ToBlocks(Pb_.ToFlow(list)));
+    auto blockStream = Pb_.FromFlow(Pb_.ToBlocks(Pb_.ToFlow(list, {})));
     auto fuzzedBlocks = FuzzStream(Pb_, blockStream, fuzzId);
     return MaterializeBlockStream(Pb_, fuzzedBlocks);
 }
@@ -208,7 +208,7 @@ TVector<ui64> TBlockHelper::MakeWideStreamColumnsFuzzers(TMultiType* multiType) 
     TVector<ui64> fuzzIds(width);
     for (ui32 i = 0; i + 1 < width; ++i) {
         fuzzIds[i] = FuzzerHolder_.ReserveFuzzer();
-        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment());
+        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
     }
     fuzzIds[width - 1] = TFuzzerHolder::EmptyFuzzerId;
     return fuzzIds;
@@ -217,7 +217,7 @@ TVector<ui64> TBlockHelper::MakeWideStreamColumnsFuzzers(TMultiType* multiType) 
 TRuntimeNode TBlockHelper::BuildScalarOnlyWideBlockStream() {
     auto driver = Pb_.NewList(Pb_.NewDataType(NUdf::EDataSlot::Uint64), {Pb_.NewDataLiteral<ui64>(0)});
     auto length = Pb_.AsScalar(Pb_.NewDataLiteral<ui64>(1));
-    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(driver), [&, length](TRuntimeNode) -> TRuntimeNode::TList {
+    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(driver, {}), [&, length](TRuntimeNode) -> TRuntimeNode::TList {
         return {length};
     });
     return Pb_.FromFlow(wideFlow);
@@ -229,7 +229,7 @@ TRuntimeNode TBlockHelper::BuildFuzzedWideStream(const TVector<TRuntimeNode>& ve
     }
     const ui32 columns = vectorLists.size();
     auto zipped = Pb_.Zip(vectorLists);
-    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(zipped), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+    auto wideFlow = Pb_.ExpandMap(Pb_.ToFlow(zipped, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
         TRuntimeNode::TList result;
         for (ui32 i = 0; i < columns; ++i) {
             result.push_back(Pb_.Nth(item, i));
@@ -246,7 +246,7 @@ TRuntimeNode TBlockHelper::ReadSingleWideStreamColumn(TRuntimeNode wideBlocks) {
     MKQL_ENSURE(multiType->GetElementsCount() == 2,
                 "Expected a single data column plus the trailing block-length scalar");
     auto expanded = Pb_.BlockExpandChunked(wideBlocks);
-    auto narrow = Pb_.NarrowMap(Pb_.ToFlow(Pb_.WideFromBlocks(expanded)),
+    auto narrow = Pb_.NarrowMap(Pb_.ToFlow(Pb_.WideFromBlocks(expanded), {}),
                                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
     return Pb_.Collect(narrow);
 }

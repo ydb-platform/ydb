@@ -8,8 +8,11 @@
 
 #include "interconnect_session_iface.h"
 #include "interconnect_direct_session.h"
+#include "interconnect_uring_engine.h"
+#include "v2_event_serializer.h"
 #include "logging/logging.h"
 
+#include <deque>
 #include <memory>
 #include <unordered_map>
 
@@ -23,8 +26,12 @@ namespace NActors {
     //   * exposes a thread-safe direct send/receive interface (IDirectSession) to subscribers via
     //     TEvInterconnect::TEvNodeConnected.
     //
-    // NOTE: the data-plane operations (packetization, socket IO, input session, pinging, metrics, ...)
-    // are intentionally left as stubs in this first integration step.
+    // Its data plane serializes events with TEventSerializer/TEventDeserializer and moves bytes through
+    // a single shared io_uring ring owned by TInterconnectUringEngineActor. Outgoing events (both the
+    // normal actor-system Forward path and IDirectSession::Send) are serialized and handed to the engine
+    // one buffer at a time (single send in flight); incoming bytes are fed to the deserializer and each
+    // reconstructed event is offered to the direct-session receive table before falling back to normal
+    // actor-system delivery.
     class TInterconnectSessionTCPv2
        : public TActor<TInterconnectSessionTCPv2>
        , public TInterconnectLoggingBase
@@ -35,12 +42,12 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        TInterconnectSessionTCPv2(TInterconnectProxyTCP* proxy, TSessionParams params);
+        explicit TInterconnectSessionTCPv2(TInterconnectProxyTCP* proxy);
 
         // IInterconnectSession
         IActor& SessionActor() noexcept override { return *this; }
 
-        void Init() override;
+        void Init(const TSessionParams& params) override;
         void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
         void Terminate(TDisconnectReason reason) override;
         THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
@@ -62,6 +69,18 @@ namespace NActors {
     private:
         friend class TActor<TInterconnectSessionTCPv2>;
 
+        struct TEvPrivate {
+            enum {
+                EvTerminate = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+
+            struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {
+                TDisconnectReason Reason;
+
+                TEvTerminate(TDisconnectReason reason) : Reason(reason) {}
+            };
+        };
+
         STATEFN(StateFunc) {
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
@@ -71,6 +90,7 @@ namespace NActors {
                 fFunc(TEvents::TEvUnsubscribe::EventType, HandleUnsubscribe)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 cFunc(TEvInterconnect::EvForwardDelayed, IgnoreForwardDelayed)
+                hFunc(TEvPrivate::TEvTerminate, [&](auto& ev) { Terminate(ev->Get()->Reason); });
             )
         }
 
@@ -81,20 +101,30 @@ namespace NActors {
         void HandlePoison();
         void IgnoreForwardDelayed() {}
 
+        void EnqueueOutgoing(TAutoPtr<IEventHandle> ev);
+
         void AddSubscriber(const TActorId& actorId, ui64 cookie);
         IEventBase* MakeNodeConnectedEvent() const;
 
+    private:
         TInterconnectProxyTCP* const Proxy;
-        const TSessionParams Params;
+        TSessionParams Params;
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
 
         // thread-safe direct send/receive handle shared with users via TEvNodeConnected
-        std::shared_ptr<TDirectSession> DirectSession;
+        class TDirectSessionV2;
+        std::shared_ptr<TDirectSessionV2> DirectSession;
+
+        // io_uring data plane
+        ui64 EngineHandle = 0;
+
+        ui64 BytesSent = 0;
+        ui64 BytesReceived = 0;
 
         // subscribers awaiting connection state notifications (actor id -> cookie)
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+        THashMap<TActorId, ui64> Subscribers;
     };
 
 }

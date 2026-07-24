@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -39,6 +40,7 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandJson2Svg>());
     AddCommand(std::make_unique<TCommandSqlExperimental>());
     AddCommand(std::make_unique<TCommandSqlOperation>());
+    AddCommand(std::make_unique<TCommandDeleteSession>());
 }
 
 TCommandStreamQuery::TCommandStreamQuery()
@@ -198,6 +200,34 @@ int TCommandGetConnection::Run(TConfig& config) {
             Cout << "  password: " << ReplaceWithAsterisks(TString{config.StaticCredentials.Password}) << Endl;
         }
     }
+    return EXIT_SUCCESS;
+}
+
+TCommandDeleteSession::TCommandDeleteSession()
+    : TYdbSimpleCommand("delete-session", {}, "Delete query session")
+{
+}
+
+void TCommandDeleteSession::Config(TConfig& config) {
+    TYdbSimpleCommand::Config(config);
+
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption("id", "Session ID to delete")
+        .Required()
+        .RequiredArgument("ID")
+        .StoreResult(&SessionId);
+}
+
+int TCommandDeleteSession::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NQuery::TQueryClient queryClient(driver);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
+        queryClient.DeleteSession(
+            SessionId,
+            FillSettings(NQuery::TDeleteSessionSettings())
+        ).GetValueSync()
+    );
     return EXIT_SUCCESS;
 }
 

@@ -92,7 +92,7 @@ public:
 private:
     using TActorContext = NActors::TActorContext;
 
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
 
     void Die(const TActorContext& ctx) override;
 

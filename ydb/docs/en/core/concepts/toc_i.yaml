@@ -6,7 +6,10 @@ items:
     path: analytics/toc_p.yaml
     mode: link
 - name: Architecture
-  href: architecture.md
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
 - name: Connecting to a database
   href: connect.md
 - name: Schema objects

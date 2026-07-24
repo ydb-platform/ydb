@@ -512,8 +512,7 @@ private:
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
         }
 
-        // PG syntax warmup is not supported yet, skip PG queries
-        // TODO(anely-d): delete when pg syntax is supported
+        // Skip legacy PG-syntax queries from the compile cache.
         std::erase_if(QueriesToCompile, [](const TEvPrivate::TQueryToCompile& q) {
             return ParseSyntax(q.Syntax, q.QueryType) == Ydb::Query::SYNTAX_PG;
         });

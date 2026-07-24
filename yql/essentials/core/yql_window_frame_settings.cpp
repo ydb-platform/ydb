@@ -17,7 +17,6 @@ namespace NYql {
 namespace {
 
 using NWindow::EDirection;
-using NWindow::TCoreWinFramesCollectorParams;
 using NWindow::TInputRow;
 using NWindow::TInputRowWindowFrame;
 using NWindow::TNumberAndDirection;

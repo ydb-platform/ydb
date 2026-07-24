@@ -98,6 +98,14 @@ class YdbTopicWorkload(WorkloadBase):
             topic_name,
         ])
 
+    def _add_data_holder_consumer_to_topic(self, topic_name) -> None:
+        availability_period = int(self.duration) * self.config.AVAILABILITY_PERIOD_NUMERATOR // self.config.AVAILABILITY_PERIOD_DENOMINATOR
+        self._add_consumer_to_topic(
+            topic_name,
+            self.config.DATA_HOLDER_CONSUMER,
+            availability_period
+        )
+
     def _run_workload(self, topic_name, duration, byte_rate, producers, consumers,
                       consumer_threads=None,
                       tx_commit_interval=None, use_tx=True, with_config=True) -> None:
@@ -206,13 +214,14 @@ class YdbTopicWorkload(WorkloadBase):
         ))
 
     def __non_transactional_workload(self):
+        # Keep wide partition coverage; lower byte_rate only to ease gRPC drain on teardown (#46635).
         self.run_topic_write_without_tx(TestConfig(
             partitions=200,
             partitions_per_tablet=10,
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate="10M"  # byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="1M"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     @property
@@ -229,18 +238,14 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(self.workload_topic_name, self.config.RETENTION)
-        availability_period = int(self.duration) * self.config.AVAILABILITY_PERIOD_NUMERATOR // self.config.AVAILABILITY_PERIOD_DENOMINATOR
-        self._add_consumer_to_topic(
-            self.workload_topic_name,
-            self.config.DATA_HOLDER_CONSUMER,
-            availability_period
-        )
+        self._add_data_holder_consumer_to_topic(self.workload_topic_name)
 
         # Запускаем тестовую нагрузку
         self._run_workload(
             self.workload_topic_name,
             self.duration,
-            self.config.DEFAULT_BYTE_RATE,
+            # DEFAULT_BYTE_RATE (100M) overloads a single CI node
+            self.config.SMALL_BYTE_RATE,
             self.producers,
             self.consumers,
             with_config=True
@@ -262,6 +267,7 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(topic_name, self.config.RETENTION)
+        self._add_data_holder_consumer_to_topic(topic_name)
 
         # Запускаем тестовую нагрузку
         self._run_workload(
@@ -291,6 +297,7 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(topic_name, self.config.RETENTION)
+        self._add_data_holder_consumer_to_topic(topic_name)
 
         # Запускаем тестовую нагрузку без транзакций
         self._run_workload(
@@ -319,4 +326,12 @@ class YdbTopicWorkload(WorkloadBase):
         ]
         if (self.chunk_index is None) or (self.chunk_size is None):
             return tests
-        return tests[self.chunk_index * self.chunk_size:(self.chunk_index + 1) * self.chunk_size]
+        chunk = tests[self.chunk_index * self.chunk_size:(self.chunk_index + 1) * self.chunk_size]
+
+        # One callable so WorkloadBase starts a single worker; run chunk
+        # scenarios one by one (parallel topic stresses overload CI, #46635).
+        def run_chunk():
+            for f in chunk:
+                f()
+
+        return [run_chunk]

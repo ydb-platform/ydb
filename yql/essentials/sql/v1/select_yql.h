@@ -4,6 +4,11 @@
 
 namespace NSQLTranslationV1 {
 
+struct TYqlColumnRef {
+    TPosition Position;
+    TString Name;
+};
+
 struct TYqlSourceAlias {
     enum class EKind {
         Subquery,
@@ -12,7 +17,7 @@ struct TYqlSourceAlias {
 
     TPosition Position;
     TString Name;
-    TVector<TString> Columns;
+    TVector<TYqlColumnRef> Columns;
     EKind Kind = EKind::Subquery;
 };
 

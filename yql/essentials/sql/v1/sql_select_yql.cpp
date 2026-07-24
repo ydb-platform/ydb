@@ -143,7 +143,7 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        TVector<TString> columns;
+        TVector<TYqlColumnRef> columns;
         if (rule.HasBlock2()) {
             columns = TableColumns(rule.GetBlock2().GetRule_pure_column_list1());
         }
@@ -568,6 +568,7 @@ private:
         }
 
         Token(rule.GetToken2());
+        setItem.Position = Ctx_.Pos();
 
         if (Mode_ != NSQLTranslation::ESqlMode::QUERY) {
             return Unsupported("ESqlMode != QUERY");
@@ -1547,13 +1548,21 @@ private:
         }
     }
 
-    TVector<TString> TableColumns(const TRule_pure_column_list& rule) {
-        TVector<TString> columns;
-        columns.emplace_back(Id(rule.GetRule_an_id2(), *this));
+    TVector<TYqlColumnRef> TableColumns(const TRule_pure_column_list& rule) {
+        TVector<TYqlColumnRef> columns(Reserve(1 + rule.GetBlock3().size()));
+        columns.emplace_back(TableColumn(rule.GetRule_an_id2()));
         for (const auto& id : rule.GetBlock3()) {
-            columns.emplace_back(Id(id.GetRule_an_id2(), *this));
+            columns.emplace_back(TableColumn(id.GetRule_an_id2()));
         }
         return columns;
+    }
+
+    TYqlColumnRef TableColumn(const TRule_an_id& rule) {
+        TString id = Id(rule, *this);
+        return {
+            .Position = Ctx_.Pos(),
+            .Name = std::move(id),
+        };
     }
 
     EYqlSetOp ToOp(const TRule_union_op& node) {

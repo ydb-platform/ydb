@@ -1163,6 +1163,74 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(InsertConflictMessages, WithIndex, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = WithIndex
+            ? R"(
+                CREATE TABLE `/Root/T` (
+                    pk Int64,
+                    u Int64,
+                    v Int64,
+                    PRIMARY KEY (pk),
+                    INDEX idx GLOBAL SYNC ON (u)
+                );
+            )"
+            : R"(
+                CREATE TABLE `/Root/T` (
+                    pk Int64,
+                    u Int64,
+                    v Int64,
+                    PRIMARY KEY (pk)
+                );
+            )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/T` (pk, u, v) VALUES (1, 100, 10);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/T` (pk, u, v) VALUES (1, 200, 20);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(it.GetIssues().ToString(), "Conflict with existing key.", it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/T` (pk, u, v) VALUES
+                    (2, 300, 30),
+                    (2, 400, 40);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                it.GetIssues().ToString(),
+                WithIndex ? "Duplicated keys found." : "Conflict with existing key.",
+                it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[100];[10]]])", StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST_TWIN(UniqIndexPkSubsetEnforced, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);

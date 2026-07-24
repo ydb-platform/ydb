@@ -1,5 +1,4 @@
 import zlib
-from abc import abstractmethod
 
 import lz4
 import lz4.frame
@@ -17,14 +16,13 @@ if brotli:
     available_compression.append("br")
 available_compression.extend(["gzip", "deflate"])
 
-comp_map = {}
+comp_map: dict[str, "Compressor | type[Compressor]"] = {}
 
 
 class Compressor:
     def __init_subclass__(cls, tag: str, thread_safe: bool = True):
         comp_map[tag] = cls() if thread_safe else cls
 
-    @abstractmethod
     def compress_block(self, block) -> bytes | bytearray:
         return block
 
@@ -66,11 +64,10 @@ class BrotliCompressor(Compressor, tag="br"):
 null_compressor = Compressor()
 
 
-def get_compressor(compression: str) -> Compressor:
+def get_compressor(compression: str | None) -> Compressor:
     if not compression:
         return null_compressor
     comp = comp_map[compression]
-    try:
-        return comp()
-    except TypeError:
+    if isinstance(comp, Compressor):
         return comp
+    return comp()

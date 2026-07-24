@@ -63,6 +63,8 @@
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq/ @ydb-platform/fq
+/ydb/services/workload_manager @ydb-platform/fq
+/ydb/core/resource_pools @ydb-platform/fq
 
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
@@ -118,6 +120,7 @@
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
+/ydb/core/tx/tiering @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage

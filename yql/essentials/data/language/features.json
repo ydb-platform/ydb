@@ -1,8 +1,4 @@
 {
-    "Materialize": {
-        "description": "MATERIALIZE",
-        "min_langver": "max"
-    },
     "Experiments": {
         "min_langver": "max"
     },
@@ -29,8 +25,27 @@
     "YqlSelect": {
         "min_langver": "max"
     },
+    "Materialize": {
+        "description": "MATERIALIZE",
+        "min_langver": "2026.02"
+    },
+    "HybridRankFunction": {
+        "min_langver": "2026.02"
+    },
     "YqlRangeWindows": {
         "min_langver": "2026.01"
+    },
+    "PgPragmaWarning": {
+        "min_langver": "2026.01"
+    },
+    "PositionOfWithIssueFunction": {
+        "min_langver": "2026.01"
+    },
+    "AsOptionalFunction": {
+        "min_langver": "2026.01"
+    },
+    "YsonUtf8": {
+        "min_langver":"2026.01"
     },
     "YtCreateView": {
         "description": "CREATE VIEW",
@@ -38,6 +53,27 @@
     },
     "YtDropView": {
         "description": "DROP VIEW",
+        "min_langver": "2025.05"
+    },
+    "LinearDestroy": {
+        "min_langver": "2025.05"
+    },
+    "FullTextFunction": {
+        "min_langver": "2025.05"
+    },
+    "WriteOffsetWithColon": {
+        "min_langver": "2025.05"
+    },
+    "DateTimeFormatZ": {
+        "min_langver": "2025.05"
+    },
+    "YsonConvert": {
+        "min_langver": "2025.05"
+    },
+    "YsonMut": {
+        "min_langver": "2025.05"
+    },
+    "YsonIterate": {
         "min_langver": "2025.05"
     },
     "InlineSubquery": {
@@ -56,8 +92,26 @@
         "description": "PARTITIONS table function",
         "min_langver": "2025.04"
     },
+    "ConcatFunction": {
+        "min_langver": "2025.04"
+    },
+    "NullIfFunction": {
+        "min_langver": "2025.04"
+    },
+    "SimplePgFunction": {
+        "min_langver": "2025.04"
+    },
+    "RandomValueSampleFunction": {
+        "min_langver": "2025.04"
+    },
     "ReplaceInto": {
         "description": "REPLACE",
+        "min_langver": "2025.04"
+    },
+    "LinearTypes": {
+        "min_langver": "2025.04"
+    },
+    "SideEffects": {
         "min_langver": "2025.04"
     },
     "LegacyNotNull": {
@@ -78,7 +132,37 @@
     "PersistableFlattenAndAggrExprs": {
         "min_langver": "2025.03"
     },
+    "FlattenOptionalByNonOptional": {
+        "min_langver": "2025.03"
+    },
+    "Sha512": {
+        "min_langver": "2025.03"
+    },
+    "IPv4Uint32": {
+        "min_langver": "2025.03"
+    },
+    "SwapBytes": {
+        "min_langver": "2025.03"
+    },
+    "ValidateRegexp": {
+        "min_langver": "2025.03"
+    },
     "GroupByExprAfterWhere": {
         "min_langver": "2025.02"
+    },
+    "StringReverseBytes": {
+        "min_langver": "2025.02"
+    },
+    "StringAsciiEqualsContainsIgnoreCase": {
+        "min_langver": "2025.02"
+    },
+    "StringAsciiPrefixSuffixIgnoreCase": {
+        "min_langver": "2025.01"
+    },
+    "StringReverse": {
+        "max_langver": "2025.01"
+    },
+    "StringTwoArgs": {
+        "max_langver": "2025.01"
     }
 }

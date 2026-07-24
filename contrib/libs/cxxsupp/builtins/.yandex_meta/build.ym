@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}22.1.1{% endblock %}
+{% block current_version %}22.1.8{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/archive/llvmorg-{{self.version().strip()}}.tar.gz
@@ -165,6 +165,12 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
     ENDIF()
 ENDIF()
 EOF
+
+echo 'IF (ARCH_WASM64 OR ARCH_WASM32)'
+echo 'SRCS('
+ls wasm/*.S 
+echo ')'
+echo 'ENDIF()'
 
 echo 'IF (ARCH_ARM6 OR ARCH_ARM7)'
 echo 'SRCS('

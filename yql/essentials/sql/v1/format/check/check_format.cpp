@@ -133,8 +133,14 @@ TMaybe<TString> CheckedFormat(
     };
 
     NSQLTranslationV1::TParsers parsers = {
-        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(),
-        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(),
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
     };
 
     auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);

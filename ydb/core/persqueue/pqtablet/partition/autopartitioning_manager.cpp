@@ -3,6 +3,7 @@
 #include <memory>
 #include <type_traits>
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/common/last_counter.h>
 #include <ydb/core/persqueue/common/partition_id.h>
@@ -12,6 +13,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 
+#include <library/cpp/time_provider/time_provider.h>
+
 #include <util/generic/strbuf.h>
 
 namespace NKikimr::NPQ {
@@ -20,7 +23,7 @@ using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperat
 
 namespace {
     void DoCleanUp(std::unordered_map<TString, TSlidingWindow>& writtenBytes) {
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
 
         for (auto it = writtenBytes.begin(); it != writtenBytes.end();) {
             auto& counter = it->second;
@@ -111,7 +114,7 @@ protected:
         }
 
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
 
         SumMetric->Update(delta, now);
 
@@ -182,7 +185,7 @@ protected:
             return NKikimrPQ::EScaleStatus::NORMAL;
         }
 
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
         const auto usagePercent = SumMetric->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxUsagePerSec;
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
@@ -266,7 +269,7 @@ protected:
     }
 
     std::vector<std::pair<TString, ui64>> GetSerializedMetrics() {
-        auto  now = TInstant::Now();
+        auto  now = TAppData::TimeProvider->Now();
         std::vector<std::pair<TString, ui64>> result;
 
         for (auto& [sourceIdHash, counter] : PerSourceMetrics) {

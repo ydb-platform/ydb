@@ -2,7 +2,8 @@
 
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
-#include "range_translate.h"
+#include "region_geometry.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
@@ -94,12 +95,8 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
-size_t RegionCount(ui64 blockCount, ui32 blockSize)
-{
-    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
-}
-
 TVector<TRegionPtr> CreateRegions(
+    ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -108,7 +105,7 @@ TVector<TRegionPtr> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const size_t regionCount = RegionCount(blockCount, blockSize);
+    const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
@@ -116,6 +113,7 @@ TVector<TRegionPtr> CreateRegions(
 
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
+            traceService,
             partitionDirectService,
             i,
             directBlockGroups,
@@ -153,6 +151,7 @@ TFastPathService::TFastPathService(
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
+          this,
           this,
           blockCount,
           blockSize,
@@ -196,7 +195,7 @@ NThreading::TFuture<void> TFastPathService::Run()
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        initialReadyFutures.push_back(dbg->Run(this));
+        initialReadyFutures.push_back(dbg->Run(this, this));
     }
     for (const auto& region: Regions) {
         region->Run();
@@ -375,10 +374,13 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+void TFastPathService::QueryAddHost(
+    size_t directBlockGroupId,
+    size_t newHostIndex)
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
-        directBlockGroupId);
+        directBlockGroupId,
+        newHostIndex);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
@@ -389,15 +391,75 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+void TFastPathService::StopTablet(const TString& reason)
+{
+    // Just forward the signal to the actor thread.
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
-    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
-    Y_ABORT_UNLESS(vchunkSize != 0);
     return {
         .LsnCounter = SequenceGenerator.load(),
-        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .LastSafeBarrier = LastSafeBarrier.load(),
+        .TotalVChunks =
+            Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
+}
+
+NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TDbgSnapshot>> futures;
+    if (dbgIndex) {
+        if (*dbgIndex < DirectBlockGroups.size()) {
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+        }
+    } else {
+        for (const auto& dbg: DirectBlockGroups) {
+            futures.push_back(dbg->BuildMonSnapshot());
+        }
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVector<TDbgSnapshot> snapshots;
+            snapshots.reserve(futures.size());
+            for (const auto& future: futures) {
+                snapshots.push_back(future.GetValue());
+            }
+            return snapshots;
+        });
+}
+
+NThreading::TFuture<std::optional<TVChunkSnapshot>>
+TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
+{
+    const auto notFound =
+        MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
+
+    const size_t regionIndex =
+        GetRegionIndexByVChunk(*VolumeConfig, vchunkIndex);
+    if (regionIndex >= Regions.size()) {
+        return notFound;
+    }
+    const size_t vChunkIndexInRegion =
+        GetVChunkIndexInRegion(*VolumeConfig, vchunkIndex);
+    auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
+    if (!vchunk) {
+        return notFound;
+    }
+
+    // The vchunk state is confined to its executor (the one of its DBG).
+    auto executor = vchunk->GetExecutor();
+    auto promise = NewPromise<std::optional<TVChunkSnapshot>>();
+    auto future = promise.GetFuture();
+    executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
+                            { promise.SetValue(vchunk->BuildMonSnapshot()); });
+    return future;
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
@@ -457,9 +519,13 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin) {
+    if (!globalMin || *globalMin == 0) {
+        // 0 is the blocking bound: some vchunk has not finished restoring its
+        // dirty map, so its records are not accounted for yet. Skip the tick.
         return;
     }
+
+    LastSafeBarrier.store(*globalMin);
 
     const ui64 cleanupBound = *globalMin - 1;
     for (const auto& dbg: DirectBlockGroups) {
@@ -527,6 +593,13 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     ScheduleDirtyMapDebugPrint();
     ++DumpCount;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize)
+{
+    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

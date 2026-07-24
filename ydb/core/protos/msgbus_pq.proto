@@ -165,6 +165,10 @@ message TPersQueuePartitionRequest {
         repeated TCmdRegisterMessageGroup RegisterGroups = 2;
     }
 
+    // Internal: discard orphan deferred-publication supportive (writer rollback).
+    message TCmdAbortDeferredStaging {
+    }
+
     optional string Topic = 1; //mandatory for request for partitions
     optional int32 Partition = 2; //mandatory for request for partitions
     optional string OwnerCookie = 3; //mandatory for write
@@ -188,6 +192,7 @@ message TPersQueuePartitionRequest {
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
     optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
+    optional TCmdAbortDeferredStaging CmdAbortDeferredStaging = 30;
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -537,6 +542,8 @@ message TPersQueuePartitionResponse {
     message TCmdRestoreDirectReadSessionResult {
     }
 
+    message TCmdAbortDeferredStagingResult {
+    }
 
     repeated TCmdWriteResult CmdWriteResult = 1;
     optional TCmdGetMaxSeqNoResult CmdGetMaxSeqNoResult = 2;
@@ -547,6 +554,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPublishDirectReadResult CmdPublishReadResult = 8;
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
     optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
+    optional TCmdAbortDeferredStagingResult CmdAbortDeferredStagingResult = 11;
 
     optional uint64 Cookie = 6;
 }

@@ -400,6 +400,40 @@ class KiKiMRClusterInterface(object):
         )
         return database_name
 
+    def alter_database(
+            self,
+            database_name,
+            storage_units_to_add=None,
+            storage_units_to_remove=None,
+            timeout_seconds=120,
+            token=None,
+    ):
+        req = AlterTenantRequest(database_name)
+
+        if token is not None:
+            req.set_user_token(token)
+
+        assert storage_units_to_add or storage_units_to_remove
+        if storage_units_to_add:
+            for pool_type, count in storage_units_to_add.items():
+                req.add_storage_groups_to_add(pool_type, count)
+
+        if storage_units_to_remove:
+            for pool_type, count in storage_units_to_remove.items():
+                req.add_storage_groups_to_remove(pool_type, count)
+
+        response = self.client.send_request(req.protobuf, method='ConsoleRequest')
+        operation = response.AlterTenantResponse.Response.operation
+        if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
+            raise RuntimeError(
+                'alter_database_storage_units failed: %s: %s' % (response.Status.Code, response.Status.Reason)
+            )
+        if not operation.ready:
+            operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds, token=token)
+        if operation.status != StatusIds.SUCCESS:
+            raise RuntimeError('alter_database_storage_units failed: %s' % (operation.status,))
+        return database_name
+
     def remove_database(
             self,
             database_name,

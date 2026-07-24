@@ -37,7 +37,7 @@ static int check_cqe(struct io_uring *ring, struct io_uring_cqe *cqe)
 		}
 		break;
 	case 2:
-		if (cqe->res) {
+		if (cqe->res && cqe->res != -ENOTCONN) {
 			fprintf(stderr, "Unexpected shutdown: %d\n", cqe->res);
 			return T_EXIT_FAIL;
 		}

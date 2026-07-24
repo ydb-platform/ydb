@@ -181,6 +181,8 @@ namespace NKikimr::NBsController {
                 auto *cmd = record.MutableReassignGroupDisk();
                 VDiskIDFromVDiskID(*VDiskToReplace, cmd->MutableVDiskId());
                 cmd->SetConvertToDonor(DonorMode);
+                cmd->SetAllowUnusableDisks(true);
+                cmd->SetSettleOnlyOnOperationalDisks(true);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
                 cmd->SetFromSelfHeal(true);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
@@ -540,6 +542,7 @@ namespace NKikimr::NBsController {
                 if (HostRecords->GetHostId(nodeId)) {
                     pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
                             HostRecords->GetLocation(nodeId),
+                            vdisk.DiskScope,
                             pdiskId,
                             *group.Content.Geometry);
                 } else {
@@ -1094,6 +1097,7 @@ namespace NKikimr::NBsController {
                     .IsReady = slot->IsReady,
                     .ReadySince = TMonotonic::Zero(),
                     .VDiskStatus = slot->GetStatus(),
+                    .DiskScope = slot->PDisk->DiskScope,
                 };
             }
         }
@@ -1144,6 +1148,7 @@ namespace NKikimr::NBsController {
                         true, /* IsReady; decision is based on ReadySince */
                         info.ReadySince,
                         info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
+                        pdiskInfo ? pdiskInfo->DiskScope : std::nullopt,
                     };
                 }
             }

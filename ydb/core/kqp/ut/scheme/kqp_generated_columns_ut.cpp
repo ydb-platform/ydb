@@ -14,6 +14,7 @@ static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig() {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
+    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return appConfig;
 }
 

@@ -489,6 +489,13 @@ message SetNotNullItem {
     optional string column_name = 1;
 }
 
+message SetNotNullMetadata {
+    string path = 1;
+    repeated string columns = 2;
+    SetNotNullState.State state = 3;
+    float progress = 4;
+}
+
 // Description of index building operation
 message IndexBuildDescription {
     string path = 1;

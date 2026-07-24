@@ -23,6 +23,7 @@ namespace NYql::NDq {
             EvReadSplitsFinished,
             EvError,
             EvRetry,
+            EvGotCredentials,
             EvEnd
         };
 
@@ -89,6 +90,15 @@ namespace NYql::NDq {
             }
 
             NConnector::NApi::TError Error;
+        };
+
+        struct TEvGotCredentials: NActors::TEventLocal<TEvGotCredentials, EvGotCredentials> {
+            explicit TEvGotCredentials(TGenericCredentials credentials)
+                : Credentials(std::move(credentials))
+            {
+            }
+
+            TGenericCredentials Credentials;
         };
 
     protected: // TODO move common logic here

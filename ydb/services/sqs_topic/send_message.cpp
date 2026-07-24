@@ -137,7 +137,10 @@ namespace NKikimr::NSqsTopic::V1 {
                         .Index = item.BatchIndex,
                         .MessageBody = std::move(item.MessageBody),
                         .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
-                        .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
+                        // MessageDeduplicationId is supported for FIFO queues only.
+                        .MessageDeduplicationId = QueueUrl_->Fifo
+                            ? toOptional(std::move(item.MessageDeduplicationId))
+                            : std::nullopt,
                         .Attributes = std::move(item.Attributes),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });

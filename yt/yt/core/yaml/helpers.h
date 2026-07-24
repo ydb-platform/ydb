@@ -1,14 +1,14 @@
 #pragma once
 
-#include "private.h"
-
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <library/cpp/yt/misc/enum.h>
+
 #include <contrib/libs/yaml/include/yaml.h>
 
-namespace NYT::NFormats {
+namespace NYT::NYaml {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -106,7 +106,7 @@ std::string_view YamlLiteralToStringView(const yaml_char_t* literal);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml
 
 // Note that ADL requires to put this function in the global namespace since
 // yaml_mark_t is defined in the global namespace from C++ POV

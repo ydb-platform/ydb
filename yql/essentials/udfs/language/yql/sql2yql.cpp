@@ -50,14 +50,20 @@ void ParseTranslationSettings(const TSql2YqlInput& input, NSQLTranslation::TTran
     ParseGatewaysConfig(input.GatewaysCfg, settings);
 }
 
-NSQLTranslation::TTranslators Translators() {
+NSQLTranslation::TTranslators Translators(TMaybe<size_t> maxParseTreeDepth) {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
 
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        maxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        maxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         /*v0=*/nullptr,
@@ -76,7 +82,8 @@ TSql2YqlOutput Sql2Yql(const TSql2YqlInput& input) noexcept try {
     google::protobuf::Arena arena;
     settings.Arena = &arena;
 
-    NYql::TAstParseResult res = NSQLTranslation::SqlToYql(Translators(), input.Query, settings);
+    NYql::TAstParseResult res = NSQLTranslation::SqlToYql(
+        Translators(settings.MaxParseTreeDepth), input.Query, settings);
 
     TVector<TString> issues(Reserve(res.Issues.Size()));
     for (const auto& issue : res.Issues) {

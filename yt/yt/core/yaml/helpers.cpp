@@ -1,10 +1,10 @@
-#include "yaml_helpers.h"
+#include "helpers.h"
 
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
-namespace NYT::NFormats {
+namespace NYT::NYaml {
 
 using namespace NYTree;
 
@@ -197,7 +197,7 @@ std::string_view YamlLiteralToStringView(const yaml_char_t* literal)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml
 
 void Serialize(const yaml_mark_t& mark, NYT::NYson::IYsonConsumer* consumer)
 {

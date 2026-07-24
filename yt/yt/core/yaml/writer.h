@@ -1,10 +1,12 @@
 #pragma once
 
-#include <yt/yt/core/yson/consumer.h>
+#include "public.h"
 
-#include <yt/yt/client/formats/public.h>
+#include <yt/yt/core/yson/public.h>
 
-namespace NYT::NFormats {
+#include <util/stream/fwd.h>
+
+namespace NYT::NYaml {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -15,4 +17,4 @@ std::unique_ptr<NYson::IFlushableYsonConsumer> CreateYamlWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml

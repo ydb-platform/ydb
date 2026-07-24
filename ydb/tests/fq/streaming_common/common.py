@@ -1,11 +1,11 @@
 import logging
 import os
+import pytest
 import time
+from typing import Self
 import yatest.common
 import ydb
-import pytest
 
-from typing import Optional
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
@@ -97,38 +97,122 @@ def get_ydb_config(request):
 
 
 class YdbClient:
-    def __init__(self, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True):
-        self.driver_config = ydb.DriverConfig(
-            endpoint, database, auth_token=token, disable_discovery=not enable_discovery
-        )
-        self.driver = None
-        self.session_pool = None
-        self.retry_settings = ydb.RetrySettings(
-            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}")
-        )
-        self.start()
+    WAIT_TIMEOUT: int = 5
 
-    def start(self):
-        self.driver = ydb.Driver(self.driver_config)
+    def __init__(self, driver: ydb.Driver, owns_driver: bool = False):
+        self.owns_driver = owns_driver
+        self.driver = driver
+        if self.owns_driver:
+            self.driver.wait(self.WAIT_TIMEOUT, fail_fast=True)
+
         self.session_pool = ydb.QuerySessionPool(self.driver)
+        self.retry_settings = ydb.RetrySettings(
+            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}"),
+        )
+
+    @classmethod
+    def from_driver_config(
+        cls, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True
+    ) -> Self:
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token, disable_discovery=not enable_discovery)
+        driver = ydb.Driver(driver_config)
+        return cls(driver, True)
 
     def stop(self):
         self.session_pool.stop()
-        self.driver.stop()
-
-    def wait_connection(self, timeout: int = 5):
-        self.driver.wait(timeout, fail_fast=True)
+        if self.owns_driver:
+            self.driver.stop()
 
     def query(self, statement: str):
         return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
 
-    def query_async(self, statement: str, timeout: Optional[float] = None):
+    def query_async(self, statement: str, timeout: float | None = None):
         settings = None
         if timeout is not None:
             settings = ydb.BaseRequestSettings().with_timeout(timeout)
         return self.session_pool.execute_with_retries_async(
             statement, settings=settings, retry_settings=self.retry_settings
         )
+
+    def create_external_data_source(
+        self, source_name: str, endpoint: str, database: str, shared_reading: bool = False
+    ) -> None:
+        self.query(f'''
+            CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                SOURCE_TYPE = 'Ydb',
+                LOCATION = '{endpoint}',
+                DATABASE_NAME = '{database}',
+                {"SHARED_READING = 'TRUE'," if shared_reading else ""}
+                AUTH_METHOD = 'NONE'
+            );
+        ''')
+
+    def topic_write(
+        self,
+        topic: str,
+        messages: list[str],
+        timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+        *args,
+        **kwargs,
+    ) -> None:
+        writer = self.driver.topic_client.writer(topic, *args, **kwargs)
+
+        try:
+            writer.write(messages, timeout)
+            writer.flush()
+        finally:
+            writer.close(flush=False)
+
+    def topic_read(
+        self,
+        topic: str,
+        consumer: str,
+        messages_count: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(30, 300),
+        commit: bool = True,
+    ) -> list[str]:
+        deadline = time.monotonic() + timeout
+
+        with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
+            def _read_single() -> str:
+                remaining = deadline - time.monotonic()
+                message = reader.receive_message(timeout=remaining)
+
+                if commit:
+                    reader.commit(message)
+
+                data = message.data
+                return data.decode() if isinstance(data, bytes) else str(data)
+
+            return [_read_single() for _ in range(messages_count)]
+
+    def topic_read_until(
+        self,
+        topic: str,
+        consumer: str,
+        messages_count: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(30, 300),
+        commit: bool = True,
+    ) -> list[str]:
+        deadline = time.monotonic() + timeout
+
+        with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
+            def _read_batch() -> list[str]:
+                remaining = deadline - time.monotonic()
+                batch = reader.receive_batch(timeout=remaining)
+
+                if commit:
+                    reader.commit(batch)
+
+                datas = [message.data for message in batch.messages]
+                return [data.decode() if isinstance(data, bytes) else str(data) for data in datas]
+
+            result: list[str] = []
+            while len(result) < messages_count:
+                result.extend(_read_batch())
+            return result
 
 
 class Kikimr:
@@ -141,37 +225,41 @@ class Kikimr:
 
         self.first_node = list(self.cluster.nodes.values())[0]
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
-        self.ydb_client = YdbClient(
-            database=self.endpoint.database,
-            endpoint=f"grpc://{self.endpoint.endpoint}",
+        self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
+
+        if os.getenv("YDB_ENDPOINT") is None or os.getenv("YDB_DATABASE") is None:
+            self.external_endpoint = None
+            self.external_ydb_client = None
+        else:
+            self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+            self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
+
+    @staticmethod
+    def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
+        return YdbClient.from_driver_config(
+            database=endpoint.database,
+            endpoint=f"grpc://{endpoint.endpoint}",
             enable_discovery=enable_discovery,
         )
-        self.ydb_client.wait_connection()
 
-    def stop(self):
+    def stop(self) -> None:
+        if self.external_ydb_client is not None:
+            self.external_ydb_client.stop()
         self.ydb_client.stop()
         self.cluster.stop()
 
 
 class StreamingTestBase(TestYdsBase):
-    def get_endpoint(self, kikimr, local_topics):
-        if local_topics:
-            return kikimr.endpoint
-        return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+    def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
+        return kikimr.endpoint if local_topics else kikimr.external_endpoint
 
-    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None):
+    def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
+        return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
+
+    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None) -> None:
         if endpoint is None:
             endpoint = self.get_endpoint(kikimr, local_topics=False)
-        shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
-        kikimr.ydb_client.query(f"""
-            CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
-                SOURCE_TYPE = "Ydb",
-                LOCATION = "{endpoint.endpoint}",
-                DATABASE_NAME = "{endpoint.database}",
-                {shared_opt}
-                AUTH_METHOD = "NONE"
-            );
-        """)
+        kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
     def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
         node = kikimr.cluster.nodes[node_id]

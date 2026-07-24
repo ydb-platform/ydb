@@ -1,20 +1,21 @@
-#include "yaml_writer.h"
+#include "writer.h"
 
+#include "config.h"
 #include "helpers.h"
-#include "yaml_helpers.h"
 
-#include <yt/yt/client/formats/config.h>
+#include <yt/yt/core/yson/consumer.h>
 
 #include <contrib/libs/yaml/include/yaml.h>
 
-namespace NYT::NFormats {
+namespace NYT::NYaml {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////
 
 class TYamlWriter
-    : public TFormatsConsumerBase
+    : public TYsonConsumerBase
+    , public virtual IFlushableYsonConsumer
 {
 public:
     TYamlWriter(
@@ -385,4 +386,4 @@ std::unique_ptr<IFlushableYsonConsumer> CreateYamlWriter(
 
 ////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml

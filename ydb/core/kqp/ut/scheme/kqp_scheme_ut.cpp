@@ -73,7 +73,6 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
 
 void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableTruncateTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -15092,7 +15091,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableEraseRowPermission) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
 
         auto rootSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -15156,7 +15154,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableDoesNotResetSerialSequence) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -15220,7 +15217,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableWithTtl) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -15272,7 +15268,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateNonExistentTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

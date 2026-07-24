@@ -1806,12 +1806,6 @@ public:
         }
 
         if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
-            if (!SessionCtx->Config().FeatureFlags.GetEnableTruncateTable()) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "TRUNCATE TABLE statement is disabled. Please contact your system administrator to enable it"));
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);

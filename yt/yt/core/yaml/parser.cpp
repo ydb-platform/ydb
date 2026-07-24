@@ -1,20 +1,19 @@
-#include "yaml_parser.h"
+#include "parser.h"
 
-#include "yaml_helpers.h"
-
-#include <yt/yt/client/formats/parser.h>
+#include "helpers.h"
 
 #include <yt/yt/core/yson/consumer.h>
+#include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/coro_pipe.h>
-
 #include <library/cpp/yt/string/stream.h>
+
+#include <library/cpp/yt/yson_string/format.h>
 
 #include <contrib/libs/yaml/include/yaml.h>
 
-namespace NYT::NFormats {
+namespace NYT::NYaml {
 
 using namespace NYson;
 using namespace NYTree;
@@ -561,4 +560,4 @@ void ParseYaml(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NYaml

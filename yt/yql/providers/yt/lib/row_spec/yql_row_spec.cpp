@@ -158,6 +158,24 @@ NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& f
     return filteredSchema;
 }
 
+class TSingularTypesVisitor : public TDefaultTypeAnnotationVisitor {
+public:
+    void Visit(const TVoidExprType&) override {
+        SingularTypeFlags_ |= NTCF_VOID;
+    }
+
+    void Visit(const TNullExprType&) override {
+        SingularTypeFlags_ |= NTCF_NULL;
+    }
+
+    ui64 SingularTypeFlags() const {
+        return SingularTypeFlags_;
+    }
+
+private:
+    ui64 SingularTypeFlags_ = 0ul;
+};
+
 }
 
 ui64 GetItemNativeYtTypeFlags(const TTypeAnnotationNode& type) {
@@ -1290,6 +1308,12 @@ void TYqlRowSpecInfo::FillDefValues(NYT::TNode& attrs, const NCommon::TStructMem
 void TYqlRowSpecInfo::FillFlags(NYT::TNode& attrs) const {
     attrs[RowSpecAttrStrictSchema] = StrictSchema;
     attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags;
+
+    // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
+    TSingularTypesVisitor visitor;
+    Type->Accept(visitor);
+    attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
+
     // Backward compatibility. TODO: remove after releasing compatibility flags
     if (NativeYtTypeFlags != 0) {
         attrs[RowSpecAttrUseNativeYtTypes] = true;

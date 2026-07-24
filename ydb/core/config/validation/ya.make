@@ -18,6 +18,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    fuzz_targets
+)
+
 RECURSE_FOR_TESTS(
     ut
     auth_config_validator_ut

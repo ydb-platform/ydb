@@ -118,6 +118,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut_configs_dispatcher
     ut_console
 )

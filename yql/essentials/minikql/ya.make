@@ -102,6 +102,7 @@ RECURSE(
     computation
     datetime
     dom
+    fuzz_targets
     invoke_builtins
     jsonpath
     perf

@@ -98,6 +98,7 @@ END()
 
 RECURSE(
     engines
+    fuzz_targets
     splitter
     tools/visualize_portions
     tools/memory_tests

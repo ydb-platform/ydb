@@ -32,3 +32,7 @@ RECURSE(
     recovery
     test
 )
+
+RECURSE_FOR_TESTS(
+    fuzz_targets
+)

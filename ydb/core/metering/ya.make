@@ -2,6 +2,10 @@ RECURSE_FOR_TESTS(
     ut
 )
 
+RECURSE(
+    fuzz_targets
+)
+
 LIBRARY()
 
 SRCS(

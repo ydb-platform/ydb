@@ -90,5 +90,6 @@ END()
 
 RECURSE_FOR_TESTS(
     btree_benchmark
+    fuzz_targets
     ut
 )

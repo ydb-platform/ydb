@@ -23,3 +23,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    fuzz_targets
+)

@@ -19,5 +19,6 @@ GENERATE_ENUM_SERIALIZATION(scalar.h)
 END()
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut
 )

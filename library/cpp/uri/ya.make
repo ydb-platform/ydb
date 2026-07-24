@@ -23,5 +23,6 @@ END()
 
 RECURSE(
     benchmark
+    fuzz_targets
     ut
 )

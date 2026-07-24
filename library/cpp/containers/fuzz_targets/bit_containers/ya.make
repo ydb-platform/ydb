@@ -1,0 +1,5 @@
+RECURSE(
+    bitmap
+    bitseq
+    enumbitset
+)

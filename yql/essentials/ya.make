@@ -4,6 +4,7 @@ RECURSE(
     ast
     core
     docs
+    fuzz_targets
     minikql
     parser
     protos
@@ -16,4 +17,3 @@ RECURSE(
     udfs
     utils
 )
-

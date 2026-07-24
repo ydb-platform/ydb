@@ -120,6 +120,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             return Reply(false, "Metadata service is not active");
         }

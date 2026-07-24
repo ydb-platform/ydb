@@ -173,6 +173,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!DstPathId) {
             Success();
         } else {

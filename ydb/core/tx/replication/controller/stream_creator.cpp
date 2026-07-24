@@ -253,6 +253,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (NeedCreate) {
             RequestPermission();
         } else {

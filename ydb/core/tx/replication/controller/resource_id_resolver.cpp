@@ -88,6 +88,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         YdbProxy = Register(CreateYdbProxy(Endpoint, Database, Ssl, CaCert, Token));
         DescribeDatabase();
         Become(&TThis::StateWork);

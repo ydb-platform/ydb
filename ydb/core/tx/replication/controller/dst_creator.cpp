@@ -680,6 +680,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (Kind) {
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);

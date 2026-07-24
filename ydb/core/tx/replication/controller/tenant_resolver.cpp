@@ -78,6 +78,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         Resolve(PathId);
         Become(&TThis::StateWork);
     }

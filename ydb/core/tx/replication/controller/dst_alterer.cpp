@@ -169,6 +169,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (DesiredState) {
         case TReplication::EState::Done:
             if (!DstPathId) {

@@ -83,6 +83,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         for (const auto& [id, _] : Targets) {
             DescribeTarget(id);
         }

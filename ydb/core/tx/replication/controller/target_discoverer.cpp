@@ -367,6 +367,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         for (ui32 i = 0; i < Paths.size(); ++i) {
             DescribePath(i);
         }

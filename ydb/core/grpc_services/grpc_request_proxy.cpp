@@ -629,7 +629,17 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        // Client telemetry (sdk build info, user agent, peer, ...) gets its own log component, so its
+        // verbosity can be tuned independently of the rest of the grpc proxy. Only discovery requests
+        // carry it for now. Requests with failed authentication are demoted to DEBUG.
+        const auto authState = event->Get()->GetAuthState().State;
+        const bool authFailed = authState == NYdbGrpc::TAuthState::AS_FAIL
+            || authState == NYdbGrpc::TAuthState::AS_UNAVAILABLE;
+        if (authFailed) {
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CLIENT_TELEMETRY, "%s", getDebugString().c_str());
+        } else {
+            LOG_INFO(*TlsActivationContext, NKikimrServices::CLIENT_TELEMETRY, "%s", getDebugString().c_str());
+        }
     }
     else {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());

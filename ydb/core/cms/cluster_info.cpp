@@ -1026,9 +1026,8 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
         if (!UseDynamicSysTabletChecking) {
             for (auto nodeId : tablet.GetNode()) {
                 if (!HasNode(nodeId)) {
-                    BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
-                                                << " with system tablet, which exists in configuration, "
-                                                   "but does not exist in cluster.");
+                    YDB_LOG_ERROR("Got node with system tablet, which exists in configuration, but does not exist in cluster",
+                        {"nodeId", nodeId});
                     continue;
                 }
                 const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;

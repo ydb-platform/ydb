@@ -115,9 +115,20 @@ def select_branches(points: list[dict]) -> list[str]:
     return sorted(chosen, key=lambda b: (branch_rank(b), b))
 
 
-def parse_ts(s: str | None) -> datetime | None:
-    if not s:
+def parse_ts(s) -> datetime | None:
+    if s is None or s == "":
         return None
+    # YDB scan / wrapper often returns Timestamp as integer µs (or ms)
+    if isinstance(s, (int, float)) or (isinstance(s, str) and s.isdigit()):
+        n = int(s)
+        # heuristics: ≥1e14 → µs, ≥1e11 → ms, else seconds
+        if n >= 10**14:
+            sec = n / 1_000_000
+        elif n >= 10**11:
+            sec = n / 1_000
+        else:
+            sec = float(n)
+        return datetime.fromtimestamp(sec, tz=timezone.utc)
     s = str(s)
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"

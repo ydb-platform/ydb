@@ -9995,6 +9995,227 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(typeFallback["kind"].GetStringSafe(), "opaque");
     }
 
+    Y_UNIT_TEST(ExportsExactSameTypeIntegralDivision) {
+        struct TCase {
+            NUdf::EDataSlot Slot;
+            TStringBuf Type;
+        };
+        const TVector<TCase> cases = {
+            {NUdf::EDataSlot::Int8, "Int8"},
+            {NUdf::EDataSlot::Int16, "Int16"},
+            {NUdf::EDataSlot::Int32, "Int32"},
+            {NUdf::EDataSlot::Int64, "Int64"},
+            {NUdf::EDataSlot::Uint8, "Uint8"},
+            {NUdf::EDataSlot::Uint16, "Uint16"},
+            {NUdf::EDataSlot::Uint32, "Uint32"},
+            {NUdf::EDataSlot::Uint64, "Uint64"},
+        };
+
+        for (const auto& test : cases) {
+            for (const bool leftNullable : {false, true}) {
+                TExportTestContext ctx;
+                const auto* operandType = ScalarType(
+                    ctx,
+                    test.Slot,
+                    leftNullable);
+                const auto* literalType = ScalarType(ctx, test.Slot);
+                const auto* resultType = ScalarType(ctx, test.Slot, true);
+                const auto expression = ExportTypedMapExpression(
+                    ctx,
+                    "a",
+                    test.Type,
+                    leftNullable,
+                    TypedCallable(
+                        ctx,
+                        "/",
+                        {
+                            TypedMember(ctx, "a.x", operandType),
+                            TypedLiteral(ctx, test.Type, "2", literalType),
+                        },
+                        resultType));
+
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["kind"].GetStringSafe(),
+                    "div");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["type"].GetStringSafe(),
+                    test.Type);
+                UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["left"]["kind"].GetStringSafe(),
+                    "column");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["left"]["column"].GetStringSafe(),
+                    "a.x");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["right"]["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["right"]["type"].GetStringSafe(),
+                    test.Type);
+            }
+        }
+
+        TExportTestContext nested;
+        const auto* intType = ScalarType(
+            nested,
+            NUdf::EDataSlot::Int64);
+        const auto* optionalInt = ScalarType(
+            nested,
+            NUdf::EDataSlot::Int64,
+            true);
+        const auto nestedExpression = ExportTypedMapExpression(
+            nested,
+            "a",
+            "Int64",
+            false,
+            TypedCallable(
+                nested,
+                "If",
+                {
+                    TypedLiteral(
+                        nested,
+                        "Bool",
+                        "true",
+                        ScalarType(nested, NUdf::EDataSlot::Bool)),
+                    TypedCallable(
+                        nested,
+                        "/",
+                        {
+                            TypedMember(nested, "a.x", intType),
+                            TypedLiteral(nested, "Int64", "3", intType),
+                        },
+                        optionalInt),
+                    TypedNothing(
+                        nested,
+                        "Int64",
+                        intType,
+                        optionalInt),
+                },
+                optionalInt));
+        UNIT_ASSERT_VALUES_EQUAL(
+            nestedExpression["kind"].GetStringSafe(),
+            "if");
+        UNIT_ASSERT_VALUES_EQUAL(
+            nestedExpression["then"]["kind"].GetStringSafe(),
+            "div");
+    }
+
+    Y_UNIT_TEST(IntegralDivisionGateFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Int32",
+                false,
+                TypedCallable(
+                    ctx,
+                    "/",
+                    {
+                        TypedMember(ctx, "a.x", intType),
+                        TypedLiteral(ctx, "Int32", "2", intType),
+                    },
+                    intType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "result must be nullable");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32);
+            const auto* int64Type = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int64);
+            const auto* optionalInt64 = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int64,
+                true);
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Int32",
+                false,
+                TypedCallable(
+                    ctx,
+                    "/",
+                    {
+                        TypedMember(ctx, "a.x", int32Type),
+                        TypedLiteral(ctx, "Int64", "2", int64Type),
+                    },
+                    optionalInt64));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "exactly the same fixed-width integer type");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32);
+            const auto* optionalDouble = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Double,
+                true);
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Int32",
+                false,
+                TypedCallable(
+                    ctx,
+                    "/",
+                    {
+                        TypedMember(ctx, "a.x", intType),
+                        TypedLiteral(ctx, "Int32", "2", intType),
+                    },
+                    optionalDouble));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar type Double");
+        }
+
+        for (const size_t arity : {size_t(1), size_t(3)}) {
+            TExportTestContext ctx;
+            const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt = ScalarType(
+                ctx,
+                NUdf::EDataSlot::Int32,
+                true);
+            TExprNode::TListType children = {
+                TypedMember(ctx, "a.x", intType),
+            };
+            if (arity == 3) {
+                children.push_back(
+                    TypedLiteral(ctx, "Int32", "2", intType));
+                children.push_back(
+                    TypedLiteral(ctx, "Int32", "3", intType));
+            }
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Int32",
+                false,
+                TypedCallable(
+                    ctx,
+                    "/",
+                    std::move(children),
+                    optionalInt));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                TStringBuilder() << "unsupported arity " << arity);
+        }
+    }
+
     Y_UNIT_TEST(ExportsExactDecimalArithmetic) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/DecimalMul", {
@@ -11405,7 +11626,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             return ExportMapExpressionResult(ctx, "a", std::move(expression));
         };
 
-        for (const auto callable : {"/", "StrictCast", "Udf", "Apply", "Now", "CurrentActorId"}) {
+        for (const auto callable : {"StrictCast", "Udf", "Apply", "Now", "CurrentActorId"}) {
             const auto result = exportCallable(callable);
             UNIT_ASSERT_C(!result.IsSupported(), callable);
             UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "Unsupported scalar callable");

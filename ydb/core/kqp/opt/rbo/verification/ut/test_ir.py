@@ -330,6 +330,53 @@ def decimal_div_snapshot(
     return value
 
 
+def integral_div_snapshot(
+    scalar_type="Int64",
+    *,
+    left_type=None,
+    right_type=None,
+    left_nullable=False,
+    right_nullable=False,
+    result_nullable=True,
+):
+    left_type = scalar_type if left_type is None else left_type
+    right_type = scalar_type if right_type is None else right_type
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"] = [
+        {
+            "name": "dividend",
+            "type": left_type,
+            "nullable": left_nullable,
+        },
+        {
+            "name": "divisor",
+            "type": right_type,
+            "nullable": right_nullable,
+        },
+    ]
+    value["plan"]["nodes"][0]["columns"] = [
+        {"source": "dividend", "output": "a.dividend"},
+        {"source": "divisor", "output": "a.divisor"},
+    ]
+    value["plan"]["nodes"][1]["predicate"] = {
+        "kind": "eq",
+        "left": {
+            "kind": "div",
+            "left": {"kind": "column", "column": "a.dividend"},
+            "right": {"kind": "column", "column": "a.divisor"},
+            "type": scalar_type,
+            "nullable": result_nullable,
+        },
+        "right": {
+            "kind": "literal",
+            "type": scalar_type,
+            "value": 0,
+        },
+    }
+    value["plan"]["output"] = ["a.dividend"]
+    return value
+
+
 def integral_safe_cast_snapshot(
     source_type="Int64",
     target_type="Int32",
@@ -1240,18 +1287,6 @@ class SnapshotTest(unittest.TestCase):
                     parse_snapshot(decimal_div_snapshot(right_type))
 
     def test_decimal_division_rejects_result_or_left_type_broadening(self):
-        integer_result = decimal_div_snapshot("Int64")
-        division = integer_result["plan"]["nodes"][1]["predicate"]["left"]
-        division["left"] = {"kind": "column", "column": "a.divisor"}
-        division["type"] = "Int64"
-        integer_result["plan"]["nodes"][1]["predicate"]["right"] = {
-            "kind": "literal",
-            "type": "Int64",
-            "value": 0,
-        }
-        with self.assertRaisesRegex(SnapshotError, "div requires a Decimal result"):
-            parse_snapshot(integer_result)
-
         for result_type in ("Decimal(6,2)", "Decimal(8,2)", "Decimal(7,3)"):
             broadened = decimal_div_snapshot()
             division = broadened["plan"]["nodes"][1]["predicate"]["left"]
@@ -1293,6 +1328,72 @@ class SnapshotTest(unittest.TestCase):
                         "div nullability must equal the OR",
                     ):
                         parse_snapshot(wrong)
+
+    def test_integral_division_requires_one_exact_fixed_width_type(self):
+        for scalar_type in sorted(INTEGER_TYPES):
+            with self.subTest(scalar_type=scalar_type):
+                snapshot = parse_snapshot(integral_div_snapshot(scalar_type))
+                expression = snapshot.plan.nodes[1].predicate.args[0]
+                self.assertEqual(
+                    (
+                        expression.kind,
+                        expression.result_type,
+                        expression.nullable,
+                    ),
+                    ("div", scalar_type, True),
+                )
+
+        for left_type, right_type, result_type in (
+            ("Int32", "Int64", "Int64"),
+            ("Int64", "Int32", "Int64"),
+            ("Int64", "Uint64", "Int64"),
+            ("Uint64", "Int64", "Uint64"),
+        ):
+            with self.subTest(
+                left_type=left_type,
+                right_type=right_type,
+                result_type=result_type,
+            ):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "operands and result must have exactly the same type",
+                ):
+                    parse_snapshot(
+                        integral_div_snapshot(
+                            result_type,
+                            left_type=left_type,
+                            right_type=right_type,
+                        )
+                    )
+
+    def test_integral_division_is_nullable_for_every_operand_shape(self):
+        for left_nullable in (False, True):
+            for right_nullable in (False, True):
+                with self.subTest(
+                    left_nullable=left_nullable,
+                    right_nullable=right_nullable,
+                ):
+                    snapshot = parse_snapshot(
+                        integral_div_snapshot(
+                            left_nullable=left_nullable,
+                            right_nullable=right_nullable,
+                        )
+                    )
+                    self.assertTrue(
+                        snapshot.plan.nodes[1].predicate.args[0].nullable
+                    )
+
+                    with self.assertRaisesRegex(
+                        SnapshotError,
+                        "integral div result must be nullable",
+                    ):
+                        parse_snapshot(
+                            integral_div_snapshot(
+                                left_nullable=left_nullable,
+                                right_nullable=right_nullable,
+                                result_nullable=False,
+                            )
+                        )
 
     def test_decimal_division_node_schema_is_closed(self):
         value = decimal_div_snapshot()

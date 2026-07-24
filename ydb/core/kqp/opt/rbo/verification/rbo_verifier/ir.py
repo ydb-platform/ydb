@@ -1473,21 +1473,34 @@ def _infer_expr(
                     + (" or be integral" if expr.kind in {"mul", "div"} else ""),
                 )
         else:
-            if expr.kind == "div":
-                _fail(path, "div requires a Decimal result")
             if family(expr.result_type) != "int":
-                _fail(path, f"{expr.kind} requires an integer result")
+                _fail(
+                    path,
+                    (
+                        "integral div requires a fixed-width integer result"
+                        if expr.kind == "div"
+                        else f"{expr.kind} requires an integer result"
+                    ),
+                )
             if left.name != expr.result_type or right.name != expr.result_type:
                 _fail(
                     path,
                     f"{expr.kind} operands and result must have exactly the same type: "
                     f"{left.name!r}, {right.name!r}, and {expr.result_type!r}",
                 )
-        nullable = left.nullable or right.nullable
+        nullable = (
+            True
+            if expr.kind == "div" and not decimal.is_type(expr.result_type)
+            else left.nullable or right.nullable
+        )
         if expr.nullable != nullable:
             _fail(
                 path,
-                f"{expr.kind} nullability must equal the OR of operand nullability",
+                (
+                    "integral div result must be nullable"
+                    if expr.kind == "div" and not decimal.is_type(expr.result_type)
+                    else f"{expr.kind} nullability must equal the OR of operand nullability"
+                ),
             )
         return ValueType(expr.result_type, nullable)
 

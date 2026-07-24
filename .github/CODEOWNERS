@@ -11,8 +11,8 @@
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
 
 /.github/ @ydb-platform/ci
-/.github/workflows/docs_*
-/.github/workflows/ydbdoc-*
+/.github/workflows/docs_* @sintjuri
+/.github/workflows/ydbdoc-* @sintjuri
 /.github/config/muted_ya*
 /.github/CODEOWNERS
 /.github/TESTOWNERS

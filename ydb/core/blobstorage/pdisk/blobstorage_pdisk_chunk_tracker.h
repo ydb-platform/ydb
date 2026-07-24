@@ -231,6 +231,10 @@ public:
     ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
         return QuotaForOwner[id].ColorFlagLimit(color);
     }
+
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return ColorLimits.GetOccupancyForColor(color, Total);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -498,13 +502,7 @@ public:
 
     bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
         if (IsOwnerUser(owner)) {
-            if (Params.ExpectedOwnerSize) {
-                if (!OwnerQuota->TryAllocate(owner, count, outErrorReason)) {
-                    return false;
-                }
-            } else {
-                OwnerQuota->ForceAllocate(owner, count);
-            }
+            OwnerQuota->ForceAllocate(owner, count);
             if (SharedQuota->TryAllocate(count, outErrorReason)) {
                 return true;
             }
@@ -613,6 +611,11 @@ public:
         Params.ExpectedOwnerCount = newOwnerCount;
         Params.ExpectedOwnerSize = newOwnerSize;
         OwnerQuota->SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ColorBorder = colorBorder;
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
     }
 };
 

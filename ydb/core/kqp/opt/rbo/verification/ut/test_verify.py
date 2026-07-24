@@ -1166,6 +1166,104 @@ def string_predicate_snapshot(fingerprint, reverse_arguments=False):
     )
 
 
+DATE_YEAR_FINGERPRINT = "yql-datetime-year-v1"
+
+
+def date_year_snapshot(
+    fingerprint=DATE_YEAR_FINGERPRINT,
+    *,
+    opaque_argument=None,
+):
+    if opaque_argument is None:
+        opaque_argument = {"kind": "bound", "depth": 0}
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "T",
+                        "columns": [
+                            {
+                                "name": "shipdate",
+                                "type": "Date",
+                                "nullable": True,
+                            }
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": [
+                    {
+                        "id": "scan",
+                        "op": "scan",
+                        "table": "T",
+                        "columns": [
+                            {
+                                "source": "shipdate",
+                                "output": "t.shipdate",
+                            }
+                        ],
+                        "pushed_limit": None,
+                    },
+                    {
+                        "id": "project",
+                        "op": "project",
+                        "input": "scan",
+                        "ordered": False,
+                        "columns": [
+                            {
+                                "output": "t.year",
+                                "expression": {
+                                    "kind": "if_present",
+                                    "optional": {
+                                        "kind": "column",
+                                        "column": "t.shipdate",
+                                    },
+                                    "present": {
+                                        "kind": "if",
+                                        "condition": {
+                                            "kind": "literal",
+                                            "type": "Bool",
+                                            "value": True,
+                                        },
+                                        "then": {
+                                            "kind": "opaque",
+                                            "fingerprint": fingerprint,
+                                            "type": "Uint16",
+                                            "nullable": False,
+                                            "args": [opaque_argument],
+                                        },
+                                        "else": {
+                                            "kind": "null",
+                                            "type": "Uint16",
+                                        },
+                                        "type": "Uint16",
+                                        "nullable": True,
+                                    },
+                                    "missing": {
+                                        "kind": "null",
+                                        "type": "Uint16",
+                                    },
+                                    "type": "Uint16",
+                                    "nullable": True,
+                                },
+                            }
+                        ],
+                    },
+                ],
+                "root": "project",
+                "output": ["t.year"],
+                "subplans": [],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
 def mixed_width_membership_snapshot(lowered):
     lookup = {"kind": "column", "column": "t.year"}
     items = [
@@ -3472,6 +3570,39 @@ class RestrictedModelSmokeTest(unittest.TestCase):
             )
         )
 
+    def test_date_year_normalization_propagates_null_exactly(self):
+        expression = (
+            date_year_snapshot()
+            .plan.node_map()["project"]
+            .columns[0]
+            .expression
+        )
+        for source_is_null in (False, True):
+            with self.subTest(source_is_null=source_is_null):
+                result = ScalarEncoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "t.shipdate": Value(
+                            "Date",
+                            smt.bool_value(source_is_null),
+                            smt.int_value(123),
+                        ),
+                    },
+                )
+                self.assertEqual(result.type, "Uint16")
+                self.assertEqual(
+                    result.is_null,
+                    smt.bool_value(source_is_null),
+                )
+                if source_is_null:
+                    self.assertEqual(result.value, smt.ZERO)
+                else:
+                    self.assertEqual(result.value.operation, "f_0")
+                    self.assertEqual(
+                        result.value.arguments,
+                        (smt.FALSE, smt.int_value(123)),
+                    )
+
     def test_mixed_width_membership_lowering_has_no_spurious_model(self):
         problem = build_logical_kernel_problem_for_tests(
             mixed_width_membership_snapshot(False),
@@ -4338,6 +4469,51 @@ class VerificationTest(unittest.TestCase):
                 string_predicate_snapshot(
                     fingerprint,
                     reverse_arguments=True,
+                ),
+            ),
+        ):
+            with self.subTest(mutation=mutation):
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        original,
+                        changed,
+                        1,
+                        10_000,
+                    ),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_date_year_normalization_fingerprint_and_argument_are_semantic(self):
+        original = date_year_snapshot()
+        identical = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                date_year_snapshot(),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(identical.status, "VERIFIED_BOUNDED")
+
+        for mutation, changed in (
+            (
+                "fingerprint",
+                date_year_snapshot("yql-datetime-year-mutated-v1"),
+            ),
+            (
+                "argument",
+                date_year_snapshot(
+                    opaque_argument={
+                        "kind": "literal",
+                        "type": "Date",
+                        "value": 0,
+                    },
                 ),
             ),
         ):

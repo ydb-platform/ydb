@@ -2279,6 +2279,107 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(!OnlyPlanNode(pair.Final, "scan")["predicate"].IsNull());
     }
 
+    Y_UNIT_TEST(RealHostVerifiesNullableDateYearProjection) {
+        TKikimrRunner kikimr;
+        CreateDateColumnTable(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT
+                Id,
+                DateTime::GetYear(CAST(D AS Timestamp)) AS ShipYear
+            FROM `/Root/RboDate`;
+        )");
+
+        const auto yearExpression = [](const NJson::TJsonValue& snapshot) {
+            TVector<const NJson::TJsonValue*> expressions;
+            CollectExpressions(snapshot["plan"], "if_present", expressions);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                expressions.size(),
+                1,
+                NJson::WriteJson(snapshot, false));
+            return expressions.front();
+        };
+
+        const auto assertYearExpression = [](const NJson::TJsonValue& expression) {
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Uint16");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+
+            const auto& optional = expression["optional"];
+            UNIT_ASSERT_VALUES_EQUAL(optional.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                optional["kind"].GetStringSafe(),
+                "column");
+
+            const auto& present = expression["present"];
+            UNIT_ASSERT_VALUES_EQUAL(present.GetMapSafe().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["kind"].GetStringSafe(),
+                "if");
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["type"].GetStringSafe(),
+                "Uint16");
+            UNIT_ASSERT(present["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["condition"].GetMapSafe().size(),
+                3);
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["condition"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["condition"]["type"].GetStringSafe(),
+                "Bool");
+            UNIT_ASSERT(present["condition"]["value"].GetBooleanSafe());
+
+            const auto& year = present["then"];
+            UNIT_ASSERT_VALUES_EQUAL(year.GetMapSafe().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(
+                year["kind"].GetStringSafe(),
+                "opaque");
+            UNIT_ASSERT_VALUES_EQUAL(
+                year["fingerprint"].GetStringSafe(),
+                "yql-datetime-year-v1");
+            UNIT_ASSERT_VALUES_EQUAL(
+                year["type"].GetStringSafe(),
+                "Uint16");
+            UNIT_ASSERT(!year["nullable"].GetBooleanSafe());
+            const auto& arguments = year["args"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(arguments.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(arguments[0].GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                arguments[0]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                arguments[0]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["else"].GetMapSafe().size(),
+                2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["else"]["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                present["else"]["type"].GetStringSafe(),
+                "Uint16");
+
+            const auto& missing = expression["missing"];
+            UNIT_ASSERT_VALUES_EQUAL(missing.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                missing["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                missing["type"].GetStringSafe(),
+                "Uint16");
+        };
+
+        const auto* initialYear = yearExpression(pair.Initial);
+        const auto* finalYear = yearExpression(pair.Final);
+        assertYearExpression(*initialYear);
+        assertYearExpression(*finalYear);
+    }
+
     Y_UNIT_TEST(RealHostVerifiesConstantDateIntervalPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateDateColumnTable(kikimr);

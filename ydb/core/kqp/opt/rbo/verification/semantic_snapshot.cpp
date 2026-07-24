@@ -2340,7 +2340,14 @@ void CheckVoidNode(const TExprNode& node, bool typeDescriptor, TStringBuf label)
 }
 
 enum class EReviewedDateTimeUdf : ui8 {
-    IntervalFromDays, Split, ShiftYears, ShiftMonths, MakeDate, Count,
+    IntervalFromDays,
+    Split,
+    SplitTimestamp,
+    ShiftYears,
+    ShiftMonths,
+    MakeDate,
+    GetYear,
+    Count,
 };
 
 struct TReviewedDateTimeArgument {
@@ -2360,7 +2367,11 @@ struct TReviewedDateTimeUdfSpec {
 
 constexpr ui64 DateTimeAutoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
 constexpr TReviewedDateTimeType DateType{NUdf::EDataSlot::Date};
+constexpr TReviewedDateTimeType TimestampType{NUdf::EDataSlot::Timestamp};
+constexpr TReviewedDateTimeType OptionalTimestampType{
+    NUdf::EDataSlot::Timestamp, true};
 constexpr TReviewedDateTimeType Int32Type{NUdf::EDataSlot::Int32};
+constexpr TReviewedDateTimeType Uint16Type{NUdf::EDataSlot::Uint16};
 constexpr TReviewedDateTimeType OptionalIntervalType{
     NUdf::EDataSlot::Interval, true};
 constexpr TReviewedDateTimeType TmType{NUdf::EDataSlot::Date, false, true};
@@ -2373,6 +2384,8 @@ const TReviewedDateTimeUdfSpec ReviewedDateTimeUdfs[] = {
         1, {}, 0, true},
     {"DateTime2.Split", TmType, {{DateType, DateTimeAutoMap}, {}},
         1, {DateType}, 1, true},
+    {"DateTime2.Split", TmType, {{TimestampType, DateTimeAutoMap}, {}},
+        1, {TimestampType}, 1, true},
     {"DateTime2.ShiftYears", OptionalTmType,
         {{TmType, DateTimeAutoMap}, {Int32Type, 0}},
         2, {DateType, Int32Type}, 2, false},
@@ -2382,6 +2395,9 @@ const TReviewedDateTimeUdfSpec ReviewedDateTimeUdfs[] = {
     {"DateTime2.MakeDate", DateType,
         {{TmType, DateTimeAutoMap}, {}},
         1, {}, 0, true},
+    {"DateTime2.GetYear", Uint16Type,
+        {{TmType, DateTimeAutoMap}, {}},
+        1, {OptionalTimestampType}, 1, false},
 };
 
 static_assert(sizeof(ReviewedDateTimeUdfs) / sizeof(ReviewedDateTimeUdfs[0]) ==
@@ -2923,6 +2939,161 @@ NJson::TJsonValue ConstantShiftedDateExpr(const TExprNode& node) {
 bool IsConstantShiftedDate(const TExprNode& node) {
     return node.IsCallable("Map") &&
         IsExactDataAnnotation(node.GetTypeAnn(), NUdf::EDataSlot::Date, true);
+}
+
+bool IsNullableDateYearMap(const TExprNode& node) {
+    return node.IsCallable("Map") &&
+        IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Uint16, true);
+}
+
+TString CheckNullableDateYearMap(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Map") || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Uint16, true))
+    {
+        Unsupported(
+            "DateTime2 year bridge requires an Optional<Uint16> Map");
+    }
+
+    const auto& cast = *node.Child(0);
+    CheckScalarSafetyMetadata(cast);
+    if (!cast.IsCallable("SafeCast") || cast.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            cast.GetTypeAnn(), NUdf::EDataSlot::Timestamp, true))
+    {
+        Unsupported(
+            "DateTime2 year bridge requires SafeCast to Optional<Timestamp>");
+    }
+    CheckDataDescriptor(
+        *cast.Child(1),
+        NUdf::EDataSlot::Timestamp,
+        true,
+        "DateTime2 year SafeCast target");
+
+    const auto& source = *cast.Child(0);
+    CheckScalarSafetyMetadata(source);
+    bool sourceNullable = false;
+    if (!source.IsCallable("Member") || source.ChildrenSize() != 2 ||
+        ScalarTypeName(source, &sourceNullable) != "Date" ||
+        !sourceNullable || !source.Child(1)->IsAtom())
+    {
+        Unsupported(
+            "DateTime2 year bridge requires a direct Optional<Date> member");
+    }
+    const TString column(source.Child(1)->Content());
+    if (source.Child(0) != rowArgument || !visibleColumns.contains(column)) {
+        Unsupported(
+            "DateTime2 year bridge requires a direct visible input member");
+    }
+    CheckScalarSafetyMetadata(*source.Child(1));
+
+    if (CastResult<false>(source.GetTypeAnn(), cast.GetTypeAnn()) !=
+        NUdf::ECastOptions::Complete)
+    {
+        Unsupported(
+            "DateTime2 year bridge requires a complete Date-to-Timestamp cast");
+    }
+
+    const auto& lambda = *node.Child(1);
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument() ||
+        lambda.Child(0)->Child(0)->ChildrenSize() != 0)
+    {
+        Unsupported("DateTime2 year Map requires a unary lambda");
+    }
+    const auto& argument = *lambda.Child(0)->Child(0);
+    CheckScalarSafetyMetadata(lambda);
+    CheckScalarSafetyMetadata(*lambda.Child(0));
+    CheckScalarSafetyMetadata(argument);
+    if (!IsExactDataAnnotation(
+            argument.GetTypeAnn(), NUdf::EDataSlot::Timestamp, false))
+    {
+        Unsupported(
+            "DateTime2 year Map lambda argument must be Timestamp");
+    }
+
+    const auto& getYear = *lambda.Child(1);
+    CheckReviewedDateTimeApply(
+        getYear,
+        ReviewedDateTimeUdf(EReviewedDateTimeUdf::GetYear),
+        "DateTime2.GetYear Apply");
+    const auto& split = *getYear.Child(1);
+    CheckReviewedDateTimeApply(
+        split,
+        ReviewedDateTimeUdf(EReviewedDateTimeUdf::SplitTimestamp),
+        "DateTime2.Split Timestamp Apply");
+    if (split.Child(1) != &argument) {
+        Unsupported(
+            "DateTime2 year Map does not preserve exact lambda identity");
+    }
+
+    return column;
+}
+
+NJson::TJsonValue NullableDateYearExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth)
+{
+    const TString column =
+        CheckNullableDateYearMap(node, rowArgument, visibleColumns);
+
+    // The normalized binder deliberately ranges over the original Date
+    // member, not the implementation's complete Date-to-Timestamp cast.
+    // Keep the reviewed composite operation non-null and lift it to the
+    // handler's Optional<Uint16> type with an always-taken exact If.
+    budget.Charge(normalizedDepth + 1, 3);
+    budget.Charge(normalizedDepth + 2, 3);
+    budget.Charge(normalizedDepth + 3);
+
+    auto arguments = JsonArray();
+    arguments.AppendValue(BoundExpr(0));
+    auto year = JsonMap();
+    year["kind"] = "opaque";
+    year["fingerprint"] = "yql-datetime-year-v1";
+    year["type"] = "Uint16";
+    year["nullable"] = false;
+    year["args"] = std::move(arguments);
+
+    auto condition = JsonMap();
+    condition["kind"] = "literal";
+    condition["type"] = "Bool";
+    condition["value"] = true;
+
+    auto liftedMissing = JsonMap();
+    liftedMissing["kind"] = "null";
+    liftedMissing["type"] = "Uint16";
+
+    auto present = JsonMap();
+    present["kind"] = "if";
+    present["condition"] = std::move(condition);
+    present["then"] = std::move(year);
+    present["else"] = std::move(liftedMissing);
+    present["type"] = "Uint16";
+    present["nullable"] = true;
+
+    auto missing = JsonMap();
+    missing["kind"] = "null";
+    missing["type"] = "Uint16";
+
+    auto result = JsonMap();
+    result["kind"] = "if_present";
+    result["optional"] = ColumnExpr(column);
+    result["present"] = std::move(present);
+    result["missing"] = std::move(missing);
+    result["type"] = "Uint16";
+    result["nullable"] = true;
+    return result;
 }
 
 class TRestrictedConcatAuditor;
@@ -3498,6 +3669,15 @@ NJson::TJsonValue ExportExprNode(
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
+    }
+
+    if (IsNullableDateYearMap(node)) {
+        return NullableDateYearExpr(
+            node,
+            rowArgument,
+            visibleColumns,
+            budget,
+            normalizedDepth);
     }
 
     if (IsDateArithmetic(node)) {

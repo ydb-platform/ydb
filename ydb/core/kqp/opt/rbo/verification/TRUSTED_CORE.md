@@ -148,6 +148,17 @@ shares each deterministic total function and its ordered column/literal
 arguments across both plans. Cross-dialect exporter mutations and a
 solver-backed real-host fixture are the independent evidence.
 
+The nullable Date-year bridge likewise changes only `semantic_snapshot.cpp`.
+It admits one direct visible `Optional<Date>` member, a complete cast to
+`Optional<Timestamp>`, and the exact reviewed unary
+`DateTime2.GetYear(DateTime2.Split(argument))` UDF envelope. The exporter
+preserves NULL with existing `if_present`/`if` IR and assigns the non-null
+operation the stable `yql-datetime-year-v1` opaque identity over the bound Date
+payload. Treating that deterministic total function as otherwise arbitrary is
+an over-approximation: it may make a proof harder, but cannot make an invalid
+plan pair prove equivalent. Exporter near-miss mutations, NULL/fingerprint/
+argument solver tests, and a real-host bounded proof cover the vertical path.
+
 Decimal `MIN` crosses `ir.py`, `decimal.py`, and `relation.py`. The decoder
 admits only exact same-type Decimal input/output with phase-aware nullability;
 the kernel reduces non-NULL values in raw signed-code order and preserves a
@@ -158,16 +169,16 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-dynamic-IN 2026-07-24 physical-line audit recorded:
+The post-Date-year 2026-07-24 physical-line audit recorded:
 
 | Area | Physical lines |
 |---|---:|
 | Nine trusted Python semantic modules | 10,577 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,394 |
-| **Proof-producing code total** | **18,971** |
-| Tests, outside the TCB | 44,453 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 8,574 |
+| **Proof-producing code total** | **19,151** |
+| Tests, outside the TCB | 45,110 |
 | Diagnostic/orchestration tools, outside the TCB | 5,131 |
-| Documentation, outside the TCB | 5,098 |
+| Documentation, outside the TCB | 5,287 |
 
 These figures are a review baseline, not a generated invariant. The trusted
 core is a medium-sized verification subsystem, so it should be audited by
@@ -193,6 +204,9 @@ the SMT obligation itself:
   existential membership test over the recorded lookup/result columns, with
   no hidden NULL, coercion, correlation, cardinality-error, or fanout
   semantics;
+- each accepted `yql-datetime-year-v1` shape denotes the same complete
+  Date-to-Timestamp cast and deterministic, total Split/GetYear operation on
+  the bound Date payload;
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
@@ -257,7 +271,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate dialect mutations and real-host proof; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate and Date-year mutations and real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `relation.py` | aggregate/DistinctAll exporter and IR mutations; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, dynamic-`IN` mapping/cache/pair-cap, real-host Decimal-AVG, and `IN`-to-`left_semi` cases |
 | StageGraph and routing | `semantic_snapshot.cpp`; `ir.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; C++ topology/task mutations; real-host integration |

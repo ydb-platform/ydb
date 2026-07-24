@@ -892,6 +892,32 @@ enum class EDateTime2ShiftShape {
     WrongLambdaBinder,
 };
 
+enum class EDateTime2YearShape {
+    Exact,
+    NonOptionalResult,
+    WrongResultType,
+    NonMemberSource,
+    InvisibleSource,
+    NonOptionalSource,
+    WrongSourceType,
+    WrongCastCallable,
+    WrongCastTarget,
+    NonOptionalCastResult,
+    NonUnaryLambda,
+    WrongLambdaType,
+    WrongLambdaBinder,
+    WrongSplitName,
+    WrongSplitUserType,
+    WrongSplitReturnDescriptor,
+    WrongSplitSettings,
+    WrongSplitFlags,
+    WrongGetYearName,
+    WrongGetYearUserType,
+    WrongGetYearReturnDescriptor,
+    WrongGetYearSettings,
+    WrongGetYearFlags,
+};
+
 TExprNode::TPtr VoidValue(TExportTestContext& ctx) {
     return TypedCallable(
         ctx,
@@ -1513,6 +1539,278 @@ TExprNode::TPtr TypedDateTime2Shift(
             TypedUnaryLambda(ctx, argument, std::move(makeDateApply)),
         },
         optionalDateType);
+}
+
+TExprNode::TPtr TypedNullableDateYear(
+    TExportTestContext& ctx,
+    EDateTime2YearShape shape = EDateTime2YearShape::Exact)
+{
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType =
+        ScalarType(ctx, NUdf::EDataSlot::Date, true);
+    const auto* datetimeType = ScalarType(ctx, NUdf::EDataSlot::Datetime);
+    const auto* optionalDatetimeType =
+        ScalarType(ctx, NUdf::EDataSlot::Datetime, true);
+    const auto* timestampType = ScalarType(ctx, NUdf::EDataSlot::Timestamp);
+    const auto* optionalTimestampType =
+        ScalarType(ctx, NUdf::EDataSlot::Timestamp, true);
+    const auto* uint16Type = ScalarType(ctx, NUdf::EDataSlot::Uint16);
+    const auto* optionalUint16Type =
+        ScalarType(ctx, NUdf::EDataSlot::Uint16, true);
+    const auto* uint32Type = ScalarType(ctx, NUdf::EDataSlot::Uint32);
+    const auto* optionalUint32Type =
+        ScalarType(ctx, NUdf::EDataSlot::Uint32, true);
+    const auto* resourceType =
+        ctx.ExprCtx.MakeType<TResourceExprType>("DateTime2.TM");
+    const ui64 autoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+
+    const auto makeUserType = [&ctx](
+        TTypeAnnotationNode::TListType argumentTypes,
+        TExprNode::TListType argumentDescriptors)
+    {
+        const auto* argumentsType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            std::move(argumentTypes));
+        const auto* emptyStructType = ctx.ExprCtx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{});
+        const auto* emptyTupleType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{});
+        const auto* userType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                argumentsType,
+                emptyStructType,
+                emptyTupleType,
+            });
+        return TupleTypeDescriptor(
+            ctx,
+            {
+                TupleTypeDescriptor(
+                    ctx,
+                    std::move(argumentDescriptors),
+                    argumentsType),
+                EmptyStructTypeDescriptor(ctx, emptyStructType),
+                TupleTypeDescriptor(ctx, {}, emptyTupleType),
+            },
+            userType);
+    };
+
+    TExprNode::TPtr source;
+    if (shape == EDateTime2YearShape::NonMemberSource) {
+        source = TypedNothing(
+            ctx, "Date", dateType, optionalDateType);
+    } else {
+        const bool nonOptional =
+            shape == EDateTime2YearShape::NonOptionalSource;
+        const bool wrongType =
+            shape == EDateTime2YearShape::WrongSourceType;
+        source = TypedMember(
+            ctx,
+            shape == EDateTime2YearShape::InvisibleSource
+                ? TStringBuf("a.hidden")
+                : TStringBuf("a.d"),
+            wrongType
+                ? optionalDatetimeType
+                : nonOptional
+                    ? dateType
+                    : optionalDateType);
+    }
+
+    const bool wrongCastTarget =
+        shape == EDateTime2YearShape::WrongCastTarget;
+    const bool nonOptionalCast =
+        shape == EDateTime2YearShape::NonOptionalCastResult;
+    auto cast = TypedCallable(
+        ctx,
+        shape == EDateTime2YearShape::WrongCastCallable
+            ? TStringBuf("Convert")
+            : TStringBuf("SafeCast"),
+        {
+            std::move(source),
+            nonOptionalCast
+                ? DataTypeDescriptor(ctx, "Timestamp", timestampType)
+                : wrongCastTarget
+                    ? OptionalDataTypeDescriptor(
+                        ctx,
+                        "Datetime",
+                        datetimeType,
+                        optionalDatetimeType)
+                    : OptionalDataTypeDescriptor(
+                        ctx,
+                        "Timestamp",
+                        timestampType,
+                        optionalTimestampType),
+        },
+        nonOptionalCast ? timestampType : optionalTimestampType);
+
+    auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "timestamp");
+    argument->SetTypeAnn(
+        shape == EDateTime2YearShape::WrongLambdaType
+            ? dateType
+            : timestampType);
+    TExprNode::TPtr splitArgument = argument;
+    if (shape == EDateTime2YearShape::WrongLambdaBinder) {
+        splitArgument =
+            ctx.ExprCtx.NewArgument(TPositionHandle(), "other_timestamp");
+        splitArgument->SetTypeAnn(timestampType);
+    }
+
+    const ui64 splitFlags =
+        shape == EDateTime2YearShape::WrongSplitFlags ? 0 : autoMap;
+    const auto* splitCallableType = UdfCallableType(
+        ctx, resourceType, {{timestampType, splitFlags}});
+    const auto* splitCachedResultType =
+        shape == EDateTime2YearShape::WrongSplitReturnDescriptor
+            ? dateType
+            : resourceType;
+    const auto* splitCachedCallableType = UdfCallableType(
+        ctx, splitCachedResultType, {{timestampType, splitFlags}});
+    auto splitCachedType = CallableTypeDescriptor(
+        ctx,
+        shape == EDateTime2YearShape::WrongSplitReturnDescriptor
+            ? DataTypeDescriptor(ctx, "Date", dateType)
+            : ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+        {{
+            DataTypeDescriptor(ctx, "Timestamp", timestampType),
+            splitFlags,
+        }},
+        splitCachedCallableType);
+    auto splitUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                shape == EDateTime2YearShape::WrongSplitName
+                    ? TStringBuf("DateTime2.MakeTimestamp")
+                    : TStringBuf("DateTime2.Split")),
+            VoidValue(ctx),
+            shape == EDateTime2YearShape::WrongSplitUserType
+                ? makeUserType(
+                    {dateType},
+                    {DataTypeDescriptor(ctx, "Date", dateType)})
+                : makeUserType(
+                    {timestampType},
+                    {DataTypeDescriptor(
+                        ctx, "Timestamp", timestampType)}),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            std::move(splitCachedType),
+            VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            shape == EDateTime2YearShape::WrongSplitSettings
+                ? UdfSettings(ctx, {"strict", "blocks"})
+                : UdfSettings(ctx, {"blocks", "strict"}),
+        },
+        splitCallableType);
+    auto split = TypedCallable(
+        ctx,
+        "Apply",
+        {std::move(splitUdf), std::move(splitArgument)},
+        resourceType);
+
+    const ui64 getYearFlags =
+        shape == EDateTime2YearShape::WrongGetYearFlags ? 0 : autoMap;
+    const auto* getYearCallableType = UdfCallableType(
+        ctx, uint16Type, {{resourceType, getYearFlags}});
+    const auto* getYearCachedResultType =
+        shape == EDateTime2YearShape::WrongGetYearReturnDescriptor
+            ? uint32Type
+            : uint16Type;
+    const auto* getYearCachedCallableType = UdfCallableType(
+        ctx, getYearCachedResultType, {{resourceType, getYearFlags}});
+    auto getYearCachedType = CallableTypeDescriptor(
+        ctx,
+        DataTypeDescriptor(
+            ctx,
+            shape == EDateTime2YearShape::WrongGetYearReturnDescriptor
+                ? TStringBuf("Uint32")
+                : TStringBuf("Uint16"),
+            getYearCachedResultType),
+        {{
+            ResourceTypeDescriptor(ctx, "DateTime2.TM", resourceType),
+            getYearFlags,
+        }},
+        getYearCachedCallableType);
+    auto getYearUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                shape == EDateTime2YearShape::WrongGetYearName
+                    ? TStringBuf("DateTime2.GetMonth")
+                    : TStringBuf("DateTime2.GetYear")),
+            VoidValue(ctx),
+            shape == EDateTime2YearShape::WrongGetYearUserType
+                ? makeUserType(
+                    {timestampType},
+                    {DataTypeDescriptor(
+                        ctx, "Timestamp", timestampType)})
+                : makeUserType(
+                    {optionalTimestampType},
+                    {OptionalDataTypeDescriptor(
+                        ctx,
+                        "Timestamp",
+                        timestampType,
+                        optionalTimestampType)}),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            std::move(getYearCachedType),
+            VoidTypeDescriptor(ctx),
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            shape == EDateTime2YearShape::WrongGetYearSettings
+                ? UdfSettings(ctx, {"blocks", "strict"})
+                : UdfSettings(ctx, {"strict"}),
+        },
+        getYearCallableType);
+    auto getYear = TypedCallable(
+        ctx,
+        "Apply",
+        {std::move(getYearUdf), std::move(split)},
+        uint16Type);
+
+    TExprNode::TPtr lambda;
+    if (shape == EDateTime2YearShape::NonUnaryLambda) {
+        auto second =
+            ctx.ExprCtx.NewArgument(TPositionHandle(), "second_timestamp");
+        second->SetTypeAnn(timestampType);
+        lambda = ctx.ExprCtx.NewLambda(
+            TPositionHandle(),
+            ctx.ExprCtx.NewArguments(
+                TPositionHandle(), {argument, std::move(second)}),
+            std::move(getYear));
+    } else {
+        lambda = TypedUnaryLambda(ctx, argument, std::move(getYear));
+    }
+
+    return TypedCallable(
+        ctx,
+        "Map",
+        {std::move(cast), std::move(lambda)},
+        shape == EDateTime2YearShape::NonOptionalResult
+            ? uint16Type
+            : shape == EDateTime2YearShape::WrongResultType
+                ? optionalUint32Type
+                : optionalUint16Type);
+}
+
+TSemanticSnapshotExportResult ExportNullableDateYear(
+    TExportTestContext& ctx,
+    EDateTime2YearShape shape = EDateTime2YearShape::Exact)
+{
+    const auto& table = AddTable(ctx, "/Root/DateYear", {
+        {"d", "Date", false},
+        {"hidden", "Date", false},
+    });
+    auto read = MakeRead(ctx, table, "a", {"d"});
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            TExpression(
+                TypedNullableDateYear(ctx, shape),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
 TExprNode::TPtr MakeOlapFilterProcess(
@@ -3866,6 +4164,88 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_C(!result.IsSupported(), testCase.Value);
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason, testCase.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactNullableDateYearMap) {
+        TExportTestContext ctx;
+        const auto snapshot = ParseSupported(ExportNullableDateYear(ctx));
+        const auto& expression = FindNode(snapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["type"].GetStringSafe(), "Uint16");
+        UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["column"].GetStringSafe(), "a.d");
+
+        const auto& present = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(present["kind"].GetStringSafe(), "if");
+        UNIT_ASSERT_VALUES_EQUAL(present["type"].GetStringSafe(), "Uint16");
+        UNIT_ASSERT(present["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["condition"]["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["condition"]["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(present["condition"]["value"].GetBooleanSafe());
+
+        const auto& year = present["then"];
+        UNIT_ASSERT_VALUES_EQUAL(year["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            year["fingerprint"].GetStringSafe(),
+            "yql-datetime-year-v1");
+        UNIT_ASSERT_VALUES_EQUAL(year["type"].GetStringSafe(), "Uint16");
+        UNIT_ASSERT(!year["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(year["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            year["args"][0]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            year["args"][0]["depth"].GetUIntegerSafe(), 0);
+
+        for (const auto* missing : {
+            &present["else"],
+            &expression["missing"],
+        }) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                (*missing)["kind"].GetStringSafe(), "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                (*missing)["type"].GetStringSafe(), "Uint16");
+        }
+    }
+
+    Y_UNIT_TEST(NullableDateYearMapGateFailsClosed) {
+        const TVector<EDateTime2YearShape> malformedShapes = {
+            EDateTime2YearShape::NonOptionalResult,
+            EDateTime2YearShape::WrongResultType,
+            EDateTime2YearShape::NonMemberSource,
+            EDateTime2YearShape::InvisibleSource,
+            EDateTime2YearShape::NonOptionalSource,
+            EDateTime2YearShape::WrongSourceType,
+            EDateTime2YearShape::WrongCastCallable,
+            EDateTime2YearShape::WrongCastTarget,
+            EDateTime2YearShape::NonOptionalCastResult,
+            EDateTime2YearShape::NonUnaryLambda,
+            EDateTime2YearShape::WrongLambdaType,
+            EDateTime2YearShape::WrongLambdaBinder,
+            EDateTime2YearShape::WrongSplitName,
+            EDateTime2YearShape::WrongSplitUserType,
+            EDateTime2YearShape::WrongSplitReturnDescriptor,
+            EDateTime2YearShape::WrongSplitSettings,
+            EDateTime2YearShape::WrongSplitFlags,
+            EDateTime2YearShape::WrongGetYearName,
+            EDateTime2YearShape::WrongGetYearUserType,
+            EDateTime2YearShape::WrongGetYearReturnDescriptor,
+            EDateTime2YearShape::WrongGetYearSettings,
+            EDateTime2YearShape::WrongGetYearFlags,
+        };
+        for (const auto shape : malformedShapes) {
+            TExportTestContext ctx;
+            const auto result = ExportNullableDateYear(ctx, shape);
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
         }
     }
 

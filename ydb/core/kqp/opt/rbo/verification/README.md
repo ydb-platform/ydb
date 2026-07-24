@@ -26,6 +26,8 @@ uncorrelated scalar subplans with consumer-demanded local cardinality errors
 and eager inherited errors, exact one-equality-correlated scalar aggregate
 subplans, plus uncorrelated and one-equality-correlated relational `EXISTS`,
 exact uncorrelated single-column dynamic `IN`,
+the exact nullable
+`Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection shape,
 exact row-level `DistinctAll` aggregation, plus the benchmark-dashboard parts
 of M4. The reviewed exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
@@ -48,17 +50,18 @@ target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete formula-only measurements reran both suites on 2026-07-24
 after the correlated-COUNT repair, exact `DistinctAll` support, and restoration
 of the production PostgreSQL parser/runtime in the benchmark host, then added
-the exact uncorrelated dynamic-`IN` slice. They
-establish formula construction for TPCH q1, q3, q4, q5, q6, q10, q11, q12,
-q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19, q25, q29, q37,
+the exact uncorrelated dynamic-`IN` and nullable Date-year slices. They
+establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
+q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q19,
+q25, q29, q37,
 q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65, q68, q69, q71, q76,
-q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 47/121 workload
-queries (38.8%). TPCH has thirteen formulas, seven unsupported queries, and two
+q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99: 50/121 workload
+queries (41.3%). TPCH has sixteen formulas, four unsupported queries, and two
 optimizer failures; TPC-DS has thirty-four formulas, thirty-nine unsupported
-queries, and twenty-six optimizer failures. Across both suites that is 46
+queries, and twenty-six optimizer failures. Across both suites that is 43
 unsupported queries and 28 optimizer failures.
 Of the 93 queries that reach verifier classification rather than failing
-during optimizer preparation, 47 construct formulas (50.5%).
+during optimizer preparation, 50 construct formulas (53.8%).
 
 `DistinctAll` moves TPC-DS q6 through formula construction. The earlier
 correlated-COUNT correctness repair intentionally moves TPCH q17 and TPC-DS
@@ -68,14 +71,17 @@ empty-row reconstruction, which is not yet implemented safely. This is a
 reduction in the formula floor, but not a loss of an established proof; none of
 those six formulas belonged to the solver proof floor.
 
-A focused post-dashboard slice now gives generic `EndsWith`/`StringContains`
-and their pushed OLAP spellings one reviewed canonical opaque identity, and
-models same-type Decimal `MIN` exactly. TPCH q2 passes both exporters and
+At the preceding focused post-dashboard checkpoint, generic
+`EndsWith`/`StringContains` and their pushed OLAP spellings received one
+reviewed canonical opaque identity, and same-type Decimal `MIN` was modeled
+exactly. TPCH q2 passes both exporters and
 Decimal `MIN`, then fails closed at the verifier's 32,640-pair Merge
 construction, above the 16,384-pair cap. TPCH q9 clears the String-predicate
-bridge but still reaches unsupported scalar `Map` in both snapshots. A small
+bridge but at that checkpoint still reached unsupported scalar `Map` in both
+snapshots. A small
 real-host column-store fixture containing both String predicates is
-`VERIFIED_BOUNDED`. These focused results leave formula coverage at 46/121.
+`VERIFIED_BOUNDED`. Those focused results left formula coverage at 46/121,
+before the subsequent dynamic-`IN` and Date-year slices.
 
 The following exact dynamic-`IN` slice raises that floor by one. Its descriptor
 records one typed lookup column and one typed subplan-result column. Both must
@@ -100,12 +106,44 @@ fixture captures uncorrelated `IN` in the initial plan and an ordinary
 That integration target links production PostgreSQL support because the dummy
 provider failed preparation for this valid query shape.
 
-The final policy-checked TPCH run spent 2,800/21,080 ms in
+The exact nullable Date-year slice admits only an
+`Optional<Uint16>` `Map` over a complete `SafeCast` from one direct visible
+`Optional<Date>` member to `Optional<Timestamp>`. Its unary non-null
+`Timestamp` lambda must be exactly the reviewed
+`DateTime2.GetYear(DateTime2.Split(argument))` chain, including UDF names,
+callable and cached descriptors, argument flags, settings, annotations, and
+lambda identity. Every nearby shape fails closed.
+
+The exporter preserves source NULL with `if_present`, represents the reviewed
+non-null year operation as the stable typed opaque function
+`yql-datetime-year-v1` over the bound Date value, and lifts that value back to
+`Optional<Uint16>` with an explicit typed-NULL branch. This is deliberately a
+shared deterministic-total function, not a calendar reimplementation: it can
+prove that the same reviewed operation and argument were preserved without
+inventing relationships to other calendar expressions.
+
+This moves TPCH q7, q8, and q9 through formula construction. Their complete
+dashboard rows spent 237/3,318, 278/2,954, and 187/1,628 ms respectively in
+preparation/verifier work. Separate focused 60-second solver experiments all
+returned `UNKNOWN`: q7 after 230/64,641 ms at branch 4/4
+`right_outcome_0_unmatched`, q8 after 280/65,107 ms at branch 4/28
+`left_outcome_1_unmatched`, and q9 after 181/62,461 ms at branch 4/4
+`right_outcome_0_unmatched`. They extend the formula floor, not the unchanged
+nineteen-query proof floor. Focused C++ mutations exercise the material
+Date-year-specific type, UDF, setting, flag, and binder gates, while shared
+exporter tests retain the generic UDF-envelope and scalar-safety checks. Python
+tests check exact NULL propagation and prove that the opaque fingerprint and
+argument are semantic. A real-host nullable-Date projection captures both
+optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
+183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
+32/32 real-host integration tests.
+
+The final policy-checked TPCH run spent 2,897/29,563 ms in
 preparation/verifier work and
 produced report SHA-256
-`65a38cf551f99ced8df28708b0bd6f58bdd4d280cd44cf1b6581826ccd813907`;
-TPC-DS spent 63,783/187,195 ms and produced
-`bc89dca6db0f32f3b0793f270b5d69e6feff03ca9e2094da6ada314f9d063840`.
+`6a8cbbeb316d128880ae97295efcc763cdc5ce14d648adec3411e6b0bb8fa214`;
+TPC-DS spent 64,077/192,905 ms and produced
+`279318f3d46f585bba33ede252bf723a5ece36c989215015c0046eb6677e8f29`.
 TPC-DS q6 itself emitted its formula after 347/11,882 ms. The preceding
 milestone reports and their timings/hashes remain historical records in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
@@ -119,11 +157,11 @@ constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19,
 and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, and q96: nineteen
 obligations (15.7% of the workload). The expanded proof-floor gate is green
-and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after 1,140/59,310 ms
+and policy-valid: TPCH passes 10/10 `VERIFIED_BOUNDED` after 1,226/59,673 ms
 and produced report SHA-256
-`bf9b6e149aba25afed999781cb2138002829b9111f7ab35d54229cee02a1969c`;
-TPC-DS passes 9/9 after 1,388/35,706 ms and produced
-`f943c791f20bbb2acdc4d3875e4cab049f618b761aa28da4b8627a3f87f90894`.
+`20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`;
+TPC-DS passes 9/9 after 1,448/36,162 ms and produced
+`62d7539a519ae370278b313d50e83b30a7d50d279cd12f6347b3b1e011163a95`.
 The preceding retained eighteen-query canonical-first exact-branch TPCH run
 spent 1,145/56,389 ms and produced report SHA-256
 `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
@@ -171,7 +209,8 @@ and reach the verifier. All four now satisfy the stronger formula-construction
 floor. Later formula or proof results satisfy every weaker floor automatically.
 The complete nineteen-obligation proof floor is confirmed after the dynamic
 `IN` slice: 19/121 workload queries (15.7%) are `VERIFIED_BOUNDED` at two rows
-and two tasks. Formula coverage is 47/121 (38.8%).
+and two tasks. After the later nullable Date-year bridge, formula coverage is
+50/121 (41.3%); the proof floor remains unchanged.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -540,6 +579,45 @@ constants and return `UNKNOWN` rather than reproducing the old symbolic
 candidates. This refutes q5's saved witness; it does not turn q77's historical
 candidate into either a proof or a confirmed false positive.
 
+Another exact bridge covers the optimizer's nullable year-extraction
+normalization:
+
+```text
+Map(
+  SafeCast(direct Optional<Date> member, Optional<Timestamp>),
+  (timestamp: Timestamp) ->
+    DateTime2.GetYear(DateTime2.Split(timestamp)))
+```
+
+The outer result must be exactly `Optional<Uint16>`. The source must be one
+direct visible member, the Date-to-Timestamp cast must be classified complete,
+and the lambda must be unary with the exact non-null Timestamp argument reused
+by `Split`. `Split` and `GetYear` must match their reviewed normalized UDF
+names, callable types, cached result descriptors, user types, AutoMap flags,
+settings, Void metadata, and annotations. Different result/source types,
+computed or invisible members, other casts, non-unary or misbound lambdas,
+different UDFs, and malformed metadata fail closed.
+
+The normalized snapshot expression is exact about Optional behavior:
+`if_present(column(Date), if(true, year(bound(0)), NULL<Uint16>),
+NULL<Uint16>)`, with an `Optional<Uint16>` result. `year` is the non-null typed
+opaque function with fingerprint `yql-datetime-year-v1`; its argument is the
+bound original Date payload because the intervening cast is complete. The
+inner constant-true `if` performs only the schema lift required by the current
+strict scalar IR. A common fingerprint and ordered argument make the reviewed
+operation identical across snapshots, while any mutation remains observable.
+
+The C++ exporter suite includes the accepted shape and focused fail-closed
+mutations for the material Date-year-specific gates; shared tests retain the
+generic UDF-envelope and scalar-safety contract. Python checks exact NULL
+lifting and obtains a bounded proof for identical expressions plus
+counterexamples when either the fingerprint or argument changes. A
+nullable-Date real-host projection verifies the initial and final optimizer
+snapshots at two rows and two tasks. In the workload this bridge moves TPCH q7,
+q8, and q9 from the former scalar-`Map` boundary to complete formula
+construction; their focused solver runs remain `UNKNOWN`, so no query is added
+to the proof floor.
+
 The Date/Interval normalization additionally covers Optional-Date arithmetic
 of the form `SafeCast(text, Optional<Date>) +/- Apply(udf, days)`. The text must
 be a direct non-null `String` or `Utf8` literal. The cast result and descriptor
@@ -733,8 +811,9 @@ Focused q1 emits a formula after 111/998 ms; its non-gating 60-second solver run
 is `UNKNOWN` after 159/63,937 ms, not a proof or counterexample. Focused q65
 emits a formula after 687/30,318 ms. At that milestone the combined formula
 slice was 39/121 (32.2%) and the proof floor had thirteen queries. q7 and q8
-remain visible at the deeper generic `Map` exporter blocker in the current
-dashboard.
+were visible at the deeper generic `Map` exporter blocker at that milestone;
+the later exact nullable Date-year bridge now moves them through formula
+construction.
 
 The subplan audit of the then-catalog-blocked slice found 32 source subqueries
 across seven TPCH and thirteen TPC-DS queries: fifteen scalar, seventeen `EXISTS`,
@@ -875,8 +954,10 @@ and malformed lookup/output mappings fail closed.
 Focused dynamic-`IN` checks pass 74/74 in the Python subplan matrix, 13/13 in
 the broader C++ subplan matrix, and 1/1 through the real host. The integration
 case proves initial `IN` equivalent to final `left_semi` at two rows and two
-tasks. Multiple dependencies, broader correlations, range reads, and other
-OLAP pushdowns remain separate extensions.
+tasks. The exact nullable Date-year projection bridge is also implemented and
+tested independently as described above. Multiple dependencies, broader
+correlations, nullable/coercing dynamic `IN`, range reads, and other OLAP
+pushdowns remain separate extensions.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy now adds
 TPCH q18 as its nineteenth obligation; the complete 10/10 TPCH and 9/9 TPC-DS
@@ -1404,7 +1485,10 @@ solver budget. Nullable `String IN ('first', 'second')` and
 through the real host and prove the normal obligation. A separate uncorrelated
 dynamic-`IN` fixture captures a typed non-null integral lookup/result
 descriptor initially and an ordinary `left_semi` join finally, then proves the
-two-row/two-task obligation. A separate
+two-row/two-task obligation. A nullable-Date projection fixture checks the
+exact `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` normalization,
+including the `yql-datetime-year-v1` opaque node and explicit Optional lift in
+both snapshots, then proves the two-row/two-task obligation. A separate
 `COUNT(*) > 1` query captures ordinary `Uint64 > Int32` comparison at both
 real-host boundaries and returns `VERIFIED_BOUNDED` at two rows and two tasks.
 A native Decimal column filter likewise checks exact tagged literals and

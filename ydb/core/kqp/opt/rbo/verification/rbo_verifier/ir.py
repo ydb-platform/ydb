@@ -2368,6 +2368,16 @@ def _node_expression_columns(node: PlanNode) -> frozenset[str]:
     return result
 
 
+def _is_exact_nested_subplan(owner: Subplan, nested: Subplan) -> bool:
+    """The deliberately narrow closed nesting admitted by the v1 model."""
+
+    return (
+        isinstance(owner, InSubplan)
+        and isinstance(nested, ScalarSubplan)
+        and nested.dependency is None
+    )
+
+
 def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     """Validate references and types, returning every node's output schema."""
 
@@ -2930,6 +2940,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         subplan.binding: descendants(subplan.root)
         for subplan in snapshot.plan.subplans
     }
+    subplans_by_binding = {
+        subplan.binding: subplan
+        for subplan in snapshot.plan.subplans
+    }
     subplan_roots = {subplan.root for subplan in snapshot.plan.subplans}
     all_bindings = frozenset(
         subplan.binding for subplan in snapshot.plan.subplans
@@ -3329,11 +3343,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 for node_id in subplan_nodes[subplan.binding]
             )
         ) & all_bindings
-        if nested_bindings:
-            _fail(
-                f"{path}.root",
-                "subplan expressions may not reference subplan bindings",
-            )
+        for nested_binding in sorted(nested_bindings):
+            nested = subplans_by_binding[nested_binding]
+            if not _is_exact_nested_subplan(subplan, nested):
+                _fail(
+                    f"{path}.root",
+                    "only an uncorrelated scalar binding may be consumed "
+                    "inside an IN subplan",
+                )
         if (
             isinstance(subplan, ExistsSubplan)
             and subplan.predicate is not None
@@ -3343,12 +3360,28 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 f"{path}.predicate",
                 "EXISTS predicate may not reference subplan bindings",
             )
-        non_main_consumers = set(subplan.consumers) - main_nodes
-        if non_main_consumers:
-            _fail(
-                f"{path}.consumers",
-                "subplan consumers must be reachable from the main root",
+        for consumer_id in subplan.consumers:
+            owner_bindings = tuple(
+                owner_binding
+                for owner_binding, owner_nodes in subplan_nodes.items()
+                if consumer_id in owner_nodes
             )
+            context_count = (
+                int(consumer_id in main_nodes) + len(owner_bindings)
+            )
+            if context_count != 1:
+                _fail(
+                    f"{path}.consumers",
+                    "a subplan consumer must belong to exactly one plan root",
+                )
+            if owner_bindings:
+                owner = subplans_by_binding[owner_bindings[0]]
+                if not _is_exact_nested_subplan(owner, subplan):
+                    _fail(
+                        f"{path}.consumers",
+                        "only an uncorrelated scalar binding may be consumed "
+                        "inside an IN subplan",
+                    )
     for node_id, owners in outer_bind_owners.items():
         if len(owners) != 1:
             _fail(

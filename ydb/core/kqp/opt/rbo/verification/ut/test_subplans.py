@@ -473,6 +473,63 @@ def _in_snapshot(
     }
 
 
+def _nested_scalar_in_snapshot():
+    raw = _in_snapshot()
+    raw["schema"]["tables"][1]["columns"].append(
+        {"name": "group", "type": "Int32", "nullable": False}
+    )
+    raw["schema"]["tables"].append(
+        {
+            "name": "Scalar",
+            "columns": [
+                {"name": "value", "type": "Int32", "nullable": False}
+            ],
+            "unique_keys": [],
+        }
+    )
+    raw["plan"]["nodes"][1]["columns"].append(
+        {"source": "group", "output": "inner.group"}
+    )
+    raw["plan"]["nodes"].extend(
+        (
+            {
+                "id": "scalar_scan",
+                "op": "scan",
+                "table": "Scalar",
+                "columns": [
+                    {"source": "value", "output": "scalar.value"}
+                ],
+                "predicate": None,
+                "pushed_limit": None,
+            },
+            {
+                "id": "inner_filter",
+                "op": "filter",
+                "input": "inner_scan",
+                "predicate": _equality("inner.group", BINDING),
+            },
+        )
+    )
+    raw["plan"]["subplans"][0]["root"] = "inner_filter"
+    raw["plan"]["subplans"].append(
+        {
+            "binding": BINDING,
+            "kind": "scalar",
+            "root": "scalar_scan",
+            "output": {
+                "column": "scalar.value",
+                "type": "Int32",
+                "nullable": False,
+            },
+            "type": "Int32",
+            "nullable": True,
+            "dependencies": [],
+            "consumers": ["inner_filter"],
+        }
+    )
+    return raw
+
+
 def _lower_in_snapshot(raw, join_kind):
     result = copy.deepcopy(raw)
     descriptor = result["plan"]["subplans"][0]
@@ -966,6 +1023,38 @@ def _in_constants(
                 constants[cell.is_null.atom] = value is None
             if cell.value.operation == "symbol":
                 constants[cell.value.atom] = 0 if value is None else value
+    return constants
+
+
+def _nested_scalar_in_constants(
+    database,
+    outer,
+    inner,
+    groups,
+    scalar_values,
+    *,
+    outer_present=None,
+    inner_present=None,
+    scalar_present=None,
+):
+    constants = _in_constants(
+        database,
+        outer,
+        inner,
+        outer_present=outer_present,
+        inner_present=inner_present,
+    )
+    if scalar_present is None:
+        scalar_present = (True,) * len(scalar_values)
+    for row, group in zip(database.witness["Inner"], groups):
+        constants[row.cells["group"].value.atom] = group
+    for row, value, present in zip(
+        database.witness["Scalar"],
+        scalar_values,
+        scalar_present,
+    ):
+        constants[row.present.atom] = present
+        constants[row.cells["value"].value.atom] = value
     return constants
 
 
@@ -2652,6 +2741,80 @@ class InSubplanEvaluationTest(unittest.TestCase):
                     self.assertEqual(set(evaluator.subplan_families), {IN_BINDING})
                     self.assertEqual(observed.count("inner_scan"), 1)
 
+    def test_uncorrelated_scalar_can_filter_an_in_subplan(self):
+        evaluator, database, family = self._evaluate(
+            _nested_scalar_in_snapshot(),
+            row_bound=3,
+        )
+        constants = _nested_scalar_in_constants(
+            database,
+            outer=(1, 2, 3),
+            inner=(1, 2, 3),
+            groups=(7, 8, 7),
+            scalar_values=(7, 9, 9),
+            scalar_present=(True, False, False),
+        )
+        outcome = family.outcomes[0]
+
+        self.assertFalse(_ground(outcome.error, constants))
+        self.assertEqual(
+            self._present_values(outcome.relation, constants),
+            [1, 3],
+        )
+        self.assertEqual(
+            set(evaluator.subplan_families),
+            {BINDING, IN_BINDING},
+        )
+
+        no_scalar_row = _nested_scalar_in_constants(
+            database,
+            outer=(1, 2, 3),
+            inner=(1, 2, 3),
+            groups=(7, 8, 7),
+            scalar_values=(7, 9, 9),
+            scalar_present=(False, False, False),
+        )
+        self.assertFalse(_ground(outcome.error, no_scalar_row))
+        self.assertEqual(
+            self._present_values(outcome.relation, no_scalar_row),
+            [],
+        )
+
+    def test_nested_scalar_cardinality_error_is_gated_by_consumer_rows(self):
+        _evaluator, database, family = self._evaluate(
+            _nested_scalar_in_snapshot(),
+            row_bound=2,
+        )
+        outcome = family.outcomes[0]
+        common = {
+            "outer": (1, 2),
+            "inner": (1, 2),
+            "groups": (7, 7),
+            "scalar_values": (7, 7),
+            "scalar_present": (True, True),
+        }
+
+        demanded = _nested_scalar_in_constants(
+            database,
+            **common,
+            inner_present=(True, False),
+        )
+        not_demanded = _nested_scalar_in_constants(
+            database,
+            **common,
+            inner_present=(False, False),
+        )
+        empty_main = _nested_scalar_in_constants(
+            database,
+            **common,
+            outer_present=(False, False),
+            inner_present=(True, False),
+        )
+
+        self.assertTrue(_ground(outcome.error, demanded))
+        self.assertFalse(_ground(outcome.error, not_demanded))
+        self.assertTrue(_ground(outcome.error, empty_main))
+
     def test_nullable_fixed_width_membership_is_positive_filter_truth(self):
         cases = (
             (
@@ -3229,7 +3392,47 @@ class ScalarSubplanValidationTest(unittest.TestCase):
         raw["plan"]["subplans"][0]["consumers"].append("sub_value")
         with self.assertRaisesRegex(
             SnapshotError,
-            "subplan expressions may not reference",
+            "only an uncorrelated scalar binding",
+        ):
+            parse_snapshot(raw)
+
+    def test_only_uncorrelated_scalar_may_be_nested_inside_in(self):
+        parse_snapshot(_nested_scalar_in_snapshot())
+        reordered = _nested_scalar_in_snapshot()
+        reordered["plan"]["subplans"].reverse()
+        parse_snapshot(reordered)
+
+        raw = _nested_scalar_in_snapshot()
+        nested = raw["plan"]["subplans"][1]
+        nested.clear()
+        nested.update(
+            {
+                "binding": BINDING,
+                "kind": "in",
+                "root": "scalar_scan",
+                "lookup": {
+                    "column": "inner.group",
+                    "type": "Int32",
+                    "nullable": False,
+                },
+                "output": {
+                    "column": "scalar.value",
+                    "type": "Int32",
+                    "nullable": False,
+                },
+                "type": "Bool",
+                "nullable": False,
+                "dependencies": [],
+                "consumers": ["inner_filter"],
+            }
+        )
+        raw["plan"]["nodes"][-1]["predicate"] = {
+            "kind": "column",
+            "column": BINDING,
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "only an uncorrelated scalar binding",
         ):
             parse_snapshot(raw)
 

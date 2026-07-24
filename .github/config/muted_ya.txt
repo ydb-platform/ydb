@@ -35,6 +35,7 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.test_topic_data
+ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache

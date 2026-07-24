@@ -1260,6 +1260,49 @@ def filtered_snapshot(predicate):
     )
 
 
+def integral_division_snapshot(reverse_operands=False):
+    left = {"kind": "column", "column": "a.x"}
+    right = {"kind": "column", "column": "a.k"}
+    if reverse_operands:
+        left, right = right, left
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [copy.deepcopy(schema()["tables"][0])]
+            },
+            "plan": {
+                "nodes": [
+                    copy.deepcopy(SCAN_A),
+                    {
+                        "id": "project",
+                        "op": "project",
+                        "input": "a",
+                        "ordered": False,
+                        "columns": [
+                            {
+                                "output": "quotient",
+                                "expression": {
+                                    "kind": "div",
+                                    "left": left,
+                                    "right": right,
+                                    "type": "Int64",
+                                    "nullable": True,
+                                },
+                            }
+                        ],
+                    },
+                ],
+                "root": "project",
+                "output": ["quotient"],
+                "subplans": [],
+            },
+            "stage_graph": None,
+        }
+    )
+
+
 def string_predicate_snapshot(fingerprint, reverse_arguments=False):
     arguments = [
         {"kind": "column", "column": "t.s"},
@@ -4500,6 +4543,34 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_integral_division_is_an_exact_bounded_observable(self):
+        original = integral_division_snapshot()
+        equivalent = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                integral_division_snapshot(),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(equivalent.status, "VERIFIED_BOUNDED")
+
+        reversed_operands = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                integral_division_snapshot(reverse_operands=True),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(reversed_operands.status, "COUNTEREXAMPLE")
+
     def test_split_distinct_all_is_bounded_equivalent(self):
         result = solve(
             build_problem(

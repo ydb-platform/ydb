@@ -1494,6 +1494,11 @@ struct TDecimalArithmeticSignature {
     bool ResultNullable;
 };
 
+struct TIntegralDivisionSignature {
+    TString ResultType;
+    bool ResultNullable;
+};
+
 struct TIfPresentSignature {
     const TExprNode* Optional;
     const TExprNode* Argument;
@@ -1721,6 +1726,33 @@ TDecimalArithmeticSignature CheckDecimalArithmeticCallable(const TExprNode& node
     return {resultType, resultNullable};
 }
 
+TIntegralDivisionSignature CheckIntegralDivisionCallable(
+    const TExprNode& node)
+{
+    CheckScalarArity(node, 2, 2);
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    if (!IsIntegerType(resultType)) {
+        Unsupported(
+            "Integral division result must be a fixed-width integer");
+    }
+    for (const auto& child : node.Children()) {
+        if (ScalarTypeName(*child) != resultType) {
+            Unsupported(
+                "Integral division operands and result must have exactly "
+                "the same fixed-width integer type");
+        }
+    }
+    // MiniKQL integral Div returns NULL for a zero divisor and for the signed
+    // MIN / -1 overflow, even when both operands are non-optional.
+    if (!resultNullable) {
+        Unsupported("Integral division result must be nullable");
+    }
+
+    return {resultType, resultNullable};
+}
+
 bool CheckCanonicalStringPredicateCallable(const TExprNode& node) {
     CheckScalarArity(node, 2, 2);
     if (!node.Child(0)->IsCallable("Member") ||
@@ -1801,8 +1833,14 @@ void CheckOpaqueCallable(
     // This is deliberately a positive list.  TExprNode exposes side-effect and
     // CSE-safety flags, but YQL has no generic totality contract for a callable.
     // Keep every accepted family small enough to audit and fail closed for UDFs,
-    // generic division, strict casts, Unwrap, and every other not-yet-reviewed
-    // form. DecimalDiv is an explicitly audited total Decimal operation.
+    // floating-point division, strict casts, Unwrap, and every other
+    // not-yet-reviewed form. DecimalDiv and exact same-type integral division
+    // are explicitly audited total operations.
+    if (name == "/" && IsIntegerType(ScalarTypeName(node))) {
+        CheckIntegralDivisionCallable(node);
+        return;
+    }
+
     if (name == "+" || name == "-" || name == "*") {
         if ((name == "+" || name == "-") &&
             ParseCanonicalDecimalType(ScalarTypeName(node)))
@@ -4809,6 +4847,32 @@ NJson::TJsonValue ExportExprNode(
             result["nullable"] = resultNullable;
             return result;
         }
+    }
+
+    if (node.IsCallable("/") &&
+        IsIntegerType(ScalarTypeName(node)))
+    {
+        const auto signature = CheckIntegralDivisionCallable(node);
+
+        // Retain the closed-world node checks used by opaque expressions.
+        // Integral division is total in MiniKQL because its invalid arithmetic
+        // cases produce Optional NULL rather than an observable failure.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+
+        auto result = BinaryExpr(
+            "div",
+            ExportExprNode(
+                *node.Child(0), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1),
+            ExportExprNode(
+                *node.Child(1), rowArgument, visibleColumns, boundArguments,
+                budget, normalizedDepth + 1, sourceDepth + 1));
+        result["type"] = signature.ResultType;
+        result["nullable"] = signature.ResultNullable;
+        return result;
     }
 
     if (node.IsCallable({"DecimalMul", "DecimalDiv"})) {

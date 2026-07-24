@@ -155,7 +155,7 @@ class Encoder:
             assert expression.result_type is not None
             left = self._evaluate(expression.args[0], row, bindings)
             right = self._evaluate(expression.args[1], row, bindings)
-            is_null = smt.or_(left.is_null, right.is_null)
+            operand_is_null = smt.or_(left.is_null, right.is_null)
             if decimal.is_type(expression.result_type):
                 if expression.kind == "add":
                     value = decimal.add(left.value, right.value, expression.result_type)
@@ -187,9 +187,21 @@ class Encoder:
                 )
                 return Value(
                     expression.result_type,
-                    is_null,
+                    operand_is_null,
                     value,
                     finite_abs_bound,
+                )
+            if expression.kind == "div":
+                value, arithmetic_is_null = _divide_integer(
+                    smt.ite(left.is_null, smt.ZERO, left.value),
+                    smt.ite(right.is_null, smt.ZERO, right.value),
+                    expression.result_type,
+                )
+                is_null = smt.or_(operand_is_null, arithmetic_is_null)
+                return Value(
+                    expression.result_type,
+                    is_null,
+                    smt.ite(is_null, smt.ZERO, value),
                 )
             if expression.kind == "add":
                 raw = smt.add(left.value, right.value)
@@ -198,10 +210,10 @@ class Encoder:
             elif expression.kind == "mul":
                 raw = smt.mul(left.value, right.value)
             else:
-                raise AssertionError("integer division is not part of the semantic snapshot IR")
+                raise AssertionError(f"unknown integer arithmetic kind {expression.kind!r}")
             return Value(
                 expression.result_type,
-                is_null,
+                operand_is_null,
                 _wrap_integer(raw, expression.result_type),
             )
 
@@ -573,3 +585,68 @@ def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:
         smt.mod(smt.add(value, smt.int_value(sign)), modulus),
         smt.int_value(sign),
     )
+
+
+def _divide_integer(
+    left: smt.Term,
+    right: smt.Term,
+    scalar_type: str,
+) -> tuple[smt.Term, smt.Term]:
+    """MiniKQL fixed-width integral division with an explicit NULL guard.
+
+    SMT integer ``div`` rounds negative quotients toward minus infinity, while
+    C++ and MiniKQL truncate toward zero. Divide nonnegative magnitudes using
+    the narrow trusted primitive, then restore the sign. Replacing an invalid
+    zero denominator by one prevents SMT's totalized zero-division value from
+    leaking into any observable branch. Callers canonicalize NULL payloads to
+    zero; snapshot domain constraints bound every remaining present operand.
+    """
+
+    bounds = integer_bounds(scalar_type)
+    assert bounds is not None
+    signed = scalar_type.startswith("Int")
+    right_is_zero = smt.eq(right, smt.ZERO)
+    overflow = (
+        smt.and_(
+            smt.eq(left, smt.int_value(bounds[0])),
+            smt.eq(right, smt.int_value(-1)),
+        )
+        if signed
+        else smt.FALSE
+    )
+
+    if signed:
+        left_negative = smt.lt(left, smt.ZERO)
+        right_negative = smt.lt(right, smt.ZERO)
+        left_magnitude = smt.ite(
+            left_negative,
+            smt.sub(smt.ZERO, left),
+            left,
+        )
+        right_magnitude = smt.ite(
+            right_negative,
+            smt.sub(smt.ZERO, right),
+            right,
+        )
+    else:
+        left_negative = smt.FALSE
+        right_negative = smt.FALSE
+        left_magnitude = left
+        right_magnitude = right
+
+    safe_denominator = smt.ite(
+        right_is_zero,
+        smt.ONE,
+        right_magnitude,
+    )
+    magnitude = smt.div_nonnegative_by_positive(
+        left_magnitude,
+        safe_denominator,
+    )
+    negative = smt.not_(smt.eq(left_negative, right_negative))
+    quotient = smt.ite(
+        negative,
+        smt.sub(smt.ZERO, magnitude),
+        magnitude,
+    )
+    return quotient, smt.or_(right_is_zero, overflow)

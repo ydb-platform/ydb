@@ -91,6 +91,8 @@ def _ground(term):
         return values[0] - values[1]
     if term.operation == "*":
         return values[0] * values[1]
+    if term.operation == "div":
+        return values[0] // values[1]
     if term.operation == "mod":
         return values[0] % values[1]
     if term.operation == "ite":
@@ -140,6 +142,168 @@ class IntegerArithmeticTest(unittest.TestCase):
         )
         self.assertEqual(actual.is_null, smt.TRUE)
         self.assertEqual(_ground(actual.value), 21)
+
+
+def _integral_division_reference(scalar_type, left, right):
+    bounds = integer_bounds(scalar_type)
+    assert bounds is not None
+    if right == 0:
+        return None
+    if scalar_type.startswith("Int") and left == bounds[0] and right == -1:
+        return None
+    magnitude = abs(left) // abs(right)
+    return -magnitude if (left < 0) != (right < 0) else magnitude
+
+
+class IntegralDivisionTest(unittest.TestCase):
+    @staticmethod
+    def _evaluate(
+        scalar_type,
+        left,
+        right,
+        *,
+        left_is_null=False,
+        right_is_null=False,
+    ):
+        return Encoder(smt.Script()).evaluate(
+            _arithmetic(
+                "div",
+                scalar_type,
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+                nullable=True,
+            ),
+            {
+                "left": Value(
+                    scalar_type,
+                    smt.bool_value(left_is_null),
+                    smt.int_value(left),
+                ),
+                "right": Value(
+                    scalar_type,
+                    smt.bool_value(right_is_null),
+                    smt.int_value(right),
+                ),
+            },
+        )
+
+    def test_int8_and_uint8_match_independent_exhaustive_reference(self):
+        for scalar_type in ("Int8", "Uint8"):
+            lower, upper = integer_bounds(scalar_type)
+            for left in range(lower, upper):
+                for right in range(lower, upper):
+                    expected = _integral_division_reference(
+                        scalar_type,
+                        left,
+                        right,
+                    )
+                    actual = self._evaluate(scalar_type, left, right)
+                    if expected is None:
+                        self.assertIs(actual.is_null, smt.TRUE)
+                        self.assertEqual(_ground(actual.value), 0)
+                    else:
+                        self.assertIs(actual.is_null, smt.FALSE)
+                        self.assertEqual(_ground(actual.value), expected)
+
+    def test_every_width_covers_zero_overflow_and_truncation_toward_zero(self):
+        for scalar_type in sorted(INTEGER_TYPES):
+            lower, upper = integer_bounds(scalar_type)
+            cases = [
+                (upper - 1, 3),
+                (upper - 1, 0),
+            ]
+            if scalar_type.startswith("Int"):
+                cases.extend(
+                    [
+                        (-7, 3),
+                        (7, -3),
+                        (-7, -3),
+                        (lower, -1),
+                        (lower, 1),
+                    ]
+                )
+            for left, right in cases:
+                with self.subTest(
+                    scalar_type=scalar_type,
+                    left=left,
+                    right=right,
+                ):
+                    expected = _integral_division_reference(
+                        scalar_type,
+                        left,
+                        right,
+                    )
+                    actual = self._evaluate(scalar_type, left, right)
+                    self.assertEqual(_ground(actual.is_null), expected is None)
+                    self.assertEqual(
+                        _ground(actual.value),
+                        0 if expected is None else expected,
+                    )
+
+    def test_operand_nulls_are_absorbing_and_canonicalize_the_payload(self):
+        for left_is_null in (False, True):
+            for right_is_null in (False, True):
+                actual = self._evaluate(
+                    "Int64",
+                    -7,
+                    3,
+                    left_is_null=left_is_null,
+                    right_is_null=right_is_null,
+                )
+                with self.subTest(
+                    left_is_null=left_is_null,
+                    right_is_null=right_is_null,
+                ):
+                    expected_null = left_is_null or right_is_null
+                    self.assertEqual(_ground(actual.is_null), expected_null)
+                    self.assertEqual(
+                        _ground(actual.value),
+                        0 if expected_null else -2,
+                    )
+
+    def test_null_unsigned_payloads_do_not_enter_nonnegative_division(self):
+        trusted_division = smt.div_nonnegative_by_positive
+        with mock.patch.object(
+            smt,
+            "div_nonnegative_by_positive",
+            wraps=trusted_division,
+        ) as division:
+            actual = self._evaluate(
+                "Uint64",
+                -7,
+                -3,
+                left_is_null=True,
+                right_is_null=True,
+            )
+
+        dividend, divisor = division.call_args.args
+        self.assertGreaterEqual(_ground(dividend), 0)
+        self.assertGreater(_ground(divisor), 0)
+        self.assertIs(actual.is_null, smt.TRUE)
+        self.assertEqual(_ground(actual.value), 0)
+
+    def test_symbolic_divisor_is_replaced_before_smt_division(self):
+        script = smt.Script()
+        left = script.fresh_constant("left", smt.INT)
+        right = script.fresh_constant("right", smt.INT)
+        actual = Encoder(script).evaluate(
+            _arithmetic(
+                "div",
+                "Int64",
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+                nullable=True,
+            ),
+            {
+                "left": Value("Int64", smt.FALSE, left),
+                "right": Value("Int64", smt.FALSE, right),
+            },
+        )
+        rendered = actual.value.render()
+        self.assertIn("(div ", rendered)
+        self.assertIn(f"(ite (= {right.render()} 0) 1", rendered)
+        self.assertIn("(- 9223372036854775808)", actual.is_null.render())
+        self.assertIn("(- 1)", actual.is_null.render())
 
 
 class IntegralSafeCastTest(unittest.TestCase):
@@ -460,15 +624,22 @@ class DecimalDivisionDispatchTest(unittest.TestCase):
                         smt.bool_value(left_is_null or right_is_null),
                     )
 
-    def test_integer_division_cannot_enter_fixed_width_arithmetic(self):
+    def test_integral_division_does_not_dispatch_to_decimal(self):
         expression = _arithmetic(
             "div",
             "Int64",
             _literal("Int64", 10),
             _literal("Int64", 2),
+            nullable=True,
         )
-        with self.assertRaisesRegex(AssertionError, "integer division is not part"):
-            Encoder(smt.Script()).evaluate(expression, {})
+        with mock.patch.object(
+            scalar_module.decimal,
+            "divide",
+        ) as decimal_divide:
+            actual = Encoder(smt.Script()).evaluate(expression, {})
+        decimal_divide.assert_not_called()
+        self.assertIs(actual.is_null, smt.FALSE)
+        self.assertEqual(_ground(actual.value), 5)
 
 
 class DecimalCastDispatchTest(unittest.TestCase):

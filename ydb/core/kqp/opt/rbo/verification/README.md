@@ -1707,13 +1707,18 @@ nondeterministic outcomes, and the exact root mismatch are requested together
 from one SAT model. All enabled outcomes are printed; absent rows omit their
 meaningless payloads. Every enabled outcome and unmatched root record includes
 its bounded plan choices as concrete `{value,bound}` pairs. Those values are
-diagnostic model data, not stable verifier-witness fields. Trace extraction
-fails closed above 100,000 unique terms. Enabling the read-only observers
-without aliases is regression-tested to leave the normal SMT-LIB obligation
-byte-for-byte unchanged. Every trace carries SHA-256 digests of the complete
-normalized before/after snapshots; supplying `--query` also binds the exact
-query bytes and is mandatory for real replay. The semantic digest is defined by
-the complete renderer in the producing revision. If renderer coverage changes,
+diagnostic model data, not stable verifier-witness fields or observable query
+results. Replay validates every integer bound/value pair and requires each
+mismatch record to repeat its referenced outcome's choices exactly, but does
+not use choices to classify observable nondeterminism. A direct
+inspector-through-Z3-to-replay regression covers this protocol boundary with a
+nonempty unordered-Limit choice. Trace extraction fails closed above 100,000
+unique terms. Enabling the read-only observers without aliases is
+regression-tested to leave the normal SMT-LIB obligation byte-for-byte
+unchanged. Every trace carries SHA-256 digests of the complete normalized
+before/after snapshots; supplying `--query` also binds the exact query bytes
+and is mandatory for real replay. The semantic digest is defined by the
+complete renderer in the producing revision. If renderer coverage changes,
 older artifacts whose digest no longer matches fail closed during replay; the
 trace protocol version alone does not claim cross-revision digest stability.
 When tracing a saved verifier candidate, `--verifier-verdict verdict.json`

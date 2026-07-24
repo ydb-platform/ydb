@@ -3,6 +3,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -12,6 +13,11 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
+
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     UnionAll,
@@ -19,6 +25,9 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     parse_snapshot,
 )
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import snapshot_digest
+from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
+    prepare as prepare_inspection,
+)
 from ydb.core.kqp.opt.rbo.verification.replay import cli as replay_cli
 from ydb.core.kqp.opt.rbo.verification.replay.case import (
     load_json,
@@ -37,6 +46,13 @@ from ydb.core.kqp.opt.rbo.verification.replay.observation import (
     parse_result,
 )
 from ydb.core.kqp.opt.rbo.verification.replay.runner import Target, run_replay
+
+
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 def identity(path="/Root/source/table", cluster="Я"):
@@ -69,7 +85,14 @@ def schema(columns=None, key=("id",)):
     }
 
 
-def snapshot(staged, ordered=False, columns=None, key=("id",), storage="column"):
+def snapshot(
+    staged,
+    ordered=False,
+    columns=None,
+    key=("id",),
+    storage="column",
+    limit=False,
+):
     table_columns = columns or schema()["tables"][0]["columns"]
     mappings = [
         {"source": column["name"], "output": column["name"]}
@@ -94,6 +117,16 @@ def snapshot(staged, ordered=False, columns=None, key=("id",), storage="column")
             "phase": "undefined",
         })
         root = "sort"
+    if limit:
+        nodes.append({
+            "id": "limit",
+            "op": "limit",
+            "input": root,
+            "count": {"kind": "literal", "type": "Uint64", "value": 1},
+            "offset": None,
+            "phase": "final",
+        })
+        root = "limit"
     graph = None
     if staged:
         graph = {
@@ -146,6 +179,7 @@ def trace(rows=None, ordered=False, outcomes=1, columns=None):
             {
                 "index": index,
                 "decisions": [],
+                "choices": [],
                 "sequence": ordered,
                 "order": [] if ordered else None,
                 "rows": copy.deepcopy(rendered_rows),
@@ -168,6 +202,7 @@ def trace(rows=None, ordered=False, outcomes=1, columns=None):
                 "source": side,
                 "outcome": index,
                 "decisions": [],
+                "choices": [],
                 "matching_outcomes": [],
             }
             for side in ("before", "after")
@@ -241,6 +276,83 @@ class CaseTest(unittest.TestCase):
         query = f"SELECT * FROM `{table_path(TABLE)}` ORDER BY id;"
         with self.assertRaisesRegex(ReplayError, "semantics disagree"):
             prepared(before, after, trace(ordered=False), query)
+
+    def test_trace_choices_are_strict_and_match_the_root_outcome(self):
+        before = snapshot(False)
+        after = snapshot(True)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+
+        missing = trace()
+        missing["trace"]["comparison"]["before"]["outcomes"][0].pop("choices")
+        with self.assertRaisesRegex(ReplayError, "unknown or missing"):
+            prepared(before, after, missing, query)
+
+        invalid = (
+            ("not_array", None, "not an array"),
+            ("wrong_fields", [{"value": 0}], "unknown or missing"),
+            ("bool_value", [{"value": True, "bound": 2}], "invalid"),
+            ("bool_bound", [{"value": 0, "bound": True}], "invalid"),
+            ("zero_bound", [{"value": 0, "bound": 0}], "invalid"),
+            ("out_of_range", [{"value": 2, "bound": 2}], "invalid"),
+        )
+        for label, choices, message in invalid:
+            with self.subTest(label=label):
+                value = trace()
+                value["trace"]["comparison"]["before"]["outcomes"][0][
+                    "choices"
+                ] = choices
+                with self.assertRaisesRegex(ReplayError, message):
+                    prepared(before, after, value, query)
+
+        disagreement = trace()
+        disagreement["trace"]["comparison"]["before"]["outcomes"][0][
+            "choices"
+        ] = [{"value": 0, "bound": 2}]
+        with self.assertRaisesRegex(ReplayError, "choices differ"):
+            prepared(before, after, disagreement, query)
+
+    def test_plan_choices_do_not_create_observable_nondeterminism(self):
+        value = trace(outcomes=2)
+        for side in ("before", "after"):
+            outcomes = value["trace"]["comparison"][side]["outcomes"]
+            outcomes[0]["choices"] = [{"value": 0, "bound": 2}]
+            outcomes[1]["choices"] = [{"value": 1, "bound": 2}]
+        for mismatch in value["mismatches"]:
+            mismatch["choices"] = [
+                {"value": mismatch["outcome"], "bound": 2}
+            ]
+
+        before = snapshot(False)
+        after = snapshot(True)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+
+        prepared(before, after, value, query)
+
+    @unittest.skipUnless(SOLVER, "requires the pinned Z3 binary")
+    def test_inspector_choice_trace_round_trips_into_replay(self):
+        before = snapshot(False)
+        after = snapshot(True, limit=True)
+        query = f"SELECT * FROM `{table_path(TABLE)}`;"
+
+        inspected = prepare_inspection(before, after, 2, 10_000).solve(
+            SOLVER,
+            10_000,
+        )
+        self.assertEqual(inspected["status"], "COUNTEREXAMPLE")
+        inspected["inputs"]["query_sha256"] = hashlib.sha256(
+            query.encode()
+        ).hexdigest()
+        choices = [
+            choice
+            for side in ("before", "after")
+            for outcome in inspected["trace"]["comparison"][side]["outcomes"]
+            for choice in outcome["choices"]
+        ]
+        self.assertTrue(choices)
+
+        case = prepare_case(before, after, inspected, query)
+
+        self.assertEqual(case.row_bound, 2)
 
     def test_ordered_union_initial_root_uses_sequence_semantics(self):
         base = snapshot(False)

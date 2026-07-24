@@ -1906,6 +1906,10 @@ regression locks the corrected boundary.
   witnesses, with strict dual-target mode preflight and typed BulkUpsert setup;
   legal Decimal specials are rendered as `-inf`, `inf`, and `nan`; multi-result
   TPC-DS q14, q23, and q39 remain an explicit replay extension.
+- Trace-v1 replay requires and range-validates every inspector `{value,bound}`
+  plan choice and checks exact outcome/mismatch agreement. Choices remain
+  diagnostic plan valuations rather than observable result identity; a direct
+  inspector/Z3/replay round trip with nonempty choices locks that distinction.
 - Version-four benchmark reports preserve the exact assembled query, both
   snapshots, and byte-exact raw verifier verdict with SHA-256 bindings. The raw
   verdict artifact is authoritative for the witness; the report's parsed

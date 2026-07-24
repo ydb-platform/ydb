@@ -1,0 +1,228 @@
+name: db_benchmark
+
+# Runs the YDB vs PostgreSQL (pgvector) ANN vector benchmark
+# (.github/scripts/db_benchmark.py). The Python dependencies are taken from
+# .github/scripts/setup.sh and installed into a dedicated virtualenv before the
+# script runs. The script itself downloads the datasets, downloads a prebuilt
+# ydbd and/or builds PostgreSQL+pgvector, launches the servers, and tears them
+# down again.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Backend(s) to benchmark'
+        required: false
+        type: choice
+        options:
+          - both
+          - ydb
+          - postgres
+        default: both
+      dataset:
+        description: 'Dataset to benchmark'
+        required: false
+        type: choice
+        options:
+          - all
+          - sparse
+          - yfcc-10M
+          - text2image-10M
+        default: text2image-10M
+      n_base:
+        description: 'Number of base vectors (0 = all)'
+        required: false
+        default: '50000'
+      n_queries:
+        description: 'Number of query vectors (0 = all)'
+        required: false
+        default: '1000'
+      k:
+        description: 'Neighbours per query (recall@k)'
+        required: false
+        default: '10'
+      ef_search:
+        description: 'Comma-separated search-effort sweep (pgvector hnsw.ef_search / YDB KMeansTreeSearchTopSize)'
+        required: false
+        default: '50,100,200,400'
+      threads:
+        description: 'Concurrent query worker connections (empty = number of CPUs)'
+        required: false
+        default: ''
+      pg_dsn:
+        description: 'Connect to an external PostgreSQL at this DSN (e.g. postgresql://user@host:5432/db) instead of launching one. pgvector must be installed there. Do NOT put the password here — set the PG_PASSWORD repository secret instead (inputs are not masked in logs).'
+        required: false
+        default: ''
+      ydb_endpoint:
+        description: 'Connect to an external YDB at this endpoint (e.g. grpc://host:2135 or grpcs://host:2135) instead of launching one. For auth set the YDB_ACCESS_TOKEN secret (IAM/OAuth token) or YDB_SA_KEY_JSON secret (service-account key file contents); leave both unset for anonymous.'
+        required: false
+        default: ''
+      ydb_database:
+        description: 'External YDB database path (e.g. /Root/testdb); used with ydb_endpoint'
+        required: false
+        default: '/Root/test'
+      ydb_version:
+        description: 'Prebuilt ydbd version to download (ignored when ydb_endpoint is set)'
+        required: false
+        default: 'stable-26-2-1'
+      ydb_clusters:
+        description: 'YDB vector_kmeans_tree clusters'
+        required: false
+        default: '64'
+      ydb_levels:
+        description: 'YDB vector_kmeans_tree levels'
+        required: false
+        default: '2'
+      pg_version:
+        description: 'PostgreSQL version to build from source'
+        required: false
+        default: '16.4'
+      pgvector_version:
+        description: 'pgvector version to build'
+        required: false
+        default: '0.8.0'
+      extra_args:
+        description: 'Extra raw arguments appended to db_benchmark.py'
+        required: false
+        default: ''
+
+jobs:
+  benchmark:
+    name: DB benchmark (${{ inputs.backend || 'both' }} / ${{ inputs.dataset || 'text2image-10M' }})
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release ]
+    timeout-minutes: 1200
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create virtualenv with dependencies from setup.sh
+        working-directory: .github/scripts
+        run: |
+          set -euo pipefail
+          # Build the virtualenv the same way setup.sh does and install exactly
+          # the pip dependencies it lists, extracted straight from the script so
+          # the two never drift apart.
+          python3 -m venv vector_index_bench
+          # shellcheck disable=SC1091
+          source vector_index_bench/bin/activate
+          grep -E '^[[:space:]]*pip install' setup.sh | while IFS= read -r line; do
+            echo "+ $line"
+            eval "$line"
+          done
+          python -c "import numpy, scipy, tqdm, psycopg, ydb; print('deps OK')"
+
+      - name: Download dataset(s)
+        working-directory: .github/scripts
+        env:
+          INPUT_DATASET: ${{ inputs.dataset || 'text2image-10M' }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source vector_index_bench/bin/activate
+          # --download with no dataset name fetches all of them.
+          if [[ "$INPUT_DATASET" == "all" ]]; then
+            python db_benchmark.py --download
+          else
+            python db_benchmark.py --download "$INPUT_DATASET"
+          fi
+
+      - name: Run benchmark
+        working-directory: .github/scripts
+        env:
+          INPUT_BACKEND: ${{ inputs.backend || 'both' }}
+          INPUT_DATASET: ${{ inputs.dataset || 'text2image-10M' }}
+          INPUT_N_BASE: ${{ inputs.n_base || '50000' }}
+          INPUT_N_QUERIES: ${{ inputs.n_queries || '1000' }}
+          INPUT_K: ${{ inputs.k || '10' }}
+          INPUT_EF_SEARCH: ${{ inputs.ef_search || '50,100,200,400' }}
+          INPUT_THREADS: ${{ inputs.threads || '' }}
+          INPUT_PG_DSN: ${{ inputs.pg_dsn || '' }}
+          INPUT_YDB_ENDPOINT: ${{ inputs.ydb_endpoint || '' }}
+          INPUT_YDB_DATABASE: ${{ inputs.ydb_database || '/Root/test' }}
+          INPUT_YDB_VERSION: ${{ inputs.ydb_version || 'stable-26-2-1' }}
+          INPUT_YDB_CLUSTERS: ${{ inputs.ydb_clusters || '64' }}
+          INPUT_YDB_LEVELS: ${{ inputs.ydb_levels || '2' }}
+          INPUT_PG_VERSION: ${{ inputs.pg_version || '16.4' }}
+          INPUT_PGVECTOR_VERSION: ${{ inputs.pgvector_version || '0.8.0' }}
+          INPUT_EXTRA_ARGS: ${{ inputs.extra_args || '' }}
+          # PostgreSQL password for an external server, taken from a masked
+          # repository/environment secret rather than a workflow input. libpq
+          # (and therefore psycopg) reads PGPASSWORD automatically, so it never
+          # appears in the DSN, the command line, or the logs.
+          PGPASSWORD: ${{ secrets.PG_PASSWORD }}
+          # YDB auth for an external endpoint, from masked secrets. The SDK's
+          # credentials_from_env_variables() reads YDB_ACCESS_TOKEN_CREDENTIALS
+          # (an IAM/OAuth token) and YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+          # (a path to a key file). Leave both unset to connect anonymously.
+          YDB_ACCESS_TOKEN_CREDENTIALS: ${{ secrets.YDB_ACCESS_TOKEN }}
+          YDB_SA_KEY_JSON: ${{ secrets.YDB_SA_KEY_JSON }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source vector_index_bench/bin/activate
+          # A service-account key is a file path to the SDK: if the key JSON was
+          # provided as a secret, write it to a private temp file and point the
+          # SDK at it. (An access token, if set, is used as-is from the env.)
+          if [[ -n "${YDB_SA_KEY_JSON:-}" ]]; then
+            KEYFILE="$(mktemp)"
+            chmod 600 "$KEYFILE"
+            printf '%s' "$YDB_SA_KEY_JSON" > "$KEYFILE"
+            export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS="$KEYFILE"
+            trap 'rm -f "$KEYFILE"' EXIT
+          fi
+          # Build optional args. When an external DSN/endpoint is given the
+          # script connects to it and skips provisioning a managed server.
+          EXTRA=()
+          if [[ -n "$INPUT_THREADS" ]]; then
+            EXTRA+=(--threads "$INPUT_THREADS")
+          fi
+          if [[ -n "$INPUT_PG_DSN" ]]; then
+            EXTRA+=(--pg-dsn "$INPUT_PG_DSN")
+          fi
+          if [[ -n "$INPUT_YDB_ENDPOINT" ]]; then
+            EXTRA+=(--ydb-endpoint "$INPUT_YDB_ENDPOINT" --ydb-database "$INPUT_YDB_DATABASE")
+          fi
+          python db_benchmark.py \
+            --backend "$INPUT_BACKEND" \
+            --dataset "$INPUT_DATASET" \
+            --n_base "$INPUT_N_BASE" \
+            --n_queries "$INPUT_N_QUERIES" \
+            --k "$INPUT_K" \
+            --ef_search "$INPUT_EF_SEARCH" \
+            --ydb-version "$INPUT_YDB_VERSION" \
+            --ydb-clusters "$INPUT_YDB_CLUSTERS" \
+            --ydb-levels "$INPUT_YDB_LEVELS" \
+            --pg-version "$INPUT_PG_VERSION" \
+            --pgvector-version "$INPUT_PGVECTOR_VERSION" \
+            "${EXTRA[@]}" $INPUT_EXTRA_ARGS
+
+      - name: Post results to job summary
+        if: always()
+        working-directory: .github/scripts
+        run: |
+          RESULTS=db_benchmark_results.json
+          {
+            echo "### YDB vs PostgreSQL benchmark"
+            echo ""
+            if [[ -f "$RESULTS" ]]; then
+              echo "| Dataset | Backend | ef_search | Build(s) | QPS | Recall@k | Filtered |"
+              echo "|---|---|---|---|---|---|---|"
+              jq -r '.results[] | "| \(.dataset) | \(.backend) | \(.ef_search) | \(.build_time_s) | \(.qps) | \(.recall_at_k) | \(.filtered) |"' "$RESULTS"
+            else
+              echo "No results file produced."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-benchmark-results
+          path: .github/scripts/db_benchmark_results.json
+          retention-days: 30
+          if-no-files-found: warn

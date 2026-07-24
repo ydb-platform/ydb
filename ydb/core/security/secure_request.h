@@ -1,5 +1,6 @@
 #pragma once
 #include "ticket_parser.h"
+#include "secure_request_iface.h"
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
@@ -7,7 +8,9 @@
 namespace NKikimr {
 
 template <typename TBase, typename TDerived, typename TBootstrap = TDerived>
-class TSecureRequestActor : public TBase {
+class TSecureRequestActor
+    : public TBase
+    , public ISecureRequestIface {
 private:
     TString Database;
     TString SecurityToken;

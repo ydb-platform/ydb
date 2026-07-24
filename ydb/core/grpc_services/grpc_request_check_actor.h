@@ -10,7 +10,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
@@ -86,10 +85,19 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForCluster
     };
 }
 
+class TGrpcRequestCheckActorCommon {
+protected:
+    TGrpcRequestCheckActorCommon() = default;
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, bool isGrpcRequest, const TString& userSID, bool auditEnabledCompleted, const ISecureRequestIface& secReq) const;
+protected:
+    std::vector<std::pair<TString, TString>> Attributes_;
+};
+
 template <typename TEvent>
 class TGrpcRequestCheckActor
     : public TGRpcRequestProxyHandleMethods
     , public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>>
+    , public TGrpcRequestCheckActorCommon
     , public ICheckerIface
     , public IFacilityProvider
 {
@@ -560,35 +568,7 @@ private:
         const TString userSID = TBase::GetUserSID();
         // DmlAudit, specially enabled through Scheme Shard
         bool auditEnabledCompleted = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
-        bool auditEnabledReceived = false;
-
-        TAuditMode auditMode = requestBaseCtx->GetAuditMode();
-        if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
-            TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
-            const NACLibProto::ESubjectType subjectType = token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-            auditEnabledCompleted |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, subjectType);
-            auditEnabledReceived |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Received, subjectType);
-        }
-
-        if (auditEnabledReceived || auditEnabledCompleted) {
-            if constexpr (IsGrpcRequest) {
-                if (TString grpcMethod = requestBaseCtx->GetRpcMethodName()) {
-                    requestBaseCtx->AddAuditLogPart("grpc_method", requestBaseCtx->GetRpcMethodName());
-                }
-            }
-            const TString sanitizedToken = TBase::GetSanitizedToken();
-            AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            if (auditEnabledReceived) {
-                AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
-            }
-
-            if (auditEnabledCompleted) {
-                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
-                    AuditContextEnd(requestBaseCtx);
-                    AuditLog(status, parts);
-                });
-            }
-        }
+        TGrpcRequestCheckActorCommon::AuditRequest(requestBaseCtx, databaseName, IsGrpcRequest, userSID, auditEnabledCompleted, *this);
     }
 
 private:
@@ -753,7 +733,6 @@ private:
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
     bool SkipCheckConnectRights_ = false;
-    std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
     bool DmlAuditEnabled_ = false;
     std::unordered_set<TString> DmlAuditExpectedSubjects_;

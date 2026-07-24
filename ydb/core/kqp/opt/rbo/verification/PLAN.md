@@ -1410,8 +1410,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Occurrence/routing compaction, scoped shared-term rendering, nonrecursive
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
-  repeated-structure construction gates. The latest complete suite
-  measurements reran on 2026-07-24 after the correlated-COUNT repair, exact
+  repeated-structure construction gates. The latest complete post-fix suite
+  measurements were generated on 2026-07-24 from source `4f73b38aaaf` after
+  the correlated-COUNT repair, exact
   `DistinctAll` support, and restoration of the production PostgreSQL
   parser/runtime in the benchmark host, then added exact uncorrelated dynamic
   `IN`, the exact nullable Date-year bridge, the side-explicit shared-IU/q95
@@ -1429,13 +1430,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer-successful queries, including snapshot-boundary failures, formula
   coverage is 53/93 (57.0%).
 
-  The current TPCH formula dashboard spent 2,917/30,877 ms in
+  The current TPCH formula dashboard spent 2,801/30,006 ms in
   preparation/verifier work and produced report SHA-256
-  `6258b600c86ba214fd456f9b26855ab4834314bed5557e25a3923828f9befe05`;
-  TPC-DS spent 69,312/193,036 ms and produced
-  `baaac25acbbca3bd0c1d2d3fdccbca7d6d017bce404108707d25bcf5a617eafa`.
-  Its q6, q56, q60, and q95 rows emitted after 369/12,812, 1,275/957,
-  1,308/950, and 520/477 ms, respectively.
+  `deb388eec49e32242cd66bfbe943ef2f73a692d95d96150fbfb68f8281390753`;
+  TPC-DS spent 68,622/200,340 ms and produced
+  `9d808615985c7c6fce4bc76cfb7b1c92e68e82ecb02294e23921f7dad809af2d`.
+  Its q6, q56, q60, and q95 rows emitted after 344/11,938, 1,653/1,082,
+  1,464/1,092, and 474/454 ms, respectively.
 
   `DistinctAll` adds TPC-DS q6. The correlated-COUNT correctness repair
   intentionally moves TPCH q17 and TPC-DS q1, q30, q32, q81, and q92 from
@@ -1490,11 +1491,23 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   rejected. It adds TPC-DS q56 and q60 to formula construction, raising the
   floor to 53/121, and moves q45 to the unrelated final Read range/ordering
   boundary. The remaining initial dynamic-`IN` blockers are q33, q58, and q83.
-  Focused solver runs returned `COUNTEREXAMPLE` candidates for q56 after
-  1,260/2,356 ms and q60 after 1,260/2,072 ms. Fixed-witness inspection
-  reproduces the symbolic mismatches, but real-YDB confirmation is still
-  required; neither result is a proof, a policy-floor entry, or a confirmed
-  optimizer defect.
+  Pre-fix focused solver runs returned `COUNTEREXAMPLE` candidates for q56
+  after 1,260/2,356 ms and q60 after 1,260/2,072 ms. Fixed-witness inspection
+  reproduced both symbolic mismatches. A paired embedded real-YDB diagnostic
+  with CBO explicitly disabled confirmed one shared RBO root cause: legacy
+  execution returned `("same", 10)`, while new RBO returned zero rows. Commit
+  `6a2c3acb29b` preserves the finding.
+
+  Commit `98176b0b48c` repairs the ambiguous shared-IU join-key extraction.
+  Both old witnesses now return `WITNESS_NOT_REPRODUCED`, and post-fix focused
+  q56/q60 runs return `UNKNOWN` at the 60-second limit. On source
+  `4f73b38aaaf`, q56 spent 1,286/61,302 ms and q60 spent 1,224/61,274 ms in
+  preparation/verification; the focused report SHA-256 is
+  `1da4256d6b306933aa54cabc99fce262f12bcac69b1dd64c9dfd599fad7b6caa`.
+  That source retains the nonmanual production runtime regression. Formula
+  coverage remains 53/121 overall, 53/93 among optimizer-successful queries,
+  and 53/59 among verifier entrants; neither query enters the unchanged 20/121
+  proof floor.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
@@ -1514,13 +1527,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q42, q48, q52,
   q55, q69, q90, q93, q95, and q96 with a fixed 60-second per-query budget.
-  The refreshed policy gate passes 10/10 TPCH and 10/10 TPC-DS, all
-  `VERIFIED_BOUNDED`. The current TPCH proof-floor report spent 1,190/66,607 ms
-  and produced SHA-256
-  `d64a3940e165de2bd8e57b81492c99c6303ca6f8e6956c7e9f85d081f97d01dc`;
-  TPC-DS spent 1,955/41,249 ms and produced
-  `05cdf3877c999262b34d094b9c411412fe0ef37ae200959af442960c42b364a7`.
-  Its q95 row spent 495/3,039 ms; a preceding dedicated run measured
+  The current post-fix policy gate passes 10/10 TPCH and 10/10 TPC-DS, all
+  `VERIFIED_BOUNDED`. Its TPCH proof-floor report spent 1,164/61,112 ms and
+  produced SHA-256
+  `1971377b7fa14ab2b6823cdacb99a4d79a76ac4ceea9de46117d30df94a154f9`;
+  TPC-DS spent 2,063/40,374 ms and produced
+  `9a0d87075982d9ef4138b1d55b2265bd9ef461c237fec239c817e601da02bf7f`.
+  Its q95 row spent 589/3,429 ms; a preceding dedicated run measured
   512/3,013 ms. The preceding nineteen-query report SHA-256 values were
   `20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`
   and
@@ -1760,9 +1773,10 @@ integration target uses production PostgreSQL support because the dummy
 provider failed preparation. TPCH q18 emits a formula and returns
 `VERIFIED_BOUNDED` after 155/3,035 ms in its focused solver run. The later
 shared-IU/q95 slice proves q95. The String extension adds q56/q60 formulas and
-moves q45 to final range semantics; its two symbolic counterexample candidates
-remain pending real-YDB confirmation and do not change the twenty-query proof
-floor.
+moves q45 to final range semantics. Its two pre-fix symbolic counterexamples
+led to the confirmed and repaired shared-IU defect documented below; post-fix
+both old witnesses are invalid and the corrected obligations are `UNKNOWN`, so
+the twenty-query proof floor is unchanged.
 
 The exact nullable Date-year projection bridge accepts only the reviewed
 `Map(SafeCast(Optional<Date> -> Optional<Timestamp>), lambda Timestamp:
@@ -1810,7 +1824,8 @@ proof policy adds TPCH q18 to the previous eighteen obligations; the expanded
 gate confirmed all nineteen at that checkpoint. The later q95 slice adds the
 twentieth obligation, and the current expanded gate confirms all twenty.
 
-The milestone audit has independently found eight production optimizer defects.
+The audit and solver/real-YDB confirmation workflow have found nine production
+optimizer defects.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
 `NOT EXISTS`; the focused regression and per-conjunct reset are committed in
@@ -1890,6 +1905,24 @@ class. The later complete dashboards correctly reclassify TPCH q17 and TPC-DS
 q1, q30, q32, q81, and q92 at that optimizer gate. This reduces formula
 coverage but leaves the proof floor unchanged.
 
+Ninth, the pre-fix q56 and q60 String-`IN` candidates exposed one production
+defect in `TPushFilterIntoJoinRule`. The rule classified equality endpoints by
+IU membership alone. When an IU name existed on both `LeftSemi` inputs, it
+could consume a predicate belonging to the selected left input as an
+additional semi-join key. With CBO explicitly disabled, the paired embedded
+real-YDB finding returned `("same", 10)` under legacy optimization and zero
+rows under new RBO. Commit `6a2c3acb29b` preserves that diagnostic.
+
+Commit `98176b0b48c` requires exclusive endpoint ownership before extracting a
+join key, so an ambiguous shared-IU equality continues through the existing
+side-routing path and stays on the selected left input. Its direct rule
+regression is committed with the repair; commit `4f73b38aaaf` retains the
+nonmanual production runtime regression. After the fix, both old witnesses
+return `WITNESS_NOT_REPRODUCED`, while focused q56 and q60 solver runs return
+`UNKNOWN` at 60 seconds; their SHA-bound timings and report digest are recorded
+above. Formula coverage is unchanged at 53/121, 53/93, and 53/59 under the
+three documented denominators; the proof floor remains 20/121.
+
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises
 `PRECONDITION_FAILED` despite an empty top-level consumer, confirming that the
@@ -1936,6 +1969,10 @@ regression locks the corrected boundary.
   currently confirms the shared `M` versus `inf` mismatch and is intentionally
   excluded from normal recursive tests until the runtime aggregate state is
   fixed.
+- The manual runtime target also retains the paired shared-IU String-`IN`
+  diagnostic that confirmed the q56/q60 result loss with CBO disabled. It now
+  passes after `98176b0b48c`; the normal real-host suite retains the production
+  regression from `4f73b38aaaf`.
 
 ## Non-goals
 

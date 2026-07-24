@@ -183,9 +183,10 @@ execution divergence can coexist.
 
 ## Latest measured formula coverage
 
-The latest complete formula-only dashboards were rerun on 2026-07-24 after the
-correlated-COUNT repair, exact `DistinctAll` support, and restoration of the
-production PostgreSQL parser/runtime in the benchmark host, then added exact
+The latest complete post-fix formula-only dashboards were generated on
+2026-07-24 from source `4f73b38aaaf` after the correlated-COUNT repair, exact
+`DistinctAll` support, and restoration of the production PostgreSQL
+parser/runtime in the benchmark host, then added exact
 uncorrelated dynamic `IN`, the exact nullable Date-year projection bridge, and
 the side-explicit shared-IU/q95 aggregate slice, followed by exact same-type
 String dynamic `IN`. Together they emit the 53-query
@@ -210,13 +211,13 @@ same fail-closed reconstruction gate instead of stopping in host preparation.
 | TPCH_YQL | 16 (q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q22) | 4 | 2 | 22 |
 | TPCDS_YQL | 37 (q3, q5, q6, q10, q15, q19, q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q95, q96, q99) | 36 | 26 | 99 |
 
-The current TPCH dashboard spent 2,917/30,877 ms in preparation/verifier
-work and produced report SHA-256
-`6258b600c86ba214fd456f9b26855ab4834314bed5557e25a3923828f9befe05`.
-Its TPC-DS counterpart spent 69,312/193,036 ms and produced
-`baaac25acbbca3bd0c1d2d3fdccbca7d6d017bce404108707d25bcf5a617eafa`.
-TPC-DS q6, q56, q60, and q95 emitted after 369/12,812, 1,275/957, 1,308/950,
-and 520/477 ms, respectively.
+The current TPCH dashboard spent 2,801/30,006 ms in preparation/verifier work
+and produced report SHA-256
+`deb388eec49e32242cd66bfbe943ef2f73a692d95d96150fbfb68f8281390753`.
+Its TPC-DS counterpart spent 68,622/200,340 ms and produced
+`9d808615985c7c6fce4bc76cfb7b1c92e68e82ecb02294e23921f7dad809af2d`.
+TPC-DS q6, q56, q60, and q95 emitted after 344/11,938, 1,653/1,082,
+1,464/1,092, and 474/454 ms, respectively.
 
 The preceding 51-formula q95-expanded TPCH run spent 3,004/31,688 ms and
 produced
@@ -342,11 +343,22 @@ fail-closed. This moves q56/q60 through formula construction and q45 through
 initial export to its independent final Read range/ordering blocker. q33, q58,
 and q83 remain at the initial dynamic-`IN` type boundary.
 
-Focused solver runs returned `COUNTEREXAMPLE` candidates for q56 after
+Pre-fix focused solver runs returned `COUNTEREXAMPLE` candidates for q56 after
 1,260/2,356 ms and q60 after 1,260/2,072 ms. Fixed-witness inspection
-reproduces both symbolic mismatches, but independent real-YDB replay remains
-mandatory. Neither candidate is a proof, a proof-floor entry, or a confirmed
-optimizer defect.
+reproduced both symbolic mismatches. A paired embedded real-YDB diagnostic with
+CBO explicitly disabled confirmed that they exposed one RBO defect: legacy
+execution returned `("same", 10)`, while new RBO returned zero rows. Commit
+`6a2c3acb29b` preserves the finding.
+
+After the exclusive-IU-ownership repair in `98176b0b48c`, both old witnesses
+return `WITNESS_NOT_REPRODUCED`, and focused q56/q60 solver runs return
+`UNKNOWN` at the 60-second limit. On source `4f73b38aaaf`, q56 spent
+1,286/61,302 ms and q60 spent 1,224/61,274 ms in preparation/verification; the
+focused report SHA-256 is
+`1da4256d6b306933aa54cabc99fce262f12bcac69b1dd64c9dfd599fad7b6caa`.
+That source retains the nonmanual production runtime regression. Formula
+coverage stays at 53/121, 53/93 optimizer-successful queries, and 53/59
+verifier entrants. Neither query enters the unchanged 20/121 proof floor.
 
 ### TPCH inventory
 
@@ -691,7 +703,8 @@ leaked intermediate state, and broken direct lineage. Focused C++ exporter
 tests passed 3/3 and the full exporter suite passed 147/147 at that
 Decimal-AVG milestone.
 
-The current dashboards emit 16/22 TPCH and 37/99 TPC-DS formulas, for 53/121
+The current post-fix dashboards emit 16/22 TPCH and 37/99 TPC-DS formulas, for
+53/121
 (43.8%). They record 40 unsupported and 28 optimizer-failure queries. Exact
 `DistinctAll` adds TPC-DS q6; the correlated-COUNT correctness repair moves
 TPCH q17 and TPC-DS q1/q30/q32/q81/q92 to intentional optimizer-side
@@ -716,13 +729,13 @@ contains twenty confirmed `VERIFIED_BOUNDED` obligations.
   q55, q69, q90, q93, q95, and q96, each at two rows per referenced table and
   two tasks. These are twenty bounded proofs, 20/121 (16.5%) of the workload,
   for the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
-  The refreshed policy gate passes 10/10 TPCH and 10/10 TPC-DS, all
-  `VERIFIED_BOUNDED`. The current TPCH proof-floor report spent 1,190/66,607 ms
-  and has SHA-256
-  `d64a3940e165de2bd8e57b81492c99c6303ca6f8e6956c7e9f85d081f97d01dc`;
-  TPC-DS spent 1,955/41,249 ms and has
-  `05cdf3877c999262b34d094b9c411412fe0ef37ae200959af442960c42b364a7`.
-  Its q95 row spent 495/3,039 ms in preparation/verification. A preceding
+  The current post-fix policy gate passes 10/10 TPCH and 10/10 TPC-DS, all
+  `VERIFIED_BOUNDED`. Its TPCH proof-floor report spent 1,164/61,112 ms and
+  has SHA-256
+  `1971377b7fa14ab2b6823cdacb99a4d79a76ac4ceea9de46117d30df94a154f9`;
+  TPC-DS spent 2,063/40,374 ms and has
+  `9a0d87075982d9ef4138b1d55b2265bd9ef461c237fec239c817e601da02bf7f`.
+  Its q95 row spent 589/3,429 ms in preparation/verification. A preceding
   dedicated q95 run measured 512/3,013 ms. The preceding nineteen-query report
   SHA-256 values were
   `20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`
@@ -1110,18 +1123,22 @@ contains twenty confirmed `VERIFIED_BOUNDED` obligations.
   `UNKNOWN` at 60000 ms. q88 is therefore still an open solver-performance
   item, not a bounded proof and not a known optimizer bug.
 
-No reported solver or proof-floor run has confirmed an optimizer correctness
-bug. The proof policy contains TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19,
-and q22 plus TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, q95, and q96. Its
-complete expanded run confirms all twenty as `VERIFIED_BOUNDED`. TPC-DS q5,
-q10, q19, q25, q29, q46, q65, q68, q77, q80, q91, and q99 construct formulas
+The corrected-model q56/q60 candidates are the first solver findings in this
+audit to lead to a confirmed optimizer correctness bug through paired real-YDB
+execution. They share the single ninth root cause documented below. The proof
+policy contains TPCH q3, q4, q6, q11, q12, q14, q15, q18, q19, and q22 plus
+TPC-DS q3, q42, q48, q52, q55, q69, q90, q93, q95, and q96. Its complete
+expanded run confirms all twenty as `VERIFIED_BOUNDED`. TPC-DS q5, q10, q19,
+q25, q29, q46, q56, q60, q65, q68, q77, q80, q91, and q99 construct formulas
 but return `UNKNOWN` in their latest solver runs. TPCH q1, q7, q8, and q9 also
 construct formulas and are `UNKNOWN` in their focused 60-second runs.
 The former q6/q14, q5, q79, and q88 candidates were verifier-modeling false
 positives. q77's historical candidate is not rediscovered by the exact
 Date-cast model, but its regenerated and corrected fixed-witness results are
 both `UNKNOWN`; it is neither a current candidate nor a confirmed false
-positive. No corrected-model witness currently requires replay.
+positive. No corrected-model witness currently awaits replay: q56/q60 were
+confirmed, localized, repaired, and invalidated against the corrected
+snapshots.
 
 The subplan coverage milestone began with a corrected source inventory and a
 final-boundary visibility prerequisite. The then-catalog-blocked seven TPCH and
@@ -1247,8 +1264,8 @@ obligations, and the expanded policy gate confirms all 20/20.
 
 ### Confirmed subplan optimizer defects
 
-The subplan audit also produced eight production optimizer findings,
-independently of the solver dashboard:
+The audit and solver/real-YDB confirmation workflow produced nine production
+optimizer findings:
 
 - With a nonempty inner table, `WHERE NOT flag AND EXISTS (subquery)` returned
   no rows under new RBO but returned the expected row under the legacy
@@ -1322,6 +1339,24 @@ class. The focused fix did not itself revise workload numbers. The later
 complete dashboards show the intended consequence: TPCH q17 and TPC-DS q1,
 q30, q32, q81, and q92 now stop at this optimizer gate, reducing the formula
 floor while leaving the eighteen-query proof floor unchanged.
+
+The ninth finding is the shared-IU String-`IN` result loss exposed by both q56
+and q60. They had one production root cause in `TPushFilterIntoJoinRule`: IU
+membership alone could classify an equality as a cross-input key even when one
+endpoint name appeared on both `LeftSemi` inputs. The rule then consumed a
+predicate belonging on the selected left input as an additional semi-join key.
+With CBO explicitly disabled, the paired embedded real-YDB finding returned
+`("same", 10)` under legacy optimization and zero rows under new RBO. Commit
+`6a2c3acb29b` preserves that pre-fix diagnostic.
+
+Commit `98176b0b48c` requires each extracted key endpoint to belong exclusively
+to its declared side, leaving ambiguous shared-IU equalities to the existing
+side-routing logic, and retains a direct rule regression. Commit
+`4f73b38aaaf` adds the nonmanual production runtime regression. After the fix,
+both old witnesses return `WITNESS_NOT_REPRODUCED`; focused q56/q60 solver runs
+return `UNKNOWN` at 60 seconds, with their SHA-bound timings and report digest
+recorded above. The fix changes neither the 53/121, 53/93, and 53/59 formula
+counts nor the 20/121 proof floor.
 
 An additional legacy probe with intrinsic
 `Ensure(foo.id, false, "inner scalar error")` in the scalar producer also

@@ -142,7 +142,7 @@ move_node_files() {
     mv -v nodes/"$1" certs/"$DEST_NAME"/
 }
 
-# The '..' part here is due to changed current directory
+# Below node2 may receive a space-separated list of extra names for the host
 (cat ${NODES_FILE}; echo "") | while read node node2; do
     if [ ! -z "$node" ]; then
         safe_node=`echo $node | tr '*$/' '___'`
@@ -156,9 +156,6 @@ done
 
 echo "All done. Certificates are in CA/certs/$DEST_NAME"
 
-if [ -d current ]; then
-  mv -v current current.bak.`date '+%Y-%m-%d_%H-%M-%S'`
-fi
 rm -f current
 ln -sv certs/"$DEST_NAME" current
 

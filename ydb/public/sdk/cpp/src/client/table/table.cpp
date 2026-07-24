@@ -244,6 +244,21 @@ const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
     return Metadata_;
 }
 
+TSetNotNullOperation::TSetNotNullOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::SetNotNullMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<ESetNotNullState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Path = metadata.path();
+    Metadata_.Columns.assign(metadata.columns().begin(), metadata.columns().end());
+}
+
+const TSetNotNullOperation::TMetadata& TSetNotNullOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {

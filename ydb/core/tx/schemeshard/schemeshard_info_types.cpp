@@ -511,6 +511,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
+                return nullptr;
+            }
+
             bool isChangeNotNullConstraint = col.HasNotNull();
             bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
 

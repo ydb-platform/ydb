@@ -863,9 +863,10 @@ bool IsStringType(TStringBuf type) {
 }
 
 bool IsExactDynamicInColumnType(TStringBuf type) {
-    // Dynamic IN is modeled as same-type equality over one non-null scalar
-    // domain.  Keep this narrower than general comparison compatibility:
-    // Utf8 and coercing comparisons have not been audited for this lowering.
+    // Dynamic IN is modeled as same-type equality over one scalar domain.
+    // Nullable integers are admitted only under the separately validated
+    // positive-Filter contract.  Keep this narrower than general comparison
+    // compatibility: Utf8 and coercing comparisons have not been audited.
     return IsIntegerType(type) || type == "String";
 }
 
@@ -5371,6 +5372,8 @@ private:
         TString LookupColumn;
         TString OutputColumn;
         TString ColumnType;
+        bool LookupNullable = false;
+        bool OutputNullable = false;
     };
 
     struct TSubplanDescriptor {
@@ -5509,6 +5512,15 @@ private:
         const TSubplanDescriptor& subplan)
     {
         const auto* result =
+            std::get_if<TInSubplanDetails>(&subplan.Details);
+        Y_ENSURE(result, "IN subplan descriptor has invalid details");
+        return *result;
+    }
+
+    static TInSubplanDetails& InDetails(
+        TSubplanDescriptor& subplan)
+    {
+        auto* result =
             std::get_if<TInSubplanDetails>(&subplan.Details);
         Y_ENSURE(result, "IN subplan descriptor has invalid details");
         return *result;
@@ -6038,12 +6050,12 @@ private:
         }
 
         const auto outputType = ExactType(OutputType(*plan, output));
-        if (outputType.Nullable ||
-            !IsExactDynamicInColumnType(outputType.Name))
+        if (!IsExactDynamicInColumnType(outputType.Name) ||
+            (outputType.Nullable && !IsIntegerType(outputType.Name)))
         {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << binding
-                << " result must be a non-null fixed-width integer or String");
+                << " result must be a fixed-width integer or non-null String");
         }
         return {
             .Binding = binding,
@@ -6053,6 +6065,7 @@ private:
                 .LookupColumn = lookup,
                 .OutputColumn = output,
                 .ColumnType = outputType.Name,
+                .OutputNullable = outputType.Nullable,
             },
         };
     }
@@ -6299,9 +6312,35 @@ private:
         }
     }
 
-    void ValidateInConsumer(const TSubplanDescriptor& subplan) {
+    static void ValidatePositiveNullableInConsumer(
+        TStringBuf binding,
+        const TOpFilter& consumer)
+    {
+        bool found = false;
+        for (const auto& conjunct : consumer.FilterExpr.SplitConjunct()) {
+            if (!ExpressionColumns(conjunct).contains(binding)) {
+                continue;
+            }
+            const auto body = conjunct.GetExpressionBody();
+            const auto member =
+                body ? DirectMemberName(*body) : std::nullopt;
+            if (!member || *member != binding) {
+                Unsupported(TStringBuilder()
+                    << "Nullable IN subplan binding " << binding
+                    << " must be a direct positive Filter conjunct");
+            }
+            found = true;
+        }
+        if (!found) {
+            Unsupported(TStringBuilder()
+                << "Nullable IN subplan binding " << binding
+                << " is absent from its positive Filter conjuncts");
+        }
+    }
+
+    void ValidateInConsumer(TSubplanDescriptor& subplan) {
         Y_ENSURE(subplan.Consumers.size() == 1);
-        const auto& details = InDetails(subplan);
+        auto& details = InDetails(subplan);
         auto& input = *subplan.Consumers.front()->GetChildren().front();
         const auto inputNames = OutputNames(input);
         if (!inputNames.contains(details.LookupColumn)) {
@@ -6311,13 +6350,22 @@ private:
         }
         const auto lookupType =
             ExactType(OutputType(input, details.LookupColumn));
-        if (lookupType.Nullable ||
-            lookupType.Name != details.ColumnType)
-        {
+        if (lookupType.Name != details.ColumnType) {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << subplan.Binding
-                << " lookup and result must have the same supported "
-                   "non-null type");
+                << " lookup and result must have the same supported type");
+        }
+        if (lookupType.Nullable && !IsIntegerType(lookupType.Name)) {
+            Unsupported(TStringBuilder()
+                << "IN subplan binding " << subplan.Binding
+                << " nullable lookup must be a fixed-width integer");
+        }
+        details.LookupNullable = lookupType.Nullable;
+        if (details.LookupNullable || details.OutputNullable) {
+            ValidatePositiveNullableInConsumer(
+                subplan.Binding,
+                static_cast<const TOpFilter&>(
+                    *subplan.Consumers.front()));
         }
     }
 
@@ -6520,7 +6568,7 @@ private:
     }
 
     void ValidateSubplanConsumerContracts() {
-        for (const auto& subplan : Subplans) {
+        for (auto& subplan : Subplans) {
             if (subplan.Consumers.empty()) {
                 Unsupported(TStringBuilder()
                     << KindName(subplan)
@@ -6719,11 +6767,11 @@ private:
                 auto lookup = JsonMap();
                 lookup["column"] = in.LookupColumn;
                 lookup["type"] = in.ColumnType;
-                lookup["nullable"] = false;
+                lookup["nullable"] = in.LookupNullable;
                 auto output = JsonMap();
                 output["column"] = in.OutputColumn;
                 output["type"] = in.ColumnType;
-                output["nullable"] = false;
+                output["nullable"] = in.OutputNullable;
                 descriptor["kind"] = "in";
                 descriptor["lookup"] = std::move(lookup);
                 descriptor["output"] = std::move(output);

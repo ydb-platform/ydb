@@ -81,6 +81,7 @@ RECURSE_FOR_TESTS(
     ut_donor
     ut_group_mapping
     ut_huge
+    ut_loadactor
     ut_startup_brokers
     ut_read_only_vdisk
     ut_osiris

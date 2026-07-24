@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/tx.h>
+#include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
@@ -249,6 +251,12 @@ public:
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    TString QueryYson(const std::string& query) {
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
+        return FormatResultSetYson(result.GetResultSet(0));
+    }
+
     void CheckUnordered(const std::string& query, const TString& expected) {
         auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
@@ -288,6 +296,14 @@ public:
                 << "\n  expected stream lookup: " << (expected ? "yes" : "no")
                 << ", found: " << (has ? "yes" : "no")
                 << "\nAST:\n" << ast);
+    }
+
+    void RestartSchemeShard(const std::string& tablePath) {
+        auto& runtime = *Kikimr.GetTestServer().GetRuntime();
+        runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+            new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
+        Sleep(TDuration::Seconds(3));
+        NKikimr::Tests::TClient::RefreshPathCache(&runtime, TString(tablePath));
     }
 
 private:
@@ -1830,6 +1846,56 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (2, 20);");
         fixture.Check("SELECT k, a, g, c FROM TestTable ORDER BY k;", "[[1;[10];[11];7];[2;[20];[21];7]]");
     }
+
+    Y_UNIT_TEST(AlterAddCoveringIndexOverGenerated) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                b Int32,
+                g Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 10, 100), (2, 20, 200);");
+
+        fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_a GLOBAL SYNC ON (a) COVER (g);");
+
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a ORDER BY a;", "[[[10];[110]];[[20];[220]]]");
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a WHERE a = 10;", "[[[10];[110]]]");
+
+        fixture.Exec("UPSERT INTO TestTable (k, b) VALUES (1, 500);");
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a WHERE a = 10;", "[[[10];[510]]]");
+
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (2, 25);");
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a WHERE a = 20;", "[]");
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a WHERE a = 25;", "[[[25];[225]]]");
+
+        fixture.Check("SELECT k, a, g FROM TestTable ORDER BY k;", "[[1;[10];[510]];[2;[25];[225]]]");
+        fixture.Check("SELECT a, g FROM TestTable VIEW idx_a ORDER BY a;", "[[[10];[510]];[[25];[225]]]");
+    }
+
+    Y_UNIT_TEST(RandomGeneratedConsistentWithIndex) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                r Uint64 GENERATED ALWAYS AS (RandomNumber(1)) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_a GLOBAL SYNC ON (a) COVER (r)
+            );
+        )");
+
+        fixture.Exec("INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30);");
+
+        const TString fromTable = fixture.QueryYson("SELECT a, r FROM TestTable ORDER BY a;");
+        const TString fromIndex = fixture.QueryYson("SELECT a, r FROM TestTable VIEW idx_a ORDER BY a;");
+
+        UNIT_ASSERT_C(!fromTable.Contains("#"), "random generated column is NULL in base table: " << fromTable);
+        UNIT_ASSERT_VALUES_EQUAL_C(fromIndex, fromTable,
+            "non-deterministic generated value diverged between the base table and the covering index");
+    }
 }
 
 Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
@@ -1877,6 +1943,20 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
         // so the generated column is recomputed inline from those values
         fixture.CheckStreamLookup("UPDATE GcTable SET a = 2, b = 3 WHERE k = 1;", /* expected */ false);
         fixture.CheckStreamLookup("UPDATE GcTable SET a = 2 WHERE k = 1;", /* expected */ false);
+    }
+
+    Y_UNIT_TEST(DependenciesSurviveSchemeShardRestart) {
+        TTestFixture fixture(StreamLookupDDL);
+
+        fixture.CheckStreamLookup("UPSERT INTO GcTable (k, a) VALUES (1, 2);", /* expected */ true);
+        fixture.Exec("UPSERT INTO GcTable (k, a, b) VALUES (5, 10, 100);");
+
+        fixture.RestartSchemeShard("/Root/GcTable");
+
+        fixture.CheckStreamLookup("UPSERT INTO GcTable (k, a) VALUES (3, 4) /* after restart */;", /* expected */ true);
+
+        fixture.Exec("UPSERT INTO GcTable (k, a) VALUES (5, 20);");
+        fixture.Check("SELECT k, a, b, g FROM GcTable WHERE k = 5;", "[[5;[20];[100];[120]]]");
     }
 }
 

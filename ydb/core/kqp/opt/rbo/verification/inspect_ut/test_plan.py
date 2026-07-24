@@ -578,7 +578,7 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             binding="$exists",
             root="sub_source",
             predicate=None,
-            dependency=None,
+            dependencies=(),
             consumers=("main_filter",),
         )
         snapshot = ir.Snapshot(
@@ -601,7 +601,10 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             ir.Project(
                 "outer",
                 "main_unit",
-                (ir.Projection("outer.x", _literal()),),
+                (
+                    ir.Projection("outer.x", _literal()),
+                    ir.Projection("outer.y", _literal(2)),
+                ),
                 False,
             ),
             ir.Filter("main_filter", "outer", _column("$exists")),
@@ -609,7 +612,10 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             ir.Project(
                 "inner",
                 "sub_unit",
-                (ir.Projection("inner.x", _literal()),),
+                (
+                    ir.Projection("inner.x", _literal()),
+                    ir.Projection("inner.y", _literal(3)),
+                ),
                 False,
             ),
         )
@@ -622,7 +628,7 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
             binding="$exists",
             root="inner",
             predicate=correlation,
-            dependency="outer.x",
+            dependencies=("outer.x",),
             consumers=("main_filter",),
         )
         correlated = ir.Snapshot(
@@ -657,6 +663,52 @@ stage_graph root_stage="root" stages=3 edges=2 assumptions=[]
                     plan=replace(
                         correlated.plan,
                         subplans=(reversed_correlation,),
+                    ),
+                )
+            ),
+        )
+
+        inequality = ir.Expr(
+            kind="not",
+            args=(
+                ir.Expr(
+                    kind="eq",
+                    args=(_column("outer.y"), _column("inner.y")),
+                    null_safe=False,
+                ),
+            ),
+        )
+        two_dependency_descriptor = replace(
+            correlated_descriptor,
+            predicate=ir.Expr(
+                kind="and",
+                args=(correlation, inequality),
+            ),
+            dependencies=("outer.x", "outer.y"),
+        )
+        two_dependency = replace(
+            correlated,
+            plan=replace(
+                correlated.plan,
+                subplans=(two_dependency_descriptor,),
+            ),
+        )
+        self.assertIn(
+            'dependencies=["outer.x", "outer.y"]',
+            render_snapshot(two_dependency),
+        )
+        reordered = replace(
+            two_dependency_descriptor,
+            dependencies=("outer.y", "outer.x"),
+        )
+        self.assertNotEqual(
+            snapshot_digest(two_dependency),
+            snapshot_digest(
+                replace(
+                    two_dependency,
+                    plan=replace(
+                        two_dependency.plan,
+                        subplans=(reordered,),
                     ),
                 )
             ),

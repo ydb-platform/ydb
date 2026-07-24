@@ -275,12 +275,12 @@ class ScalarSubplan:
 
 @dataclass(frozen=True, slots=True)
 class ExistsSubplan:
-    """One EXISTS binding, uncorrelated or equality-correlated with inner-only residuals."""
+    """One uncorrelated or deliberately narrow correlated EXISTS binding."""
 
     binding: str
     root: str
     predicate: Expr | None
-    dependency: str | None
+    dependencies: tuple[str, ...]
     consumers: tuple[str, ...]
 
 
@@ -1278,10 +1278,10 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
         _fail(f"{path}.type", "an EXISTS binding must have type 'Bool'")
     if nullable:
         _fail(f"{path}.nullable", "an EXISTS binding must be non-nullable")
-    if len(dependencies) > 1:
+    if len(dependencies) > 2:
         _fail(
             f"{path}.dependencies",
-            "EXISTS supports at most one outer dependency",
+            "EXISTS supports at most two outer dependencies",
         )
     predicate = (
         None
@@ -1297,7 +1297,7 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
         binding=binding,
         root=root,
         predicate=predicate,
-        dependency=dependencies[0] if dependencies else None,
+        dependencies=dependencies,
         consumers=consumers,
     )
 
@@ -1836,12 +1836,23 @@ def _validate_void_dataflow(
             continue
 
         if isinstance(node, Join):
+            left_voids = _void_columns(schemas[node.left])
+            right_voids = _void_columns(schemas[node.right])
+            if any(
+                key.left in left_voids or key.right in right_voids
+                for key in node.keys
+            ):
+                _fail(f"node {node.id!r}", message)
+
             dropped = set()
+            retained = set()
             if node.kind in {"left_semi", "left_anti"}:
-                dropped = _void_columns(schemas[node.right])
+                dropped = right_voids
+                retained = left_voids
             elif node.kind in {"right_semi", "right_anti"}:
-                dropped = _void_columns(schemas[node.left])
-            if dropped:
+                dropped = left_voids
+                retained = right_voids
+            if not dropped.issubset(retained):
                 _fail(f"node {node.id!r}", message)
             continue
 
@@ -2222,15 +2233,17 @@ def _validate_positive_nullable_in_binding(
         )
 
 
-def _direct_correlation_inner_column(
+def _direct_correlation(
     predicate: Expr,
     dependency: str,
     inner_schema: Mapping[str, Column],
     path: str,
     label: str,
     inner_source: str,
-) -> str:
-    """Validate the shared strict outer/inner equality contract."""
+    *,
+    allow_inequality: bool = False,
+) -> tuple[str, str]:
+    """Return the direct comparison kind and inner column for one dependency."""
 
     dependent_conjuncts = tuple(
         conjunct
@@ -2243,23 +2256,37 @@ def _direct_correlation_inner_column(
             f"{label} requires exactly one dependency-bearing conjunct",
         )
     correlation = dependent_conjuncts[0]
+    comparison = correlation
+    comparison_kind = "eq"
     if (
-        correlation.kind != "eq"
-        or correlation.null_safe
-        or len(correlation.args) != 2
-        or any(argument.kind != "column" for argument in correlation.args)
+        allow_inequality
+        and correlation.kind == "not"
+        and len(correlation.args) == 1
     ):
+        comparison = correlation.args[0]
+        comparison_kind = "ne"
+    if (
+        comparison.kind != "eq"
+        or comparison.null_safe
+        or len(comparison.args) != 2
+        or any(argument.kind != "column" for argument in comparison.args)
+    ):
+        requirement = (
+            "one direct non-null-safe column equality or inequality"
+            if allow_inequality
+            else "one non-null-safe column equality"
+        )
         _fail(
             path,
-            f"{label} requires one non-null-safe column equality",
+            f"{label} requires {requirement}",
         )
     predicate_columns = tuple(
-        argument.column for argument in correlation.args
+        argument.column for argument in comparison.args
     )
     if predicate_columns.count(dependency) != 1:
         _fail(
             path,
-            f"{label} equality must reference its outer dependency once",
+            f"{label} comparison must reference its outer dependency once",
         )
     inner_column = next(
         column for column in predicate_columns if column != dependency
@@ -2269,6 +2296,28 @@ def _direct_correlation_inner_column(
             path,
             f"inner column {inner_column!r} is not produced by {inner_source}",
         )
+    return comparison_kind, inner_column
+
+
+def _direct_correlation_inner_column(
+    predicate: Expr,
+    dependency: str,
+    inner_schema: Mapping[str, Column],
+    path: str,
+    label: str,
+    inner_source: str,
+) -> str:
+    """Validate the shared strict outer/inner equality contract."""
+
+    comparison_kind, inner_column = _direct_correlation(
+        predicate,
+        dependency,
+        inner_schema,
+        path,
+        label,
+        inner_source,
+    )
+    assert comparison_kind == "eq"
     return inner_column
 
 
@@ -2343,7 +2392,13 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         _unique(subplan.consumers, f"{path}.consumers")
 
         if isinstance(subplan, ExistsSubplan):
-            if (subplan.dependency is None) != (subplan.predicate is None):
+            _unique(subplan.dependencies, f"{path}.dependencies")
+            if len(subplan.dependencies) > 2:
+                _fail(
+                    f"{path}.dependencies",
+                    "EXISTS supports at most two outer dependencies",
+                )
+            if bool(subplan.dependencies) != (subplan.predicate is not None):
                 _fail(
                     f"{path}.predicate",
                     "must be present exactly when EXISTS is correlated",
@@ -2907,6 +2962,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     isinstance(nodes[node_id], Sort)
                     and nodes[node_id].limit is not None
                 )
+                or (
+                    isinstance(nodes[node_id], Scan)
+                    and nodes[node_id].pushed_limit is not None
+                )
                 for node_id in subplan_nodes[subplan.binding]
             )
         ):
@@ -3118,39 +3177,71 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         )
         elif isinstance(subplan, ExistsSubplan):
             if subplan.predicate is not None:
-                assert subplan.dependency is not None
-                dependency = subplan.dependency
+                assert subplan.dependencies
                 consumer = nodes[subplan.consumers[0]]
                 assert isinstance(consumer, Filter)
                 outer_schema = schemas[consumer.input]
-                outer_column = outer_schema.get(dependency)
-                if outer_column is None:
-                    _fail(
-                        f"{path}.dependencies",
-                        f"outer column {dependency!r} is not available to the consumer",
-                    )
-                if dependency in schema:
-                    _fail(
-                        f"{path}.dependencies",
-                        f"outer column {dependency!r} collides with an inner column",
-                    )
                 predicate = subplan.predicate
-                inner_column = _direct_correlation_inner_column(
-                    predicate,
-                    dependency,
-                    schema,
-                    f"{path}.predicate",
-                    "correlated EXISTS",
-                    "the subplan root",
-                )
-                if outer_column.type != schema[inner_column].type:
-                    _fail(
+                predicate_schema = dict(schema)
+                correlations: list[tuple[str, str]] = []
+                two_dependencies = len(subplan.dependencies) == 2
+                if two_dependencies:
+                    for conjunct in _conjuncts(predicate):
+                        columns = _expression_columns(conjunct)
+                        if sum(
+                            dependency in columns
+                            for dependency in subplan.dependencies
+                        ) > 1:
+                            _fail(
+                                f"{path}.predicate",
+                                "two-dependency EXISTS requires each outer "
+                                "dependency in a separate conjunct",
+                            )
+                for dependency in subplan.dependencies:
+                    outer_column = outer_schema.get(dependency)
+                    if outer_column is None:
+                        _fail(
+                            f"{path}.dependencies",
+                            f"outer column {dependency!r} is not available to the consumer",
+                        )
+                    if dependency in schema:
+                        _fail(
+                            f"{path}.dependencies",
+                            f"outer column {dependency!r} collides with an inner column",
+                        )
+                    comparison_kind, inner_column = _direct_correlation(
+                        predicate,
+                        dependency,
+                        schema,
                         f"{path}.predicate",
-                        "EXISTS equality column types must match exactly",
+                        "correlated EXISTS",
+                        "the subplan root",
+                        allow_inequality=two_dependencies,
                     )
+                    inner_column_type = schema[inner_column]
+                    if outer_column.type != inner_column_type.type:
+                        _fail(
+                            f"{path}.predicate",
+                            "EXISTS correlation column types must match exactly",
+                        )
+                    predicate_schema[dependency] = outer_column
+                    correlations.append((comparison_kind, inner_column))
+                if two_dependencies:
+                    if {kind for kind, _inner in correlations} != {"eq", "ne"}:
+                        _fail(
+                            f"{path}.predicate",
+                            "two-dependency EXISTS requires exactly one direct "
+                            "equality and one direct inequality",
+                        )
+                    if len({inner for _kind, inner in correlations}) != 2:
+                        _fail(
+                            f"{path}.predicate",
+                            "two-dependency EXISTS correlations must reference "
+                            "distinct inner columns",
+                        )
                 predicate_type = _infer_expr(
                     predicate,
-                    dict(schema) | {dependency: outer_column},
+                    predicate_schema,
                     f"{path}.predicate",
                 )
                 if predicate_type.name != BOOL:

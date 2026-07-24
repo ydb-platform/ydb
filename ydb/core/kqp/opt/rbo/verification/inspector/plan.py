@@ -326,15 +326,12 @@ def _subplan(subplan: ir.Subplan) -> str:
             f"consumers={_list(subplan.consumers, _quote)}"
         )
     if isinstance(subplan, ir.ExistsSubplan):
-        dependencies = (
-            () if subplan.dependency is None else (subplan.dependency,)
-        )
         return (
             f"subplan binding={_quote(subplan.binding)} kind=exists "
             f"root={_quote(subplan.root)} "
             f"predicate={_optional(subplan.predicate, render_expression)} "
             f"type={_quote(ir.BOOL)} nullable=false "
-            f"dependencies={_list(dependencies, _quote)} "
+            f"dependencies={_list(subplan.dependencies, _quote)} "
             f"consumers={_list(subplan.consumers, _quote)}"
         )
     if isinstance(subplan, ir.InSubplan):

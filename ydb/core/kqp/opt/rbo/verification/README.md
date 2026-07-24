@@ -5,8 +5,9 @@ This directory contains the standalone bounded-equivalence checker described in
 a bounded input database on which their result bags or ordered sequences differ.
 The reproducible 121-query dashboard contract and current unsupported inventory
 are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md). The current
-proof-producing trust boundary, assumptions, size, and slice-by-slice review
-procedure are indexed in [TRUSTED_CORE.md](TRUSTED_CORE.md).
+proof-producing trust boundary, assumptions, and slice-by-slice review
+procedure, together with the latest audited size baseline, are indexed in
+[TRUSTED_CORE.md](TRUSTED_CORE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
@@ -55,34 +56,46 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The latest complete post-fix formula-only measurements were generated on
-2026-07-24 from source `5dafcc79a4e` after the correlated-COUNT repair, exact
+2026-07-24 from source `4c2c1359e28` after the correlated-COUNT repair, exact
 `DistinctAll` support, restoration of
 the production PostgreSQL parser/runtime in the benchmark host, and the exact
 dynamic-`IN`, nullable Date-year, q95 multi-distinct, and exact String
 dynamic-`IN` slices, followed by the exact proven-total Date `Unwrap` and
 positive nullable-integral dynamic-`IN` gates, then exact nullable integral
-casts and same-scale Decimal widening under weak `SafeCast`.
-They establish formula construction for TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10,
-q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q5, q6, q10, q15, q18,
-q19, q25, q29, q33, q37, q38,
+casts and same-scale Decimal widening under weak `SafeCast`, and finally the
+pushed-predicate output-IU resolver. They establish formula construction for
+TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, and
+q22 plus TPC-DS q2, q3, q5, q6, q10, q15, q18, q19, q25, q29, q33, q37, q38,
 q40, q42, q43, q46, q48, q50, q52, q55, q56, q60, q61, q62, q65, q68, q69,
-q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, and q99:
-57/121 workload queries (47.1%). TPCH has sixteen formulas, four unsupported
-queries, and two optimizer failures; TPC-DS has forty-one formulas,
-thirty-two unsupported queries, and twenty-six optimizer failures. Across
-both suites that is 36 unsupported queries and 28 optimizer failures.
+q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q95, q96, q97, and
+q99: 59/121 workload queries (48.8%). TPCH has sixteen formulas, four
+unsupported queries, and two optimizer failures; TPC-DS has forty-three
+formulas, thirty unsupported queries, and twenty-six optimizer failures.
+Across both suites that is 34 unsupported queries and 28 optimizer failures.
 
 There are two useful denominators behind that workload-wide number.
-Ninety-three queries complete optimizer preparation, so 57/93 (61.3%) of
-optimizer-successful queries construct formulas. Seventeen TPCH and forty-six
-TPC-DS queries actually enter the Python verifier; 57/63 (90.5%) of those
-entrants construct the full bounded obligation. The 30-query gap from 93
-optimizer-successful queries to 63 verifier entrants is the deliberately
+Ninety-three queries complete optimizer preparation, so 59/93 (63.4%) of
+optimizer-successful queries construct formulas. Seventeen TPCH and forty-nine
+TPC-DS queries enter the Python verifier, so 59/66 (89.4%) of all entrants
+construct the full bounded obligation. The 27-query gap from 93
+optimizer-successful queries to 66 verifier entrants is the deliberately
 fail-closed C++ export boundary.
-Of the 36 current unsupported results, 25 stop at initial export, five at final
-export, and six inside the verifier. Thus 30 are intentionally rejected before
-formula construction is attempted; only six exported plan pairs currently fail
-to construct a formula.
+Of the 34 current unsupported results, 25 stop at initial export, two at final
+export, and seven inside the verifier. Thus 27 are intentionally rejected
+before formula construction is attempted; seven exported plan pairs currently
+fail to construct a formula.
+
+The output-IU slice mirrors the pre-physical OLAP source builder:
+each physical read name, full output-IU name, and short output-IU name resolves
+to the read's logical output column. Multiple spellings for that same output
+are aliases, while a referenced spelling that denotes distinct outputs fails
+closed; an ambiguity that the predicate never references is irrelevant and is
+accepted. TPC-DS q2 and q97 now emit formulas. q59 passes both exporters and
+enters the verifier, then fails closed at a 32,640-pair Sort construction above
+the 16,384-pair audit cap. Their complete-dashboard preparation/verifier times
+are 3,874/34,168 ms, 993/1,218 ms, and 595/895 ms for q2, q59, and q97,
+respectively. These are formula/entry coverage results only: they add no
+bounded proof and expose no optimizer correctness bug.
 
 The latest Decimal-cast gate emits a `cast_decimal` node only for weak
 `SafeCast`, with a mandatory canonical `source_type` that the Python decoder
@@ -264,12 +277,18 @@ optimizer snapshots and is `VERIFIED_BOUNDED`. The fresh complete suites pass
 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector tests, and
 32/32 real-host integration tests.
 
-The current policy-checked TPCH formula dashboard spent 2,872/28,853 ms in
-preparation/verifier work and produced report SHA-256
+The latest complete policy-checked TPCH formula dashboard spent
+7,401/76,064 ms in preparation/verifier work and produced report SHA-256
+`92f8508dcc9eb47e49a4ecbd9ec3577f2ab84aaa254404f555f9f4b60207342a`;
+TPC-DS spent 123,828/490,758 ms and produced
+`e7eef8b14247a35a3c1eb822d15d87eb6c80151064aa89164d58bcaba568f405`.
+Both complete policy runs are green.
+The immediately preceding 57-formula checkpoint was generated from source
+`5dafcc79a4e`. Its TPCH dashboard spent 2,872/28,853 ms and produced
 `c0eadbb10b2b1f394d604bb5cc5097d9fac26646e6d3aa97b90e2ff47b0712d2`;
 TPC-DS spent 63,947/243,682 ms and produced
 `6e895ad5385f95b0528362e228d992065bb44487262cb22e5ddb5ba38ba9b844`.
-TPC-DS q18 emitted after 1,002/51,090 ms.
+TPC-DS q18 emitted after 1,002/51,090 ms in that historical report.
 The immediately preceding 56-formula q33 checkpoint was generated from source
 `dfd6546dfd5`. Its TPCH dashboard spent 2,814/29,457 ms and produced
 `b3bc23c618c62f73cbc362ed568a33caf484c98804160b799bf42530f9dc66e4`;
@@ -301,21 +320,27 @@ Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
 q19, and q22 plus TPC-DS q3, q38, q42, q48, q52, q55, q69, q87, q90, q93,
-q95, and q96: twenty-two obligations (18.2% of the workload). The current post-fix
-proof-floor gate is green and policy-valid: TPCH passes 10/10
-`VERIFIED_BOUNDED` after 1,212/75,124 ms and produced report SHA-256
+q95, and q96: twenty-two obligations (18.2% of the workload). The current
+post-fix proof-floor gate on source `4c2c1359e28` is green and policy-valid:
+TPCH passes 10/10
+`VERIFIED_BOUNDED` after 1,171/70,555 ms and produced report SHA-256
+`95b250728e656081f7a0469035bef4cd3df289a7ec1f0ce08c17d9cf76698554`;
+TPC-DS passes 12/12 after 7,482/113,885 ms and produced
+`a4b72350384d051958576505f5daf8e09106c59ec87104aa9ebebe1485ca4384`.
+TPCH q14 spent 85/37,202 ms in the isolated green run.
+At the immediately preceding q18 checkpoint, TPCH passed 10/10 after
+1,212/75,124 ms and produced
 `f90794bec99f5d739648c6f7fca81574ed52b8070257204d14f373edc0d38361`;
-TPC-DS passes 12/12 after 2,937/50,488 ms and produced
+TPC-DS passed 12/12 after 2,937/50,488 ms and produced
 `96e07f8139df89f7b2a0f216dd82ee0044afb592c10a7d43f3183275a796caa9`.
-The complete verification subtree at this q18 milestone passes 34/34 suites
-and 934/934 tests.
-At the immediately preceding q33 checkpoint, TPCH passed 10/10 after
+Its complete verification subtree passed 34/34 suites and 934/934 tests.
+At the preceding q33 checkpoint, TPCH passed 10/10 after
 1,185/62,768 ms with report
 `1b68432f4e269bd19ca6064338fd008439391a1b1ffc9fa3f511d96418c6a8c6`,
 and TPC-DS passed 12/12 after 2,800/43,618 ms with report
 `2b32e78f680ca78e59ca158ceaf35e46cc61623f9f5bfe33c0aa938a525ac5e0`;
 its complete verification subtree passed 34/34 suites and 925/925 tests.
-At the immediately preceding Date-`Unwrap` checkpoint, the same twenty-two
+At the preceding Date-`Unwrap` checkpoint, the same twenty-two
 obligations were already enforced: TPCH passed 10/10 after 1,234/58,883 ms
 with report
 `db65dfe267b0b343f3cded64a32a028fab5561f4ad7b48a5803e0d3629c77f37`,
@@ -376,9 +401,11 @@ solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend
 neither the proof floor nor the formula count.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
-for TPCH q1 and TPC-DS q5, q65, and q80: both snapshots must continue to export
-and reach the verifier. All four now satisfy the stronger formula-construction
-floor. Later formula or proof results satisfy every weaker floor automatically.
+for TPCH q1 and TPC-DS q5, q59, q65, and q80: both snapshots must continue to
+export and reach the verifier. All except q59 satisfy the stronger
+formula-construction floor; q59 is pinned at entry while its 32,640-pair Sort
+exceeds the 16,384-pair audit cap. Later formula or proof results satisfy every
+weaker floor automatically.
 The complete nineteen-obligation proof floor was confirmed after the dynamic
 `IN` slice: 19/121 workload queries (15.7%) were `VERIFIED_BOUNDED` at two rows
 and two tasks. After the later nullable Date-year bridge, formula coverage was
@@ -389,9 +416,10 @@ count at the next checkpoint to 53 without changing that proof floor. The
 exact proven-total Date `Unwrap` gate then raised the counts to 55 formulas
 and twenty-two enforced proofs. The positive nullable-integral dynamic-`IN`
 gate raised the formula count to 56; q33 was not added to the proof floor.
-The weak nullable Decimal-`SafeCast` gate raises the current formula count to
-57; TPC-DS q18 is likewise not added to the unchanged twenty-two-query proof
-floor.
+The weak nullable Decimal-`SafeCast` gate raised the formula count to 57;
+the subsequent pushed-predicate output-IU resolver adds TPC-DS q2/q97 and
+raises the current count to 59. TPC-DS q18, q2, and q97 are not added to the
+unchanged twenty-two-query proof floor.
 
 Before that exact Date-cast gate was implemented, a focused 60-second solver
 experiment returned `COUNTEREXAMPLE` for TPC-DS q5 after 1,576/10,150 ms of
@@ -1602,13 +1630,17 @@ The exporter also emits `predicate` on every scan, with legacy absence meaning
 `null`. A non-null predicate is decoded from the executed `OlapFilterLambda`
 rather than `OriginalPredicate` statistics metadata. Version one accepts only a
 one-argument chain of `KqpOlapFilter` operations ending at that exact argument;
-its scalar subset is physical columns, supported literals, Boolean
+its scalar subset is read-column references, supported literals, Boolean
 AND/OR/NOT, the equality and ordering families described above (including
 all-pairs ordinary integral `DataCompare`), and exact presence tests. A
 `TKqpOlapFilterUnaryOp` is admitted only as an exact two-child tuple whose
 operator is the Atom `exists` or `empty`; its recursively decoded argument is
 lowered respectively to `exists(x)` or `not(exists(x))`. A non-Atom or unknown
-operator (including `just`) and an unavailable physical column fail closed.
+operator (including `just`) and an unavailable read column fail closed. Each
+physical read name, full output-IU name, and short output-IU name resolves to
+the corresponding logical scan output. A referenced identifier that maps to
+distinct outputs is ambiguous and fails closed; an unused ambiguous spelling
+does not affect the predicate and is accepted.
 `Coalesce(predicate, false)` is erased only in a positive filter context: at
 the filter boundary or beneath AND/OR. The same form beneath NOT, comparison,
 or a unary presence operation fails closed because the erasure is not

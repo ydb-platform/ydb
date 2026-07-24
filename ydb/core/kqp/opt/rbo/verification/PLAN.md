@@ -642,7 +642,9 @@ Implementation sequence:
     `IN` at a direct positive top-level Filter conjunct;
 42. M4: exact nullable integral-to-Decimal weak `SafeCast` and same-scale,
     non-decreasing-precision Decimal weak `SafeCast`;
-43. next: multiple dependencies, broader correlations, coercing or other
+43. M4: exact pushed-OLAP physical/full/short output-IU resolution with
+    referenced-ambiguity rejection;
+44. next: multiple dependencies, broader correlations, coercing or other
     nullable dynamic `IN`, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
@@ -1417,8 +1419,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   evaluated before per-task pushed limits. Exact two-child
   `TKqpOlapFilterUnaryOp` tuples require an Atom operator tag: `exists(x)` maps
   to the scalar presence node and `empty(x)` to its negation. Unknown or
-  non-Atom tags, malformed tuples, and unavailable physical columns fail
-  closed; the separate Date gate admits `just` only around a direct valid
+  non-Atom tags, malformed tuples, and unavailable read columns fail closed.
+  Physical read names, full output-IU names, and short output-IU names resolve
+  to the corresponding logical scan output. A referenced spelling that denotes
+  distinct outputs fails closed as ambiguous; unused ambiguity is accepted
+  because it cannot affect the predicate. The separate Date gate admits `just`
+  only around a direct valid
   non-null Date literal. `Coalesce(predicate, false)` is erased only at a
   positive filter position propagated through AND/OR; the same node beneath
   NOT, a comparison, or a unary presence operation fails closed. Exporter
@@ -1446,8 +1452,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   writes a structured timeout-aware report, and preserves diagnostic artifacts
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
-  enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 57-query formula floor must keep constructing SMT, and the
+  enforce three monotonic depths: TPCH q1 and TPC-DS q5, q59, q65, and q80
+  must reach the verifier, the 59-query formula floor must keep constructing
+  SMT, and the
   twenty-two-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A
   verifier-side `UNSUPPORTED` result satisfies only the first tier; later
   formulas and proofs satisfy every weaker tier without pinning brittle blocker
@@ -1456,31 +1463,44 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
   repeated-structure construction gates. The latest complete suite
-  measurements were generated on 2026-07-24 from source `5dafcc79a4e` after
+  measurements were generated on 2026-07-24 from source `4c2c1359e28` after
   the correlated-COUNT repair, exact
   `DistinctAll` support, and restoration of the production PostgreSQL
   parser/runtime in the benchmark host, then added exact uncorrelated dynamic
   `IN`, the exact nullable Date-year bridge, the side-explicit shared-IU/q95
   aggregate slice, exact String dynamic `IN`, exact proven-total Date `Unwrap`,
   exact positive nullable-integral dynamic `IN`, and exact nullable integral
-  and same-scale Decimal widening weak `SafeCast`. They emit TPCH q1, q3, q4,
-  q5, q6, q7, q8,
-  q9, q10, q11,
-  q12, q14, q15, q18, q19, and q22 (16/22) and TPC-DS q3, q5, q6, q10, q15,
-  q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q55,
-  q56, q60, q61,
+  and same-scale Decimal widening weak `SafeCast`, then the pushed-predicate
+  output-IU resolver. They emit TPCH q1, q3, q4, q5, q6, q7, q8, q9, q10, q11,
+  q12, q14, q15, q18, q19, and q22 (16/22) and TPC-DS q2, q3, q5, q6, q10,
+  q15, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52,
+  q55, q56, q60, q61,
   q62, q65, q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93,
-  q95, q96, and q99 (41/99), for 57/121 workload queries (47.1%). TPCH has
-  four unsupported and two optimizer-failure results; TPC-DS has 32
-  unsupported and 26 optimizer-failure results, for 36 unsupported and 28
-  optimizer failures across both suites. Sixty-three queries pass both exporters
-  and enter the formula verifier, of which 57 construct formulas (90.5%).
-  Relative to all 93 optimizer-successful queries, including snapshot-boundary
-  failures, formula coverage is 57/93 (61.3%). The 36 unsupported rows split
-  into 25 initial-export, five final-export, and six verifier results.
+  q95, q96, q97, and q99 (43/99), for 59/121 workload queries (48.8%).
 
-  The current TPCH formula dashboard spent 2,872/28,853 ms in
+  The output-IU slice moves TPC-DS q2 and q97 to formula construction and q59
+  through both exporters to a verifier-side 32,640-pair Sort rejection above
+  the 16,384-pair audit cap.
+  TPCH has four unsupported and two optimizer-failure results; TPC-DS has 30
+  unsupported and 26 optimizer-failure results, for 34 unsupported and 28
+  optimizer failures across both suites. Sixty-six queries pass both exporters
+  and enter the formula verifier, of which 59 construct formulas (89.4%).
+  Relative to all 93 optimizer-successful queries, including snapshot-boundary
+  failures, formula coverage is 59/93 (63.4%). The 34 unsupported rows split
+  into 25 initial-export, two final-export, and seven verifier results. The
+  output-IU result is formula/entry coverage only; the proof floor remains
+  twenty-two and no optimizer correctness bug was found.
+
+  The latest complete TPCH formula dashboard spent 7,401/76,064 ms in
   preparation/verifier work and produced report SHA-256
+  `92f8508dcc9eb47e49a4ecbd9ec3577f2ab84aaa254404f555f9f4b60207342a`;
+  TPC-DS spent 123,828/490,758 ms and produced
+  `e7eef8b14247a35a3c1eb822d15d87eb6c80151064aa89164d58bcaba568f405`.
+  TPC-DS q2, q59, and q97 spent 3,874/34,168, 993/1,218, and 595/895 ms,
+  respectively. Both complete policy runs are green.
+
+  The immediately preceding 57-formula checkpoint was generated from source
+  `5dafcc79a4e`. Its TPCH formula dashboard spent 2,872/28,853 ms and produced
   `c0eadbb10b2b1f394d604bb5cc5097d9fac26646e6d3aa97b90e2ff47b0712d2`;
   TPC-DS spent 63,947/243,682 ms and produced
   `6e895ad5385f95b0528362e228d992065bb44487262cb22e5ddb5ba38ba9b844`.
@@ -1613,9 +1633,18 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   families returns `VERIFIED_BOUNDED` at two rows and two tasks. TPC-DS q18
   exercises the same contract and emits a complete formula after
   1,002/51,090 ms, but it is formula-only and is not in the proof floor. It
-  revealed no optimizer correctness bug. Current formula coverage is 57/121
-  overall, 57/93 among optimizer-successful queries, and 57/63 among verifier
-  entrants.
+  revealed no optimizer correctness bug. At that checkpoint formula coverage
+  was 57/121 overall, 57/93 among optimizer-successful queries, and 57/63 among
+  verifier entrants.
+
+  The subsequent output-IU resolver maps each OLAP predicate reference through
+  the read's physical name, full output-IU name, or short output-IU name to the
+  logical scan output. Distinct outputs sharing a referenced spelling fail
+  closed; unused ambiguity is accepted. In the complete dashboard q2/q97 emit
+  formulas, while q59 reaches the verifier and stops at the audited Sort pair
+  cap. Current
+  formula coverage is 59/121 overall, 59/93 among optimizer-successful queries,
+  and 59/66 among verifier entrants. The proof floor remains 22/121.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
@@ -1635,17 +1664,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q38, q42, q48,
   q52, q55, q69, q87, q90, q93, q95, and q96 with a fixed 60-second per-query
-  budget. The current policy gate passes 10/10 TPCH and 12/12 TPC-DS, all
-  `VERIFIED_BOUNDED`, so the proof floor remains 22/121. Its TPCH proof-floor
-  report spent 1,212/75,124 ms and
+  budget. The current policy gate on source `4c2c1359e28` passes 10/10 TPCH
+  and 12/12 TPC-DS, all `VERIFIED_BOUNDED`, so the proof floor remains 22/121.
+  Its TPCH proof-floor report spent 1,171/70,555 ms and
   produced SHA-256
+  `95b250728e656081f7a0469035bef4cd3df289a7ec1f0ce08c17d9cf76698554`;
+  TPC-DS spent 7,482/113,885 ms and produced
+  `a4b72350384d051958576505f5daf8e09106c59ec87104aa9ebebe1485ca4384`.
+  TPCH q14 spent 85/37,202 ms in the isolated green run.
+  TPC-DS q18 is not in this unchanged twenty-two-query proof policy.
+
+  At the immediately preceding q18 checkpoint, TPCH spent 1,212/75,124 ms and
+  produced
   `f90794bec99f5d739648c6f7fca81574ed52b8070257204d14f373edc0d38361`;
   TPC-DS spent 2,937/50,488 ms and produced
-  `96e07f8139df89f7b2a0f216dd82ee0044afb592c10a7d43f3183275a796caa9`.
-  TPC-DS q18 is not in this unchanged twenty-two-query proof policy.
-  The complete verification subtree passes 34/34 suites and 934/934 tests at
-  this milestone.
-
+  `96e07f8139df89f7b2a0f216dd82ee0044afb592c10a7d43f3183275a796caa9`,
+  and the complete verification subtree passed 34/34 suites and 934/934 tests.
   At the preceding q33 checkpoint, TPCH spent 1,185/62,768 ms and produced
   `1b68432f4e269bd19ca6064338fd008439391a1b1ffc9fa3f511d96418c6a8c6`;
   TPC-DS spent 2,800/43,618 ms and produced

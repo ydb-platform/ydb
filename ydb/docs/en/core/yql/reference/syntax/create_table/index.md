@@ -2,15 +2,16 @@
 
 {% if feature_bulk_tables %}
 
-The table is automatically created upon the first [INSERT INTO](../insert_into.md){% if feature_mapreduce %} in the database specified by the [USE](../use.md) operator{% endif %}. The schema is defined automatically in this process.
+The table is created automatically on the first [INSERT INTO](../insert_into.md){% if feature_mapreduce %}, in the database specified by the [USE](../use.md) operator{% endif %}. The schema is determined automatically.
 
 {% else %}
 
-The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} It also allows defining secondary indexes on the created table.
+Calling `CREATE TABLE` creates {% if concept_table %} [table]({{ concept_table }}){% else %}table{% endif %} with the specified data schema{% if feature_map_tables %} and key columns (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} Allows defining secondary indexes on the created table.
 
 {% endif %}
 
 {% endif %}
+
 
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
@@ -36,76 +37,86 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 [AS SELECT ...]
 ```
 
+
 {% if oss == true and backend_name == "YDB" %}
 
-## Request parameters {#request-parameters}
+## Query parameters
 
 ### table_name
 
-The path of the table to be created.
+Path of the table to be created.
 
 When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 ### IF NOT EXISTS
 
-If the table with the specified name already exists, the execution of the operator is completely skipped — no checks or schema matching is performed, and no error occurs. Note that the existing table may differ in structure from the one you would like to create with this query — no comparison or equivalence check is performed.
+If a table with the specified name already exists, the statement execution is completely skipped — no schema checks or matching are performed, and no error is raised. Note that the existing table may differ in structure from the one you intended to create with this query — no comparison or equivalence verification is performed.
 
 ### column_name
 
-The name of the column to be created in the new table.
+Name of the column created in the new table.
 
-When choosing a name for the column, consider the common [column naming rules](../../../../concepts/datamodel/table.md#column-naming-rules).
+When choosing a name for a column, consider the common [column naming rules](../../../../concepts/datamodel/table.md#column-naming-rules).
 
 ### column_data_type
 
-The data type of the column. The complete list of data types supported by {{ ydb-short-name }} is available in the [{#T}](../../types/index.md) section.
+Data type of the column. The full list of data types supported by {{ ydb-short-name }} is available in the [{#T}](../../types/index.md) section.
 
 {% include [column_option_list.md](../_includes/column_option_list.md) %}
 
 ### INDEX
 
-Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), and [Bloom skip indexes](bloom_skip_index.md) are supported.
+Definition of an index on a table. Supported:
+
+* [secondary indexes](secondary_index.md),
+* [vector indexes](vector_index.md),
+* [full-text indexes](fulltext_index.md),
+* [Bloom indexes](bloom_skip_index.md),
+* [JSON indexes](json_index.md).
 
 ### PRIMARY KEY
 
-Definition of the primary key of the table. Specifies the columns that make up the primary key in the order of enumeration. For more information on selecting a primary key, see the [{#T}](../../../../dev/primary-key/index.md) article.
+Definition of the table's primary key. Specifies the columns that make up the primary key in the order listed. See more about choosing a primary key in the [{#T}](../../../../dev/primary-key/index.md) section.
 
 ### PARTITION BY HASH
 
-Definition of the columns on which partitioning will occur for **column-oriented** tables. Specifies the columns on which [partitioning](../../../../concepts/glossary.md#partition) will occur using the hash function. The columns must be part of the primary key. The columns do not necessarily have to be a prefix or suffix — the requirement is to be part of the primary key.
+Definition of partitioning keys for **columnar** tables. Specifies the columns whose hash is used for data [partitioning](../../../../concepts/glossary.md#partition). Columns must be part of the primary key. The columns do not have to be a prefix or suffix — the requirement is to be part of the primary key.
 
-If the parameter is not specified, the table will be partitioned on the same columns as those included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
+If the parameter is not specified, the table will be partitioned by the same columns that are part of the primary key. For guidance on choosing partitioning keys in columnar tables, read the article [{#T}](../../../../dev/primary-key/column-oriented.md).
 
-For more information on partitioning column-oriented tables, see the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
+Read more about partitioning columnar tables in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
 
-### FAMILY <column_family> (column group setting)
+### FAMILY <column_family> (column group configuration)
 
-Definition of a column group with specified parameters. For more information, see the [{#T}](family.md) section.
+Definition of a column group with specified parameters. See more in the [{#T}](family.md) section.
 
 ### WITH
 
-Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
+Additional table creation parameters. See more in the [{#T}](with.md) section.
 
 {% note info %}
 
 {{ ydb-short-name }} supports two types of tables:
 
-* [Row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables.
-* [Column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables.
+* [Row](../../../../concepts/datamodel/table.md#row-oriented-tables).
+* [Columnar](../../../../concepts/datamodel/table.md#column-oriented-tables).
 
-The table type is specified by the `STORE` parameter in the `WITH` clause, where `ROW` indicates a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table and `COLUMN` indicates a [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) table:
+The table type at creation is set by the `STORE` parameter in the `WITH` block, where `ROW` denotes a [row table](../../../../concepts/datamodel/table.md#row-oriented-tables), and `COLUMN` denotes a [columnar table](../../../../concepts/datamodel/table.md#column-oriented-tables):
+
 
 ```yql
 CREATE <table_name> (
   columns
   ...
 )
+
 WITH (
   STORE = COLUMN -- Default value ROW
 )
 ```
 
-By default, if the `STORE` parameter is not specified, a row-oriented table is created.
+
+By default, if the `STORE` parameter is not specified, a row table is created.
 
 {% endnote %}
 
@@ -117,13 +128,13 @@ When choosing a name for the table, consider the common [schema object naming ru
 
 ### AS SELECT
 
-Creating and filling a table with data from a `SELECT` query. For more information, see the [{#T}](as_select.md) section.
+Creating and populating a table based on the results of the `SELECT` query. See more in the [{#T}](as_select.md) section.
 
-## Examples of table creation
+## Table creation examples
 
 {% list tabs %}
 
-- Creating a row-oriented table
+- Creating a row table
 
   {% if feature_column_container_type %}
 
@@ -135,7 +146,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
       d "List<List<Int32>>"
       PRIMARY KEY (a, b)
     );
-    ```
+  ```
 
   {% else %}
 
@@ -146,11 +157,12 @@ Creating and filling a table with data from a `SELECT` query. For more informati
       c Float,
       PRIMARY KEY (a, b)
     );
-    ```
+  ```
 
   {% endif %}
 
-  Example of creating a table with a DEFAULT value:
+  Example of creating a table using the default value (DEFAULT):
+
 
   ```yql
     CREATE TABLE table_with_default (
@@ -161,15 +173,16 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
+
   {% if feature_column_container_type == true %}
 
-  For non-key columns, any data types are allowed{% if feature_serial %}, except [serial](../../types/serial.md) types{% endif %}, whereas for key columns only [primitive](../../types/primitive.md) types{% if feature_serial %} and [serial](../../types/serial.md) types{% endif %} are permitted. When specifying complex types (for example, `List<String>`), the type should be enclosed in double quotes.
+  For non-key columns, any data types are allowed{% if feature_serial %} , except [serial](../../types/serial.md) {% endif %}, for key columns only [primitive](../../types/primitive.md){% if feature_serial %} and [serial](../../types/serial.md){% endif %}. When specifying complex types (e.g., `List<String>`), the type is enclosed in double quotes.
 
   {% else %}
 
   {% if feature_serial %}
 
-  For key columns, only [primitive](../../types/primitive.md) and [serial](../../types/serial.md) data types are allowed; for non-key columns, only [primitive](../../types/primitive.md) types are allowed.
+  For key columns, only [primitive](../../types/primitive.md) and [serial](../../types/serial.md) data types are allowed, for non-key columns, only [primitive](../../types/primitive.md) types are allowed.
 
   {% else %}
 
@@ -181,17 +194,17 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% if feature_not_null == true %}
 
-  Without additional modifiers, a column acquires an [optional](../../types/optional.md) type and allows `NULL` values. To designate a non-optional type, use the `NOT NULL` constraint.
+  Without additional modifiers, the column gets an [optional type](../../types/optional.md) and allows writing `NULL` as values. To obtain a non-optional type, you must use `NOT NULL`.
 
   {% else %}
 
   {% if feature_not_null_for_pk %}
 
-  By default, all columns are [optional](../../types/optional.md) and can have `NULL` values. The `NOT NULL` constraint can only be specified for columns that are part of the primary key.
+  By default, all columns are [optional](../../types/optional.md) and can have a NULL value. The `NOT NULL` constraint can be specified only for columns that are part of the primary key.
 
   {% else %}
 
-  All columns allow NULL values, meaning they are [optional](../../types/optional.md).
+  All columns allow writing `NULL` as values, i.e., they are [optional](../../types/optional.md).
 
   {% endif %}
 
@@ -199,11 +212,12 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% if feature_map_tables %}
 
-  Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These columns become part of the key in the order they are listed.
+  Specifying `PRIMARY KEY` with a non‑empty list of columns is required. These columns become part of the key in the order listed.
 
   {% endif %}
 
-  Example of creating a row-oriented table using partitioning options:
+  Example of creating a row table with partitioning options:
+
 
   ```yql
   CREATE TABLE <table_name> (
@@ -218,9 +232,10 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
-  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [Partitioning Row-Oriented Tables](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
 
-- Creating a column-oriented table
+  This code will create a row table with automatic partitioning enabled by partition size (`AUTO_PARTITIONING_BY_SIZE`) and a preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) of 512 megabytes. The full list of row‑table partitioning options is in the [Row table partitioning](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the article [{#T}](../../../../concepts/datamodel/table.md).
+
+- Creating a column table
 
   ```yql
   CREATE TABLE table_name (
@@ -235,9 +250,11 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
-  For column-oriented tables, you can explicitly specify the columns on which partitioning will occur using the `PARTITION BY HASH` construct. Usually, these are columns of the primary key with a large number of unique values, such as `Timestamp`. If `PARTITION BY HASH` is not specified, partitioning will occur automatically on all columns included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
 
-  Column-oriented tables do not currently support automatic repartitioning, so it is important to specify the correct number of partitions when creating a table with the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` parameter:
+  For column tables you can explicitly specify which columns to partition by using the `PARTITION BY HASH` construct. Typically, you choose primary‑key columns with a high number of unique values, for example, `Timestamp`. If `PARTITION BY HASH` is omitted, partitioning will occur automatically on all columns that are part of the primary key. For more details on selecting and using partitioning keys in column tables, read the article [{#T}](../../../../dev/primary-key/column-oriented.md).
+
+  Currently, column tables do not support automatic re‑partitioning, so it is important to specify the correct number of partitions when creating a table using the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` parameter:
+
 
   ```yql
   CREATE TABLE table_name (
@@ -253,8 +270,8 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
-  This code will create a column-oriented table with 10 partitions. The full list of column-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
 
+  This code will create a column table with 10 partitions. You can review the full list of column‑table partitioning options in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section of the article [{#T}](../../../../concepts/datamodel/table.md).
 
 {% endlist %}
 
@@ -262,27 +279,27 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
 {% if feature_column_container_type == true %}
 
-For non-key columns, any data types are allowed, whereas for key columns only [primitive](../../types/primitive.md) types are permitted. When specifying complex types (for example, `List<String>`), the type should be enclosed in double quotes.
+For non‑key columns any data types are allowed, for key columns only [primitive](../../types/primitive.md) types. When specifying complex types (for example, `List<String>`) the type must be enclosed in double quotes.
 
 {% else %}
 
-For both key and non-key columns, only [primitive](../../types/primitive.md) data types are allowed.
+Only [primitive](../../types/primitive.md) data types are allowed for both key and non‑key columns.
 
 {% endif %}
 
 {% if feature_not_null == true %}
 
-Without additional modifiers, a column acquires an [optional](../../types/optional.md) type and allows `NULL` values. To designate a non-optional type, use the `NOT NULL` constraint.
+Without additional modifiers, a column has an [optional type](../../types/optional.md) and allows writing `NULL` as values. To obtain a non‑optional type you must use `NOT NULL`.
 
 {% else %}
 
 {% if feature_not_null_for_pk %}
 
-By default, all columns are [optional](../../types/optional.md) and can have `NULL` values. The `NOT NULL` constraint can only be specified for columns that are part of the primary key.
+By default all columns are [optional](../../types/optional.md) and can have a NULL value. The `NOT NULL` constraint can be specified only for columns that are part of the primary key.
 
 {% else %}
 
-All columns allow NULL values, meaning they are [optional](../../types/optional.md).
+All columns allow writing `NULL` as values, i.e., they are [optional](../../types/optional.md).
 
 {% endif %}
 
@@ -290,11 +307,12 @@ All columns allow NULL values, meaning they are [optional](../../types/optional.
 
 {% if feature_map_tables %}
 
-Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These columns become part of the key in the order they are listed.
+Specifying `PRIMARY KEY` with a non‑empty list of columns is required. These columns become part of the key in the order listed.
 
 {% endif %}
 
 Example:
+
 
 ```yql
 CREATE TABLE <table_name> (
@@ -309,21 +327,22 @@ CREATE TABLE <table_name> (
 
 {% if backend_name == "YDB" and oss == true %}
 
-When creating row-oriented tables, it is possible to specify:
+When creating row tables you can specify:
 
-* [A secondary index](secondary_index.md).
-* [A vector index](vector_index.md).
-* [A fulltext index](fulltext_index.md).
-* [A Bloom skip index](bloom_skip_index.md).
+* [Secondary index](secondary_index.md).
+* [Vector index](vector_index.md).
+* [Full‑text index](fulltext_index.md).
+* [JSON index](json_index.md).
+* [Bloom index](bloom_skip_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
-* [Creating a table filled with query results](as_select.md).
+* [Creating and populating a table from query results](as_select.md).
 
-When creating column-oriented tables, it is possible to specify:
+When creating column tables you can specify:
 
-* [A Bloom skip index](bloom_skip_index.md).
+* [Bloom index](bloom_skip_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
-* [Creating a table filled with query results](as_select.md).
+* [Creating and populating a table from query results](as_select.md).
 
 {% endif %}

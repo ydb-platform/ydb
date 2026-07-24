@@ -31,6 +31,8 @@ items:
   href: fulltext-indexes.md
 - name: Hybrid search
   href: hybrid-search.md
+- name: JSON indexes
+  href: json-indexes.md
 - name: Local indexes
   href: local-indexes/index.md
   include:
@@ -51,11 +53,11 @@ items:
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
-- name: Structure and limitations of a shared topic reader
-  href: shared-consumer-internals.md
 - name: Terraform
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
 - name: Resource consumption management
   href: resource-consumption-management.md
+- name: Structure and limitations of a shared topic reader
+  href: shared-consumer-internals.md

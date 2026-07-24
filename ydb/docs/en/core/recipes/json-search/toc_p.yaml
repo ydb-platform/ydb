@@ -1,0 +1,9 @@
+items:
+- name: JSON-index — quick start
+  href: json-index-quickstart.md
+- name: Directory with nested attributes
+  href: json-index-catalog.md
+- name: Parameterized queries and JsonPath variables
+  href: json-index-parameters.md
+- name: Field type validation and path existence
+  href: json-index-typecheck.md

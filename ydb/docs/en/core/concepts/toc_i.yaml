@@ -5,11 +5,6 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
-- name: Architecture
-  href: architecture/index.md
-  include:
-    path: architecture/toc_p.yaml
-    mode: link
 - name: Connecting to a database
   href: connect.md
 - name: Schema objects
@@ -19,8 +14,6 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
-- name: Bridge mode
-  href: bridge.md
 - name: Query execution
   href: query_execution/index.md
   include:
@@ -47,3 +40,13 @@ items:
   when: feature_transfer
 - name: Streaming queries
   href: streaming-query.md
+- name: Architecture
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
+- name: Architecture
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link

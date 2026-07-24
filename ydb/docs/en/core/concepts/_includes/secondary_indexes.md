@@ -1,90 +1,94 @@
-# Secondary Indexes
+# Secondary indexes
 
-{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_ — global structures backed by a separate index table.
+In {{ ydb-short-name }} an index on the primary key is created automatically, so queries with a condition on the primary key are always executed efficiently, touching only the required rows. A query with a condition on one or more non‑key columns typically results in a full table scan. To make such queries efficient, you need to use *secondary indexes* — global structures with a separate index table.
 
-[Local indexes](../glossary.md#local-index) are a separate kind of auxiliary structure: they are stored with table data and applied in the storage layer on read, without materializing a separate index table (see [Local indexes](#bloom-skip-index) below).
+Separate from that, there are [local indexes](../glossary.md#local-index): auxiliary structures that are stored together with the table data and are applied during storage‑side reads, without materializing a separate index table (see the [Local indexes](#bloom-skip-index) section below).
 
-The current version of {{ ydb-short-name }} implements _synchronous_ and _asynchronous_ global secondary indexes. Each index is a hidden table that is updated:
+In the current version, {{ ydb-short-name }} implements *synchronous* and *asynchronous* global secondary indexes. Each index is a hidden table that is updated:
 
-* For synchronous indexes: Transactionally when the main table changes.
-* For asynchronous indexes: In the background while getting the necessary changes from the main table.
+* for synchronous indexes — transactionally when the primary table changes.
+* for asynchronous indexes — in the background, receiving the necessary changes from the primary table.
 
-When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns to enable navigation from an index record to the table row.
+When a user sends an SQL query to insert, update, or delete data, the database transparently generates commands to modify the index table. A table can have multiple secondary indexes. An index can include multiple columns, and the order of columns in the index matters. A column can be part of several indexes. In addition to the specified columns, an index always implicitly stores the values of the table’s primary key columns, so that from a found index entry you can navigate to the corresponding table row.
 
-## Synchronous Secondary Index {#sync}
+## Synchronous secondary index {#sync}
 
-A synchronous index is updated simultaneously with the table that it indexes. This index ensures [strict consistency](https://en.wikipedia.org/wiki/Consistency_model) through [distributed transactions](../transactions.md#distributed-tx). While reads and blind writes to a table with no index can be performed without a planning stage, significantly reducing delays, such optimization is impossible when writing data to a table with a synchronous index.
+A synchronous index is updated together with the table it indexes. Such an index provides [strict data consistency](https://en.wikipedia.org/wiki/Consistency_model) and uses the [distributed transactions](../transactions.md#distributed-tx) mechanism for this. Thus, while read operations and blind writes to a table without an index can be performed without a planning stage, significantly reducing latency, this optimization is not possible for writes to a table with a synchronous index.
 
-## Asynchronous Secondary Index {#async}
+## Asynchronous secondary index {#async}
 
-Unlike a synchronous index, an asynchronous index doesn't use distributed transactions. Instead, it receives changes from an indexed table in the background. Write transactions to a table using this index are performed with no planning overheads due to reduced guarantees: an asynchronous index provides [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency), but no strict consistency. You can only use asynchronous indexes in read transactions in [Stale Read Only](../transactions.md#modes) mode.
+An asynchronous index, unlike a synchronous one, does not use the distributed transactions mechanism, but instead receives changes from the indexed table in the background. Write transactions to a table with such an index are executed without additional planning overhead, at the cost of reduced guarantees: an asynchronous index provides [eventual data consistency](https://en.wikipedia.org/wiki/Eventual_consistency) but not strict consistency. Using an asynchronous index in read transactions is possible only in the [Stale Read Only](../transactions.md#modes) mode.
 
-## Covering Secondary Index {#covering}
+## Covering secondary index {#covering}
 
-You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
+It is possible to copy the contents of columns into the index (covering index), which eliminates the need to read from the primary table during index read operations, significantly reducing latency. At the same time, this denormalization increases disk space consumption and can slow down insert and update operations due to the need for additional data copying.
 
-## Unique Secondary Index {#unique}
+## Unique secondary index {#unique}
 
-This type of index enforces unique constraint behavior and, just like a regular secondary index, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it is aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
+This type of index implements the semantics of a unique value in a column or set of columns and, like other indexes, allows efficient point reads on the set of indexed columns. {{ ydb-short-name }} uses it to perform additional checks to ensure that each unique value of the indexed columns appears in the table at most once. If a modifying query violates this constraint, it is aborted with status `PRECONDITION_FAILED`. Consequently, client code must be prepared to handle this status.
 
-A unique secondary index is a synchronous index, so from a transactional perspective, the update process is the same as for the [synchronous secondary index](#sync) described above.
+A unique secondary index is a synchronous index, so from a transactional perspective its update process is the same as that of the [synchronous secondary index](#sync) described above.
 
-## Vector Index
+## Vector index {#vector}
 
-[Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
+[Vector index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike traditional secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
+Unlike traditional secondary indexes that optimize equality or range searches, vector indexes enable you to perform [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
-## Fulltext Index
+## Full-text index {#fulltext}
 
-[Fulltext index](../../dev/fulltext-indexes.md) is a special type of secondary index.
+[Full-text index](../../dev/fulltext-indexes.md) is a special type of secondary index.
 
-Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
+Unlike traditional secondary indexes that optimize equality or range searches, full-text indexes allow scalable text search by words and phrases (and, when using [N-grams](https://en.wikipedia.org/wiki/N-gram) — also by substrings). See also: [Full-text search](../query_execution/fulltext_search.md).
+
+## JSON index {#json}
+
+[JSON index](../../dev/json-indexes.md) is a special type of secondary index, like the full-text one — both are built on top of an [inverted index](https://en.wikipedia.org/wiki/Inverted_index), but use different tokenizers.
+
+JSON indexes allow speeding up predicates with the [JSON_EXISTS](../../yql/reference/builtins/json.md) and [JSON_VALUE](../../yql/reference/builtins/json.md) functions on the contents of a column of type `Json` or `JsonDocument`. The index is built by splitting JSON documents into path tokens and pairs of the form “path + value”, which enables finding matching rows by [JsonPath](../../yql/reference/builtins/json.md#jsonpath) paths without a full table scan. See also: [JSON search](../query_execution/json_search.md).
 
 ## Local indexes {#bloom-skip-index}
 
-[Local indexes](../query_execution/local_indexes.md) are auxiliary structures stored together with table data and applied while reading in the storage layer. They do not materialize a separate index table. Currently, [Bloom skip indexes](../../dev/bloom-skip-indexes.md) are implemented; other kinds are planned.
+[Local indexes](../query_execution/local_indexes.md) — auxiliary structures stored together with the table data and used during reads on the storage side. They do not materialize a separate index table. Currently, [Bloom indexes](../../dev/bloom-skip-indexes.md) are implemented, and other types are planned for the future.
 
-## Creating a Secondary Index Online {#index-add}
+## Online creation of a secondary index {#index-add}
 
-{{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.
+In {{ ydb-short-name }} you can create a secondary index and also delete an existing secondary index without service interruption. For a single table you can create only one index at a time.
 
-Online index creation consists of the following steps:
+The online index creation operation consists of the following steps:
 
-1. Taking a snapshot of a data table and creating an index table marked that writes are available.
+1. Taking a snapshot of the table with data, creating an index table with a write-availability marker.
 
-   After this step, write transactions are distributed, writing to the main table and the index, respectively. The index is not yet available to the user.
+   After this step, write transactions become distributed, and records are written to the primary table and the index. The index is not yet available to the user.
+2. Reading a snapshot of the primary table and writing to the index.
 
-1. Reading the snapshot of the main table and writing data to the index.
+   Implements “write-to-the-past”: it allows situations where data updates at step 1 change data written at step 2.
+3. Publishing the result, deleting the snapshot.
 
-   "Writes to the past" are implemented: situations where data updates in step 1 change the data written in step 2 are resolved.
+   The index is ready for use.
 
-1. Publishing the results and deleting the snapshot.
+Potential impact on user transactions:
 
-   The index is ready to use.
-
-Possible impact on user transactions:
-
-* There may be an increase in delays because transactions are now distributed (when creating a synchronous index).
-* There may be an enhanced background of `OVERLOADED` errors because index table automatic shard splitting is actively running during data writes.
+* Increased latency may be observed because transactions become distributed when creating a synchronous index.
+* You may experience an increased error rate `OVERLOADED` because automatic shard splitting of the index table is actively running while data is being written.
 
 {% note info %}
 
-The data write rate is chosen to minimize the impact of the write process on user transactions. To control the rate, configure limits for the corresponding queue in the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+The data write speed is selected to minimize the impact of the write process on user transactions. To control the speed, configure limits for the appropriate [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config) queue.
 
 {% endnote %}
 
-Creating an index is an asynchronous operation. If the client-server connection is interrupted after the operation has started, index building continues. You can manage asynchronous operations using the {{ ydb-short-name }} CLI.
+Creating an index is an asynchronous operation. If a client-server connectivity break occurs after the operation is started, index building will continue. You can manage the asynchronous operation via the {{ ydb-short-name }} CLI.
 
-## Creating and Deleting Secondary Indexes {#ddl}
+## Creating and deleting secondary indexes {#ddl}
 
 A secondary index can be:
 
-- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table/index.md) statement.
-- Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table/index.md) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
-- Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table/index.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
-- Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) statement or the YDB CLI `table drop` command.
+- Created when a table is created with the YQL [CREATE TABLE](../../yql/reference/syntax/create_table/index.md) command.
+- Added to an existing table by the YQL command [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) or by the {{ ydb-short-name }} CLI command [table index add](../../reference/ydb-cli/commands/secondary_index.md#add)
+- Deleted from an existing table using the YQL command [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) or the {{ ydb-short-name }} CLI command [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
+- It is removed together with the table by the YQL command [DROP TABLE](../../yql/reference/syntax/drop_table.md) or by the {{ ydb-short-name }} CLI `table drop` command.
 
-## Using Secondary Indexes {#use}
+## Using secondary indexes {#use}
 
-For detailed information on using secondary indexes in applications, refer to the [relevant article](../../dev/secondary-indexes.md) in the documentation section for developers.
+Detailed information about using secondary indexes in applications can be found in the [article about them](../../dev/secondary-indexes.md) in the developer documentation section.

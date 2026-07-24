@@ -70,6 +70,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 * [векторные индексы](vector_index.md),
 * [полнотекстовые индексы](fulltext_index.md),
 * [Блум-индексы](bloom_skip_index.md),
+* [min_max-индекс](min_max_index.md),
 * [JSON-индексы](json_index.md).
 
 ### PRIMARY KEY

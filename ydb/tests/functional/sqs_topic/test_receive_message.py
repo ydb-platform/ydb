@@ -36,6 +36,7 @@ class TestSqsTopicReceiveMessage(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             MessageBody=message_body,
             MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
         )
 
         response = self._boto_client.receive_message(

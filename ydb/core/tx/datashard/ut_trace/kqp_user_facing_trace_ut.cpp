@@ -107,7 +107,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         // query -> stage -> task: at least one task span nests under a stage.
         auto run = execute->get().BFSFindOne("Run");
         UNIT_ASSERT(run);
-        UNIT_ASSERT_C(run->get().BFSFindOne("Compute task 1"), "per-task span missing under stage");
+        UNIT_ASSERT_C(run->get().BFSFindOne("Write task 1"), "per-task span missing under stage");
+        UNIT_ASSERT_C(run->get().BFSFindOne("Write /Root/table-1"), "write stage not named by table");
 
         // The user tree is pruned: engine internals (ComputeActor) live in the dev tree only.
         UNIT_ASSERT_C(!userRoot->BFSFindOne("ComputeActor"), "user tree leaked engine internals");

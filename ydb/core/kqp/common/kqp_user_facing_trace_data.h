@@ -136,9 +136,18 @@ struct TUserFacingShardCommitAck {
     TInstant CommittedAt;
 };
 
+// Presentation hint for one stage, captured by the executer from the tasks graph: exported
+// stage stats carry no table info for sink writes, so without it the renderer can only name
+// such stages "Step N".
+struct TUserFacingStageHint {
+    TString TablePath;
+    bool IsWrite = false;
+};
+
 struct TUserFacingTraceExecutionData {
     TUserFacingTraceTimeline Timeline;
     TUserFacingTraceTaskStats TaskStats;
+    THashMap<ui32, TUserFacingStageHint> StageHints; // by exported stage id
     TVector<TUserFacingShardCommitAck> ShardCommitAcks;
     // Stats exported at collection depth for the trace; the response's stats stay at the
     // client-requested mode and must not be used for rendering.

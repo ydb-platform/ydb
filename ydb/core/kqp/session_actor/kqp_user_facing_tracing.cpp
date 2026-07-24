@@ -105,7 +105,7 @@ TStageSignals CollectStageSignals(const NYql::NDqProto::TDqStageStats& stage) {
 
 // Short action of a stage, inherited by its task spans ("Read task 3"): a task viewed out of
 // context should still say what it was doing.
-TString StageShortVerb(const NYql::NDqProto::TDqStageStats& stage) {
+TString StageShortVerb(const NYql::NDqProto::TDqStageStats& stage, const TUserFacingStageHint* hint) {
     if (stage.OperatorJoinSize() > 0) {
         return "Join";
     }
@@ -118,10 +118,13 @@ TString StageShortVerb(const NYql::NDqProto::TDqStageStats& stage) {
     if (stage.TablesSize() > 0) {
         return stage.GetTables(0).GetWriteRows().GetSum() > 0 ? "Write" : "Read";
     }
+    if (hint && hint->TablePath) {
+        return hint->IsWrite ? "Write" : "Read";
+    }
     return "Compute";
 }
 
-TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
+TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage, const TUserFacingStageHint* hint) {
     // Name by the dominant operator first; a table name only labels a pure read/write stage.
     if (stage.OperatorJoinSize() > 0) {
         return "Join";
@@ -135,6 +138,10 @@ TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
     if (stage.TablesSize() > 0) {
         const auto& table = stage.GetTables(0);
         return TStringBuilder() << (table.GetWriteRows().GetSum() > 0 ? "Write " : "Read ") << table.GetTablePath();
+    }
+    // Sink-write stages carry no table info in exported stats; the executer-captured hint does.
+    if (hint && hint->TablePath) {
+        return TStringBuilder() << (hint->IsWrite ? "Write " : "Read ") << hint->TablePath;
     }
     return TStringBuilder() << "Step " << stage.GetStageId();
 }
@@ -232,9 +239,12 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
     }
 }
 
-void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqExecutionStats& stats,
-        const TUserFacingTraceTaskStats& taskStats, TSpanBudget& budget) {
+void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecutionData& trace,
+        TSpanBudget& budget) {
+    const NYql::NDqProto::TDqExecutionStats& stats = trace.ExecStats;
+    const TUserFacingTraceTaskStats& taskStats = trace.TaskStats;
     for (const auto& stage : stats.GetStages()) {
+        const TUserFacingStageHint* hint = trace.StageHints.FindPtr(stage.GetStageId());
         // Stage start/finish are offsets from BaseTimeMs (absolute epoch ms); base 0 => untimed stage.
         const ui64 base = stage.GetBaseTimeMs();
         const ui64 startMs = stage.GetStartTimeMs().GetMin();
@@ -245,7 +255,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             parent, parent.Span(parent.GetVerbosity()),
             TInstant::MilliSeconds(base + startMs), TInstant::MilliSeconds(base + finishMs),
-            NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage));
+            NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage, hint));
         if (!span) {
             continue;
         }
@@ -292,7 +302,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const NYql::NDqProto::TDqEx
                 span.Attribute("ydb.tasks_truncated",
                     static_cast<i64>(stage.GetTotalTasksCount() - stageTasks.size()));
             }
-            EmitTaskSpans(span.GetTraceId(), StageShortVerb(stage), stageTasks, base + startMs, budget);
+            EmitTaskSpans(span.GetTraceId(), StageShortVerb(stage, hint), stageTasks, base + startMs, budget);
         }
         span.End();
     }
@@ -353,7 +363,7 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan = MakePhase(executeId, run.Start, run.End, "Run");
     }
     const NWilson::TTraceId runId = runSpan ? runSpan.GetTraceId() : NWilson::TTraceId{};
-    EmitStageSpans(runSpan ? runId : executeId, trace.ExecStats, trace.TaskStats, budget);
+    EmitStageSpans(runSpan ? runId : executeId, trace, budget);
     if (runSpan) {
         runSpan.End();
     }

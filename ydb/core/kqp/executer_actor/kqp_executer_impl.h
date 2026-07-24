@@ -1880,6 +1880,13 @@ protected:
                     EndUserFacingPhase();
                     // Stamped after the last phase's end so children never overflow Execute.
                     UserFacingTraceData->Timeline.Execute.End = TInstant::Now();
+                    for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                        // Exported stage stats are numbered by the first tx only (see ExportExecStats).
+                        if (stageId.TxId == 0 && stageInfo.Meta.TablePath) {
+                            UserFacingTraceData->StageHints.emplace(stageId.StageId,
+                                TUserFacingStageHint{stageInfo.Meta.TablePath, stageInfo.Meta.HasWrites()});
+                        }
+                    }
                     Stats->ExportExecStats(UserFacingTraceData->ExecStats);
                     UserFacingTraceData->TaskStats = std::move(Stats->UserFacingTaskStats);
                     ResponseEv->UserFacingTraceData = std::move(UserFacingTraceData);

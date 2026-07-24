@@ -20,7 +20,7 @@ using namespace NTable;
         TDerived* AsDerived() { \
             return static_cast<TDerived*>(this); \
         } \
-        TStringBuf GetLogPrefix() const { \
+        NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const { \
             return AsDerived()->GetLogPrefix(); \
         }
 
@@ -61,8 +61,9 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::CHANGE_EXCHANGE, "HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -127,8 +128,9 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::CHANGE_EXCHANGE, "HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -223,8 +225,9 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::CHANGE_EXCHANGE, "HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -245,8 +248,9 @@ private:
         }
 
         if (!entry.KeyDescription->GetPartitions()) {
-            LOG_W("Empty partitions list"
-                << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
+            YDB_LOG_WARN_COMP(NKikimrServices::CHANGE_EXCHANGE, "Target table has empty partitions list",
+                {"logPrefix", GetLogPrefix()},
+                {"navigateEntry", entry.ToString(*AppData()->TypeRegistry)});
             return AsDerived()->Retry();
         }
 

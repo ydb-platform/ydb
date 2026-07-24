@@ -217,7 +217,11 @@ FROM
 
 {% note warning %}
 
-Чтение и запись [пользовательских атрибутов](../datamodel/topic.md#message) не поддерживаются.
+{% note warning %}
+
+Запись [пользовательских атрибутов](../datamodel/topic.md#message) через YQL не поддерживается.
+
+{% endnote %}
 
 {% endnote %}
 

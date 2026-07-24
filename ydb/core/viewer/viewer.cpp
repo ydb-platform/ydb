@@ -46,6 +46,7 @@ namespace {
 
 enum class EViewerEndpointAccessType {
     Administration,
+    Monitoring,
     Viewer,
     Database
 };
@@ -244,16 +245,24 @@ public:
 
             if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
                 applyAccessRules({
-                    // Viewer-level endpoints.
-                    // non "/viewer" prefix endpoints.
+                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
+
+                    // Administration-level endpoints.
+                    {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
+
+                    // Monitoring-level endpoints.
+                    // restart pdisk and evict vdisk endpoints below have some query-parameters,
+                    // which require Administration-level access. This is checked in the handler.
+                    // So the Monitoring-level access is not always enough got a successull call.
+                    {"/pdisk/restart", {EViewerEndpointAccessType::Monitoring}},
+                    {"/vdisk/evict", {EViewerEndpointAccessType::Monitoring}},
+
+                    // Viewer-level endpoints
                     {"/pdisk/info", {EViewerEndpointAccessType::Viewer}},
-                    {"/pdisk/restart", {EViewerEndpointAccessType::Viewer}},
                     {"/pdisk/status", {EViewerEndpointAccessType::Viewer}},
                     {"/vdisk/vdiskstat", {EViewerEndpointAccessType::Viewer}},
                     {"/vdisk/getblob", {EViewerEndpointAccessType::Viewer}},
                     {"/vdisk/blobindexstat", {EViewerEndpointAccessType::Viewer}},
-                    {"/vdisk/evict", {EViewerEndpointAccessType::Viewer}},
-                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
                     {"/viewer/hiveinfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/hivestats", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/counters", {EViewerEndpointAccessType::Viewer}},
@@ -282,11 +291,7 @@ public:
                     {"/viewer/browse", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/content", {EViewerEndpointAccessType::Viewer}},
 
-                    // Administration-level endpoints.
-                    {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
-
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
-                    // non "/viewer" prefix endpoints.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
                     {"/operation/get", {EViewerEndpointAccessType::Database, true}},
                     {"/operation/list", {EViewerEndpointAccessType::Database, true}},
@@ -295,7 +300,6 @@ public:
                     {"/query/script/execute", {EViewerEndpointAccessType::Database, true}},
                     {"/query/script/fetch", {EViewerEndpointAccessType::Database, true}},
                     {"/scheme/directory", {EViewerEndpointAccessType::Database, true}},
-                    // "/viewer" prefix endpoints (/viewer/json/* aliases are registered automatically).
                     {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
@@ -348,6 +352,8 @@ public:
                         return administrationAllowedSIDs;
                     case EViewerEndpointAccessType::Viewer:
                         return viewerAllowedSIDs;
+                    case EViewerEndpointAccessType::Monitoring:
+                        return monitoringAllowedSIDs;
                     case EViewerEndpointAccessType::Database:
                     default:
                         return databaseAllowedSIDs;
@@ -632,6 +638,9 @@ private:
         switch (itAccess->second.AccessType) {
             case EViewerEndpointAccessType::Administration:
                 return IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
+            case EViewerEndpointAccessType::Monitoring:
+                return IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())
+                    || IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
             case EViewerEndpointAccessType::Viewer:
                 return IsTokenAllowed(serializedToken, sec.GetViewerAllowedSIDs())
                     || IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())

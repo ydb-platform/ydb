@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
 
-#include <ydb/library/actors/util/funnel_queue.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 
 // Must be included AFTER YDB headers because linux/uapi headers pulled by
 // liburing may define macros that clash with project headers.
@@ -20,6 +20,7 @@
 
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <sys/timerfd.h>
 
 #include <cerrno>
 #include <deque>
@@ -134,18 +135,23 @@ namespace NActors {
             bool ReadPending = false;
             bool WritePending = false;
             bool UnregisterRequested = false;
+            const bool SendPings;
             TRcBuf WriteBuffer;
             std::deque<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
             size_t IovLen = 0;
             size_t UnsentBytes = 0;
 
+            const std::shared_ptr<std::atomic<int64_t>> ClockSkew;
+            const std::shared_ptr<std::atomic<uint64_t>> PingRTT;
+
             THashMap<TActorId, TIntrusivePtr<IReceiveCallback>> ReceiveCallbacks;
             NMonitoring::TDynamicCounters::TCounterPtr EventsReceived;
 
             TRegisteredSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket, TActorId sessionId,
                     bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
-                    TActorSystem *actorSystem)
+                    TActorSystem *actorSystem, bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
+                    std::shared_ptr<std::atomic<uint64_t>> pingRTT)
                 : ShardIdx(shardIdx)
                 , Socket(std::move(socket))
                 , SessionId(sessionId)
@@ -153,6 +159,9 @@ namespace NActors {
                 , ActorSystem(actorSystem)
                 , Serializer(checksumming)
                 , Deserializer(peerScopeId)
+                , SendPings(sendPings)
+                , ClockSkew(std::move(clockSkew))
+                , PingRTT(std::move(pingRTT))
             {}
 
             void Disconnect(TDisconnectReason reason) {
@@ -191,7 +200,7 @@ namespace NActors {
             // serialization/sending
 
             bool Serialize() {
-                if (UnsentBytes >= MinSerializeWindowSize) { // we have some bytes to send by now, don't trigger serialization
+                if (UnsentBytes >= MinSerializeWindowSize && !Serializer.HasOutOfBandTraffic()) {
                     return false;
                 }
 
@@ -249,6 +258,86 @@ namespace NActors {
 
                 Serializer.CommitProducedBytes(num, eventToWireTime);
             }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // ping/clock skew management
+
+            NHPTimer::STime PingRequestSentTimestamp = 0;
+            NHPTimer::STime PingResponseSentTimestamp = 0;
+
+            void SendPingRequest() {
+                NActorsInterconnect::TSystemPayloadV2 systemRequest;
+                auto *r = systemRequest.AddRequests();
+                r->MutablePingRequest();
+                Serializer.Push(systemRequest);
+                PingRequestSentTimestamp = GetCycleCountFast();
+            }
+
+            void Process(NActorsInterconnect::TSystemPayloadV2& systemRequest) override {
+                std::optional<NActorsInterconnect::TSystemPayloadV2> response;
+
+                auto addRequest = [&] {
+                    if (!response) {
+                        response.emplace();
+                    }
+                    return response->AddRequests();
+                };
+
+                const NHPTimer::STime timestamp = GetCycleCountFast();
+                const TInstant now = Now();
+
+                auto calculateRoundTripTimeAndSkew = [&](auto& item, NHPTimer::STime sent) {
+                    const ui64 rtt = NHPTimer::GetSeconds(timestamp - sent) * 1e6;
+                    const i64 skew = item.GetWallClock() + rtt / 2 - now.MicroSeconds();
+                    RegisterPingAndSkew(rtt, skew);
+                };
+
+                for (const auto& item : systemRequest.GetRequests()) {
+                    switch (item.GetRequestCase()) {
+                        case NActorsInterconnect::TSystemPayloadV2::TRequest::kPingRequest: {
+                            // we have received PingRequest from the peer -- we have to remember when we got it, send
+                            // the reply and wait for PingConfirm to make up our ClockSkew value
+                            auto *pr = addRequest()->MutablePingResponse();
+                            pr->SetWallClock(now.MicroSeconds());
+                            PingResponseSentTimestamp = timestamp;
+                            break;
+                        }
+
+                        case NActorsInterconnect::TSystemPayloadV2::TRequest::kPingResponse: {
+                            calculateRoundTripTimeAndSkew(item.GetPingResponse(), PingRequestSentTimestamp);
+                            PingRequestSentTimestamp = 0;
+
+                            auto *pc = addRequest()->MutablePingConfirm();
+                            pc->SetWallClock(now.MicroSeconds());
+                            break;
+                        }
+
+                        case NActorsInterconnect::TSystemPayloadV2::TRequest::kPingConfirm:
+                            calculateRoundTripTimeAndSkew(item.GetPingConfirm(), PingResponseSentTimestamp);
+                            PingResponseSentTimestamp = 0;
+                            break;
+
+                        case NActorsInterconnect::TSystemPayloadV2::TRequest::REQUEST_NOT_SET:
+                            break;
+                    }
+                }
+
+                if (response) {
+                    Serializer.Push(*response);
+                }
+            }
+
+            ui64 PingValues[3] = {0, 0, 0};
+
+            void RegisterPingAndSkew(ui64 pingUs, i64 skew) {
+                ClockSkew->store(skew);
+
+                // calculate worst ping over three last times
+                PingValues[0] = PingValues[1];
+                PingValues[1] = PingValues[2];
+                PingValues[2] = pingUs;
+                PingRTT->store(Max(PingValues[0], PingValues[1], PingValues[2]));
+            }
         };
 
         class TShard {
@@ -256,6 +345,7 @@ namespace NActors {
                 kOpPipe = 1,
                 kOpRead,
                 kOpWrite,
+                kOpTimer,
             };
             static const ui64 kOpMask = (1 << 3) - 1;
 
@@ -269,6 +359,9 @@ namespace NActors {
             int ReadPipe;
             int WritePipe;
             char ReadPipeBuffer[256];
+
+            int TimerFd;
+            char ReadTimerBuffer[256];
 
             struct TSessionHash {
                 size_t operator()(const std::unique_ptr<TRegisteredSession>& p) const { return THash<void*>{}(p.get()); }
@@ -417,6 +510,17 @@ namespace NActors {
                 ReadPipe = fds[0];
                 WritePipe = fds[1];
 
+                // set timer
+                TimerFd = timerfd_create(CLOCK_MONOTONIC, 0);
+                Y_ABORT_UNLESS(TimerFd != -1);
+
+                // arm timer
+                itimerspec spec;
+                memset(&spec, 0, sizeof(spec));
+                spec.it_interval.tv_sec = 2; // every two seconds
+                spec.it_value.tv_sec = 2; // initial expiration
+                timerfd_settime(TimerFd, 0, &spec, nullptr);
+
                 // start worker thread
                 Worker = std::thread(std::bind(&TShard::WorkerThread, this));
             }
@@ -427,6 +531,7 @@ namespace NActors {
                 DrainQueue(); // free commands that were enqueued after the worker stopped (teardown races)
                 close(ReadPipe);
                 close(WritePipe);
+                close(TimerFd);
                 // remaining registered sessions are freed as the Sessions container is destroyed
             }
 
@@ -530,7 +635,7 @@ namespace NActors {
                     uintptr_t sessionId = reinterpret_cast<uintptr_t>(session);
                     Y_ABORT_UNLESS((sessionId & kOpMask) == 0);
                     io_uring_sqe_set_data64(sqe, sessionId | op);
-                    Y_DEBUG_ABORT_UNLESS(op == kOpPipe ? session == nullptr : session != nullptr);
+                    Y_DEBUG_ABORT_UNLESS(op == kOpPipe || op == kOpTimer ? session == nullptr : session != nullptr);
                     ++*SQEAllocated;
                 }
                 return sqe;
@@ -567,6 +672,12 @@ namespace NActors {
                 io_uring_prep_read(sqe, ReadPipe, ReadPipeBuffer, sizeof(ReadPipeBuffer), -1);
             }
 
+            void PutTimer() {
+                io_uring_sqe *sqe = GetSQE(nullptr, kOpTimer);
+                Y_ABORT_UNLESS(sqe, "failed to obtain timer SQE: SQ overflow"); // TODO(alexvru): handle this somehow
+                io_uring_prep_read(sqe, TimerFd, ReadTimerBuffer, sizeof(ReadTimerBuffer), -1);
+            }
+
             void WorkerThread() {
                 LastActivitySwitchTimestamp = GetCycleCountFast();
 
@@ -574,6 +685,7 @@ namespace NActors {
 
                 // prepare read request in order for sender threads to wake this one up when waiting on CQ
                 PutPipeReadRequest();
+                PutTimer();
 
                 for (;;) {
                     // submit any pending SQ's (if we have any)
@@ -681,6 +793,7 @@ namespace NActors {
 
             void DispatchCompletion(io_uring_cqe cqe) {
                 auto *session = reinterpret_cast<TRegisteredSession*>(uintptr_t(cqe.user_data) & ~uintptr_t(kOpMask));
+                Y_ABORT_UNLESS(!(cqe.flags & IORING_CQE_F_MORE)); // not expecting multiple completions
                 switch (static_cast<EOperationType>(cqe.user_data & kOpMask)) {
                     case kOpPipe:
                         // this operation is used just to break wait-CQE syscall and exit to process some commands; but
@@ -690,18 +803,31 @@ namespace NActors {
                         break;
 
                     case kOpRead:
-                        Y_ABORT_UNLESS(!(cqe.flags & IORING_CQE_F_MORE)); // not expecting multiple completions
                         Y_DEBUG_ABORT_UNLESS(session != nullptr);
                         DispatchRead(*session, cqe.res); // TODO(alexvru): maybe handle NONEMPTY (if it won't break equality)
                         break;
 
                     case kOpWrite:
-                        Y_ABORT_UNLESS(!(cqe.flags & IORING_CQE_F_MORE)); // not expecting multiple completions
                         Y_DEBUG_ABORT_UNLESS(session != nullptr);
                         DispatchWrite(*session, cqe.res);
                         break;
+
+                    case kOpTimer:
+                        Y_DEBUG_ABORT_UNLESS(session == nullptr);
+                        DispatchTimer();
+                        PutTimer();
+                        break;
                 }
                 ++*CQEProcessed;
+            }
+
+            void DispatchTimer() {
+                for (auto& session : Sessions) {
+                    if (!session->Terminated && session->SendPings && session->PingRequestSentTimestamp == 0) {
+                        session->SendPingRequest();
+                        IssueWritesForSession(*session);
+                    }
+                }
             }
 
             void DispatchRead(TRegisteredSession& session, i32 res) {
@@ -724,6 +850,7 @@ namespace NActors {
                         session.ApplyBytesRead(res);
                     }
                     IssueReadForSession(session);
+                    IssueWritesForSession(session);
                 }
 
                 MaybeEraseSession(session); // NB: may free `session`; must be the last use
@@ -844,14 +971,17 @@ namespace NActors {
         }
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
-                bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback) override {
+                bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
+                bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
+                std::shared_ptr<std::atomic<uint64_t>> pingRTT) override {
             if (Stopping) {
                 return 0; // engine is shutting down; caller treats 0 as a failed registration and terminates
             }
             Y_ABORT_UNLESS(ActorSystem);
             const ui32 shardIdx = NextShardIdx++ % Shards.size();
             auto session = std::make_unique<TRegisteredSession>(shardIdx, std::move(socket), sessionActorId,
-                checksumming, peerScopeId, std::move(onDisconnectCallback), ActorSystem);
+                checksumming, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings, std::move(clockSkew),
+                std::move(pingRTT));
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;

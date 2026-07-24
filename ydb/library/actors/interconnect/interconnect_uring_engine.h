@@ -29,7 +29,8 @@ namespace NActors {
         // Registers a connected socket, arms receiving, and returns an opaque non-zero handle (0 on
         // failure). The engine holds a reference to the socket until Unregister fully drains. Thread-safe.
         virtual ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
-            bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback) = 0;
+            bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
+            bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew, std::shared_ptr<std::atomic<uint64_t>> pingRTT) = 0;
 
         // Put a message into outgoing queue. Thread-safe.
         virtual void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> callback = nullptr) = 0;

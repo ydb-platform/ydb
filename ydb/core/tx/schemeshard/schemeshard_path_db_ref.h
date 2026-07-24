@@ -2,6 +2,8 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <type_traits>
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
@@ -23,7 +25,7 @@ private:
 };
 
 // Owning handle for a path's DbRefCount reference: ctor acquires, dtor releases,
-// copy re-acquires, move transfers. DetachWithoutRelease() drops it without
+// move transfers, copy is deleted. DetachWithoutRelease() drops it without
 // releasing (a Paths snapshot owns the counter, or at shutdown).
 class TPathDbRef {
 public:
@@ -37,13 +39,7 @@ public:
         Acquire();
     }
 
-    TPathDbRef(const TPathDbRef& other)
-        : SS(other.SS)
-        , PathId(other.PathId)
-        , Reason(other.Reason)
-    {
-        Acquire();
-    }
+    TPathDbRef(const TPathDbRef&) = delete;
 
     TPathDbRef(TPathDbRef&& other) noexcept
         : SS(other.SS)
@@ -53,16 +49,7 @@ public:
         other.SS = nullptr;
     }
 
-    TPathDbRef& operator=(const TPathDbRef& other) {
-        if (this != &other) {
-            Release();
-            SS = other.SS;
-            PathId = other.PathId;
-            Reason = other.Reason;
-            Acquire();
-        }
-        return *this;
-    }
+    TPathDbRef& operator=(const TPathDbRef&) = delete;
 
     TPathDbRef& operator=(TPathDbRef&& other) noexcept {
         if (this != &other) {
@@ -112,6 +99,12 @@ private:
     TPathId PathId;
     TRefLabel Reason = "";
 };
+
+// The move checks bite only alongside the copy ones: T&& binds to const T&.
+static_assert(!std::is_copy_constructible_v<TPathDbRef>);
+static_assert(!std::is_copy_assignable_v<TPathDbRef>);
+static_assert(std::is_move_constructible_v<TPathDbRef>);
+static_assert(std::is_move_assignable_v<TPathDbRef>);
 
 // Acquire/release a path's DbRefCount without an owning handle, for containers
 // (TDbRefMap) whose membership is the reference. `reason` must be a string literal.

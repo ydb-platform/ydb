@@ -373,6 +373,12 @@ bool TReadSession::Close(TDuration timeout) {
         // Log final counters.
         CountersLogger->Stop();
     }
+    {
+        std::lock_guard guard(Lock);
+        if (DumpCountersContext) {
+            DumpCountersContext->Cancel();
+        }
+    }
 
     std::vector<TSingleClusterReadSessionImpl::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
@@ -383,6 +389,8 @@ bool TReadSession::Close(TDuration timeout) {
         }
     };
 
+    std::vector<TCallbackContextPtr> cbContextsToCancel;
+    std::shared_ptr<TCallbackContext<TCountersLogger>> dumpCountersContextToCancel;
     TDeferredActions deferred;
     {
         std::lock_guard guard(Lock);
@@ -447,6 +455,8 @@ bool TReadSession::Close(TDuration timeout) {
     {
         std::lock_guard guard(Lock);
         Aborting = true; // Set abort flag for doing nothing on destructor.
+        cbContextsToCancel = CbContexts;
+        dumpCountersContextToCancel = DumpCountersContext;
     }
 
     for (const auto& session : sessions) {
@@ -457,6 +467,13 @@ bool TReadSession::Close(TDuration timeout) {
     ClearAllEvents();
     for (const auto& session : sessions) {
         session->ClearAllPartitionStreamEvents();
+    }
+
+    for (const auto& ctx : cbContextsToCancel) {
+        ctx->Cancel();
+    }
+    if (dumpCountersContextToCancel) {
+        dumpCountersContextToCancel->Cancel();
     }
 
     return result;

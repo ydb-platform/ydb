@@ -306,6 +306,7 @@ enum ESimpleCounters {
     COUNTER_TEST_SHARD_COUNT = 236                         [(CounterOpts) = {Name: "TestShardCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 237      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxTruncateColumnTable = 239 [(CounterOpts) = {Name: "InFlightOps/TruncateColumnTable"}];
 }
 
 enum ECumulativeCounters {
@@ -507,6 +508,7 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
     COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxTruncateColumnTable = 151 [(CounterOpts) = {Name: "FinishedOps/TruncateColumnTable"}];
 }
 
 enum EPercentileCounters {

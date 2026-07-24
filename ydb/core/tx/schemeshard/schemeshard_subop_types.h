@@ -141,6 +141,7 @@ enum ESimpleCounters : int;
     item(TxMoveLocalIndex, 124) \
     item(TxCreateTestShardSet, 125) \
     item(TxDropTestShardSet, 126) \
+    item(TxTruncateColumnTable, 127) \
 
 // TX_STATE_TYPE_ENUM
 

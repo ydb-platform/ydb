@@ -76,15 +76,15 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
-| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, correlated-subplan shape checks, and operator/StageGraph invariants. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, exact scalar-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
+| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, all-plan-root virtual-binding confinement, exact scalar-inside-`IN` and correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
@@ -193,8 +193,43 @@ embeddings, bounded `left_semi` equivalence, and a real-host lowering.
 Date-specific validation repeats the independent-nullability and positive
 Filter gates, uses the existing bounded Date domain, and includes a real-host
 nullable-Date `IN`-to-`left_semi` bounded proof. A focused TPC-DS q58 run
-reaches the later nested-subplan rejection, so this slice changes neither the
-formula count nor the proof policy.
+reached the later nested-subplan rejection at that Date-only checkpoint, so
+that slice changed neither the formula count nor the proof policy.
+
+The exact nested extension admits only an uncorrelated scalar binding consumed
+from inside an uncorrelated dynamic-`IN` root. The physical roots remain
+disjoint: nesting is one expression-reference edge, not one relational root
+below another. Each binding-consuming operator must belong to exactly one
+main or subplan-root context. A scalar root may not itself consume another
+binding, and `IN` inside `IN`, correlated nested scalars, `EXISTS` nesting,
+ambiguous root ownership, and staged residual subplans remain fail-closed.
+This admits no recursive chain or cycle.
+
+After typing every reachable node, `ir.py` independently audits every main and
+subplan-root descendant schema for declared binding names. A virtual binding
+therefore cannot escape as a relational output from the nested `IN` root (or
+from any other plan context), even if its name and declared `IN` output are
+mutated together. A dedicated nested-`IN` regression covers that boundary.
+
+Evaluation recursively constructs and caches the nested scalar family at its
+immediate Project/Filter consumer before evaluating the enclosing membership
+test. Zero/one/many scalar rows retain the ordinary NULL/value/error semantics.
+The scalar's new cardinality error is demanded by rows at that immediate nested
+consumer; an error inherited from its root remains eager through the enclosing
+`IN` and is not gated again by an empty top-level consumer. Existing choice
+correlation and the cumulative 16,384 membership-pair budget apply unchanged.
+
+Independent C++ and Python positive/near-miss tests cover the exact descriptor,
+consumer ownership, nesting-kind, correlation, NULL, demand, cache, choice, and
+pair-cap boundaries. The complete hermetic Python verifier target passes
+568/568 tests. A focused production-host TPC-DS q58 run now emits the complete
+324,938,538-byte formula after 3,291/103,862 ms of preparation/construction;
+its SHA-256 is
+`22f51f5d1a82091a35d29b6ac120344725f1272b8093ae9a0f1c3fa6fc6eaa70`.
+The checked-in formula policy now pins q58. It was not solved, adds no bounded
+proof, and revealed no optimizer correctness bug. TPC-DS q83 remains
+fail-closed at its `IN`-inside-`IN` initial shape; its final shape also contains
+the separate unsupported static nullable-Date `SqlIn`.
 
 The exact duplicate-source Map projection changes only
 `semantic_snapshot.cpp`; the existing Project IR and evaluator already copy a
@@ -326,26 +361,33 @@ require no datatype or definition.
 The fixed output slots have a present-prefix invariant. Only root wrapping,
 OuterBind, Project, and one-input Stage gather preserve it; Filter, source
 partitioning, hash routing, and multi-input gather clear it. Ordered Limit
-statically slices slots only while the invariant is present. Merge additionally
-requires concrete semantic input ordinals and adds unconditional adjacent rank
-edges in each producer's ordinal order. Every legal order of present rows
-extends to a full rank permutation including absent holes, so those chains
-denote precisely the sorted producer-order-preserving interleavings. When both
-compared sequences have the fixed present-prefix invariant, equality checks
-aligned presence/value slots and requires every unmatched suffix slot to be
-absent. That is exactly compressed-sequence equality and avoids the ordinary
-quadratic compressed-rank matrix.
+statically slices slots only while the invariant is present. Merge orders the
+network ranks along each producer's semantic input order. A fixed producer
+order, including concrete input ordinals, uses unconditional adjacent rank
+edges. If a producer has symbolic input ordinals, every unordered pair of
+syntactically live rows instead gets one exact guard: an absent row or equal
+input ordinals impose no order; otherwise input-ordinal less-than is equivalent
+to network-rank less-than. Every legal order of present rows extends to a full
+rank permutation including absent holes, so these constraints denote precisely
+the sorted producer-order-preserving interleavings. When both compared
+sequences have the fixed present-prefix invariant, equality checks aligned
+presence/value slots and requires every unmatched suffix slot to be absent.
+That is exactly compressed-sequence equality and avoids the ordinary quadratic
+compressed-rank matrix.
 
 Selection is fail-closed: ordinary pair construction remains capped at 16,384;
 the network is separately capped at 32,768 comparators, 131,072 logical packed
 payload cells, and 64 ordering columns. The payload charge is live input rows
 times scalar lanes. It is an auditable logical-width gate, not an estimate of
 Python memory, rendered formula bytes, constructors, selectors, or downstream
-equality terms. Intermediate TopSort compacts only when the uncompacted shaped
-slots from both fixed verifier tasks would make the downstream Merge exceed the
-pair cap. Exhaustive topology, NULL/direction, tie/duplicate, present-prefix,
-offset, producer-hole/reversed-ordinal, mixed-key Merge, Decimal-AVG-state,
-layout, declaration-ownership, formula-structure, and cap-fallback tests are
+equality terms. A Merge network with symbolic input ordinals also charges every
+unordered syntactically live pair in each such producer, summed across all
+outcomes, against the same 16,384 pair cap. Intermediate TopSort compacts only
+when the uncompacted shaped slots from both fixed verifier tasks would make the
+downstream Merge exceed the pair cap. Exhaustive topology, NULL/direction,
+tie/duplicate, present-prefix, offset, concrete and symbolic producer order,
+producer holes/equal or reversed ordinals, mixed-key Merge, Decimal-AVG state,
+layout, declaration ownership, formula structure, and cap/fallback tests are
 the independent evidence.
 
 The complete policy dashboards move TPCH q2 and TPC-DS q59/q78 to formulas.
@@ -359,8 +401,9 @@ The policy-valid complete TPC-DS report independently confirms both formula
 rows and has SHA-256
 `44254733785284105840e269653f3cae79384db985cf13260906df57cf1deaa6`.
 Neither obligation was solved, so this slice adds no bounded proof and reveals
-no optimizer correctness bug. The complete hermetic verifier target passes
-564/564 tests, and the updated coverage-policy target passes 14/14.
+no optimizer correctness bug. At that packed-carrier checkpoint, the complete
+hermetic verifier target passed 564/564 tests and the updated coverage-policy
+target passed 14/14.
 
 The nullable Date-year bridge likewise changes only `semantic_snapshot.cpp`.
 It admits one direct visible `Optional<Date>` member, a complete cast to
@@ -429,18 +472,18 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-packed-carrier 2026-07-24 physical-line audit records implementation,
-test, and diagnostic rows at source `4fc711fd585`; documentation includes this
-evidence update:
+The post-q58 2026-07-24 physical-line audit records implementation, test, and
+diagnostic rows at source `5e39696174b`; documentation includes this evidence
+update:
 
 | Area | Physical lines |
 |---|---:|
-| Ten trusted Python semantic modules | 12,150 |
-| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,354 |
-| **Proof-producing code total** | **21,504** |
-| Tests, outside the TCB | 52,686 |
+| Ten trusted Python semantic modules | 12,228 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,373 |
+| **Proof-producing code total** | **21,601** |
+| Tests, outside the TCB | 53,287 |
 | Diagnostic/orchestration tools, outside the TCB | 5,230 |
-| Documentation, outside the TCB | 7,396 |
+| Documentation, outside the TCB | 7,570 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
 rows enumerate the trusted files in the table above. Tests are source files
@@ -453,14 +496,17 @@ generated invariant. The trusted core is a medium-sized verification
 subsystem, so it should be audited by vertical semantic slice rather than
 treated as one small script.
 
-Relative to the preceding `d84b3ee7a0a` baseline, this milestone adds 527
-physical trusted Python lines and 670 test lines; it changes neither the C++
-exporter nor diagnostic tooling. The trusted addition is material, but its
-review surface is split into three explicit seams: the restricted product and
-definition API in `smt.py`, the row layout/codec plus comparator transport in
-`relation.py`, and the present-prefix equality fast path in `relation.py`.
-There is no new query-specific equivalence axiom or production-side declaration
-interpreter.
+Relative to the preceding packed-carrier `4fc711fd585` baseline, this milestone
+adds 78 physical trusted Python lines, 19 C++ exporter lines, and 601 test
+lines; it does not change diagnostic tooling. The new trusted review surface
+has two explicit seams: exact nested-consumer indexing and validation in
+`semantic_snapshot.cpp`/`ir.py`, and symbolic producer-order constraints plus
+their preflight charge in `relation.py`. The earlier product/definition,
+row-codec, comparator-transport, and present-prefix seams remain unchanged.
+There is no query-specific equivalence axiom or production-side declaration
+interpreter. Relative to the immediately preceding q58 policy checkpoint, the
+virtual-binding hardening removes the two-line main-root-only skip and adds 24
+physical test lines.
 
 ## External assumptions
 
@@ -488,8 +534,12 @@ the SMT obligation itself:
   independently nullable fixed-width-integral or Date pair, the binding occurs
   only as a direct positive top-level Filter conjunct where FALSE and UNKNOWN
   both reject the outer row; Date values obey the recorded bounded domain, and
-  there is no hidden coercion, correlation,
-  cardinality-error, or fanout semantics;
+  there is no hidden coercion, correlation, cardinality-error, or fanout
+  semantics in the `IN` operator itself;
+- each scalar binding consumed inside an accepted dynamic-`IN` root is exactly
+  the recorded uncorrelated scalar plan, is demanded at the recorded immediate
+  unary consumer, and has no hidden dependency, invocation, choice, error, or
+  cardinality semantics beyond the ordinary scalar-subplan model;
 - each accepted repeated-source Map rename copies the same runtime input value
   into every declared distinct output, suppresses the original source once,
   and preserves the recorded Map-element order without hidden computation;
@@ -519,6 +569,9 @@ the SMT obligation itself:
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
+- symbolic Merge input ordinals describe each producer's runtime sequence:
+  strict ordinal order must be preserved for two present rows, while equal
+  ordinals impose no relative order;
 - the fixed two-task routing, hashing, connection, ordering, multiplicity, and
   error semantics agree with the runtime for the admitted StageGraph subset;
 - the pinned Z3 executable correctly decides the emitted SMT-LIB formula, and
@@ -582,7 +635,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, and exact Decimal weak-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar-inside-`IN` ownership/nesting/cache/choice checks, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

@@ -2244,6 +2244,93 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[10;100];[20;200]])");
     }
 
+    Y_UNIT_TEST(SharedIUStringInPreservesFactJoinPredicate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/item` (
+                i_item_sk Int64 NOT NULL,
+                i_item_id String NOT NULL,
+                i_color String NOT NULL,
+                PRIMARY KEY (i_item_sk)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/store_sales` (
+                ss_ticket_number Int64 NOT NULL,
+                ss_item_sk Int64 NOT NULL,
+                amount Int64 NOT NULL,
+                PRIMARY KEY (ss_ticket_number)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder itemRows;
+        itemRows.BeginList()
+            .AddListItem().BeginStruct()
+                .AddMember("i_item_sk").Int64(1)
+                .AddMember("i_item_id").String("same")
+                .AddMember("i_color").String("black")
+                .EndStruct()
+            .AddListItem().BeginStruct()
+                .AddMember("i_item_sk").Int64(2)
+                .AddMember("i_item_id").String("same")
+                .AddMember("i_color").String("orchid")
+                .EndStruct()
+            .EndList();
+        auto upsertResult = tableClient.BulkUpsert("/Root/item", itemRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder saleRows;
+        saleRows.BeginList()
+            .AddListItem().BeginStruct()
+                .AddMember("ss_ticket_number").Int64(1)
+                .AddMember("ss_item_sk").Int64(1)
+                .AddMember("amount").Int64(10)
+                .EndStruct()
+            .EndList();
+        upsertResult = tableClient.BulkUpsert("/Root/store_sales", saleRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+            PRAGMA ydb.CostBasedOptimizationLevel = '0';
+
+            SELECT
+                i_item_id AS ItemId,
+                amount AS Amount
+            FROM
+                `/Root/store_sales`,
+                `/Root/item`
+            WHERE
+                i_item_id IN (
+                    SELECT i_item_id
+                    FROM `/Root/item`
+                    WHERE i_color IN ('orchid', 'chiffon', 'lace')
+                )
+                AND ss_item_sk == i_item_sk
+            ORDER BY ItemId, Amount;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings())
+            .ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([["same";10]])");
+    }
+
     bool HasParam(const std::string& ast, const std::string& param) {
         auto txPos = ast.find("KqpPhysicalTx");
         if (txPos == std::string::npos) {

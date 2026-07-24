@@ -393,6 +393,57 @@ def test_existing_objects_cannot_use_old_secrets_if_old_secret_creation_is_disab
     assert CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE in str(exc_info.value)
 
 
+def test_existing_objects_can_migrate_to_new_secrets_if_old_secret_creation_is_disabled(old_secrets_utils):
+    # create all types of objects with old secrets
+    old_secrets_utils.create_old_secret("OldSecret", value="")
+    old_secrets_utils.create_eds("eds-old-secret", "OldSecret")
+    old_secrets_utils.create_table("repl_src")
+    old_secrets_utils.create_async_replication("replication-old-secret", "repl_src", "repl_dst", "OldSecret")
+    old_secrets_utils.create_topic("transfer_topic")
+    old_secrets_utils.create_transfer_table("transfer_dst")
+    old_secrets_utils.create_transfer("transfer-old-secret", "transfer_topic", "transfer_dst", "OldSecret")
+
+    # restart cluster with disabled old secret creation
+    old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
+
+    # non-secret ALTER (e.g. STATE) must still work for objects that use old secrets
+    old_secrets_utils.execute_scheme("""
+        ALTER ASYNC REPLICATION `replication-old-secret` SET (STATE = "Paused");
+        ALTER ASYNC REPLICATION `replication-old-secret` SET (STATE = "StandBy");
+    """)
+    old_secrets_utils.execute_scheme("""
+        ALTER TRANSFER `transfer-old-secret` SET (STATE = "Paused");
+        ALTER TRANSFER `transfer-old-secret` SET (STATE = "StandBy");
+    """)
+
+    # migrate existing objects to new secrets
+    new_secret = "NewSecret"
+    old_secrets_utils.create_schema_secret(new_secret, value="")
+
+    old_secrets_utils.create_eds(
+        "eds-old-secret",
+        new_secret,
+        schema_secret=True,
+        create_or_replace=True,
+    )
+    old_secrets_utils.alter_password_secret(
+        "ASYNC REPLICATION",
+        "replication-old-secret",
+        new_secret,
+        schema_secret=True,
+    )
+    old_secrets_utils.alter_password_secret(
+        "TRANSFER",
+        "transfer-old-secret",
+        new_secret,
+        schema_secret=True,
+    )
+
+    old_secrets_utils.assert_path_ready(f"{DATABASE}/eds-old-secret")
+    old_secrets_utils.assert_path_ready(f"{DATABASE}/replication-old-secret")
+    old_secrets_utils.assert_path_ready(f"{DATABASE}/transfer-old-secret")
+
+
 def test_disable_old_secret_creation(old_secrets_utils):
     old_secrets_utils.create_old_secret("OldSecret", value="")
 

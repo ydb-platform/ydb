@@ -86,6 +86,18 @@ class StaticConfigGenerator(object):
         self.__mon_port = mon_port
         self.__kikimr_home = cfg_home
         self.__sqs_port = sqs_port
+        self.__dynamic_node = self.__cluster_details.get_service("dynamic_node")
+        if self.__dynamic_node is not None:
+            if "node_broker_port" in self.__dynamic_node:
+                self.__node_broker_port = self.__dynamic_node["node_broker_port"]
+            if "grpc_port" in self.__dynamic_node:
+                self.__grpc_port = self.__dynamic_node["grpc_port"]
+            if "ic_port" in self.__dynamic_node:
+                self.__ic_port = self.__dynamic_node["ic_port"]
+            if "mon_port" in self.__dynamic_node:
+                self.__mon_port = self.__dynamic_node["mon_port"]
+            if "sqs_port" in self.__dynamic_node:
+                self.__sqs_port = self.__dynamic_node["sqs_port"]
         self._mon_address = None
         self.__config_file_to_generate_callable = {
             "boot.txt": self.__generate_boot_txt,
@@ -214,7 +226,10 @@ class StaticConfigGenerator(object):
 
     @property
     def grpc_txt(self):
-        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, self.__cluster_details.grpc_config)
+        grpc_config = copy.deepcopy(self.__cluster_details.grpc_config)
+        if self.__grpc_port is not None:
+            grpc_config["port"] = self.__grpc_port
+        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, grpc_config)
 
     @property
     def dyn_ns_txt(self):
@@ -572,6 +587,7 @@ class StaticConfigGenerator(object):
                 self.__node_broker_port,
                 self._database,
                 self.__ic_port,
+                self.__grpc_port,
                 self.__mon_port,
                 self.__kikimr_home,
                 self.__sqs_port,

@@ -1711,6 +1711,89 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 set(expected),
             )
 
+    def test_public_merge_network_preserves_symbolic_producer_order(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        script = smt.Script()
+        present = tuple(
+            script.fresh_constant(f"present:{index}", smt.BOOL)
+            for index in range(4)
+        )
+        input_ordinals = tuple(
+            script.fresh_constant(f"input:{index}", smt.INT)
+            for index in range(4)
+        )
+        payloads = (10, 20, 30, 40)
+        rows = tuple(
+            Row(
+                row_present,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "payload": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(payload),
+                    ),
+                },
+            )
+            for row_present, payload in zip(present, payloads)
+        )
+        order = (SortOrder("k", True, False),)
+        source = single(Relation(
+            columns,
+            rows,
+            sequence=True,
+            order=order,
+            ordinals=input_ordinals,
+        ))
+        groups = ((0, 1, 2), (3,))
+        with (
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 6),
+            patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
+        ):
+            family = merge_family(
+                source,
+                order,
+                groups,
+                script,
+                "merge",
+            )
+
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
+        self.assertIsNone(family.outcomes[0].relation.ordinals)
+        cases = (
+            (
+                (True, True, True, True),
+                (2, 0, 1, 0),
+                ((20, 30, 10), (40,)),
+            ),
+            (
+                (True, False, True, True),
+                (0, 1, 2, 0),
+                ((10, 30), (40,)),
+            ),
+        )
+        for presence, ordinals, producer_payloads in cases:
+            constants = {
+                term.atom: value
+                for term, value in (
+                    *zip(present, presence),
+                    *zip(input_ordinals, ordinals),
+                )
+            }
+            expected = {
+                tuple((0, payload) for payload in interleaving)
+                for interleaving in relation._interleavings(
+                    producer_payloads
+                )
+            }
+            self.assertEqual(
+                _sequences(family, constants, script),
+                expected,
+            )
+
     def test_merge_uses_network_when_only_ordinal_encoding_exceeds_cap(self):
         columns = (
             Column("k", "Int64", False),
@@ -2506,9 +2589,9 @@ class MergeEncodingTest(unittest.TestCase):
     ORDER = (SortOrder("k", True, False),)
 
     @staticmethod
-    def _row(payload):
+    def _row(payload, present=smt.TRUE):
         return Row(
-            smt.TRUE,
+            present,
             {
                 "k": Value("Int64", smt.FALSE, smt.ZERO),
                 "payload": Value("Int64", smt.FALSE, smt.int_value(payload)),
@@ -2537,31 +2620,46 @@ class MergeEncodingTest(unittest.TestCase):
             {((0, 20), (0, 10))},
         )
 
-    def test_symbolic_merge_preserves_each_producer_tie_order(self):
+    def test_network_merge_preserves_each_fixed_producer_order(self):
+        script = smt.Script()
+        middle_present = script.fresh_constant("middle", smt.BOOL)
         source = single(
             Relation(
                 self.COLUMNS,
-                (self._row(10), self._row(20), self._row(30)),
+                (
+                    self._row(10),
+                    self._row(20, middle_present),
+                    self._row(30),
+                    self._row(40),
+                ),
                 sequence=True,
                 order=self.ORDER,
             )
         )
-        with patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 1):
+        with (
+            patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 6),
+        ):
             merged = merge_family(
                 source,
                 self.ORDER,
-                ((0, 1), (2,)),
-                smt.Script(),
+                ((2, 1, 0), (3,)),
+                script,
                 "merge",
             )
 
-        self.assertEqual(len(merged.outcomes[0].choices), 3)
+        self.assertEqual(len(merged.outcomes[0].choices), 4)
         self.assertEqual(
-            _sequences(merged, {}),
+            _sequences(
+                merged,
+                {middle_present.atom: False},
+                script,
+            ),
             {
-                ((0, 10), (0, 20), (0, 30)),
-                ((0, 10), (0, 30), (0, 20)),
-                ((0, 30), (0, 10), (0, 20)),
+                tuple((0, payload) for payload in interleaving)
+                for interleaving in relation._interleavings(
+                    ((30, 10), (40,))
+                )
             },
         )
 
@@ -2576,6 +2674,7 @@ class MergeEncodingTest(unittest.TestCase):
         )
         with (
             patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(relation, "MAX_SORT_NETWORK_COMPARATORS", 0),
             patch.object(
                 relation,
                 "factorial",
@@ -2610,6 +2709,7 @@ class MergeEncodingTest(unittest.TestCase):
         with (
             patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
             patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(relation, "MAX_SORT_NETWORK_COMPARATORS", 0),
             patch.object(
                 relation,
                 "_fresh_ordinals",
@@ -2625,6 +2725,53 @@ class MergeEncodingTest(unittest.TestCase):
                     self.ORDER,
                     ((0, 1, 2),),
                     smt.Script(),
+                    "merge",
+                )
+
+        script = smt.Script()
+        symbolic_ordinals = tuple(
+            script.fresh_constant(f"input:{index}", smt.INT)
+            for index in range(3)
+        )
+        symbolic_relation = Relation(
+            self.COLUMNS,
+            tuple(self._row(value) for value in range(3)),
+            sequence=True,
+            order=self.ORDER,
+            ordinals=symbolic_ordinals,
+        )
+        alternatives = RelationFamily(tuple(
+            Outcome(
+                smt.TRUE,
+                symbolic_relation,
+                smt.FALSE,
+                (("branch", branch),),
+            )
+            for branch in range(2)
+        ))
+        with (
+            patch.object(relation, "MAX_OUTCOME_ALTERNATIVES", 0),
+            patch.object(relation, "MAX_RELATION_ROW_PAIRS", 5),
+            patch.object(
+                relation,
+                "_sorting_network_family",
+                side_effect=AssertionError("network must not be allocated"),
+            ),
+            patch.object(
+                relation,
+                "_fresh_ordinals",
+                side_effect=AssertionError("ordinals must not be allocated"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "merge ordinal construction requires 18 candidate-row pairs.*5 pair construction",
+            ):
+                merge_family(
+                    alternatives,
+                    self.ORDER,
+                    ((0, 1, 2),),
+                    script,
                     "merge",
                 )
 

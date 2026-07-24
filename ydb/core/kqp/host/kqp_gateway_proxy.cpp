@@ -3625,6 +3625,14 @@ public:
                 tx.SetWorkingDir(pathPair.first);
                 tx.SetOperationType(GetOperationType());
 
+                // Set flags for IF NOT EXISTS / IF EXISTS handling
+                // FailOnExist is read by schemeshard to decide whether to accept existing paths
+                // FailedOnAlreadyExists is read by KQP gateway to translate StatusAlreadyExists to success
+                // SuccessOnNotExist is read by KQP gateway to translate StatusPathDoesNotExist to success
+                tx.SetFailOnExist(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetFailedOnAlreadyExists(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetSuccessOnNotExist(settings.MissingOk);
+
                 TSecretSchemaOp& op = GetSecretSchemaOp(tx);
                 op.SetName(pathPair.second);
                 FillSchemaOperation(settings, op);
@@ -3711,6 +3719,7 @@ public:
             if (settings.InheritPermissions.has_value()) {
                 op.SetInheritPermissions(*settings.InheritPermissions);
             }
+            op.SetReplaceIfExists(settings.ReplaceIfExists);
         }
 
     private:

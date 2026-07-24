@@ -453,6 +453,8 @@ namespace {
         if (auto inheritPermissions = TString(createSecret.InheritPermissions())) {
             settings.InheritPermissions = FromString<bool>(inheritPermissions);
         }
+        settings.ReplaceIfExists = (TString(createSecret.ReplaceIfExists()) == "1");
+        settings.ExistingOk = (TString(createSecret.ExistingOk()) == "1");
         return settings;
     }
 
@@ -465,12 +467,14 @@ namespace {
         if (auto paramName = TString(alterSecret.ValueParamName())) {
             settings.ValueParamName = std::move(paramName);
         }
+        settings.MissingOk = (TString(alterSecret.MissingOk()) == "1");
         return settings;
     }
 
     TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
         TSecretSettings settings;
         settings.Name = TString(dropSecret.Secret());
+        settings.MissingOk = (TString(dropSecret.MissingOk()) == "1");
         return settings;
     }
 

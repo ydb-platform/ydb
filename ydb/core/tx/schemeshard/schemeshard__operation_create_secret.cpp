@@ -328,7 +328,39 @@ bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
 
 }
 
-ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    const auto& createSecretProto = tx.GetCreateSecret();
+    const auto replaceIfExists = createSecretProto.GetReplaceIfExists();
+
+    if (replaceIfExists) {
+        const TString& parentPathStr = tx.GetWorkingDir();
+        const TString& secretName = createSecretProto.GetName();
+        const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        const TPath dstPath = parentPath.Child(secretName);
+
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsSecret();
+
+        if (isAlreadyExists) {
+            // Convert to alter: build an alter transaction from the create transaction
+            TTxTransaction alterTx = tx;
+            alterTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSecret);
+            auto* alterSecret = alterTx.MutableAlterSecret();
+            alterSecret->SetName(createSecretProto.GetName());
+            if (createSecretProto.HasValue()) {
+                alterSecret->SetValue(createSecretProto.GetValue());
+            }
+            if (createSecretProto.HasValueParamName()) {
+                alterSecret->SetValueParamName(createSecretProto.GetValueParamName());
+            }
+            return CreateAlterSecret(id, alterTx);
+        }
+    }
+
     return MakeSubOperation<TCreateSecret>(id, tx);
 }
 

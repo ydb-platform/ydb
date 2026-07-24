@@ -1890,20 +1890,7 @@ size_t TStorage::GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const
 {
 }
 
-TOrderedMessageGroupIdHash::TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other)
-    : GroupIdHash(other.GroupIdHash)
-{
-    TIntrusiveListItem<TOrderedMessageGroupIdHash>& lhs = *this;
-    TIntrusiveListItem<TOrderedMessageGroupIdHash>& rhs = other;
-    if (rhs.Empty()) {
-        return;
-    }
-    lhs.SetNext(rhs.Next());
-    lhs.SetPrev(rhs.Prev());
-    rhs.Next()->SetPrev(&lhs);
-    rhs.Prev()->SetNext(&lhs);
-    rhs.ResetItem();
-}
+TOrderedMessageGroupIdHash::TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other) = default;
 
 bool TOrderedMessageGroupIdHash::operator==(const TOrderedMessageGroupIdHash& other) const {
     return GroupIdHash == other.GroupIdHash;
@@ -1921,10 +1908,12 @@ size_t TStorage::TMessageGroups::UnlockedMessageGroupsIdSize() const {
 }
 
 bool TStorage::TMessageGroups::UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash) {
-    size_t viewOrderSz0 = Y_IS_DEBUG_BUILD ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
+    constexpr size_t maxCheckSizeLimit = 150;
+    const bool checkSize = Y_IS_DEBUG_BUILD && UnlockedMessageGroupsId.size() < maxCheckSizeLimit;
+    size_t viewOrderSz0 = checkSize ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
     size_t n = UnlockedMessageGroupsId.erase(messageGroupIdHash);
-    size_t viewOrderSz1 = Y_IS_DEBUG_BUILD ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
-    Y_ASSERT(Y_IS_DEBUG_BUILD && (viewOrderSz0 == viewOrderSz1 + n));
+    size_t viewOrderSz1 = checkSize ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
+    Y_ASSERT(!checkSize || (viewOrderSz0 == viewOrderSz1 + n));
     return n > 0;
 }
 

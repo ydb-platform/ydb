@@ -60,6 +60,9 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
+        } else if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+            // Just in case - when we disable old secrets, we'll make sure they are not needed any more
+            return Reply(false, "Usage of old secrets is disabled now. Please use the new secrets");
         } else {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));

@@ -666,6 +666,17 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
         return promise.GetFuture();
     }
 
+    if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+        // Just in case - when we disable old secrets, we'll make sure they are not needed any more
+        promise.SetValue(
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::BAD_REQUEST,
+                { NYql::TIssue("Usage of old secrets is disabled now. Please use the new secrets") }
+            )
+        );
+        return promise.GetFuture();
+    }
+
     actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", secretNames, promise));
     return promise.GetFuture();
 }
@@ -674,13 +685,17 @@ IActor* TDescribeSchemaSecretsServiceFactory::CreateService() {
     return new TDescribeSchemaSecretsService();
 }
 
+bool IsSchemeSecret(const TString& secretName) {
+    return secretName.StartsWith('/');
+}
+
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames) {
     if (!flags.GetEnableSchemaSecrets()) {
         return false;
     }
 
     for (const auto& secretName : secretNames) {
-        if (!secretName.StartsWith('/')) {
+        if (!IsSchemeSecret(secretName)) {
             return false;
         }
     }
@@ -689,7 +704,7 @@ bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString
 }
 
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName) {
-    return flags.GetEnableSchemaSecrets() && secretName.StartsWith('/');
+    return flags.GetEnableSchemaSecrets() && IsSchemeSecret(secretName);
 }
 
 }  // namespace NKikimr::NSecret

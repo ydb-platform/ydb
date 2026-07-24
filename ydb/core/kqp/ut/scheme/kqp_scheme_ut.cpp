@@ -15028,7 +15028,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new one",
+                "Old secrets creation syntax is disabled now. Please use the new secrets",
                 result.GetIssues().ToString());
         }
         { // upsert
@@ -15040,7 +15040,7 @@ END DO)",
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Old secrets creation syntax is disabled now. Please use the new one",
+                "Old secrets creation syntax is disabled now. Please use the new secrets",
                 result.GetIssues().ToString());
         }
         { // alter
@@ -15063,6 +15063,37 @@ END DO)",
             // old secrets pretend that removing non existent secret is fine and succeeded
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithOldSecretDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetDisableOldSecretCreation(true);
+        featureFlags.SetDisableOldSecrets(true);
+
+        NKqp::TKikimrSettings settings;
+        settings.SetFeatureFlags(featureFlags);
+        settings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        static const auto query = R"sql(
+            CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="mysa",
+                SERVICE_ACCOUNT_SECRET_NAME="OldSecret"
+            );
+        )sql";
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Old secrets are disabled for creating new objects. Please use the new secrets",
+            result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {

@@ -49,10 +49,14 @@ catalog-bounded stored-String `Concat` shape.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
-Version-four benchmark artifacts SHA-bind the exact initial and final
-snapshots, assembled query, and byte-exact raw verifier verdict. A separate
-all-candidates confirmation driver pins each saved solver database from that
-raw verdict before inspection and replay.
+Version-five benchmark reports keep query preparation and semantic
+classification as independent axes. A failed `SyncPrepareDataQuery` does not
+discard an already captured exact Initial/Final boundary-result pair: export
+and verification continue, while `prepare_status` and `prepare_reason` retain
+the later failure. The reports SHA-bind the exact assembled query and each
+preserved snapshot, unsupported boundary diagnostic, and byte-exact raw
+verifier verdict. A separate all-candidates confirmation driver pins each saved
+solver database from that raw verdict before inspection and replay.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
@@ -64,29 +68,55 @@ q19, q25, q29, q33,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q60, q61, q62, q65,
 q68, q69, q71, q76, q77, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95,
 q96, q97, and q99: 63/121 workload queries (52.1%). TPCH has seventeen
-formulas, three unsupported queries, and two optimizer failures; TPC-DS has
-forty-six formulas, twenty-seven unsupported queries, and twenty-six optimizer
-failures. Across both suites that is 30 unsupported queries and 28 optimizer
-failures.
+formulas, three unsupported semantic outcomes, and two no-pair optimizer
+failures; TPC-DS has forty-six formulas, thirty-five unsupported semantic
+outcomes, and eighteen no-pair optimizer failures. Across both suites the
+semantic-outcome partition is therefore 63 formulas, 38 `UNSUPPORTED`, and 20
+`OPTIMIZER_FAILURE`. Preparation is a separate partition: twenty TPCH and
+seventy-three TPC-DS queries succeed, while two TPCH and twenty-six TPC-DS
+queries fail. Eight TPC-DS rows belong to both the preparation-failure and
+semantic-unsupported inventories, so those inventories must not be added as
+disjoint workload counts.
 
-There are two useful denominators behind that workload-wide number.
-Ninety-three queries complete optimizer preparation, so 63/93 (67.7%) of
-optimizer-successful queries construct formulas. Eighteen TPCH and fifty-two
-TPC-DS queries enter the Python verifier, so 63/70 (90.0%) of all entrants
-construct the full bounded obligation. The 23-query gap from 93
-optimizer-successful queries to 70 verifier entrants is the deliberately
-fail-closed C++ export boundary.
-Of the 30 current unsupported results, 21 stop at initial export, two at final
-export, and seven inside the verifier. Thus 23 are intentionally rejected
-before formula construction is attempted; seven exported plan pairs currently
-fail to construct a formula.
+Four denominators answer different questions. Formula coverage is 63/121
+(52.1%) over the corpus, 63/101 (62.4%) over exact Initial/Final
+boundary-result pairs, 63/93 (67.7%) within the preparation-successful subset,
+and 63/70 (90.0%) among verifier entrants. The preparation-success ratio uses
+the intersection of formula rows with preparation-success rows; version five
+permits a future formula to coexist with failed later preparation. Of the 38
+current unsupported outcomes, 29 stop first at initial export, two at final
+export, and seven inside the verifier. Thus the strict C++ boundary rejects 31
+of the 101 exact pairs before formula construction, while seven exported pairs
+fail closed in the verifier itself.
 
-The complete TPCH dashboard spent 3,245/50,777 ms in preparation/verifier work
+A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
+and q98. Every query produced an exact Initial/Final boundary-result pair and
+later failed preparation; every semantic outcome was `UNSUPPORTED`, with no
+verifier entry or formula. Seven initial exports reject `YqlAggWin`; q49 first
+rejects a Decimal `SafeCast` scale change. The independently audited final
+boundaries reject `YqlAggWin` for q12/q20/q53/q63/q89/q98, `YqlWin` for q49,
+and Read range/ordering semantics for q51. The focused run spent 3,186/0 ms in
+preparation/verifier work and produced report SHA-256
+`37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
+
+The complete TPCH dashboard spent 2,752/42,193 ms in preparation/verifier work
 and produced report SHA-256
-`dc0b0269be9b508eb930b0cb646ce4ec0cf7febd826315c6accc6d6a5ae88aa1`.
-TPC-DS spent 66,495/356,670 ms and produced
-`aa28d105660d213add6957bbf192e21fd2300608fa2ec3062a30de541403de23`.
+`2cf12ff5803e229a1c8af9ec04a6d3314ab91f7b471bdc883e683da8654541f5`.
+TPC-DS spent 81,647/413,358 ms and produced
+`507eaf74a90f01b722824277a4632cbdf5cf5076d4809a978d0065cdcc927a11`.
 Both complete formula-only policy runs are green.
+
+The detailed planning estimate in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md)
+groups the preparation-successful formula gap into roughly eight to ten broad
+feature families and twelve to eighteen narrow milestones. Including exact
+window semantics for the newly visible failed-preparation pairs gives roughly
+ten to twelve families and sixteen to twenty-four milestones for the complete
+captured-pair gap; the remaining twenty workload entries need frontend or
+optimizer progress before verifier feature work can reach them.
+Those milestone ranges assume deliberately workload-targeted gates. A safer
+engineering budget for clean, reusable implementations is roughly fifteen to
+twenty-two milestones for the preparation-successful gap and twenty to thirty
+for all currently captured pairs.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -2135,7 +2165,7 @@ the external mutation boundary.
 
 ## Automatic counterexample confirmation
 
-A version-four benchmark coverage report preserves the exact assembled query,
+A version-four or version-five benchmark coverage report preserves the exact assembled query,
 both snapshots, and byte-exact raw verifier verdict, with SHA-256 bindings, for
 every symbolic counterexample. The raw verdict artifact is the authoritative
 witness source; the parsed verdict in the report contains metadata only and

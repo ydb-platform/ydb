@@ -63,6 +63,14 @@ The exporter is part of the trusted path. It must be mechanical, preserve every
 semantic field, use stable IDs rather than addresses, and fail when it encounters
 an operator or expression it cannot represent.
 
+Successful whole-query preparation is not a precondition for auditing a pair
+that was already captured at these boundaries. Initial and Final boundary
+results own their versioned JSON or unsupported diagnostic independently; a
+later `SyncPrepareDataQuery` failure is recorded on a separate preparation
+axis and does not discard them. Reports therefore partition preparation and
+semantic verification separately. The proof obligation ends before
+`ConvertToPhysical`; later physical generation remains outside this contract.
+
 The snapshot contains only semantic data:
 
 - table columns, types, nullability, keys, and relevant partitioning metadata;
@@ -902,9 +910,11 @@ Before treating optimizer findings as credible:
    aggregate phase, moving Limit across Filter, changing Sort direction, NULL
    placement, key order, or TopSort limit, and corrupting split Limit phases.
 3. Preserve and replay every solver witness.
-4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage dashboard;
-   report unsupported features separately from failures, and keep a hermetic
-   solver-backed regression floor for every curated workload proof.
+4. Run the supported subset of `TPCH_YQL` and `TPCDS_YQL` as a coverage
+   dashboard; report semantic unsupported outcomes and preparation failures as
+   independent axes, preserve their overlap when an exact pair survives, and
+   keep separate preparation-success, verifier-entry, formula-construction,
+   and hermetic solver-backed proof floors.
 
 Independent exhaustive concrete references now cover EmptySource,
 scan/project/filter, logical UnionAll, root projection, and every admitted join
@@ -1501,16 +1511,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   return `VERIFIED_BOUNDED` at two rows per table and two tasks. These are
   bounded theorems only, not unbounded query-equivalence claims.
 - The real-host dashboard runs all 22 `TPCH_YQL` and 99 `TPCDS_YQL` sources,
-  writes a structured timeout-aware report, and preserves diagnostic artifacts
-  for every correctness, unknown, schema, or solver outcome.
-- Its strict version-three input policy and independently versioned evaluation
-  enforce three monotonic depths: TPCH q1 and TPC-DS q5, q59, q65, and q80
-  must reach the verifier, the 63-query formula floor must keep constructing
-  SMT, and the
-  twenty-five-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A
-  verifier-side `UNSUPPORTED` result satisfies only the first tier; later
-  formulas and proofs satisfy every weaker tier without pinning brittle blocker
-  text.
+  writes a structured timeout-aware version-five report, and preserves
+  diagnostic artifacts for every captured boundary, correctness, unknown,
+  schema, or solver outcome. Preparation status and semantic classification
+  are independent; a later failed preparation does not erase an exact captured
+  pair.
+- Its strict version-four input policy and independently versioned
+  version-three evaluation enforce one orthogonal preparation-success floor
+  and three monotonic semantic depths: TPCH q1 and TPC-DS q5, q59, q65, and
+  q80 must reach the verifier, the 63-query formula floor must keep
+  constructing SMT, and the twenty-five-query hermetic proof floor must remain
+  `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
+  entry tier; later formulas and proofs satisfy every weaker semantic tier
+  without pinning brittle blocker text.
 - Occurrence/routing compaction, scoped shared-term rendering, nonrecursive
   structural IDs, exact grouped-key classes, and the at-most-three-row
   enumeration/symbolic-ordinal selector remove the former factorial and
@@ -1518,20 +1531,43 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 
   The current complete policy-checked formula dashboards, generated on
   2026-07-24, include the repeated-source Map projection used by TPC-DS q54.
-  TPCH has 17 formulas, three
-  unsupported queries, two optimizer failures, and 18 verifier entrants;
-  TPC-DS has 46 formulas, 27 unsupported queries, 26 optimizer failures, and 52
-  entrants. Across both suites, 63/121 queries construct formulas (52.1%), 63/93
-  optimizer-successful queries construct formulas (67.7%), and 63/70 verifier
-  entrants construct formulas (90.0%). The 30 unsupported rows split into 21
-  initial-export, two final-export, and seven verifier results.
+  TPCH's semantic partition is 17 formulas, three unsupported queries, and two
+  no-pair optimizer failures; TPC-DS has 46 formulas, 35 unsupported queries,
+  and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
+  73/99 TPC-DS queries and fails for the other 2 and 26. Eight failed TPC-DS
+  preparations retain exact pairs and overlap the unsupported inventory.
+  Across both suites, 63/121 queries construct formulas (52.1%), 63/101 exact
+  pairs do so (62.4%), 63/93 do so within the preparation-successful subset
+  (67.7%), and 63/70 verifier entrants do so (90.0%). The 38 unsupported rows
+  split by primary reason into 29 initial-export, two final-export, and seven
+  verifier results.
 
-  The complete TPCH formula dashboard spent 3,245/50,777 ms in
+  The complete TPCH formula dashboard spent 2,752/42,193 ms in
   preparation/verifier work and produced report SHA-256
-  `dc0b0269be9b508eb930b0cb646ce4ec0cf7febd826315c6accc6d6a5ae88aa1`;
-  TPC-DS spent 66,495/356,670 ms and produced
-  `aa28d105660d213add6957bbf192e21fd2300608fa2ec3062a30de541403de23`.
+  `2cf12ff5803e229a1c8af9ec04a6d3314ab91f7b471bdc883e683da8654541f5`;
+  TPC-DS spent 81,647/413,358 ms and produced
+  `507eaf74a90f01b722824277a4632cbdf5cf5076d4809a978d0065cdcc927a11`.
   Both complete formula-only policy runs are green.
+
+  A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
+  and q98 preserves exact pairs despite failed preparation. All eight are
+  semantically unsupported: window callables dominate, q49 first exposes a
+  Decimal scale-changing cast, and q51 exposes a secondary range-read boundary.
+  It spent 3,186/0 ms and produced report SHA-256
+  `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
+
+  The preparation-successful formula gap is estimated at 8--10 feature
+  families or 12--18 narrow milestones. Adding exact window semantics for the
+  newly visible failed-preparation pairs makes the full captured-pair gap
+  roughly 10--12 families or 16--24 milestones. Approximate projections from
+  the current 63 formulas are 70--76 after 3--5 milestones, 80--88 after
+  8--12, and 88--93 preparation-successful formulas after 12--18. Later
+  blockers can change these workload-targeted ranges. A safer engineering
+  budget for clean, reusable implementations is about 15--22 milestones for
+  the preparation-successful gap and 20--30 for all captured pairs. The 20
+  no-pair entries require
+  frontend/optimizer progress; the present captured-pair ceiling is 101/121,
+  and formula construction is not solver proof.
 
   q54's row spends 50,737 ms in verifier/formula-construction work. Its
   separate 60-second solver experiment is `UNKNOWN`: the global deadline
@@ -2271,8 +2307,11 @@ regression locks the corrected boundary.
   plan choice and checks exact outcome/mismatch agreement. Choices remain
   diagnostic plan valuations rather than observable result identity; a direct
   inspector/Z3/replay round trip with nonempty choices locks that distinction.
-- Version-four benchmark reports preserve the exact assembled query, both
-  snapshots, and byte-exact raw verifier verdict with SHA-256 bindings. The raw
+- Version-four and version-five benchmark reports preserve the exact assembled
+  query, both snapshots, and byte-exact raw verifier verdict with SHA-256
+  bindings. Version five additionally records preparation and semantic
+  outcomes as independent axes without discarding an exact pair after a later
+  preparation failure. The raw
   verdict artifact is authoritative for the witness; the report's parsed
   verdict contains metadata only and omits the witness to prevent loss of wide
   Decimal integers during JSON re-encoding. The separate confirmation driver

@@ -42,7 +42,7 @@ public:
     { }
 
     int Value;
-    int Weight;
+    std::atomic<int> Weight;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSimpleCachedValue)
@@ -1672,6 +1672,10 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     constexpr int batchCount = 10'000;
     constexpr double forbidResurrectionProbability = 0.25;
 
+    // Use a fixed-seed random generator for deterministic single-threaded
+    // or semi-deterministic multithreading testing.
+    constexpr int seedBase = 142857;
+
     const auto params = GetParam();
     const int cacheSize = params.CacheSize;
     const bool enableResurrection = params.EnableResurrection;
@@ -1682,9 +1686,6 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
 
     auto config = CreateCacheConfig(cacheSize);
     auto cache = New<TCountingSlruCache>(std::move(config), enableResurrection);
-
-    // Use a fixed-seed random generator for deterministic testing.
-    std::mt19937 randomGenerator(142857);
 
     auto operationDomainValues = TEnumTraits<EStressOperation>::GetDomainValues();
     std::vector<EStressOperation> operations(operationDomainValues.begin(), operationDomainValues.end());
@@ -1716,7 +1717,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     // that there is no value with the given key in the cache.
     THashMap<int, TWeakPtr<TSimpleCachedValue>> lastInsertedValues;
 
-    auto pickCacheValue = [&] () -> TSimpleCachedValuePtr {
+    auto pickCacheValue = [&] (std::mt19937& randomGenerator) -> TSimpleCachedValuePtr {
         auto guard = Guard(lock);
         while (!cacheValues.empty()) {
             size_t cacheValueIndex = randomGenerator() % cacheValues.size();
@@ -1731,6 +1732,8 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     };
 
     auto runAction = [&] (const EStressOperation operation, const int step) -> void{
+        std::mt19937 randomGenerator(seedBase + step);
+
         switch (operation) {
             case EStressOperation::Find: {
                 auto key = keyDistribution(randomGenerator);
@@ -1759,7 +1762,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 break;
             }
             case EStressOperation::Touch: {
-                auto value = pickCacheValue();
+                auto value = pickCacheValue(randomGenerator);
                 if (!value) {
                     break;
                 }
@@ -1851,7 +1854,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 break;
             }
             case EStressOperation::UpdateWeight: {
-                auto value = pickCacheValue();
+                auto value = pickCacheValue(randomGenerator);
                 if (!value) {
                     break;
                 }
@@ -1905,6 +1908,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
         actions.clear();
     };
 
+    std::mt19937 randomGenerator(seedBase);
     for (int step = 0; step < stepCount; ++step) {
         auto operation = operations[randomGenerator() % operations.size()];
         if (sync) {

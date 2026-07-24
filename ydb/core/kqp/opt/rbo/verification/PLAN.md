@@ -135,6 +135,11 @@ The explicit scalar core initially contains:
 - exact direct non-null String/Utf8-literal `SafeCast` to `Optional<Date>`,
   folded to an existing Date literal or typed NULL in both generic expressions
   and the executed OLAP-filter dialect;
+- exact nullable
+  `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection:
+  one direct visible `Optional<Date>` member, a complete cast, and the reviewed
+  unary UDF chain normalize to an explicit NULL lift around the shared
+  `yql-datetime-year-v1` typed opaque function;
 - exact constant Optional-Date `+`/`-` folding for a direct String/Utf8-literal
   `SafeCast` and the strict normalized `DateTime2.IntervalFromDays` UDF shape;
 - restricted static `IN`: a direct raw tuple or `AsList` containing 1..512
@@ -593,8 +598,10 @@ Implementation sequence:
 34. M4: exact row-level `DistinctAll` aggregation, beginning with TPC-DS q6;
 35. M4: canonical generic-to-OLAP `EndsWith`/`StringContains` bridge;
 36. M4: exact same-type Decimal aggregate `min`;
-37. next: dynamic `IN`, broader correlations, range reads, and other OLAP
-    pushdowns.
+37. M4: exact uncorrelated non-null integral dynamic `IN` and exact nullable
+    `Date -> Timestamp -> DateTime2.Split -> DateTime2.GetYear` projection;
+38. next: multiple dependencies, broader correlations, nullable/coercing
+    dynamic `IN`, range reads, and other OLAP pushdowns.
 
 The C++ exporter lowers an RBO map mechanically to an exact projection:
 all expressions read the input row, rename sources are removed, untouched input
@@ -1225,6 +1232,23 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   alternatives and nested evaluation. A real-host case
   proves initial dynamic `IN` equivalent to final `left_semi` at two rows and
   two tasks.
+- Exact nullable Date-year projection accepts only an
+  `Optional<Uint16>` `Map` over a complete `SafeCast` from one direct visible
+  `Optional<Date>` member to `Optional<Timestamp>`. Its unary non-null
+  Timestamp lambda must be exactly
+  `DateTime2.GetYear(DateTime2.Split(argument))`; all UDF names, callable and
+  cached descriptors, user types, AutoMap flags, settings, annotations, and
+  lambda identity are checked. Near-miss shapes fail closed. The snapshot
+  preserves source NULL with `if_present`, applies the stable non-null typed
+  opaque function `yql-datetime-year-v1` to the bound Date payload, and uses an
+  explicit constant-true `if` with typed NULL to lift that payload result to
+  `Optional<Uint16>`. Focused C++ mutations cover the material
+  Date-year-specific gates while shared tests retain generic UDF-envelope and
+  scalar-safety checks; Python tests cover NULL propagation plus
+  fingerprint/argument mutations, and a real-host nullable-Date projection is
+  `VERIFIED_BOUNDED`. Fresh complete validation
+  passes 183/183 C++ tests, 493/493 Python verifier tests, 46/46 inspector
+  tests, and 32/32 real-host integration tests.
 - Decimal literals are tagged as finite, negative infinity, positive infinity,
   or NaN; source and opaque values use the exact legal typed domain. Ordinary
   equality/order, exact-type null-safe equality, Decimal/Decimal and
@@ -1320,7 +1344,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   for every correctness, unknown, schema, or solver outcome.
 - Its strict version-three input policy and independently versioned evaluation
   enforce three monotonic depths: TPCH q1 and TPC-DS q5, q65, and q80 must reach
-  the verifier, the 47-query formula floor must keep constructing SMT, and the
+  the verifier, the 50-query formula floor must keep constructing SMT, and the
   nineteen-query hermetic proof floor must remain `VERIFIED_BOUNDED`. A
   verifier-side `UNSUPPORTED` result satisfies only the first tier; later
   formulas and proofs satisfy every weaker tier without pinning brittle blocker
@@ -1332,34 +1356,35 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   measurements reran on 2026-07-24 after the correlated-COUNT repair, exact
   `DistinctAll` support, and restoration of the production PostgreSQL
   parser/runtime in the benchmark host, then added exact uncorrelated dynamic
-  `IN`. They emit TPCH q1, q3, q4, q5, q6,
-  q10, q11,
-  q12, q14, q15, q18, q19, and q22 (13/22) and TPC-DS q3, q5, q6, q10, q15, q19,
+  `IN` and the exact nullable Date-year bridge. They emit TPCH q1, q3, q4, q5,
+  q6, q7, q8, q9, q10, q11,
+  q12, q14, q15, q18, q19, and q22 (16/22) and TPC-DS q3, q5, q6, q10, q15, q19,
   q25, q29, q37, q40, q42, q43, q46, q48, q50, q52, q55, q61, q62, q65,
   q68, q69, q71, q76, q77, q79, q80, q82, q88, q90, q91, q93, q96, and q99
-  (34/99), for 47/121 workload queries (38.8%). TPCH has seven unsupported and
+  (34/99), for 50/121 workload queries (41.3%). TPCH has four unsupported and
   two optimizer-failure results; TPC-DS has 39 unsupported and 26
-  optimizer-failure results, for 46 unsupported and 28 optimizer failures
+  optimizer-failure results, for 43 unsupported and 28 optimizer failures
   across both suites. Of the 93 queries that reach verifier classification,
-  47 construct formulas (50.5%).
+  50 construct formulas (53.8%).
 
   `DistinctAll` adds TPC-DS q6. The correlated-COUNT correctness repair
   intentionally moves TPCH q17 and TPC-DS q1, q30, q32, q81, and q92 from
   formula construction to an optimizer-side fail-closed result because their
   computed correlated aggregate shapes require general empty-row
   reconstruction. None was in the proof floor. The current policy-checked TPCH
-  run spent 2,800/21,080 ms and produced report SHA-256
-  `65a38cf551f99ced8df28708b0bd6f58bdd4d280cd44cf1b6581826ccd813907`;
-  TPC-DS spent 63,783/187,195 ms and produced
-  `bc89dca6db0f32f3b0793f270b5d69e6feff03ca9e2094da6ada314f9d063840`.
+  run spent 2,897/29,563 ms and produced report SHA-256
+  `6a8cbbeb316d128880ae97295efcc763cdc5ce14d648adec3411e6b0bb8fa214`;
+  TPC-DS spent 64,077/192,905 ms and produced
+  `279318f3d46f585bba33ede252bf723a5ece36c989215015c0046eb6677e8f29`.
   Formula emission confirms end-to-end model coverage at two rows per
   referenced table and two tasks; it is not a proof by itself.
 
-  Focused post-dashboard checks of the canonical String-predicate bridge and
-  Decimal `MIN` leave this floor at 46/121. TPCH q2 now passes both exporters
-  and `MIN` before reaching the 32,640-pair Merge cap; TPCH q9 clears both
-  String-predicate spellings but reaches scalar `Map` in both snapshots. The
-  small real-host bridge fixture is `VERIFIED_BOUNDED`.
+  At the preceding focused post-dashboard checkpoint, the canonical
+  String-predicate bridge and Decimal `MIN` left the floor at 46/121. TPCH q2
+  passed both exporters and `MIN` before reaching the 32,640-pair Merge cap;
+  TPCH q9 cleared both String-predicate spellings but then reached scalar `Map`
+  in both snapshots. The small real-host bridge fixture was
+  `VERIFIED_BOUNDED`.
 
   The following dynamic-`IN` slice adds TPCH q18. Its focused solver run is
   `VERIFIED_BOUNDED` after 155/3,035 ms at two rows and two tasks, so q18 is
@@ -1367,6 +1392,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   gate but reach later blockers; nullable, `String`, and `Date` cases fail
   closed. The real-host `IN`-to-`left_semi` proof uses production PostgreSQL
   support because the dummy provider failed preparation.
+
+  The subsequent exact nullable Date-year slice adds TPCH q7, q8, and q9 to
+  the formula floor. Their complete dashboard rows spend 237/3,318,
+  278/2,954, and 187/1,628 ms respectively in preparation/verifier work.
+  Focused 60-second solver experiments all return `UNKNOWN`: q7 after
+  230/64,641 ms at branch 4/4 `right_outcome_0_unmatched`, q8 after
+  280/65,107 ms at branch 4/28 `left_outcome_1_unmatched`, and q9 after
+  181/62,461 ms at branch 4/4 `right_outcome_0_unmatched`. These rows extend
+  formula construction only; the proof floor remains 19/121.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. The remaining verifier-side
@@ -1386,12 +1420,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q18, q19, and q22 plus TPC-DS q3, q42, q48, q52,
   q55, q69, q90, q93, and q96 with a fixed 60-second per-query budget. The
-  expanded policy gate passes 10/10 TPCH after 1,140/59,310 ms and 9/9 TPC-DS
-  after 1,388/35,706 ms, all `VERIFIED_BOUNDED`. The current report SHA-256
+  refreshed policy gate passes 10/10 TPCH after 1,226/59,673 ms and 9/9 TPC-DS
+  after 1,448/36,162 ms, all `VERIFIED_BOUNDED`. The current report SHA-256
   values are
-  `bf9b6e149aba25afed999781cb2138002829b9111f7ab35d54229cee02a1969c`
+  `20540ba5eb16c0d239cd6ed5c9369d4372b774820c4b9033550b0343d577a5d1`
   and
-  `f943c791f20bbb2acdc4d3875e4cab049f618b761aa28da4b8627a3f87f90894`.
+  `62d7539a519ae370278b313d50e83b30a7d50d279cd12f6347b3b1e011163a95`.
   The preceding retained eighteen-query canonical-first exact-branch TPCH run
   spent 1,145/56,389 ms in preparation/verification and produced report SHA-256
   `6d7329166c0cff497adcd86fd2d061bb409ca170c473b51529ed76ca8d80280c`;
@@ -1627,6 +1661,17 @@ preparation. TPCH q18 now emits a formula and returns `VERIFIED_BOUNDED` after
 155/3,035 ms in the focused solver run. q16 and TPC-DS q95 reach later blockers,
 while nullable, `String`, and `Date` dynamic-`IN` cases remain fail closed.
 
+The exact nullable Date-year projection bridge accepts only the reviewed
+`Map(SafeCast(Optional<Date> -> Optional<Timestamp>), lambda Timestamp:
+GetYear(Split(argument)))` shape. It validates the direct visible source,
+complete cast, exact unary binder, complete normalized UDF envelopes, and
+`Optional<Uint16>` result before lowering to an explicit `if_present` NULL lift
+around `yql-datetime-year-v1`. C++ near-miss mutations and Python semantic
+mutations fail as intended, while the real-host initial/final pair is
+`VERIFIED_BOUNDED`. TPCH q7, q8, and q9 now emit complete formulas; all three
+focused 60-second solver runs remain `UNKNOWN`, so the nineteen-query proof
+floor is unchanged.
+
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`: the proof-producing boundary has a maintained
 trusted-core map, subplan export is separated into explicit phases, and the C++
@@ -1654,8 +1699,9 @@ without changing the sequence language. A 60-second solver experiment remains
 parser/runtime now backs both the coverage host and benchmark-mode prefix
 capture, exposing dynamic `IN` as a verifier boundary instead of a dummy-host
 preparation failure. The exact uncorrelated non-null integral slice is now
-implemented; nullable/coercing dynamic `IN`, multiple dependencies, broader
-correlations, range reads, and other OLAP pushdowns remain future work. The
+implemented, as is the exact nullable Date-year projection bridge.
+Nullable/coercing dynamic `IN`, multiple dependencies, broader correlations,
+range reads, and other OLAP pushdowns remain future work. The
 proof policy adds TPCH q18 to the previous eighteen obligations; the expanded
 gate confirms all nineteen.
 

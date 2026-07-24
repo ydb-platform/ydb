@@ -90,7 +90,7 @@ distinguished_name = distinguished_name
 req_extensions = extensions
 
 [ distinguished_name ]
-organizationName = YDB Self-Signed Authority
+organizationName = YDB
 
 [ extensions ]
 subjectAltName = @alt_names

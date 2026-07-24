@@ -29,8 +29,15 @@ TAccountQuoterHolder::TAccountQuoterHolder(const TActorId& actor, const TTabletC
 }
 
 
-TConsumerReadQuota::TConsumerReadQuota(THolder<TAccountQuoterHolder> accountQuotaTracker, ui64 readQuotaBurst, ui64 readQuotaSpeed)
+TConsumerReadQuota::TConsumerReadQuota(
+    THolder<TAccountQuoterHolder> accountQuotaTracker,
+    ui64 readQuotaBurst,
+    ui64 readQuotaSpeed,
+    ui64 readMessageQuotaBurst,
+    ui64 readMessageQuotaSpeed
+)
     : PartitionPerConsumerQuotaTracker(readQuotaBurst, readQuotaSpeed, TAppData::TimeProvider->Now())
+    , PartitionPerConsumerMessageQuotaTracker(readMessageQuotaBurst, readMessageQuotaSpeed, TAppData::TimeProvider->Now())
     , AccountQuotaTracker(std::move(accountQuotaTracker))
 {
 }

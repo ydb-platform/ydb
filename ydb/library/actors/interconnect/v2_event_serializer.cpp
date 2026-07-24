@@ -15,10 +15,7 @@ namespace NActors {
 
     void TEventSerializer::Push(std::unique_ptr<IEventHandle> ev) {
         const ui16 channel = ev->GetChannel();
-        TPerChannelQueue& queue = GetQueue(channel);
-        const bool first = queue.Events.empty();
-        queue.Events.push_back(std::move(ev));
-        if (first) {
+        if (GetQueue(channel).Events.Push(std::move(ev))) {
             // place this new quota into non-zero part of the heap
             Y_ABORT_UNLESS(channel != TChunkHeader::SystemChannel);
             PerChannelQuotaHeap.push_back(TPerChannelQuota{
@@ -81,7 +78,7 @@ namespace NActors {
 
             // update quota
             std::ranges::pop_heap(PerChannelQuotaHeap, std::less<ui16>{}, &TPerChannelQuota::Quota);
-            if (queue.Events.empty() && queue.SystemRequests.empty()) {
+            if (!queue.Events.Peek() && queue.SystemRequests.empty()) {
                 // we have serialized all the events avaiable in this queue, so we drop record from the quota heap
                 PerChannelQuotaHeap.pop_back();
             } else {
@@ -190,8 +187,8 @@ namespace NActors {
             queue.SystemRequests.pop_front();
         }
 
-        while (Min(buffer.size(), maxBytesToProduce) >= MinUsefulQuota && !queue.Events.empty()) {
-            IEventHandle& ev = *queue.Events.front();
+        while (Min(buffer.size(), maxBytesToProduce) >= MinUsefulQuota && queue.Events.Peek()) {
+            IEventHandle& ev = *queue.Events.Peek();
 
             TChunkHeader *header = nullptr;
             auto addEventChunkBytes = [&](const char *ptr, size_t numBytes) {
@@ -312,7 +309,7 @@ namespace NActors {
                             .Event{ev.ReleaseBase().Release()},
                             .EventReceivedTimestamp = reinterpret_cast<const ui64&>(ev.OriginScopeId),
                         });
-                        queue.Events.pop_front();
+                        queue.Events.Pop();
                         queue.SerializeStage = ESerializeStage::kInitial;
                         queue.EventHeaderOffset = 0;
                     }

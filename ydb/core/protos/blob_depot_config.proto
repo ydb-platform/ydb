@@ -58,6 +58,10 @@ message TS3BackendSettings {
     optional string BalancerHost = 4;
     optional uint32 BalancerRefreshSecMin = 5 [default = 10];
     optional uint32 BalancerRefreshSecMax = 6 [default = 15];
+    // ProxyPort when balancer returns a hostname without an explicit port.
+    optional uint32 BalancerProxyPort = 7 [default = 4080];
+    // ProxyScheme for connections via the balancer-provided host.
+    optional NKikimrSchemeOp.TS3Settings.EScheme BalancerProxyScheme = 8 [default = HTTP];
 }
 
 message TBlobDepotConfig {

@@ -65,10 +65,11 @@ jobs:
             sdk_root="$(mktemp -d "$RUNNER_TEMP/cpp-sdk-peerdirs.XXXXXX")/sdk"
             mkdir -p "$sdk_root/scripts"
             cp ydb/public/sdk/cpp/scripts/check_peerdirs.py "$sdk_root/scripts/"
+            cp ydb/public/sdk/cpp/allowed_peerdirs.txt "$sdk_root/"
             while IFS= read -r -d '' path; do
               rel="${path#ydb/public/sdk/cpp/}"
               case "$rel" in
-                allowed_peerdirs.txt|*/ya.make) ;;
+                */ya.make) ;;
                 *) continue ;;
               esac
               target="$sdk_root/$rel"

@@ -176,4 +176,8 @@ struct TTxState {
     }
 };
 
+// Non-copyable via the TPathDbRef members: assigning over a live tx state drops its refs.
+static_assert(!std::is_copy_assignable_v<TTxState>);
+static_assert(std::is_move_assignable_v<TTxState>);
+
 }  // namespace NKikimr::NSchemeShard

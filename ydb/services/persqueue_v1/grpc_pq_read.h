@@ -89,9 +89,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // template methods implementation
 
-template <bool UseMigrationProtocol>
+template <EProtocol Protocol>
 auto FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<UseMigrationProtocol,
+    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
                                                     PersQueue::V1::MigrationStreamingReadServerMessage,
                                                     Topic::StreamReadMessage::FromServer>::type;
     ServerMessage res;
@@ -105,7 +105,7 @@ Topic::StreamDirectReadMessage::FromServer FillDirectReadResponse(const TString&
 
 template <typename ReadRequest>
 void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest>;
+    constexpr EProtocol Protocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection");
 
@@ -113,7 +113,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
+            FillReadResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
         return;
     }
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
@@ -121,7 +121,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
 
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
+            FillReadResponse<Protocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         // TODO: Inc SLI Errors
         return;
     } else {
@@ -134,7 +134,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
 
         auto ip = ev->Get()->GetPeerName();
 
-        TActorId worker = ctx.Register(new TReadSessionActor<UseMigrationProtocol>(
+        TActorId worker = ctx.Register(new TReadSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler

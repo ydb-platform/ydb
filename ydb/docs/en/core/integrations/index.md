@@ -4,7 +4,7 @@ This section provides the main information about {{ ydb-name }} integrations wit
 
 {% note info %}
 
-In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via network protocols [PostgreSQL](../postgresql/intro.md) or [Apache Kafka](../reference/kafka-api/index.md). Due to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
+In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via [PostgreSQL](../postgresql/intro.md) or [Apache Kafka](../reference/kafka-api/index.md) network protocols. Thanks to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level of each specific application must be clarified separately.
 
 {% endnote %}
 
@@ -43,7 +43,7 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 ## Object–relational mapping (ORM) {#orm}
 
-{% include notitle [Table of contents](orm/_includes/toc-table.md) %}
+{% include notitle [Contents](orm/_includes/toc-table.md) %}
 
 ## Vector search {#vectorsearch}
 

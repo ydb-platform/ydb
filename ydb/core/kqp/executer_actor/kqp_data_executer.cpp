@@ -228,6 +228,8 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
+            event->CollectUserFacingProfile = UserFacingTraceData
+                && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),
@@ -331,6 +333,7 @@ public:
             tl.Phase(EUserFacingTracePhase::CommitPrepareShards) = ev->Get()->CommitPrepareShards;
             tl.Phase(EUserFacingTracePhase::CommitCoordinator) = ev->Get()->CommitCoordinator;
             tl.Phase(EUserFacingTracePhase::CommitApplyShards) = ev->Get()->CommitApplyShards;
+            UserFacingTraceData->ShardCommitAcks = std::move(ev->Get()->ShardCommitAcks);
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();

@@ -5256,6 +5256,7 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        CollectUserFacingProfile = ev->Get()->CollectUserFacingProfile;
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
@@ -5703,6 +5704,11 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (CollectUserFacingProfile && preparedInfo.ShardId) {
+            auto& ack = UserFacingShardAcks[preparedInfo.ShardId];
+            ack.ShardId = preparedInfo.ShardId;
+            ack.PreparedAt = TInstant::Now();
+        }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             YDB_LOG_ERROR("Handle TEvWriteResult: unable to select coordinator. Tx canceled, previously selected coordinator selected at propose",
@@ -5728,6 +5734,11 @@ public:
     }
 
     void OnCommitted(ui64 shardId, ui64) override {
+        if (CollectUserFacingProfile && shardId) {
+            auto& ack = UserFacingShardAcks[shardId];
+            ack.ShardId = shardId;
+            ack.CommittedAt = TInstant::Now();
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -5742,6 +5753,12 @@ public:
             result->CommitPrepareShards = UserFacingCommitPrepareShards;
             result->CommitCoordinator = UserFacingCommitCoordinator;
             result->CommitApplyShards = UserFacingCommitApplyShards;
+            for (const auto& [shardId, ack] : UserFacingShardAcks) {
+                if (result->ShardCommitAcks.size() >= MaxUserFacingShardReadsPerTask) {
+                    break;
+                }
+                result->ShardCommitAcks.push_back(ack);
+            }
             Send<ESendingType::Tail>(ExecuterActorId, result.release());
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
@@ -6142,6 +6159,8 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
+    bool CollectUserFacingProfile = false;
+    THashMap<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
     TUserFacingTraceTimeline::TWindow UserFacingCommitPrepareShards;
     TUserFacingTraceTimeline::TWindow UserFacingCommitCoordinator;
     TUserFacingTraceTimeline::TWindow UserFacingCommitApplyShards;

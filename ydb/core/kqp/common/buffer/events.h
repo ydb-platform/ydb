@@ -22,6 +22,8 @@ struct TEvKqpBuffer {
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
     ui64 TxId;
+    // Collect per-shard commit acks for the user-facing trace (profile sampling level only).
+    bool CollectUserFacingProfile = false;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
@@ -51,6 +53,7 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
     TUserFacingTraceTimeline::TWindow CommitPrepareShards;
     TUserFacingTraceTimeline::TWindow CommitCoordinator;
     TUserFacingTraceTimeline::TWindow CommitApplyShards;
+    TVector<TUserFacingShardCommitAck> ShardCommitAcks; // capped, profile level only
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

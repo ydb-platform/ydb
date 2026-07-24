@@ -166,6 +166,34 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent,
                     if (retries > 0) {
                         span.Attribute("ydb.read_retries", static_cast<i64>(retries));
                     }
+                    // Per-shard reads (collected only at profile level). Sub-ms reads render as
+                    // zero-length spans; the attributes still carry the detail.
+                    for (const auto& shard : extra.GetShardReads()) {
+                        if (shard.GetStartTimeMs() == 0 || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
+                            continue;
+                        }
+                        NWilson::TSpan shardSpan = NWilson::TSpan::ConstructTerminated(
+                            span.GetTraceId(), span.GetTraceId().Span(span.GetTraceId().GetVerbosity()),
+                            TInstant::MilliSeconds(shard.GetStartTimeMs()),
+                            TInstant::MilliSeconds(shard.GetFinishTimeMs()),
+                            NWilson::NTraceProto::Status::STATUS_CODE_OK,
+                            TStringBuilder() << "Shard " << shard.GetShardId());
+                        if (!shardSpan) {
+                            continue;
+                        }
+                        shardSpan.Attribute("ydb.shard_id", static_cast<i64>(shard.GetShardId()));
+                        shardSpan.Attribute("ydb.rows", static_cast<i64>(shard.GetRows()));
+                        if (shard.GetRetries() > 0) {
+                            shardSpan.Attribute("ydb.read_retries", static_cast<i64>(shard.GetRetries()));
+                        }
+                        if (shard.GetNodeId()) {
+                            shardSpan.Attribute("ydb.node_id", static_cast<i64>(shard.GetNodeId()));
+                        }
+                        shardSpan.End();
+                    }
+                    if (extra.GetShardReadsTruncated() > 0) {
+                        span.Attribute("ydb.shards_truncated", static_cast<i64>(extra.GetShardReadsTruncated()));
+                    }
                 }
             }
             span.End();
@@ -298,16 +326,35 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TUserFacingTraceExec
         runSpan.End();
     }
     if (const auto& commit = tl.Phase(EUserFacingTracePhase::Commit)) {
-        // Distributed-commit breakdown (empty on the immediate single-shard path).
+        // Distributed-commit breakdown (empty on the immediate single-shard path). At profile
+        // level the prepare/apply windows carry per-shard children: each shard's span runs from
+        // the phase start to that shard's acknowledgement, so stragglers stand out.
         if (NWilson::TSpan commitSpan = MakePhase(executeId, commit.Start, commit.End, "Commit")) {
+            const auto& acks = trace.ShardCommitAcks;
             if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitPrepareShards)) {
-                EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "PrepareShards");
+                if (NWilson::TSpan prep = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "PrepareShards")) {
+                    for (const auto& ack : acks) {
+                        if (ack.PreparedAt >= w.Start) {
+                            EmitPhase(prep.GetTraceId(), w.Start, ack.PreparedAt,
+                                TStringBuilder() << "Shard " << ack.ShardId);
+                        }
+                    }
+                    prep.End();
+                }
             }
             if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitCoordinator)) {
                 EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "Coordinator");
             }
             if (const auto& w = tl.Phase(EUserFacingTracePhase::CommitApplyShards)) {
-                EmitPhase(commitSpan.GetTraceId(), w.Start, w.End, "ApplyShards");
+                if (NWilson::TSpan apply = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "ApplyShards")) {
+                    for (const auto& ack : acks) {
+                        if (ack.CommittedAt >= w.Start) {
+                            EmitPhase(apply.GetTraceId(), w.Start, ack.CommittedAt,
+                                TStringBuilder() << "Shard " << ack.ShardId);
+                        }
+                    }
+                    apply.End();
+                }
             }
             commitSpan.End();
         }

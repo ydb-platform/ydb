@@ -1,6 +1,7 @@
 #include "kqp_read_actor.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/common/kqp_user_facing_trace_data.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -856,6 +857,13 @@ public:
     }
 
     void StartRead(TShardState* state) {
+        if (IngressStats.CollectProfile()) {
+            auto& shard = UserFacingShardReads[state->TabletId];
+            shard.SetShardId(state->TabletId);
+            if (!shard.GetStartTimeMs()) {
+                shard.SetStartTimeMs(TInstant::Now().MilliSeconds());
+            }
+        }
         TMaybe<ui64> limit;
         if (Settings->GetItemsLimit()) {
             limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);
@@ -1018,6 +1026,17 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
+        }
+
+        if (IngressStats.CollectProfile()) {
+            auto& shard = UserFacingShardReads[Reads[id].Shard->TabletId];
+            shard.SetShardId(Reads[id].Shard->TabletId);
+            shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
+            shard.SetRows(shard.GetRows() + record.GetRowCount());
+            shard.SetRetries(Max<ui32>(shard.GetRetries(), Reads[id].Shard->RetryAttempt));
+            if (Reads[id].Shard->NodeId) {
+                shard.SetNodeId(*Reads[id].Shard->NodeId);
+            }
         }
 
         TStringBuilder txLocks;
@@ -1566,8 +1585,8 @@ public:
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
-            // Add lock stats for broken locks and shard read retries
-            if (!BrokenLocks.empty() || TotalRetries > 0) {
+            // Add lock stats for broken locks, shard read retries and per-shard summaries
+            if (!BrokenLocks.empty() || TotalRetries > 0 || !UserFacingShardReads.empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -1578,6 +1597,14 @@ public:
                 }
                 if (TotalRetries > 0) {
                     extraStats.SetReadRetriesCount(extraStats.GetReadRetriesCount() + TotalRetries);
+                }
+                for (const auto& [shardId, shard] : UserFacingShardReads) {
+                    if (static_cast<size_t>(extraStats.ShardReadsSize()) >= MaxUserFacingShardReadsPerTask) {
+                        extraStats.SetShardReadsTruncated(
+                            extraStats.GetShardReadsTruncated() + UserFacingShardReads.size() - extraStats.ShardReadsSize());
+                        break;
+                    }
+                    *extraStats.AddShardReads() = shard;
                 }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
@@ -1740,6 +1767,8 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
+    // Per-shard read summaries for the user-facing trace; collected only at profile level.
+    THashMap<ui64, NKqpProto::TKqpShardReadStats> UserFacingShardReads;
 
     bool FirstShardStarted = false;
 

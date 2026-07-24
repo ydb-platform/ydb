@@ -3,6 +3,8 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 #include <array>
@@ -22,6 +24,10 @@ using TUserFacingTraceTaskStats = std::unordered_map<ui32, std::unordered_map<ui
 // Cap on retained tasks per stage (top-N by duration once full — stragglers matter most);
 // bounds executer memory on wide OLAP stages, the stage span gets ydb.tasks_truncated when hit.
 constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
+
+// Cap on per-shard read entries a task exports at profile level (first-come); the task span
+// gets ydb.shards_truncated when hit.
+constexpr size_t MaxUserFacingShardReadsPerTask = 64;
 
 // Operational phases the executer passes through. The renderer decides presentation: which are
 // grouped under "Prepare", and their user-facing names.
@@ -62,9 +68,17 @@ struct TUserFacingTraceTimeline {
     }
 };
 
+// Per-shard commit acknowledgements of a distributed commit (profile level only).
+struct TUserFacingShardCommitAck {
+    ui64 ShardId = 0;
+    TInstant PreparedAt;
+    TInstant CommittedAt;
+};
+
 struct TUserFacingTraceExecutionData {
     TUserFacingTraceTimeline Timeline;
     TUserFacingTraceTaskStats TaskStats;
+    TVector<TUserFacingShardCommitAck> ShardCommitAcks;
     // Stats exported at collection depth for the trace; the response's stats stay at the
     // client-requested mode and must not be used for rendering.
     NYql::NDqProto::TDqExecutionStats ExecStats;

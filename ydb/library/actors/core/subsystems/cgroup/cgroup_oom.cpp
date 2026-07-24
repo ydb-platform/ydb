@@ -10,10 +10,14 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log_iface.h>
+#include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
+#include <util/string/builder.h>
 
 namespace NActors {
 
@@ -27,6 +31,28 @@ namespace NActors {
             return current >= previous ? current - previous : 0;
         }
 
+        ui32 ExtractSubscriberActivityIndex(const TActorId& actorId) {
+            if (!TlsActivationContext) {
+                return Max<ui32>();
+            }
+
+            const TActorContext& context = TActivationContext::AsActorContext();
+            if (actorId.NodeId() != context.SelfID.NodeId()) {
+                return Max<ui32>();
+            }
+            if (IActor* actor = context.Mailbox.FindActor(actorId.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            if (IActor* actor = context.Mailbox.FindAlias(actorId.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            return Max<ui32>();
+        }
+
+        TStringBuf FormatSubscriberActivityName(ui32 activityIndex) {
+            return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
+        }
+
     } // namespace
 
     namespace NDetail {
@@ -37,6 +63,7 @@ namespace NActors {
             EvUnsubscribeCallback,
             EvSubscribeActor,
             EvUnsubscribeActor,
+            EvCheckActorSubscribersLiveness,
         };
 
         struct TEvPoll : TEventLocal<TEvPoll, EvPoll> {
@@ -66,9 +93,11 @@ namespace NActors {
 
         struct TEvSubscribeActor : TEventLocal<TEvSubscribeActor, EvSubscribeActor> {
             TActorId ActorId;
+            ui32 ActivityIndex;
 
-            explicit TEvSubscribeActor(TActorId actorId)
+            TEvSubscribeActor(TActorId actorId, ui32 activityIndex)
                 : ActorId(actorId)
+                , ActivityIndex(activityIndex)
             {
             }
         };
@@ -80,6 +109,115 @@ namespace NActors {
                 : ActorId(actorId)
             {
             }
+        };
+
+        struct TEvCheckActorSubscribersLiveness
+            : TEventLocal<TEvCheckActorSubscribersLiveness, EvCheckActorSubscribersLiveness>
+        {
+        };
+
+        class TCGroupOomSubscriberLivenessChecker
+            : public TActorBootstrapped<TCGroupOomSubscriberLivenessChecker>
+        {
+        public:
+            TCGroupOomSubscriberLivenessChecker(
+                    const TActorId& subscriptionOwner,
+                    THashMap<TActorId, ui32> subscribers)
+                : SubscriptionOwner(subscriptionOwner)
+                , PendingSubscribers(std::move(subscribers))
+            {
+            }
+
+            void Bootstrap() {
+                if (PendingSubscribers.empty()) {
+                    return PassAway();
+                }
+
+                Become(&TThis::StateWork);
+                // Every liveness probe is guaranteed to eventually produce exactly one response:
+                // ActorAlive or ActorDead for a local target, and ActorLivenessUnsure for a remote one.
+                // The checker can therefore wait for all responses without a timeout.
+                for (const auto& [subscriber, activityIndex] : PendingSubscribers) {
+                    Y_UNUSED(activityIndex);
+                    TActivationContext::Send(new IEventHandle(
+                        TEvents::TSystem::CheckActorLiveness,
+                        TEvents::TEvCheckActorLiveness::RequestFlags,
+                        subscriber,
+                        SelfId(),
+                        nullptr,
+                        0));
+                }
+            }
+
+        private:
+            STRICT_STFUNC(StateWork,
+                hFunc(TEvents::TEvActorAlive, Handle)
+                hFunc(TEvents::TEvActorDead, Handle)
+                hFunc(TEvents::TEvActorLivenessUnsure, Handle)
+            )
+
+            void Handle(TEvents::TEvActorAlive::TPtr& ev) {
+                Complete(ev->Sender);
+            }
+
+            void Handle(TEvents::TEvActorDead::TPtr& ev) {
+                if (const auto it = PendingSubscribers.find(ev->Sender);
+                        it != PendingSubscribers.end()) {
+                    ++LeakedSubscribersByActivity[it->second];
+                    PendingSubscribers.erase(it);
+                    Send(SubscriptionOwner, new TEvUnsubscribeActor(ev->Sender));
+                    PassAwayIfDone();
+                }
+            }
+
+            void Handle(TEvents::TEvActorLivenessUnsure::TPtr& ev) {
+                Complete(ev->Sender);
+            }
+
+            void Complete(const TActorId& subscriber) {
+                if (PendingSubscribers.erase(subscriber)) {
+                    PassAwayIfDone();
+                }
+            }
+
+            void PassAwayIfDone() {
+                if (PendingSubscribers.empty()) {
+                    LogLeakedSubscribers();
+                    PassAway();
+                }
+            }
+
+            void LogLeakedSubscribers() const {
+                if (LeakedSubscribersByActivity.empty()) {
+                    return;
+                }
+
+                TStringBuilder details;
+                bool first = true;
+                for (const auto& [activityIndex, count] : LeakedSubscribersByActivity) {
+                    if (!first) {
+                        details << ", ";
+                    }
+                    first = false;
+                    details << "{activity# " << FormatSubscriberActivityName(activityIndex)
+                        << " actors# " << count << '}';
+                }
+                NLog::TSettings* loggerSettings = TlsActivationContext->LoggerSettings();
+                if (loggerSettings &&
+                        loggerSettings->Satisfies(NLog::PRI_WARN, NActorsServices::GLOBAL)) {
+                    Send(loggerSettings->LoggerActorId, new NLog::TEvLog(
+                        NLog::PRI_WARN,
+                        NActorsServices::GLOBAL,
+                        TStringBuilder()
+                            << "CGroup OOM subscriber liveness check found leaked subscriptions: "
+                            << details));
+                }
+            }
+
+        private:
+            const TActorId SubscriptionOwner;
+            THashMap<TActorId, ui32> PendingSubscribers;
+            TMap<ui32, ui64> LeakedSubscribersByActivity;
         };
 
         class TCGroupOomActor : public TActorBootstrapped<TCGroupOomActor> {
@@ -95,6 +233,10 @@ namespace NActors {
             void Bootstrap() {
                 Become(&TThis::StateWork);
                 Send(SelfId(), new TEvPoll());
+                if (Config.SubscriberLivenessCheckInterval != TDuration::Zero()) {
+                    Schedule(Config.SubscriberLivenessCheckInterval,
+                        new TEvCheckActorSubscribersLiveness());
+                }
             }
 
             STRICT_STFUNC(StateWork,
@@ -104,6 +246,7 @@ namespace NActors {
                 hFunc(TEvUnsubscribeCallback, Handle)
                 hFunc(TEvSubscribeActor, Handle)
                 hFunc(TEvUnsubscribeActor, Handle)
+                hFunc(TEvCheckActorSubscribersLiveness, Handle)
                 cFunc(TEvents::TSystem::Poison, PassAway)
             )
 
@@ -141,11 +284,25 @@ namespace NActors {
             }
 
             void Handle(TEvSubscribeActor::TPtr& ev) {
-                ActorSubscribers.insert(ev->Get()->ActorId);
+                ActorSubscribers[ev->Get()->ActorId] = ev->Get()->ActivityIndex;
             }
 
             void Handle(TEvUnsubscribeActor::TPtr& ev) {
                 ActorSubscribers.erase(ev->Get()->ActorId);
+            }
+
+            void Handle(TEvCheckActorSubscribersLiveness::TPtr&) {
+                const TDuration interval = Config.SubscriberLivenessCheckInterval;
+                if (interval == TDuration::Zero()) {
+                    return;
+                }
+
+                if (!ActorSubscribers.empty()) {
+                    TActivationContext::Register(
+                        new TCGroupOomSubscriberLivenessChecker(SelfId(), ActorSubscribers),
+                        SelfId());
+                }
+                Schedule(interval, new TEvCheckActorSubscribersLiveness());
             }
 
             void Evaluate(TCGroupMemoryStatsPtr stats) {
@@ -205,7 +362,8 @@ namespace NActors {
 
             void Notify(const TCGroupOomAlert& alert) {
                 const TActorContext& actorContext = TActivationContext::AsActorContext();
-                for (const TActorId& actorId : ActorSubscribers) {
+                for (const auto& [actorId, activityIndex] : ActorSubscribers) {
+                    Y_UNUSED(activityIndex);
                     actorContext.Send(actorId, new TEvCGroupOomAlert(alert));
                 }
 
@@ -224,7 +382,7 @@ namespace NActors {
             const TCGroupOomConfig Config;
 
             THashMap<TCGroupOomSubSystem::TSubscriptionId, TCGroupOomSubSystem::TCallback> Callbacks;
-            THashSet<TActorId> ActorSubscribers;
+            THashMap<TActorId, ui32> ActorSubscribers;
 
             std::optional<ECGroupVersion> PreviousVersion;
             TString PreviousCGroupPath;
@@ -290,7 +448,8 @@ namespace NActors {
 
         Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
 
-        ActorSystem->Send(MonitorActorId, new NDetail::TEvSubscribeActor(actorId));
+        ActorSystem->Send(MonitorActorId,
+            new NDetail::TEvSubscribeActor(actorId, ExtractSubscriberActivityIndex(actorId)));
     }
 
     void TCGroupOomSubSystem::Unsubscribe(const TActorId& actorId) {

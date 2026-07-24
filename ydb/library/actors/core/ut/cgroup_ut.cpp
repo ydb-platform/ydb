@@ -8,16 +8,26 @@
 #include <executor_pool_basic.h>
 #include <executor_pool_io.h>
 #include <hfunc.h>
+#include <log.h>
 #include <scheduler_basic.h>
 
+#include <ydb/library/actors/protos/services_common.pb.h>
+
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
+#include <util/string/builder.h>
+#include <util/system/mutex.h>
 
+#include <atomic>
 #include <functional>
+#include <memory>
 
 using namespace NActors;
 
@@ -26,6 +36,123 @@ namespace {
     constexpr ui32 SystemPoolId = 0;
     constexpr ui32 IoPoolId = 1;
     constexpr ui64 RequestCookie = 42;
+
+    struct TCGroupOomLogState {
+        std::atomic<ui32> Warnings = 0;
+        TMutex Mutex;
+        TString LastWarning;
+    };
+
+    class TCGroupOomLogBackend : public TLogBackend {
+    public:
+        explicit TCGroupOomLogBackend(std::shared_ptr<TCGroupOomLogState> state)
+            : State(std::move(state))
+        {
+        }
+
+        void WriteData(const TLogRecord& rec) override {
+            const TStringBuf line(rec.Data, rec.Len);
+            if (rec.Priority == TLOG_WARNING &&
+                    line.Contains("CGroup OOM subscriber liveness check found leaked subscriptions")) {
+                with_lock (State->Mutex) {
+                    State->LastWarning = line;
+                }
+                State->Warnings.fetch_add(1, std::memory_order_release);
+            }
+        }
+
+        void ReopenLog() override {
+        }
+
+    private:
+        std::shared_ptr<TCGroupOomLogState> State;
+    };
+
+    struct TCGroupOomSubscriberState {
+        std::atomic<ui32> Started = 0;
+        std::atomic<ui32> Alerts = 0;
+        std::atomic<ui32> Stopped = 0;
+    };
+
+    class TCGroupOomSubscriberA : public TActorBootstrapped<TCGroupOomSubscriberA> {
+    public:
+        static constexpr char ActorName[] = "CGroupOomSubscriberA";
+
+        explicit TCGroupOomSubscriberA(std::shared_ptr<TCGroupOomSubscriberState> state)
+            : State(std::move(state))
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            GetCGroupOomSubSystem().Subscribe(SelfId());
+            State->Started.fetch_add(1, std::memory_order_release);
+        }
+
+    private:
+        void Handle(TEvCGroupOomAlert::TPtr&) {
+            State->Alerts.fetch_add(1, std::memory_order_release);
+        }
+
+        void HandlePoison() {
+            State->Stopped.fetch_add(1, std::memory_order_release);
+            PassAway();
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvCGroupOomAlert, Handle)
+            cFunc(TEvents::TSystem::Poison, HandlePoison)
+        )
+
+    private:
+        const std::shared_ptr<TCGroupOomSubscriberState> State;
+    };
+
+    class TCGroupOomSubscriberB : public TActorBootstrapped<TCGroupOomSubscriberB> {
+    public:
+        static constexpr char ActorName[] = "CGroupOomSubscriberB";
+
+        explicit TCGroupOomSubscriberB(std::shared_ptr<TCGroupOomSubscriberState> state)
+            : State(std::move(state))
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            GetCGroupOomSubSystem().Subscribe(SelfId());
+            State->Started.fetch_add(1, std::memory_order_release);
+        }
+
+    private:
+        void Handle(TEvCGroupOomAlert::TPtr&) {
+            State->Alerts.fetch_add(1, std::memory_order_release);
+        }
+
+        void HandlePoison() {
+            State->Stopped.fetch_add(1, std::memory_order_release);
+            PassAway();
+        }
+
+        STRICT_STFUNC(StateWork,
+            hFunc(TEvCGroupOomAlert, Handle)
+            cFunc(TEvents::TSystem::Poison, HandlePoison)
+        )
+
+    private:
+        const std::shared_ptr<TCGroupOomSubscriberState> State;
+    };
+
+    template <typename TPredicate>
+    void WaitForCondition(TPredicate&& predicate, TStringBuf description) {
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < deadline) {
+            if (predicate()) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_FAIL(TStringBuilder() << "timed out waiting for " << description);
+    }
 
     void WriteFile(const TFsPath& root, const TString& path, const TString& content) {
         const TFsPath fullPath = root / path;
@@ -62,7 +189,8 @@ namespace {
     THolder<TActorSystem> MakeActorSystem(
             std::unique_ptr<TCGroupV2StatsSubSystem> v2 = {},
             std::unique_ptr<TCGroupV1StatsSubSystem> v1 = {},
-            std::unique_ptr<TCGroupOomSubSystem> oom = {}) {
+            std::unique_ptr<TCGroupOomSubSystem> oom = {},
+            std::shared_ptr<TCGroupOomLogState> logState = {}) {
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 2;
@@ -80,7 +208,32 @@ namespace {
         if (oom) {
             setup->RegisterSubSystem(std::move(oom));
         }
-        return MakeHolder<TActorSystem>(setup);
+
+        TIntrusivePtr<NLog::TSettings> loggerSettings;
+        if (logState) {
+            loggerSettings = MakeIntrusive<NLog::TSettings>(
+                TActorId(0, "logger"),
+                static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+                NLog::PRI_DEBUG,
+                NLog::PRI_DEBUG,
+                0U);
+            loggerSettings->Append(
+                NActorsServices::EServiceCommon_MIN,
+                NActorsServices::EServiceCommon_MAX,
+                NActorsServices::EServiceCommon_Name);
+            loggerSettings->SetAllowDrop(false);
+            loggerSettings->SetThrottleDelay(TDuration::Zero());
+            setup->LocalServices.emplace_back(
+                loggerSettings->LoggerActorId,
+                TActorSetupCmd(
+                    new TLoggerActor(
+                        loggerSettings,
+                        TAutoPtr<TLogBackend>(new TCGroupOomLogBackend(std::move(logState))),
+                        MakeIntrusive<NMonitoring::TDynamicCounters>()),
+                    TMailboxType::Simple,
+                    SystemPoolId));
+        }
+        return MakeHolder<TActorSystem>(setup, nullptr, loggerSettings);
     }
 
     template<class TEvent, class TResult>
@@ -251,6 +404,74 @@ Y_UNIT_TEST_SUITE(TCGroupStatsSubSystemTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(*alert.MemoryUsage, 0.95, 1e-12);
 
         oom.Unsubscribe(subscriptionId);
+        actorSystem->Stop();
+    }
+
+    Y_UNIT_TEST(OomControllerRemovesDeadActorSubscribersAndLogsByActivity) {
+        TTempDir tempDir;
+        const TFsPath root = tempDir.Path();
+        WriteFile(root, "proc/self/cgroup", "0::/\n");
+        WriteFile(root, "sys/fs/cgroup/memory.current", "500\n");
+        WriteFile(root, "sys/fs/cgroup/memory.max", "1000\n");
+
+        const TDuration livenessCheckInterval = TDuration::MilliSeconds(200);
+        TCGroupOomConfig oomConfig;
+        oomConfig.ExecutorPoolId = SystemPoolId;
+        oomConfig.PollPeriod = TDuration::MilliSeconds(10);
+        oomConfig.SubscriberLivenessCheckInterval = livenessCheckInterval;
+        oomConfig.MemoryUsageThreshold = 0.9;
+
+        auto logState = std::make_shared<TCGroupOomLogState>();
+        auto actorSystem = MakeActorSystem(
+            MakeCGroupV2StatsSubSystem(MakeV2Config(root)),
+            {},
+            MakeCGroupOomSubSystem(oomConfig),
+            logState);
+        actorSystem->Start();
+
+        auto subscriberState = std::make_shared<TCGroupOomSubscriberState>();
+        TVector<TActorId> subscriberIds;
+        subscriberIds.push_back(actorSystem->Register(
+            new TCGroupOomSubscriberA(subscriberState), TMailboxType::Simple, SystemPoolId));
+        subscriberIds.push_back(actorSystem->Register(
+            new TCGroupOomSubscriberA(subscriberState), TMailboxType::Simple, SystemPoolId));
+        subscriberIds.push_back(actorSystem->Register(
+            new TCGroupOomSubscriberB(subscriberState), TMailboxType::Simple, SystemPoolId));
+
+        WaitForCondition([&] {
+            return subscriberState->Started.load(std::memory_order_acquire) == subscriberIds.size();
+        }, "cgroup OOM subscribers to start");
+        Sleep(TDuration::MilliSeconds(100));
+
+        WriteFile(root, "sys/fs/cgroup/memory.current", "950\n");
+        WaitForCondition([&] {
+            return subscriberState->Alerts.load(std::memory_order_acquire) == subscriberIds.size();
+        }, "cgroup OOM alert delivery");
+
+        Sleep(2 * livenessCheckInterval);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+
+        for (const TActorId& actorId : subscriberIds) {
+            actorSystem->Send(actorId, new TEvents::TEvPoison());
+        }
+        WaitForCondition([&] {
+            return subscriberState->Stopped.load(std::memory_order_acquire) == subscriberIds.size();
+        }, "cgroup OOM subscribers to stop");
+        WaitForCondition([&] {
+            return logState->Warnings.load(std::memory_order_acquire) == 1;
+        }, "leaked cgroup OOM subscriber warning");
+
+        with_lock (logState->Mutex) {
+            UNIT_ASSERT_STRING_CONTAINS(
+                logState->LastWarning,
+                "{activity# CGroupOomSubscriberA actors# 2}");
+            UNIT_ASSERT_STRING_CONTAINS(
+                logState->LastWarning,
+                "{activity# CGroupOomSubscriberB actors# 1}");
+        }
+
+        Sleep(2 * livenessCheckInterval);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 1);
         actorSystem->Stop();
     }
 

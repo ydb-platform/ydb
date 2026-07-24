@@ -33,6 +33,7 @@
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
 #include <util/generic/guid.h>
+#include <util/generic/scope.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -4653,9 +4654,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             cv.wait_for(lock, std::chrono::milliseconds(200), [&] { return arrivals.load() >= Parties; });
         };
 
-        std::function<void()> cleanupHook = barrier;
-        std::function<void()> startHook = barrier;
-        NYdb::NTopic::NTesting::SetDecompressionTasksPopHooks(cleanupHook, startHook);
+        NYdb::NTopic::NTesting::SetDecompressionTasksPopHooks(barrier, barrier);
+        Y_DEFER {
+            NYdb::NTopic::NTesting::ClearDecompressionTasksPopHooks();
+        };
 
         std::thread decompressThread([&] {
             decompressor->StartFuncs({0});
@@ -4687,7 +4689,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Sleep(TDuration::MilliSeconds(20));
         }
 
-        NYdb::NTopic::NTesting::ClearDecompressionTasksPopHooks();
         reader->Close(TDuration::Seconds(5));
     }
 

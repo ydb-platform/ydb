@@ -83,6 +83,45 @@ Filtering is built into the vector index because:
 * If you filter before search, you get a set of rows in which to find nearest vectors. A normal vector index can only search over all vectors in the table, not an arbitrary subset. To find nearest vectors, the DB would have to scan all remaining rows and compute distance to the query for each.
 * If you filter after search, you may get fewer results than needed and recall drops. You would have to repeat the search with a higher limit, which is also slow. In {{ ydb-short-name }}, filtering is integrated into the vector index structure and algorithm, so rows that do not match the filter are excluded from consideration immediately.
 
+## Adaptive clusters {#adaptive-clusters}
+
+A filtered vector index builds a separate cluster tree for each distinct value of the filtering columns. Different values often contain very different numbers of vectors: some categories may have millions of vectors, others only a few dozen. A single fixed `clusters` value cannot be optimal for all of them at once:
+
+* For a value with many vectors, a small `clusters` produces large leaf clusters that are slow to scan.
+* For a value with few vectors, a large `clusters` produces many nearly empty leaf clusters, which wastes space and can even harm recall (there are too few vectors to distribute meaningfully).
+
+Without adaptive clusters, the only workaround is to build several separate indexes tuned for categories of different cardinality, which is inconvenient.
+
+Adaptive clusters solve this: when enabled, {{ ydb-short-name }} chooses the number of clusters *per filtering-column value* automatically, based on how many vectors that value actually contains. Values with more vectors get more clusters (up to the `clusters` value, which acts as the upper bound), and values with few vectors get fewer clusters. This lets a single index deliver good search performance across categories of very different sizes.
+
+Adaptive clusters are controlled by the `adaptive_clusters` [index parameter](../yql/reference/syntax/create_table/vector_index.md):
+
+* `adaptive_clusters` applies only to filtered indexes (indexes with more than one index column). For non-filtered indexes it has no effect.
+* When you create a filtered index without explicitly specifying index parameters and {{ ydb-short-name }} selects them automatically, adaptive clusters are enabled by default.
+* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; set it to `true` to enable adaptive behavior.
+
+In adaptive mode, the `clusters` parameter is interpreted as the *maximum* number of clusters for any single filtering-column value. The actual number chosen for each value is derived from its vector count, `levels`, and `overlap_clusters`, and is never lower than 2. Values with very few vectors (fewer than 100) always use the minimum of 2 clusters.
+
+Example of creating a filtered index with adaptive clusters:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding)
+  COVER (embedding, data)
+  WITH (
+    distance=cosine,
+    vector_type="float",
+    vector_dimension=512,
+    clusters=512,
+    levels=2,
+    adaptive_clusters=true
+  );
+```
+
+Here `clusters=512` is the upper bound: a `user` with millions of vectors may get close to 512 clusters, while a `user` with only a few dozen vectors gets just 2.
+
 ## Index internals {#index-structure}
 
 The index is implemented with two extra tables: the level table (`indexImplLevelTable`) and the posting table (`indexImplPostingTable`). The level table stores centroids for the cluster tree. {{ ydb-short-name }} queries this table when moving from level to level during vector search. For example, if the vector index is built over 27 vectors with `levels=2` and `clusters=3`, the level table looks like this:

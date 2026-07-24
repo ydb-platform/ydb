@@ -25,6 +25,7 @@ enum class EHostHealth
     Sufferer,
     TemporaryOffline,
     Offline,
+    Broken,   // changes strictly outside of Oracle
 };
 
 struct TOracleHostStat
@@ -71,6 +72,8 @@ public:
 
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
+
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
@@ -137,6 +140,8 @@ public:
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
     [[nodiscard]] TDuration GetHostReconnectDelay(
         THostIndex hostIndex) override;
+    // Device is permanently broken, so force the host offline.
+    void OnDDiskBroken(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

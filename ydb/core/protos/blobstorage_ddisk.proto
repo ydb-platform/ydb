@@ -68,6 +68,8 @@ message TReplyStatus {
         // mismatch is in data the sender itself provided. The sender must treat this as data corruption
         // and recover upstream (e.g. resend from a known-good source) rather than blindly retry.
         CORRUPTED = 12;
+        // The device is broken. Service should decommission the device.
+        BROKEN = 13;
     }
 }
 

@@ -1673,7 +1673,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     constexpr double forbidResurrectionProbability = 0.25;
 
     // Use a fixed-seed random generator for deterministic single-threaded
-    // or semi-deterministic multithreading testing.
+    // or semi-deterministic multi-threaded testing.
     constexpr int seedBase = 142857;
 
     const auto params = GetParam();
@@ -1731,7 +1731,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
         return nullptr;
     };
 
-    auto runAction = [&] (const EStressOperation operation, const int step) -> void{
+    auto runAction = [&] (const EStressOperation operation, const int step) -> void {
         std::mt19937 randomGenerator(seedBase + step);
 
         switch (operation) {

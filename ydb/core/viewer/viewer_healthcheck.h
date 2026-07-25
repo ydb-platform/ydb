@@ -61,7 +61,7 @@ public:
     }
 
     void Bootstrap() override {
-        if (NeedToRedirect()) {
+        if (NeedToRedirect(false/* we check database auth for healthcheck manually */)) {
             return;
         }
         Format = HealthCheckResponseFormat::JSON;

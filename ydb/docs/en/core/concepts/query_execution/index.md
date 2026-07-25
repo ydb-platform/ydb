@@ -89,7 +89,7 @@ When working with queries in {{ ydb-short-name }}, there are several important l
 {{ ydb-short-name }} does not support schema transactions. This means that DDL statements (such as creating or altering tables) cannot be combined with DML statements (such as inserts, updates, or deletes) within the same transaction or query.
 
 * **Large updates and optimistic locking**
-{{ ydb-short-name }} uses optimistic concurrency control. When performing very large updates or deletes within a transaction, the probability of lock conflicts increases, making such operations impractical. For bulk modifications, it is recommended to use [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) / [`BATCH DELETE`](../../yql/reference/syntax/batch-delete.md) statements.
+{{ ydb-short-name }} uses optimistic concurrency control. When performing very large updates or deletes within a transaction, the probability of lock conflicts increases, making such operations impractical.{% if feature_batch_operations %} For bulk modifications, it is recommended to use [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) / [`BATCH DELETE`](../../yql/reference/syntax/batch-delete.md) statements.{% endif %}
 
 * **Transaction size limits**
 The amount of data that can be written in a single transaction is limited. For detailed thresholds, see the [{#T}](../limits-ydb.md#query) section.

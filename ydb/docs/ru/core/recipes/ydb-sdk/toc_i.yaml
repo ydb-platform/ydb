@@ -55,3 +55,11 @@ items:
     href: service-discovery.md
   - name: Публикация конфигурации
     href: config-publication.md
+- name: Диагностика
+  items:
+  - name: Экспорт логов в OpenTelemetry
+    href: debug-logs-otel.md
+  - name: Включение метрик в Prometheus
+    href: debug-prometheus.md
+  - name: Включение трассировки в Jaeger
+    href: debug-jaeger.md

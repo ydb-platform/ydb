@@ -256,7 +256,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActio
 
         auto& dataEvent = event.GetDataEvent();
         if (event.IsReady() || !dataEvent.SetAbandoned()) {
-            accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
+            accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize());
         } else {
             infos.push_back(dataEvent.GetParent());
         }

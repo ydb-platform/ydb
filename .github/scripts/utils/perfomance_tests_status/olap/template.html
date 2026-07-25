@@ -552,24 +552,22 @@ function statusSeverity(st) {
     regression: 4, slower: 4, failing: 5, missing: 5, broken: 6, both: 6, fail: 5, slow: 4,
   })[st] || 0;
 }
-function shortCellStatus(st, nFail, nSlow, nSoft) {
-  if (st === 'broken' || st === 'failing' || st === 'fail') {
-    if (nFail) return `fail ${nFail}`;
-    return 'fail';
+function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
+  // Counts first — same order as fmtFS / legend (slow N fail M).
+  // Do NOT map status "regression" → "slow" when only fails are present.
+  const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0);
+  if (fs) {
+    if (st === 'broken') return `broken ${fs}`;
+    return fs;
   }
-  if (st === 'regression' || st === 'slower' || st === 'slow') {
-    if (nSlow) return `slow ${nSlow}`;
-    return 'slow';
-  }
-  if (st === 'watch') {
-    if (nSoft) return `soft ${nSoft}`;
-    return 'soft';
-  }
+  if (st === 'broken' || st === 'failing' || st === 'fail') return 'fail';
+  if (st === 'regression' || st === 'slower' || st === 'slow') return 'hot';
+  if (st === 'watch') return 'soft';
   if (st === 'missing') return 'missing';
   if (st === 'stale') return 'stale';
   if (st === 'in_progress') return 'in progress';
   if (st === 'nodata') return 'no data';
-  if (st === 'both') return nFail || nSlow ? `fail ${nFail || 0} slow ${nSlow || 0}` : 'fail+slow';
+  if (st === 'both') return 'fail+slow';
   return 'ok';
 }
 function allSuiteRows(branch, db, fam) {
@@ -953,10 +951,12 @@ function liveCell(branch, db, fam) {
 function cellLabel(st, live) {
   if (live && live.compare && live.prev) {
     const a = shortCellStatus(
-      live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft
+      live.prev.status,
+      live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata
     );
     const b = shortCellStatus(
-      live.delta_status || live.status, live.n_fail, live.n_slow, live.n_soft
+      live.delta_status || live.status,
+      live.n_fail, live.n_slow, live.n_soft, live.n_nodata
     );
     if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
     return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;

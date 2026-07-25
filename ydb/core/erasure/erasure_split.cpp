@@ -10,16 +10,16 @@ namespace NKikimr {
             return {ZeroData, sizeof(ZeroData)};
         }
 
-        TMutableContiguousSpan GetDataMut() override {
-            return {const_cast<char*>(ZeroData), sizeof(ZeroData)};
-        }
-
         TMutableContiguousSpan UnsafeGetDataMut() override {
             return {const_cast<char*>(ZeroData), sizeof(ZeroData)};
         }
 
         size_t GetOccupiedMemorySize() const override {
             return sizeof(ZeroData);
+        }
+
+        IContiguousChunk::TPtr Clone() noexcept override {
+            return this;
         }
     };
 

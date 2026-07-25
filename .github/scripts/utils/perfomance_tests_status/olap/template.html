@@ -83,7 +83,8 @@
   }
   .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
   .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
-  .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.regression, .cell.slower, .cell.slow { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.failing, .cell.fail, .cell.both { background: #ffebe9; color: var(--bad); cursor: pointer; }
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
@@ -1181,8 +1182,17 @@ function liveCellNow(branch, db, fam) {
     if (s.soft) for (const n of sp.soft) softSet.add(n);
     if (s.nodata) for (const n of sp.nodata) nodataSet.add(n);
   }
+  // Disambiguate Python status=regression (used for both fail and slow).
+  let status = best || 'ok';
+  if (failSet.size && slowSet.size) {
+    status = (status === 'broken') ? 'broken' : 'both';
+  } else if (failSet.size && (status === 'regression' || status === 'ok' || status === 'watch')) {
+    status = 'failing';
+  } else if (slowSet.size && status === 'ok') {
+    status = 'regression';
+  }
   return {
-    status: best || 'ok',
+    status,
     n_hot: hot.length,
     n_fail: failSet.size,
     n_slow: slowSet.size,
@@ -1268,17 +1278,24 @@ function cellLabel(st, live) {
     if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
     return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;
   }
-  if (st === 'regression' || st === 'watch' || st === 'nodata') {
-    const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
-    if (fs) return `<span class="cnt">${fs}</span>`;
-    const ns = live.n_hot || 0;
-    return ns ? `<span class="cnt">${ns} suites</span>` : (st === 'nodata' ? 'no data' : 'hot');
-  }
+  const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
   if (st === 'broken') {
-    const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
     if (fs) return `broken <span class="cnt">${fs}</span>`;
     const ns = live.n_hot || 0;
     return ns ? `broken <span class="cnt">${ns}</span>` : 'broken';
+  }
+  // failing / regression / both / slower — prefer query counts (fail N slow M)
+  if (st === 'failing' || st === 'fail' || st === 'both'
+      || st === 'regression' || st === 'slower' || st === 'slow'
+      || st === 'watch' || st === 'nodata') {
+    if (fs) return `<span class="cnt">${fs}</span>`;
+    const ns = live.n_hot || 0;
+    if (ns) return `<span class="cnt">${ns} suites</span>`;
+    if (st === 'nodata') return 'no data';
+    if (st === 'watch') return 'soft';
+    if (st === 'failing' || st === 'fail') return 'fail';
+    if (st === 'both') return 'fail+slow';
+    return 'hot';
   }
   if (st === 'missing' || st === 'stale' || st === 'in_progress') {
     const ns = live.n_hot || 0;
@@ -1523,7 +1540,8 @@ function renderHeatmap() {
     });
     sel.addEventListener('click', (ev) => ev.stopPropagation());
   });
-  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.watch, .cell.nodata, .cell.delta-worse, .cell.delta-better, .cell.delta-mixed, .cell.delta-same').forEach(el => {
+  // Bind all data cells — including failing/both/slower (not only legacy class list).
+  root.querySelectorAll('.cell[data-db][data-fam]').forEach(el => {
     el.addEventListener('click', () => {
       const db = el.dataset.db || '';
       const fam = el.dataset.fam || '';
@@ -1541,11 +1559,15 @@ function renderHeatmap() {
         if (branch) document.getElementById('fBranch').value = branch;
         fDb.value = db;
         fFam.value = fam;
-        // Issue from *now* side (compare-aware), not CSS class alone —
-        // delta-worse on alert-ok used to leave Issue empty → empty inbox.
-        const live = liveCell(branch, db, fam);
-        const nowSt = live.compare ? (live.delta_status || live.status) : (live.status || '');
-        fIssue.value = issueFilterFromCellStatus(nowSt);
+        // Prefer fail/slow *counts* over status string: Python uses status=regression
+        // for both failing and slower, which used to force Issue=slower → empty inbox.
+        try {
+          const live = liveCell(branch, db, fam);
+          fIssue.value = issueFilterFromLive(live);
+        } catch (err) {
+          console.error('liveCell failed', err);
+          fIssue.value = '';
+        }
       }
       renderAll();
       if (!same) {
@@ -1554,16 +1576,26 @@ function renderHeatmap() {
     });
   });
 }
-function issueFilterFromCellStatus(nowSt) {
-  if (nowSt === 'ok' || nowSt === 'watch') return 'ok';
-  if (nowSt === 'nodata') return 'nodata';
-  if (nowSt === 'in_progress') return 'in_progress';
-  if (nowSt === 'missing') return 'missing';
-  if (nowSt === 'stale') return 'stale';
-  if (nowSt === 'both') return 'both';
-  if (nowSt === 'broken' || nowSt === 'failing' || nowSt === 'fail') return 'failing';
-  if (nowSt === 'regression' || nowSt === 'slower' || nowSt === 'slow') return 'slower';
+/** Map heatmap cell → inbox Issue. Counts beat ambiguous status=regression. */
+function issueFilterFromLive(live) {
+  if (!live) return '';
+  const st = live.compare ? (live.delta_status || live.status) : (live.status || '');
+  const nf = live.n_fail || 0;
+  const ns = live.n_slow || 0;
+  if (st === 'ok' || st === 'watch') return (nf || ns) ? (nf && ns ? 'both' : (nf ? 'failing' : 'slower')) : 'ok';
+  if (st === 'nodata') return 'nodata';
+  if (st === 'in_progress') return 'in_progress';
+  if (st === 'missing') return 'missing';
+  if (st === 'stale') return 'stale';
+  if (st === 'both' || (nf > 0 && ns > 0)) return 'both';
+  if (nf > 0 || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
+  if (ns > 0 || st === 'slower' || st === 'slow') return 'slower';
+  // Python: fail_status "regression" and dur "regression" share the same status word.
+  if (st === 'regression') return nf > 0 ? 'failing' : 'slower';
   return '';
+}
+function issueFilterFromCellStatus(nowSt) {
+  return issueFilterFromLive({ status: nowSt, n_fail: 0, n_slow: 0 });
 }
 function isHotIssue(issue) {
   return ['failing', 'slower', 'both', 'missing', 'stale', 'in_progress', 'broken'].includes(issue);
@@ -1681,6 +1713,22 @@ function filteredInbox() {
     // all hot + drill: any matching slice (ok or hot)
     if (!browseOk && !rowMatchesReact(r)) return false;
     return true;
+  });
+}
+/** Heatmap drill safety: if Issue filter empties the slice, show all react-matching rows in cell. */
+function filteredInboxOrDrill() {
+  const rows = filteredInbox();
+  if (rows.length) return rows;
+  const issue = document.getElementById('fIssue')?.value || '';
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  if (!issue || !db || !fam) return rows;
+  const br = selectedBranch();
+  return mergeRowPools(candidateRows(), DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return rowMatchesReact(r) || isInfraIssue(r);
   });
 }
 
@@ -2439,7 +2487,7 @@ function diveHtml(r, id) {
 
 function renderInbox() {
   destroyCharts();
-  const rows = filteredInbox();
+  const rows = filteredInboxOrDrill();
   const root = document.getElementById('inbox');
   if (!rows.length) {
     const issue = document.getElementById('fIssue').value;

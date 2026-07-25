@@ -318,7 +318,7 @@ class Encoder:
                 bound,
             )
 
-        if expression.kind == "opaque":
+        if expression.kind in {"opaque", "opaque_double"}:
             return self._evaluate_opaque(expression, row, bindings)
 
         raise AssertionError(f"unknown expression kind {expression.kind!r}")
@@ -420,6 +420,10 @@ class Encoder:
             self.script.assert_choice_invariant(
                 smt.or_(result.is_null, decimal.domain(result.value, result.type))
             )
+        elif family(result.type) == "carrier":
+            # A passive Double is an uninterpreted identity token.  No
+            # arithmetic or ordering domain is attached to its SMT integer.
+            pass
         return result
 
     def _literal(
@@ -512,6 +516,8 @@ def _default(scalar_type: str) -> smt.Term:
     if scalar_family in {"int", "date"}:
         return smt.ZERO
     if scalar_family in {"string", "atom"}:
+        return smt.ZERO
+    if scalar_family == "carrier":
         return smt.ZERO
     if scalar_family == "unit":
         return smt.FALSE

@@ -15,6 +15,7 @@ from . import decimal
 from .types import (
     BOOL,
     DATE,
+    DOUBLE,
     MAX_DATE,
     VOID,
     equality_comparison_compatible,
@@ -33,6 +34,7 @@ MAX_STATIC_IN_ITEMS = 512
 MAX_BOUND_DEPTH = 64
 MAX_EXPR_NODES = 1024
 MAX_EXPR_DEPTH = 128
+OPAQUE_DOUBLE_FINGERPRINT_PREFIX = "format:21:yql-passive-double-v1;"
 JOIN_KINDS = frozenset(
     {
         "cross",
@@ -685,18 +687,35 @@ def _parse_expr(
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
 
-    if kind == "opaque":
+    if kind in {"opaque", "opaque_double"}:
         _keys(obj, {"kind", "fingerprint", "type", "nullable", "args"}, path)
         raw_args = _array(obj["args"], f"{path}.args")
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        nullable = _bool(obj["nullable"], f"{path}.nullable")
+        fingerprint = _string(obj["fingerprint"], f"{path}.fingerprint")
+        if kind == "opaque_double":
+            if result_type != DOUBLE or nullable is not True:
+                _fail(path, "opaque_double result must be Optional<Double>")
+            if len(raw_args) != 3:
+                _fail(f"{path}.args", "opaque_double requires exactly three arguments")
+            if not (
+                fingerprint.startswith(OPAQUE_DOUBLE_FINGERPRINT_PREFIX)
+                and len(fingerprint) > len(OPAQUE_DOUBLE_FINGERPRINT_PREFIX)
+            ):
+                _fail(
+                    f"{path}.fingerprint",
+                    "opaque_double requires the audited passive-Double fingerprint prefix "
+                    "and a non-empty identity suffix",
+                )
         return Expr(
             kind=kind,
             args=tuple(
                 parse_child(arg, f"{path}.args[{index}]")
                 for index, arg in enumerate(raw_args)
             ),
-            result_type=_scalar_type(obj["type"], f"{path}.type"),
-            nullable=_bool(obj["nullable"], f"{path}.nullable"),
-            fingerprint=_string(obj["fingerprint"], f"{path}.fingerprint"),
+            result_type=result_type,
+            nullable=nullable,
+            fingerprint=fingerprint,
         )
 
     _fail(f"{path}.kind", f"unsupported expression kind {kind!r}")
@@ -743,10 +762,16 @@ def _parse_table(value: Any, path: str) -> Table:
         column_path = f"{path}.columns[{index}]"
         column = _object(raw_column, column_path)
         _keys(column, {"name", "type", "nullable"}, column_path)
+        scalar_type = _scalar_type(column["type"], f"{column_path}.type")
+        if scalar_type == DOUBLE:
+            _fail(
+                f"{column_path}.type",
+                "Double is modeled only as a derived passive carrier, not a base-table value",
+            )
         columns.append(
             Column(
                 name=_string(column["name"], f"{column_path}.name"),
-                type=_scalar_type(column["type"], f"{column_path}.type"),
+                type=scalar_type,
                 nullable=_bool(column["nullable"], f"{column_path}.nullable"),
             )
         )
@@ -851,11 +876,14 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             {"id", "op", "input", "dependency", "type", "nullable"},
             path,
         )
+        scalar_type = _scalar_type(obj["type"], f"{path}.type")
+        if scalar_type == DOUBLE:
+            _fail(f"{path}.type", "outer_bind may not transport Double")
         return OuterBind(
             id=node_id,
             input=_string(obj["input"], f"{path}.input"),
             dependency=_string(obj["dependency"], f"{path}.dependency"),
-            type=_scalar_type(obj["type"], f"{path}.type"),
+            type=scalar_type,
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
 
@@ -1169,9 +1197,12 @@ def _parse_stage_graph(value: Any, path: str) -> StageGraph:
 def _parse_subplan_output(value: Any, path: str) -> SubplanOutput:
     obj = _object(value, path)
     _keys(obj, {"column", "type", "nullable"}, path)
+    scalar_type = _scalar_type(obj["type"], f"{path}.type")
+    if scalar_type == DOUBLE:
+        _fail(f"{path}.type", "subplans may not transport Double")
     return SubplanOutput(
         column=_string(obj["column"], f"{path}.column"),
-        type=_scalar_type(obj["type"], f"{path}.type"),
+        type=scalar_type,
         nullable=_bool(obj["nullable"], f"{path}.nullable"),
     )
 
@@ -1199,6 +1230,8 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
     binding = _string(obj["binding"], f"{path}.binding")
     root = _string(obj["root"], f"{path}.root")
     scalar_type = _scalar_type(obj["type"], f"{path}.type")
+    if scalar_type == DOUBLE:
+        _fail(f"{path}.type", "subplans may not transport Double")
     nullable = _bool(obj["nullable"], f"{path}.nullable")
     dependencies = tuple(
         _string(item, f"{path}.dependencies[{index}]")
@@ -1384,6 +1417,43 @@ def _infer_expr(
     path: str,
     bindings: tuple[ValueType, ...] = (),
 ) -> ValueType:
+    def shallow_type(candidate: Expr) -> str | None:
+        if candidate.kind == "column":
+            column = columns.get(candidate.column or "")
+            return None if column is None else column.type
+        if candidate.kind == "bound":
+            if candidate.depth is None or not 0 <= candidate.depth < len(bindings):
+                return None
+            return bindings[candidate.depth].name
+        if candidate.kind == "void":
+            return VOID
+        if candidate.kind in {
+            "and",
+            "or",
+            "not",
+            "exists",
+            "in",
+            "eq",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+        }:
+            return BOOL
+        return candidate.result_type
+
+    # Double has no interpreted scalar semantics in v1.  It is only an SMT
+    # identity token created by the one audited constructor and thereafter
+    # transported by direct column references.
+    if expr.kind not in {"column", "opaque_double"}:
+        if shallow_type(expr) == DOUBLE:
+            _fail(
+                path,
+                "Double may be returned only by opaque_double or a direct column",
+            )
+        if any(shallow_type(argument) == DOUBLE for argument in expr.args):
+            _fail(path, f"{expr.kind} may not consume Double")
+
     if expr.kind == "column":
         if expr.column not in columns:
             _fail(path, f"column {expr.column!r} is not available")
@@ -1406,6 +1476,44 @@ def _infer_expr(
             for index, arg in enumerate(expr.args):
                 _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
         return ValueType(expr.result_type, expr.nullable)
+
+    if expr.kind == "opaque_double":
+        if expr.result_type != DOUBLE or expr.nullable is not True:
+            _fail(path, "opaque_double result must be Optional<Double>")
+        fingerprint = expr.fingerprint
+        if not (
+            isinstance(fingerprint, str)
+            and fingerprint.startswith(OPAQUE_DOUBLE_FINGERPRINT_PREFIX)
+            and len(fingerprint) > len(OPAQUE_DOUBLE_FINGERPRINT_PREFIX)
+        ):
+            _fail(
+                f"{path}.fingerprint",
+                "opaque_double requires the audited passive-Double fingerprint prefix "
+                "and a non-empty identity suffix",
+            )
+        if len(expr.args) != 3:
+            _fail(path, "opaque_double requires exactly three arguments")
+        if any(
+            argument.kind != "column" or argument.column is None
+            for argument in expr.args
+        ):
+            _fail(path, "opaque_double arguments must be direct column references")
+        argument_columns = tuple(argument.column for argument in expr.args)
+        if len(set(argument_columns)) != 3:
+            _fail(path, "opaque_double arguments must reference three distinct columns")
+        for index, arg in enumerate(expr.args):
+            argument = _infer_expr(
+                arg,
+                columns,
+                f"{path}.args[{index}]",
+                bindings,
+            )
+            if argument != ValueType("Int64", True):
+                _fail(
+                    f"{path}.args[{index}]",
+                    "opaque_double arguments must be Optional<Int64>",
+                )
+        return ValueType(DOUBLE, True)
 
     if expr.kind in {"and", "or", "not"}:
         argument_types = [
@@ -2033,6 +2141,8 @@ def _validate_stage_graph(
         for column in edge.keys:
             if column not in columns:
                 _fail(f"{edge_path}.keys", f"column {column!r} is not produced")
+            if columns[column].type == DOUBLE:
+                _fail(f"{edge_path}.keys", "hash routing may not consume Double")
             if columns[column].type == VOID:
                 _fail(
                     f"{edge_path}.keys",
@@ -2389,6 +2499,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     _unique([table.name for table in snapshot.tables], "snapshot.schema.tables")
     for table in snapshot.tables:
         _unique([column.name for column in table.columns], f"table {table.name!r}")
+        if any(column.type == DOUBLE for column in table.columns):
+            _fail(
+                f"table {table.name!r}",
+                "Double is modeled only as a derived passive carrier, not a base-table value",
+            )
         table_columns = table.column_map()
         for key in table.unique_keys:
             for column in key.columns:
@@ -2418,6 +2533,12 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     virtual_columns: dict[str, dict[str, Column]] = {}
     for index, subplan in enumerate(snapshot.plan.subplans):
         path = f"snapshot.plan.subplans[{index}]"
+        if isinstance(subplan, ScalarSubplan) and subplan.output.type == DOUBLE:
+            _fail(path, "subplans may not transport Double")
+        if isinstance(subplan, InSubplan) and (
+            subplan.lookup.type == DOUBLE or subplan.output.type == DOUBLE
+        ):
+            _fail(path, "subplans may not transport Double")
         if subplan.root not in nodes:
             _fail(f"{path}.root", f"unknown node {subplan.root!r}")
         if not subplan.consumers:
@@ -2600,6 +2721,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 _fail(f"node {node.id!r}.predicate", "filter predicate must be Boolean")
 
         elif isinstance(node, OuterBind):
+            if node.type == DOUBLE:
+                _fail(f"node {node.id!r}", "outer_bind may not transport Double")
             result = dict(schema_for(node.input))
             if node.dependency in result:
                 _fail(
@@ -2636,6 +2759,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             for key in node.keys:
                 if key not in input_schema:
                     _fail(f"node {node.id!r}.keys", f"column {key!r} is not available")
+                if input_schema[key].type == DOUBLE:
+                    _fail(f"node {node.id!r}.keys", "aggregate keys may not consume Double")
             if node.distinct_all and (
                 not node.keys or len(node.aggregates) != len(node.keys)
             ):
@@ -2663,6 +2788,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 input_column = input_schema.get(trait.input)
                 if input_column is None:
                     _fail(trait_path, f"input column {trait.input!r} is not available")
+                if input_column.type == DOUBLE:
+                    _fail(trait_path, "aggregate inputs may not consume Double")
+                if trait.output_type == DOUBLE:
+                    _fail(trait_path, "aggregates may not produce Double")
                 if input_column.type == VOID and (
                     node.distinct_all
                     or trait.input in node.keys
@@ -2856,6 +2985,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"{key_path}.right",
                         f"column {key.right!r} is not available from the right input",
                     )
+                if left_column.type == DOUBLE or right_column.type == DOUBLE:
+                    _fail(key_path, "join keys may not consume Double")
                 if not equality_comparison_compatible(
                     left_column.type,
                     right_column.type,

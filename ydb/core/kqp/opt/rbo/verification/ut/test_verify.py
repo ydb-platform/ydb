@@ -14,6 +14,7 @@ except ImportError:
     yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
     SnapshotError,
     parse_snapshot,
     stage_task_counts,
@@ -1451,6 +1452,141 @@ def date_year_snapshot(
             },
             "stage_graph": None,
         }
+    )
+
+
+def passive_double_snapshot(
+    fingerprint=OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "identity",
+    argument_columns=("a.k", "a.x", "a.y"),
+    *,
+    staged=False,
+    sort_merge=False,
+):
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"].append(
+        {"name": "y", "type": "Int64", "nullable": True}
+    )
+    for column in schema_value["tables"][0]["columns"]:
+        column["nullable"] = True
+    scan = copy.deepcopy(SCAN_A)
+    scan["columns"].append({"source": "y", "output": "a.y"})
+    compute = {
+        "id": "compute_double",
+        "op": "project",
+        "input": "a",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "double_value",
+                "expression": {
+                    "kind": "opaque_double",
+                    "fingerprint": fingerprint,
+                    "type": "Double",
+                    "nullable": True,
+                    "args": [
+                        {"kind": "column", "column": column}
+                        for column in argument_columns
+                    ],
+                },
+            },
+            {
+                "output": "key",
+                "expression": {"kind": "column", "column": "a.k"},
+            },
+        ],
+    }
+    passthrough = {
+        "id": "pass_double",
+        "op": "project",
+        "input": "sort_double" if sort_merge else "compute_double",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "result",
+                "expression": {
+                    "kind": "column",
+                    "column": "double_value",
+                },
+            }
+        ],
+    }
+    nodes = [scan, compute]
+    if sort_merge:
+        nodes.append(
+            {
+                "id": "sort_double",
+                "op": "sort",
+                "input": "compute_double",
+                "order": [
+                    {
+                        "column": "key",
+                        "ascending": True,
+                        "nulls_first": True,
+                    }
+                ],
+                "limit": None,
+                "phase": "undefined",
+            }
+        )
+    nodes.append(passthrough)
+    stages = None
+    edges = None
+    if staged:
+        source_nodes = ["a", "compute_double"]
+        source_output = "compute_double"
+        connection = {
+            "kind": "hash_shuffle",
+            "keys": ["key"],
+            "hash_function": "HashV1",
+            "use_spilling": False,
+        }
+        if sort_merge:
+            source_nodes.append("sort_double")
+            source_output = "sort_double"
+            connection = {
+                "kind": "merge",
+                "order": [
+                    {
+                        "column": "key",
+                        "ascending": True,
+                        "nulls_first": True,
+                    }
+                ],
+            }
+        stages = [
+            _stage(
+                "source",
+                source_nodes,
+                [],
+                [source_output],
+                "column",
+            ),
+            _stage(
+                "root",
+                ["pass_double"],
+                [source_output],
+                ["pass_double"],
+            ),
+        ]
+        edges = [
+            _edge(
+                "merge" if sort_merge else "shuffle",
+                "source",
+                "root",
+                0,
+                0,
+                **connection,
+            )
+        ]
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            "pass_double",
+            ["result"],
+            stages,
+            edges,
+        )
     )
 
 
@@ -4962,6 +5098,76 @@ class VerificationTest(unittest.TestCase):
                     10_000,
                 )
                 self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_passive_double_fingerprint_and_arguments_are_semantic(self):
+        original = passive_double_snapshot()
+        identical = solve(
+            build_logical_kernel_problem_for_tests(
+                original,
+                passive_double_snapshot(),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(identical.status, "VERIFIED_BOUNDED")
+
+        staged = solve(
+            build_problem(
+                original,
+                passive_double_snapshot(staged=True),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(staged.status, "VERIFIED_BOUNDED")
+
+        for mutation, changed in (
+            (
+                "fingerprint",
+                passive_double_snapshot(
+                    OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "changed"
+                ),
+            ),
+            (
+                "argument",
+                passive_double_snapshot(
+                    argument_columns=("a.x", "a.y", "a.k")
+                ),
+            ),
+        ):
+            with self.subTest(mutation=mutation):
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        original,
+                        changed,
+                        1,
+                        10_000,
+                    ),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_passive_double_is_a_sort_merge_passenger(self):
+        result = solve(
+            build_problem(
+                passive_double_snapshot(sort_merge=True),
+                passive_double_snapshot(staged=True, sort_merge=True),
+                2,
+                20_000,
+            ),
+            SOLVER,
+            2,
+            20_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_date_year_normalization_fingerprint_and_argument_are_semantic(self):
         original = date_year_snapshot()

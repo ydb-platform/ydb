@@ -171,6 +171,18 @@ class ExpressionRendererTest(unittest.TestCase):
                 'opaque(fingerprint="f($0)", type="Bool", nullable=true, '
                 'args=[column("x")])',
             ),
+            (
+                ir.Expr(
+                    kind="opaque_double",
+                    args=(_column("a"), _column("b"), _column("c")),
+                    result_type="Double",
+                    nullable=True,
+                    fingerprint="format:21:yql-passive-double-v1;identity",
+                ),
+                'opaque_double(fingerprint="format:21:yql-passive-double-v1;identity", '
+                'type="Double", nullable=true, '
+                'args=[column("a"), column("b"), column("c")])',
+            ),
         )
         for expression, expected in cases:
             with self.subTest(kind=expression.kind):

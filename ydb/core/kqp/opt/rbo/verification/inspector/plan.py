@@ -154,14 +154,14 @@ def render_expression(expression: ir.Expr) -> str:
             f"missing={render_expression(expression.args[2])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
-    if kind == "opaque":
+    if kind in {"opaque", "opaque_double"}:
         fingerprint = str(_required(expression.fingerprint, "fingerprint"))
         scalar_type = str(_required(expression.result_type, "type"))
         nullable = _required(expression.nullable, "nullable")
         if not isinstance(nullable, bool):
             raise InspectionError("expression field 'nullable' is not Boolean")
         return (
-            f"opaque(fingerprint={_quote(fingerprint)}, type={_quote(scalar_type)}, "
+            f"{kind}(fingerprint={_quote(fingerprint)}, type={_quote(scalar_type)}, "
             f"nullable={_boolean(nullable)}, args={_list(expression.args, render_expression)})"
         )
     raise InspectionError(f"unknown expression kind {kind!r}")

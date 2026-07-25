@@ -3,7 +3,11 @@ from unittest import mock
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import scalar as scalar_module
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Expr, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
+    Expr,
+    parse_snapshot,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import Database
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder,
@@ -1468,6 +1472,73 @@ class StringScalarTest(unittest.TestCase):
         )
         self.assertEqual(result.is_null, smt.TRUE)
         self.assertEqual(Encoder.is_true(result), smt.FALSE)
+
+
+class PassiveDoubleScalarTest(unittest.TestCase):
+    @staticmethod
+    def _expression(fingerprint, columns=("a", "b", "c")):
+        return Expr(
+            kind="opaque_double",
+            args=tuple(Expr(kind="column", column=column) for column in columns),
+            result_type="Double",
+            nullable=True,
+            fingerprint=fingerprint,
+        )
+
+    def test_carrier_uses_one_nullable_uninterpreted_int_function(self):
+        script = smt.Script()
+        encoder = Encoder(script)
+        row = {
+            name: Value(
+                "Int64",
+                script.fresh_constant(f"{name}_null", smt.BOOL),
+                script.fresh_constant(f"{name}_value", smt.INT),
+            )
+            for name in ("a", "b", "c")
+        }
+        fingerprint = OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "identity"
+
+        first = encoder.evaluate(self._expression(fingerprint), row)
+        second = encoder.evaluate(self._expression(fingerprint), row)
+
+        self.assertEqual(
+            (first.type, first.is_null.sort, first.value.sort),
+            ("Double", smt.BOOL, smt.INT),
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(script.assertions, ())
+
+    def test_fingerprint_and_argument_values_remain_semantic(self):
+        script = smt.Script()
+        encoder = Encoder(script)
+        row = {
+            name: Value("Int64", smt.FALSE, smt.int_value(value))
+            for name, value in (("a", 1), ("b", 2), ("c", 3))
+        }
+        fingerprint = OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "identity"
+
+        original = encoder.evaluate(self._expression(fingerprint), row)
+        changed_fingerprint = encoder.evaluate(
+            self._expression(fingerprint + ":changed"),
+            row,
+        )
+        changed_argument = encoder.evaluate(
+            self._expression(fingerprint, ("b", "a", "c")),
+            row,
+        )
+
+        self.assertNotEqual(
+            original.value.operation,
+            changed_fingerprint.value.operation,
+        )
+        self.assertEqual(
+            original.value.operation,
+            changed_argument.value.operation,
+        )
+        self.assertNotEqual(
+            original.value.arguments,
+            changed_argument.value.arguments,
+        )
 
 
 if __name__ == "__main__":

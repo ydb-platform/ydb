@@ -88,9 +88,19 @@
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
   .cell.nodata { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
-  .cell.delta-worse { background: linear-gradient(135deg, #ffebe9 0%, #ffcecb 100%); color: var(--bad); cursor: pointer; }
-  .cell.delta-better { background: linear-gradient(135deg, #ffebe9 0%, #dafbe1 100%); color: #1a7f37; cursor: pointer; }
-  .cell.delta-mixed { background: linear-gradient(135deg, #fff8c5 0%, #ddf4ff 100%); color: #9a6700; cursor: pointer; }
+  /* compare deltas: 40% was · 20% blend · 40% now (not a smear across the whole chip) */
+  .cell.delta-worse {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
+    color: var(--bad); cursor: pointer;
+  }
+  .cell.delta-better {
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; cursor: pointer;
+  }
+  .cell.delta-mixed {
+    background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #ddf4ff 60%, #ddf4ff 100%);
+    color: #9a6700; cursor: pointer;
+  }
   .cell.delta-same { background: #f6f8fa; color: var(--muted); cursor: pointer; }
   .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
   .cell .cnt { font-size: 11px; opacity: .85; }
@@ -103,15 +113,16 @@
   .run-card:hover { border-color: var(--info); }
   .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
   .pill.delta-better {
-    background: linear-gradient(90deg, #ffebe9, #dafbe1); color: #1a7f37;
-    box-shadow: inset 0 0 0 1px #1a7f3766;
+    background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #1a7f3766;
   }
   .pill.delta-worse {
-    background: linear-gradient(90deg, #dafbe1, #ffebe9); color: var(--bad);
-    box-shadow: inset 0 0 0 1px #cf222e66;
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
+    color: var(--bad); box-shadow: inset 0 0 0 1px #cf222e66;
   }
   .pill.delta-soft {
-    background: linear-gradient(90deg, #fff8c5, #dafbe1); color: #9a6700;
+    background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #9a6700;
   }
   .heat-legend {
     display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;

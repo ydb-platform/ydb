@@ -70,7 +70,7 @@ FOCUS_DBS = {
     "vla_small_column",
     "vla_3_node_column",
 }
-# Always-on branches; plus any stable-/prestable-* present in data (no min-points gate)
+# Prefer these first in UI; every branch with points in the window is included.
 CORE_BRANCHES = ("main", "trunk")
 
 STATUS_ORDER = {
@@ -83,12 +83,6 @@ STATUS_ORDER = {
     "broken": 6,
 }
 INBOX_PER_BRANCH = 45
-
-
-def is_report_branch(branch: str) -> bool:
-    if branch in CORE_BRANCHES:
-        return True
-    return branch.startswith("stable-") or branch.startswith("prestable-")
 
 
 def branch_rank(branch: str) -> int:
@@ -106,14 +100,15 @@ def branch_rank(branch: str) -> int:
 def select_branches(
     points: list[dict], now_utc: datetime | None = None
 ) -> list[str]:
+    """All branches that have focus-DB points in the report window — no min-points / name gate."""
     del now_utc  # kept for call-site compatibility
     seen: set[str] = set()
     for p in points:
         if p["db"] not in FOCUS_DBS:
             continue
-        if not is_report_branch(p["branch"]):
-            continue
-        seen.add(p["branch"])
+        br = (p.get("branch") or "").strip()
+        if br:
+            seen.add(br)
     for b in CORE_BRANCHES:
         seen.add(b)
     return sorted(seen, key=lambda b: (branch_rank(b), b))

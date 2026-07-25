@@ -52,7 +52,6 @@ INBOX_PER_KIND = {
 }
 
 CORE_BRANCHES = ("main",)
-MIN_CLUSTER_POINTS = 5
 
 STATUS_ORDER = {
     "ok": 0,
@@ -63,12 +62,6 @@ STATUS_ORDER = {
     "regression": 5,
     "broken": 6,
 }
-
-
-def is_report_branch(branch: str) -> bool:
-    if branch in CORE_BRANCHES or branch == "(empty)":
-        return True
-    return branch.startswith("stable-") or branch.startswith("prestable-") or branch.startswith("26")
 
 
 def branch_rank(branch: str) -> int:
@@ -88,26 +81,28 @@ def branch_rank(branch: str) -> int:
 def select_branches(
     points: list[dict], now_utc: datetime | None = None
 ) -> list[str]:
+    """All branches with points in the report window — no min-points / name gate."""
     del now_utc  # kept for call-site compatibility
     seen: set[str] = set()
     for p in points:
-        if not is_report_branch(p["branch"]):
-            continue
-        seen.add(p["branch"])
+        br = (p.get("branch") or "").strip()
+        if br:
+            seen.add(br)
     for b in CORE_BRANCHES:
         seen.add(b)
     return sorted(seen, key=lambda b: (branch_rank(b), b))
 
 
 def select_clusters(points: list[dict], branches: set[str]) -> list[str]:
-    counts: dict[str, int] = defaultdict(int)
+    """All clusters with points on selected branches — no min-points gate."""
+    seen: set[str] = set()
     for p in points:
         if p["branch"] not in branches:
             continue
-        counts[p["cluster"]] += 1
-    chosen = [c for c, n in counts.items() if n >= MIN_CLUSTER_POINTS]
-    return sorted(chosen)
-
+        c = (p.get("cluster") or "").strip()
+        if c:
+            seen.add(c)
+    return sorted(seen)
 
 def parse_ts(s) -> datetime | None:
     if s is None or s == "":

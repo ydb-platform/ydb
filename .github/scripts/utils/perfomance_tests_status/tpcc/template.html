@@ -162,9 +162,10 @@
   <h1>TPC-C Now</h1>
   <div class="sub" id="subtitle"></div>
   <div class="note">
-    Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>
-    (median). <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000&nbsp;ms или outlier &gt;3×.
+    Now = <b>последний завершённый</b> прогон vs предыдущие <b id="lblBase">7</b> (median).
+    <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000&nbsp;ms или outlier &gt;3×.
     <b>Missing</b> = slice нет в завершённой day-wave (Branch × Cluster × день).
+    Dive показывает последние <b id="lblDisplay">3</b> прогона для контекста.
   </div>
 
   <div class="wave-bar" id="waveBar">
@@ -534,7 +535,8 @@ function renderHeader() {
   const br = selectedBranch();
   const wv = waveView();
   const heat = heatSelection();
-  document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
+  const lblDisplay = document.getElementById('lblDisplay');
+  if (lblDisplay) lblDisplay.textContent = String(ui.display_runs || 3);
   document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
   document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
   document.getElementById('subtitle').innerHTML =
@@ -974,7 +976,7 @@ function diveHtml(r, id) {
     ${waveNote}
     <div class="muted">${esc((r.reasons || []).join(' · '))}</div>
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> (Now window)${fin ? ' <span class="pill">finished</span>' : ''}</div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> (context; alert = last)${fin ? ' <span class="pill">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
     <div id="${id}_hist"></div>

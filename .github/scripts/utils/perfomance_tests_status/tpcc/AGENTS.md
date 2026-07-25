@@ -8,7 +8,7 @@ When the user asks for a TPC-C / tpcc / lat90 / tpmC performance report:
 
 Answer **what is red right now**, not historical dips:
 
-1. **Broken / Lat↑ / tpmC↓** — last **3** runs vs previous **7** (median)
+1. **Broken / Lat↑ / tpmC↓** — **last completed** run vs previous **7** (median)
 2. **Missing** — expected slice absent from latest **day × Branch × Cluster** wave
 3. **Stale** — no fresh day-wave on a focus cluster
 
@@ -46,16 +46,16 @@ python3 generate.py \
 
 - Path to `out/tpcc-report.html`
 - Summary counts: **missing / broken / lat↑ / tpmC↓ / stale**
-- Note window + that Now uses last-3 vs prev-7 runs
+- Note window + that Now uses last completed vs prev-7 (median)
 
 ## Rules (v1)
 
 | Signal | Rule |
 |--------|------|
-| Now | last 3 runs / slice |
-| Baseline | previous 7 runs |
+| Now | **last completed run** / slice (dive still shows last 3 for context) |
+| Baseline | previous 7 runs (median) |
 | Lat↑ | NewOrder p90 ≥ **+10%** vs baseline; **>3×** → broken |
-| Broken | `lat ≥ 30000` (cap) in recent runs |
+| Broken | `lat ≥ 30000` (cap) on last run |
 | tpmC↓ | tpmC ≤ **−10%** vs baseline |
 | Wave | calendar day × Branch × Cluster |
 | Expected slice | present in ≥50% of day-waves for that Branch×Cluster over ~14d |
@@ -69,5 +69,5 @@ python3 generate.py \
 ## UI layers
 
 1. **Now** — counters + Cluster×run_type heatmap + problem inbox
-2. **Deep dive** — click inbox row → last 3 runs
+2. **Deep dive** — click inbox row → last 3 runs (context; alert uses last only)
 3. **History** — “Show history” charts (tpmC + lat)

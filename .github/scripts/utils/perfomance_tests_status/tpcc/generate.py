@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate Now-first TPC-C HTML report from YDB query JSON.
 
-Focus: last 3 runs vs previous 7 (lat↑ / tpmC↓ / broken cap), missing in day-waves,
-stale clusters. History is deep-dive only.
+Focus: last completed run vs previous 7 (lat↑ / tpmC↓ / broken cap), missing in
+day-waves, stale clusters. Dive cards show last 3 for context. History is deep-dive only.
 
 Example:
   python3 generate.py --input out/raw.json --output out/tpcc-report.html --open
@@ -30,7 +30,8 @@ OUTLIER_MULT = 3.0
 LAT_CAP = 30000.0
 
 DEFAULT_WINDOW_DAYS = 30  # ~1 month lookback when --since omitted
-NOW_RUNS = 3
+NOW_RUNS = 1  # alert signal = last completed run (same as OLAP)
+DISPLAY_RUNS = 3  # dive cards: recent context
 BASELINE_RUNS = 7
 EXPECTED_LOOKBACK_DAYS = 14
 EXPECTED_MIN_SHARE = 0.50
@@ -351,10 +352,11 @@ def wave_is_in_progress(age_h: float, present: set[str], expected: set[str]) -> 
 
 
 def classify_slice(pts: list[dict]) -> dict:
-    """Run-based Now classification for one (branch, cluster, suite)."""
+    """Now = last completed run; baseline = previous BASELINE_RUNS (median)."""
     pts = sorted(pts, key=lambda p: p["ts"])
     now = pts[-NOW_RUNS:]
     base = pts[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or pts[: max(1, len(pts) // 2)]
+    display = pts[-DISPLAY_RUNS:]
 
     lat_now = median([p["lat90"] for p in now if not p["lat_capped"]])
     lat_base = median([p["lat90"] for p in base if not p["lat_capped"]])
@@ -370,22 +372,22 @@ def classify_slice(pts: list[dict]) -> dict:
     lat_reasons: list[str] = []
     if capped_now > 0:
         lat_status = "broken"
-        lat_reasons.append(f"lat capped in {capped_now}/{len(now)} recent runs (≥{int(LAT_CAP)})")
+        lat_reasons.append(f"last run lat capped (≥{int(LAT_CAP)})")
     elif lat_base is not None and lat_now is not None and lat_now > lat_base * OUTLIER_MULT:
         lat_status = "broken"
-        lat_reasons.append(f"lat outlier >{OUTLIER_MULT:.0f}×")
+        lat_reasons.append(f"lat outlier >{OUTLIER_MULT:.0f}× (last run)")
     elif lat_pct is not None and lat_pct >= LAT_TOL * 100:
         lat_status = "regression"
-        lat_reasons.append(f"lat +{lat_pct:.0f}% vs last {len(base)} runs")
+        lat_reasons.append(f"lat +{lat_pct:.0f}% vs prev {len(base)} (last run)")
     elif lat_pct is not None and lat_pct >= LAT_WATCH * 100:
         lat_status = "watch"
-        lat_reasons.append(f"lat +{lat_pct:.0f}% (watch)")
+        lat_reasons.append(f"lat +{lat_pct:.0f}% (watch, last run)")
 
     tpmc_status = "ok"
     tpmc_reasons: list[str] = []
     if tpmc_pct is not None and tpmc_pct <= -TPMC_TOL * 100:
         tpmc_status = "regression"
-        tpmc_reasons.append(f"tpmC {tpmc_pct:.0f}% vs last {len(base)} runs")
+        tpmc_reasons.append(f"tpmC {tpmc_pct:.0f}% vs prev {len(base)} (last run)")
 
     # watch does not escalate overall above regression from the other metric
     status = worse(
@@ -424,7 +426,7 @@ def classify_slice(pts: list[dict]) -> dict:
         "tpmc_now": tpmc_now,
         "tpmc_pct": tpmc_pct,
         "capped_now": capped_now,
-        "now_runs": [run_view(p) for p in now],
+        "now_runs": [run_view(p) for p in display],
         "n": len(pts),
         "last_ts": now[-1]["ts_iso"][:19] if now else None,
         "version": now[-1]["version"] if now else "",
@@ -845,6 +847,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "source": "perfomance/tpcc",
         "ui": {
             "now_runs": NOW_RUNS,
+            "display_runs": DISPLAY_RUNS,
             "baseline_runs": BASELINE_RUNS,
             "stale_hours": STALE_HOURS,
             "wave_complete_hours": WAVE_COMPLETE_HOURS,
@@ -872,8 +875,9 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "inbox": inbox,
         "ok": ok_slices,
         "rules": {
-            "now": f"last {NOW_RUNS} runs",
-            "baseline": f"previous {BASELINE_RUNS} runs",
+            "now": "last completed run",
+            "baseline": f"previous {BASELINE_RUNS} runs (median)",
+            "display": f"last {DISPLAY_RUNS} runs in dive",
             "lat": f"+{int(LAT_TOL*100)}%",
             "tpmc": f"-{int(TPMC_TOL*100)}%",
             "cap": f"lat ≥ {int(LAT_CAP)} → broken",

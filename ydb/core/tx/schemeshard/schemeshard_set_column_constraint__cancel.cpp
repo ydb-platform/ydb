@@ -66,11 +66,29 @@ public:
         operationInfo.MarkAsCancelled(TString("Cancelled by user request"));
         Self->PersistSetColumnConstraintCancellation(db, operationInfo);
 
-        // Note: The operation will continue through its natural stages:
+        // Note: cancellation is de facto acted upon only while the operation is in the
+        // Validating stage:
         // - TTxReplyValidateRowCondition ignores incoming validation messages due to IsCancelled flag
         // - AlterMainTableUnlockNullWritesPropose will NOT set NOT NULL constraint due to IsCancelled check
         // - The operation will complete naturally in Done state without setting the constraint
-        Progress(BuildId);
+        //
+        // Trying to react to cancellation on earlier or later stages introduces non-trivial
+        // logic that can easily lead to unwanted bugs (e.g. a stale reply for an already
+        // abandoned stage racing with a message for the newly entered one). We sidestep that
+        // entirely here:
+        // - Later stages (Finishing, Unlocking) are already forbidden for cancellation by the
+        //   IsCloseToCompletion() check above.
+        // - Earlier stages (Locking, LockingNullWrites) simply ignore the fact of cancellation
+        //   until the Validating stage is reached; the IsCancelled flag is already persisted,
+        //   so once Validating starts (or is already running), the operation will pick it up
+        //   and unwind normally.
+        //
+        // This is not a practical concern because Validating is by far the longest-running
+        // stage of this metadata operation, and it is also the very reason a user would want
+        // to cancel a SET NOT NULL metadata operation in the first place.
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Validating) {
+            Progress(BuildId);
+        }
 
         return Reply();
     }

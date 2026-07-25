@@ -6,8 +6,12 @@ Toolkit root: `.github/scripts/utils/perfomance_tests_status`
 |---------|-----------|--------------|
 | TPC-C / tpcc / lat90 / tpmC | [`tpcc/`](tpcc/) | [`tpcc/AGENTS.md`](tpcc/AGENTS.md) |
 | OLAP / Clickbench / Tpch / Tpcds / suites | [`olap/`](olap/) | [`olap/AGENTS.md`](olap/AGENTS.md) |
+| Duty context pack / investigate incident | [`duty_agent/`](duty_agent/) | [`duty_agent/AGENTS.md`](duty_agent/AGENTS.md) |
 
 Route to the matching subfolder and follow its AGENTS.md.
+
+Duty: dive **Save context** / **Copy context** → `perf-duty-context/v1` JSON →  
+`python3 duty_agent/run.py --context pack.json --out duty-card.md` (works for olap + tpcc).
 
 ## One-shot local / CI build
 

@@ -74,3 +74,4 @@ python3 generate.py \
 1. **Now** — compact top-filters (Wave + Branch/dates) · counters · heatmap · inbox
 2. **Deep dive** — compare-run cards + charts on row expand
 3. **History** — tpmC + lat by run/commit date
+4. **Duty context** — dive **Save context** / **Copy context** → `perf-duty-context/v1` for [`../duty_agent/`](../duty_agent/) (shared with OLAP)

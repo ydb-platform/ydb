@@ -2403,6 +2403,166 @@ function buildQueryBlockHtml(item, diveId) {
       </div>`;
 }
 
+/** Compact history for duty context (no full query series). */
+function compactHist(hist, maxPts) {
+  if (!hist || !hist.labels) return null;
+  const n = hist.labels.length;
+  const start = Math.max(0, n - (maxPts || 24));
+  const slice = (arr) => (arr || []).slice(start);
+  return {
+    mode: hist.mode || null,
+    labels: slice(hist.labels),
+    fail_rate: slice(hist.fail_rate),
+    ydb: slice(hist.ydb),
+    versions: slice(hist.versions),
+    ci_versions: slice(hist.ci_versions),
+    reports: slice(hist.reports),
+    nodata: slice(hist.nodata),
+  };
+}
+
+function dutyReportMeta(kind) {
+  const ui = DATA.ui || {};
+  let url = null;
+  try { url = (location && location.href) ? location.href.split('#')[0] : null; } catch (_) {}
+  return {
+    kind,
+    url,
+    window: [ui.default_from || null, ui.default_to || null],
+    generated_at: DATA.generated_at || null,
+    source: DATA.source || null,
+  };
+}
+
+function downloadDutyJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function copyDutyJson(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+function flashDutyBtn(btn, okMsg, failMsg, ok) {
+  const prev = btn.textContent;
+  btn.textContent = ok ? okMsg : failMsg;
+  setTimeout(() => { btn.textContent = prev; }, 1400);
+}
+
+function dutySafeName(s) {
+  return String(s || 'suite').replace(/[^\w.\-]+/g, '_').slice(0, 80);
+}
+
+/** Frozen incident pack for duty_agent (schema perf-duty-context/v1). */
+function buildDutyContext(item, diveId) {
+  const view = suiteViewAtFocus(item, diveId);
+  const data = diveData(item);
+  const focusIdx = diveFocusRunIndex(item, data);
+  const focusRun = (data.now_runs || [])[focusIdx] || null;
+  const sticky = diveQueryFocus[suiteKey(item)] || null;
+  const react = [...document.querySelectorAll('.react-btn[aria-pressed="true"]')]
+    .map(b => b.dataset.react).filter(Boolean);
+  const queries = [];
+  const pushQ = (q, kind) => {
+    if (!q || !q.test) return;
+    queries.push({
+      test: q.test,
+      kind,
+      error_class: q.error_class || null,
+      ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
+      ydb_now: q.ydb_now != null ? q.ydb_now : null,
+      fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+    });
+  };
+  if (view) {
+    (view.fails || []).forEach(q => pushQ(q, 'fail'));
+    (view.slows || []).forEach(q => pushQ(q, 'slow'));
+  } else {
+    (data.bad_queries || item.bad_queries || []).forEach(q => pushQ(q, 'fail'));
+    (data.slow_queries || item.slow_queries || []).forEach(q => pushQ(q, 'slow'));
+  }
+  let sticky_detail = null;
+  if (sticky) {
+    const q = (data.queries || []).find(x => x.test === sticky);
+    if (q) {
+      sticky_detail = {
+        test: q.test,
+        kind: q.kind || null,
+        error_class: q.error_class || null,
+        ydb_now: q.ydb_now != null ? q.ydb_now : null,
+        ydb_base: q.ydb_base != null ? q.ydb_base : null,
+        ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
+        fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+        history: compactHist(q.history, 24),
+      };
+    }
+  }
+  const reportUrl = (focusRun && focusRun.report)
+    || data.report || item.report || null;
+  return {
+    schema: 'perf-duty-context/v1',
+    generated_at: new Date().toISOString(),
+    report: dutyReportMeta('olap'),
+    selection: {
+      branch: item.branch || null,
+      db: item.db || null,
+      suite: item.suite || null,
+      family: item.family || null,
+      focus_run: focusRun ? {
+        label: focusRun.label || null,
+        ci_version: focusRun.ci_version || null,
+        sha: focusRun.version || null,
+        ts: focusRun.ts || null,
+        fail_rate: focusRun.fail_rate != null ? focusRun.fail_rate : null,
+        ydb: focusRun.ydb != null ? focusRun.ydb : null,
+        report: reportUrl,
+      } : null,
+    },
+    suite_now: {
+      issue: view ? view.issue : item.issue,
+      status: view ? view.status : item.status,
+      fail_rate_now: view ? view.fail_rate_now : (item.fail_rate_now != null ? item.fail_rate_now : item.fail_rate),
+      fail_rate_base: view ? view.fail_rate_base : item.fail_rate_base,
+      ydb_now: view ? view.ydb_now : item.ydb_now,
+      ydb_base: view ? view.ydb_base : item.ydb_base,
+      ydb_pct: view ? view.ydb_pct : item.ydb_pct,
+      reasons: item.reasons || [],
+      ci_version: (view && view.ci_version) || item.ci_version || item.wave || null,
+      last_ts: (view && view.last_ts) || item.last_ts || null,
+    },
+    queries: queries.slice(0, 40),
+    sticky_query: sticky,
+    sticky_detail,
+    suite_history: compactHist(data.history || item.history, 24),
+    compare: { wave_id: getCompareId(item.branch, item.db) || null },
+    hints: { react, wave_view: waveView() },
+  };
+}
+
 function diveHtml(r, id) {
   const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
   const data = fin || r;
@@ -2489,6 +2649,8 @@ function diveHtml(r, id) {
     </div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
+      <button type="button" class="btn" data-ctx-dl="${id}" title="Download frozen incident pack for duty_agent">Save context</button>
+      <button type="button" class="btn" data-ctx-cp="${id}" title="Copy incident pack JSON">Copy context</button>
     </div>
     <div id="${id}_hist"></div>
   </div>`;
@@ -2618,6 +2780,26 @@ function renderInbox() {
       const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
       const item = rows[idx];
       if (item) mountHistory(item, id);
+    });
+  });
+  root.querySelectorAll('button[data-ctx-dl], button[data-ctx-cp]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.ctxDl || btn.dataset.ctxCp;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (!item) return;
+      const pack = buildDutyContext(item, id);
+      const sel = pack.selection || {};
+      const sha = (sel.focus_run && (sel.focus_run.sha || sel.focus_run.label)) || 'run';
+      const fname = `perf-duty-olap-${dutySafeName(sel.suite)}-${dutySafeName(sha)}.json`;
+      if (btn.dataset.ctxDl != null) {
+        downloadDutyJson(fname, pack);
+        flashDutyBtn(btn, 'Saved', 'Save failed', true);
+      } else {
+        const ok = await copyDutyJson(pack);
+        flashDutyBtn(btn, 'Copied', 'Copy failed', ok);
+      }
     });
   });
   function bindQPicks(scope) {

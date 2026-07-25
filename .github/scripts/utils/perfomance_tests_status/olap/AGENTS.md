@@ -98,4 +98,5 @@ Branch for cloud often from `CiBranch` (`trunk`) when `Branch`/`Version` empty.
 
 1. **Now** — counters + Db×family heatmap + problem inbox  
 2. **Deep dive** — click inbox row → last runs (clickable focus), query catalog, report links  
-3. **History** — “Show history” charts (suite-level only); query charts highlight now/compare runs
+3. **History** — “Show history” charts (suite-level only); query charts highlight now/compare runs  
+4. **Duty context** — dive **Save context** / **Copy context** → `perf-duty-context/v1` for [`../duty_agent/`](../duty_agent/) (shared with TPC-C)

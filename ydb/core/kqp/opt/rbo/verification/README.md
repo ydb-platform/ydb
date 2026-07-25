@@ -13,7 +13,8 @@ The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge including bounded exact bitonic-network
 representations with fixed or symbolic producer-order preservation, pushed
-OLAP-filter including exact presence tests,
+OLAP-filter including exact presence tests, exact audited point and finite
+point-set pushed read ranges,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
 same-type fixed-width integral division, exact partial integral `SafeCast`,
@@ -78,6 +79,26 @@ a Map-body root to the ordinary canonical literal node. Exact integral-right
 Decimal multiplication and division also propagate conservative finite
 coefficient bounds into later Decimal aggregates without changing their value
 semantics.
+The read-range slice accepts only a column-store StageGraph source with no
+read ordering, one catalog non-null `Int64` physical primary key, and that
+physical key emitted exactly once. `RangeInfo::ComputeNode` is authoritative;
+`OriginalPredicate` is intentionally ignored because runtime range extraction
+consumes `ComputeNode`. `KeyColumns` is descriptive evidence and must resolve
+to the same emitted physical-key IU. The closed grammar covers q9's one-point
+`RangeFinalize(RangeMultiply(10000, RangeUnion(RangeFor(...))))` form and
+q45's static finite-point `IfPresent`/`FlatMap`/`Collect`/`Take` form. It
+checks exact operators, descriptors, binders, tuple indices, pointer sharing,
+the 10,000/10,001 extractor caps, full-range overflow fallback, and
+`ExpectedMaxRanges`. Generated range nodes may lack annotations before the
+physical annotation pass; every annotation that is present must agree with
+the audited syntax. The result is ordinary exact equality or static-`IN`
+predicate IR and is conjoined with an independently pushed OLAP filter.
+Duplicate and adjacent points retain exact membership semantics. Every other
+range shape fails closed. The closed matcher is isolated in
+`read_range_predicate_impl.h`, included exactly once inside
+`semantic_snapshot.cpp`'s anonymous namespace so it can reuse the existing
+scalar safety, catalog, column-resolution, and JSON helpers without creating a
+second exporter API or duplicating trusted helpers.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -96,16 +117,15 @@ The checked-in policy currently requires formula construction for
 TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
 q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10, q15, q16, q18,
 q19, q21, q25, q29, q33, q34,
-q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61,
-q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q83,
-q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 73/121 workload
-queries (60.3%).
-The current complete policy-checked dashboards were generated on 2026-07-25
-after the literal-`Concat`/Decimal-bound q66 milestone. TPCH has eighteen
+q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
+q60, q61, q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80,
+q82, q83, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 74/121
+workload queries (61.2%).
+The current exact read-range checkpoint leaves TPCH at eighteen
 formulas, two unsupported semantic outcomes, and two no-pair optimizer
-failures; TPC-DS has fifty-five formulas, twenty-six unsupported semantic
+failures; TPC-DS has fifty-six formulas, twenty-five unsupported semantic
 outcomes, and eighteen no-pair optimizer failures. Across both suites the
-semantic partition is 73 formulas, 28 `UNSUPPORTED`, and 20
+semantic partition is 74 formulas, 27 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
@@ -114,15 +134,15 @@ inventories, so those inventories must not be added as disjoint workload
 counts.
 
 Four denominators answer different questions. Formula coverage is
-73/121 (60.3%) over the corpus, 73/101 (72.3%) over exact Initial/Final
-boundary-result pairs, 73/93 (78.5%) within the preparation-successful subset,
-and 73/78 (93.6%) among verifier entrants. The preparation-success ratio uses
+74/121 (61.2%) over the corpus, 74/101 (73.3%) over exact Initial/Final
+boundary-result pairs, 74/93 (79.6%) within the preparation-successful subset,
+and 74/80 (92.5%) among verifier entrants. The preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
-permits a future formula to coexist with failed later preparation. Of the 28
-unsupported outcomes, 21 stop first at initial export, two at final export,
-and five inside the verifier. Thus the strict C++ boundary rejects 23 of the
-101 exact pairs before formula construction, while five exported pairs
-fail closed in the verifier itself.
+permits a future formula to coexist with failed later preparation. At the
+read-range checkpoint the 27 unsupported outcomes split into 21 initial-export,
+zero final-export, and six verifier results. Thus the strict C++ boundary
+rejects 21 of the 101 exact pairs before formula construction, while six
+exported pairs fail closed in the verifier itself.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
@@ -134,12 +154,28 @@ and Read range/ordering semantics for q51. The focused run spent 3,186/0 ms in
 preparation/verifier work and produced report SHA-256
 `37b983f3247c653f5bf4a52c79375cdbc7df588ac79bd893d3a5a89ae25e16e0`.
 
-The current complete TPCH dashboard spent 2,927/30,624 ms in
+The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
 TPC-DS spent 63,931/643,722 ms and produced
 `60a7c324365ab1f038d636db53acc387b4d3ae5e35a157122309de966e8adf6f`.
-Both complete formula-only policies are valid.
+Those timings and hashes are historical q66 evidence, not measurements of the
+read-range checkpoint.
+
+The fresh read-range complete dashboards spent 2,895/30,992 ms for TPCH and
+64,296/706,547 ms for TPC-DS in preparation/verifier work. Their report
+SHA-256 values are
+`9a6c562fc3c8ef7d9d56dacf2411f1c87cc35d966e7ac538e4a947add9dded56` and
+`1eff186049cceb773f6710ce29504bde5065b098d9d7aec1d692bf05f8f5fbec`.
+Within TPC-DS, q9 spent 8,951/5,293 ms and q45 spent 511/14,367 ms.
+
+Focused production-host captures validate both admitted range shapes. TPC-DS
+q45 constructs a formula; its separate solver run is `UNKNOWN`, so this adds
+no bounded proof or counterexample. TPC-DS q9 now passes both exporters and
+enters the verifier, where it fails closed because its join output requires
+8,192 candidate rows above the 4,096-row construction audit bound. The proof
+floor remains twenty-seven. Validation passes 232/232 C++ exporter tests,
+593/593 Python verifier tests, and 14/14 coverage-policy tests.
 
 The complete TPC-DS dashboard records q83 as `FORMULA_EMITTED` after
 1,338/6,175 ms of preparation/verifier work. The separate hardened focused run
@@ -647,10 +683,10 @@ solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend
 neither the proof floor nor the formula count.
 The complete formula dashboard also enforces a monotonic verifier-entry floor
-for TPCH q1 and TPC-DS q5, q59, q65, q78, and q80: both snapshots must
-continue to export and reach the verifier. Every entry-floor query now
-satisfies the stronger formula-construction floor; q59 and q78 retain the
-weaker entry requirements as a separate diagnostic regression gate.
+for TPCH q1 and TPC-DS q5, q9, q59, q65, q78, and q80: both snapshots must
+continue to export and reach the verifier. Every entry-floor query except q9
+satisfies the stronger formula-construction floor; q9, q59, and q78 retain
+weaker entry requirements as separate diagnostic regression gates.
 Later formula or proof results satisfy every weaker floor automatically.
 The complete nineteen-obligation proof floor was confirmed after the dynamic
 `IN` slice: 19/121 workload queries (15.7%) were `VERIFIED_BOUNDED` at two rows
@@ -1578,8 +1614,9 @@ cumulative-pair checks, a bounded proof against two sequential `left_semi`
 joins, and a counterexample when the inner membership is omitted. Other
 subplan combinations, multiple dependencies, broader dynamic-`IN`
 correlations, nullable `String`, nullable anti-membership or embedded Boolean
-contexts, coercing dynamic `IN`, range reads, and other OLAP pushdowns remain
-separate extensions.
+contexts, coercing dynamic `IN`, broader read-range grammars, and other OLAP
+pushdowns remain separate extensions. Cardinality-certified integral `AVG` is
+the next focused semantic slice.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact
@@ -2019,8 +2056,9 @@ does not affect the predicate and is accepted.
 `Coalesce(predicate, false)` is erased only in a positive filter context: at
 the filter boundary or beneath AND/OR. The same form beneath NOT, comparison,
 or a unary presence operation fails closed because the erasure is not
-value-preserving there. Projection wrappers, range reads, malformed type
-descriptors, and unknown operations also fail closed. The predicate filters raw
+value-preserving there. Projection wrappers, range callables inside an OLAP
+filter, malformed type descriptors, and unknown operations also fail closed.
+The predicate filters raw
 scan rows before symbolic source partitioning and any per-task pushed limit.
 
 Every relation is capped at 4096 candidate rows. Join matrices and outputs,

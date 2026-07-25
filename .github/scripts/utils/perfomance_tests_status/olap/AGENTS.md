@@ -77,7 +77,7 @@ python3 generate.py \
 | Baseline | previous 7 runs |
 | Slower (hard) | thr=`max(+10%, 2×noise%)`; last run > base; hard if pct ≥ `max(+25%, thr)` → slow; soft (thr ≤ pct < hard) → **watch**; **>3×** → broken |
 | Noise | `noise% = pstdev(prev7) / median(prev7) · 100` |
-| Failing | last run fail_rate ≥50% → broken; **≥10% always fail** (suite / query / JS classify — same rule) |
+| Failing | last run fail_rate **≥10% always fail** (suite / query / JS); **≥50% → broken**, 10–50% → failing (not broken badge) |
 | No data | per-query mart null-template (`Success=0` + `Color` NULL) → kind `nodata`, not fail |
 | Wave | `CiVersion × DbAlias` |
 | Expected suite | present in ≥50% of waves for that DbAlias over ~14d |

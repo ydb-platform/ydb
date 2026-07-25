@@ -531,10 +531,30 @@ function candidateRows() {
   if (mode === 'all') return preferLatestBySuite(rows);
   return rows;
 }
+function issueFromTpccPart(part) {
+  if (!part) return 'ok';
+  const st = part.status || '';
+  const kind = part.kind || '';
+  if (st === 'missing' || kind === 'missing') return 'missing';
+  if (st === 'in_progress' || kind === 'in_progress') return 'in_progress';
+  if (st === 'stale' || kind === 'stale') return 'stale';
+  if (st === 'broken' || kind === 'broken') return 'broken';
+  if (st === 'both' || kind === 'both') return 'both';
+  if (st === 'lat' || kind === 'lat') return 'lat';
+  if (st === 'tpmc' || kind === 'tpmc') return 'tpmc';
+  if (st === 'regression') return 'lat';
+  return 'ok';
+}
+/** Compare-aware issue from same-prev7 heatmap now-side (not pairwise dive Δ). */
 function effectiveIssue(r) {
-  const dm = resolveDisplayMetrics(r);
-  if (dm && dm.mode === 'compare') return dm.issue || dm.kind || r.issue;
-  return r.issue;
+  const cmpId = getCompareId(r.branch, r.db);
+  if (!cmpId) return r.issue;
+  const wave = waveEntry(r.branch, r.db, cmpId);
+  if (!wave) return r.issue;
+  if (r.issue === 'missing' || r.issue === 'in_progress' || r.issue === 'stale') return r.issue;
+  const part = classifySliceNowVsWaveBaseline(r, wave);
+  if (!part) return r.issue;
+  return issueFromTpccPart(part);
 }
 function isHotIssue(issue) {
   return ['broken', 'lat', 'tpmc', 'both', 'missing', 'stale', 'in_progress', 'regression'].includes(issue);
@@ -549,8 +569,7 @@ function compareElevatedOkRows() {
     const k = rowKey(r);
     if (seen.has(k)) continue;
     if (!getCompareId(r.branch, r.db)) continue;
-    const dm = resolveDisplayMetrics(r);
-    if (dm.mode !== 'compare' || (!isHotIssue(dm.issue) && !isHotIssue(dm.status))) continue;
+    if (!isHotIssue(effectiveIssue(r))) continue;
     seen.add(k);
     out.push(r);
   }
@@ -800,13 +819,13 @@ function sliceHistory(item) {
 }
 function classifySliceAtWave(item, wave) {
   if (!wave) return null;
-  const names = new Set(wave.suite_names || []);
-  if (names.size && item.suite && !names.has(item.suite)) {
-    return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0 };
-  }
   const hist = sliceHistory(item);
   const idx = findHistIndexForWave(hist, wave);
   if (idx < 0) {
+    const names = new Set(wave.suite_names || []);
+    if (names.size && item.suite && !names.has(item.suite)) {
+      return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0 };
+    }
     return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0 };
   }
   return classifyAtIndex(hist, idx) || { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0 };
@@ -834,18 +853,25 @@ function classifySlicePairwise(item, wave) {
 }
 /**
  * Heatmap now-side: latest vs the *same* prev7 baseline as the compare wave.
- * So label is apples-to-apples: lat +23% → lat +27% (not pairwise +4% vs compare run).
+ * No suite_names→missing on now (incomplete compare days must not paint the cell missing).
+ * null = suite not in compare wave history → skip in aggregate.
+ * Coverage issues keep the server inbox signal.
  */
 function classifySliceNowVsWaveBaseline(item, wave) {
   if (!wave) return null;
-  const names = new Set(wave.suite_names || []);
-  if (names.size && item.suite && !names.has(item.suite)) {
-    return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
+    return {
+      status: item.issue,
+      kind: item.issue,
+      n_lat: 0, n_tpmc: 0, n_broken: 0,
+      lat_pct: null, tpmc_pct: null,
+    };
   }
   const hist = sliceHistory(item);
   const cmpIdx = findHistIndexForWave(hist, wave);
+  if (cmpIdx < 0) return null;
   const nowIdx = lastCompletedHistIndex(hist);
-  if (cmpIdx < 0 || nowIdx < 0) {
+  if (nowIdx < 0) {
     return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
   }
   const markers = hist.markers || [];
@@ -1124,9 +1150,22 @@ function liveCell(branch, db, fam) {
   const wave = waveEntry(branch, db, cmpId);
   if (!wave) return alertNow;
   const slices = allSliceRows(branch, db, fam);
-  // Both sides vs the same prev7 baseline (before compare day) — comparable %.
-  const prevParts = slices.map(r => classifySliceAtWave(r, wave)).filter(Boolean);
-  const nowParts = slices.map(r => classifySliceNowVsWaveBaseline(r, wave)).filter(Boolean);
+  // Pair both sides on the same slice set (cmp history point or coverage issue).
+  const prevParts = [];
+  const nowParts = [];
+  for (const r of slices) {
+    const nowPart = classifySliceNowVsWaveBaseline(r, wave);
+    if (!nowPart) continue;
+    let prevPart;
+    if (nowPart.status === 'missing' || nowPart.status === 'in_progress' || nowPart.status === 'stale') {
+      prevPart = { ...nowPart };
+    } else {
+      prevPart = classifySliceAtWave(r, wave);
+      if (!prevPart || prevPart.status === 'nodata') continue;
+    }
+    prevParts.push(prevPart);
+    nowParts.push(nowPart);
+  }
   const prev = aggregateSide(prevParts);
   const now = aggregateSide(nowParts);
   const delta = compareDeltaTpcc(prev, now);

@@ -20,7 +20,7 @@ class FailRuleTests(unittest.TestCase):
         # Chronically high fail (≥10%) stays hot even if baseline is also high.
         self.assertTrue(is_fail_rate_hot(0.12))
         st, reasons = fail_status_from_last(0.12, fr_base=0.11)
-        self.assertEqual(st, "regression")
+        self.assertEqual(st, "regression")  # Python status; JS maps this to failing (not broken)
         self.assertTrue(reasons)
 
     def test_below_hot(self):
@@ -32,6 +32,11 @@ class FailRuleTests(unittest.TestCase):
     def test_broken_threshold(self):
         st, _ = fail_status_from_last(0.55, fr_base=0.0)
         self.assertEqual(st, "broken")
+
+    def test_mid_fail_not_broken(self):
+        st, _ = fail_status_from_last(0.20, fr_base=0.0)
+        self.assertEqual(st, "regression")
+        self.assertNotEqual(st, "broken")
 
 
 class DurationRuleTests(unittest.TestCase):

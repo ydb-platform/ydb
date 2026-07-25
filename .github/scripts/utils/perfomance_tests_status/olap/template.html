@@ -628,10 +628,20 @@ function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr, markersArr, baseEndId
   const is_watch = durStatus === 'watch';
   let kind = 'ok';
   let status = 'ok';
-  if (is_fail && is_slow) { kind = 'both'; status = 'broken'; }
-  else if (is_fail) { kind = 'fail'; status = 'broken'; }
-  else if (is_slow) { kind = 'slow'; status = durStatus === 'broken' ? 'broken' : 'regression'; }
-  else if (is_watch) { kind = 'watch'; status = 'watch'; }
+  // Match Python: ≥50% → broken; ≥10% → failing (not broken); both keeps broken only if fail≥50% or dur outlier.
+  if (is_fail && is_slow) {
+    kind = 'both';
+    status = (frNow >= R.failBroken || durStatus === 'broken') ? 'broken' : 'both';
+  } else if (is_fail) {
+    kind = 'fail';
+    status = frNow >= R.failBroken ? 'broken' : 'failing';
+  } else if (is_slow) {
+    kind = 'slow';
+    status = durStatus === 'broken' ? 'broken' : 'regression';
+  } else if (is_watch) {
+    kind = 'watch';
+    status = 'watch';
+  }
   return {
     status, kind, ydb_pct, ydb_now, ydb_base,
     fail_rate: frNow,
@@ -696,13 +706,13 @@ function countQueryKindsAt(item, resolveIdx) {
 }
 function classifySuiteAtWave(item, wave) {
   if (!wave) return null;
-  const names = new Set(wave.suite_names || []);
-  if (names.size && item.suite && !names.has(item.suite)) {
-    return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
-  }
   const hist = item.history || {};
   const idx = findHistIndexForWave(hist, wave);
   if (idx < 0) {
+    const names = new Set(wave.suite_names || []);
+    if (names.size && item.suite && !names.has(item.suite)) {
+      return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
+    }
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
   }
   const m = classifyAtIndex(hist.ydb, hist.fail_rate, idx, hist.nodata, hist.markers, idx);
@@ -720,18 +730,25 @@ function classifySuiteAtWave(item, wave) {
 }
 /**
  * Heatmap now-side: latest completed vs the *same* prev7 baseline as the compare wave.
- * Apples-to-apples with classifySuiteAtWave (not server liveCellNow).
+ * Does NOT map compare-wave suite_names → missing (that wrongly paints now).
+ * Returns null when suite has no point in compare wave (skip in aggregate).
+ * Coverage issues (missing/in_progress/stale) keep the server inbox signal.
  */
 function classifySuiteNowVsWaveBaseline(item, wave) {
   if (!wave) return null;
-  const names = new Set(wave.suite_names || []);
-  if (names.size && item.suite && !names.has(item.suite)) {
-    return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
+  if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
+    return {
+      status: item.issue,
+      kind: item.issue,
+      ydb_pct: null,
+      n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+    };
   }
   const hist = item.history || {};
   const cmpIdx = findHistIndexForWave(hist, wave);
+  if (cmpIdx < 0) return null;
   const nowIdx = lastCompletedHistIndex(hist);
-  if (cmpIdx < 0 || nowIdx < 0) {
+  if (nowIdx < 0) {
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
   }
   const m = classifyAtIndex(hist.ydb, hist.fail_rate, nowIdx, hist.nodata, hist.markers, cmpIdx);
@@ -1057,8 +1074,8 @@ function fmtFSDelta(prev, now) {
   return a === b ? b : `${a} → ${b}`;
 }
 function statusFromCounts(c) {
-  if (c.fail && c.slow) return { status: 'broken', issue: 'both', kind: 'both' };
-  if (c.fail) return { status: 'broken', issue: 'failing', kind: 'fail' };
+  if (c.fail && c.slow) return { status: 'both', issue: 'both', kind: 'both' };
+  if (c.fail) return { status: 'failing', issue: 'failing', kind: 'fail' };
   if (c.slow) return { status: 'regression', issue: 'slower', kind: 'slow' };
   if (c.soft) return { status: 'watch', issue: 'watch', kind: 'watch' };
   if (c.nodata) return { status: 'nodata', issue: 'ok', kind: 'nodata' };
@@ -1209,9 +1226,23 @@ function liveCell(branch, db, fam) {
   const wave = waveEntry(branch, db, cmpId);
   if (!wave) return alertNow;
   const suites = allSuiteRows(branch, db, fam);
-  // Both sides vs the same prev7 baseline (before compare day) — comparable bands/counts.
-  const prevParts = suites.map(r => classifySuiteAtWave(r, wave)).filter(Boolean);
-  const nowParts = suites.map(r => classifySuiteNowVsWaveBaseline(r, wave)).filter(Boolean);
+  // Pair both sides on the same suite set: need a history point in the compare wave
+  // (or a coverage issue). Avoid was-only "missing" from suite_names skewing the cell.
+  const prevParts = [];
+  const nowParts = [];
+  for (const r of suites) {
+    const nowPart = classifySuiteNowVsWaveBaseline(r, wave);
+    if (!nowPart) continue;
+    let prevPart;
+    if (nowPart.status === 'missing' || nowPart.status === 'in_progress' || nowPart.status === 'stale') {
+      prevPart = { ...nowPart };
+    } else {
+      prevPart = classifySuiteAtWave(r, wave);
+      if (!prevPart || prevPart.status === 'nodata') continue;
+    }
+    prevParts.push(prevPart);
+    nowParts.push(nowPart);
+  }
   const prev = aggregateSide(prevParts);
   const now = aggregateSide(nowParts);
   const delta = compareDeltaOlap(prev, now);
@@ -1541,13 +1572,13 @@ function issueFromClassifyPart(part) {
   if (!part) return 'ok';
   const kind = part.kind || '';
   const st = part.status || '';
+  if (st === 'missing' || kind === 'missing') return 'missing';
+  if (st === 'in_progress' || kind === 'in_progress') return 'in_progress';
+  if (st === 'stale' || kind === 'stale') return 'stale';
   if (kind === 'both' || st === 'both') return 'both';
   if (kind === 'fail' || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
   if (kind === 'slow' || st === 'regression' || st === 'slower' || st === 'slow') return 'slower';
   if (kind === 'watch' || st === 'watch') return 'watch';
-  if (st === 'missing') return 'missing';
-  if (st === 'in_progress') return 'in_progress';
-  if (st === 'stale') return 'stale';
   return 'ok';
 }
 /** Under active compare: issue from same-prev7 now-side reclassify. */
@@ -2167,9 +2198,14 @@ function suiteViewAtFocus(item, diveId) {
   }
   let status = m ? m.status : (item.status || 'ok');
   let kind = m ? m.kind : 'ok';
-  if (fails.length && slows.length) { kind = 'both'; status = 'broken'; }
-  else if (fails.length) { kind = 'fail'; status = 'broken'; }
-  else if (slows.length && (status === 'ok' || status === 'nodata')) {
+  const frNow = (m && m.fail_rate != null) ? m.fail_rate : (focusRun.fail_rate != null ? Number(focusRun.fail_rate) : null);
+  if (fails.length && slows.length) {
+    kind = 'both';
+    status = (frNow != null && frNow >= R.failBroken) ? 'broken' : 'both';
+  } else if (fails.length) {
+    kind = 'fail';
+    status = (frNow != null && frNow >= R.failBroken) ? 'broken' : 'failing';
+  } else if (slows.length && (status === 'ok' || status === 'nodata' || status === 'failing')) {
     kind = 'slow'; status = 'regression';
   } else if (slows.length && status === 'watch') {
     kind = 'slow'; status = 'regression';

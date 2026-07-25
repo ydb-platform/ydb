@@ -4,6 +4,7 @@ from . import decimal
 
 BOOL = "Bool"
 DATE = "Date"
+DOUBLE = "Double"
 VOID = "Void"
 
 # Mirrors NYql::NUdf::MAX_DATE.  Date is an unsigned day-since-epoch value and
@@ -24,7 +25,7 @@ INTEGER_TYPES = frozenset(
 )
 
 STRING_TYPES = frozenset({"String", "Utf8"})
-FIXED_SCALAR_TYPES = frozenset({BOOL, DATE}) | INTEGER_TYPES | STRING_TYPES
+FIXED_SCALAR_TYPES = frozenset({BOOL, DATE, DOUBLE}) | INTEGER_TYPES | STRING_TYPES
 
 
 def is_decimal_type(scalar_type: str) -> bool:
@@ -82,6 +83,8 @@ def ordinary_integer_comparison_compatible(left: str, right: str) -> bool:
 def equality_comparison_compatible(left: str, right: str) -> bool:
     """Whether ordinary equality compares both scalar values without loss."""
 
+    if DOUBLE in {left, right}:
+        return False
     return (
         left == right
         or ordinary_integer_comparison_compatible(left, right)
@@ -93,6 +96,8 @@ def equality_comparison_compatible(left: str, right: str) -> bool:
 def static_in_comparison_compatible(left: str, right: str) -> bool:
     """The deliberately narrower v1 static-IN common-type gate."""
 
+    if DOUBLE in {left, right}:
+        return False
     return left == right or integer_comparison_compatible(left, right)
 
 
@@ -132,6 +137,8 @@ def family(scalar_type: str) -> str:
         return "string"
     if scalar_type == DATE:
         return "date"
+    if scalar_type == DOUBLE:
+        return "carrier"
     if is_decimal_type(scalar_type):
         return "atom"
     raise ValueError(f"unsupported scalar type {scalar_type!r}")

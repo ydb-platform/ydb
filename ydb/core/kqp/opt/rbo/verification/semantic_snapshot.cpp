@@ -586,7 +586,7 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
             push(expression["missing"]);
             continue;
         }
-        if (kind == "opaque") {
+        if (kind == "opaque" || kind == "opaque_double") {
             pushArray("args");
             continue;
         }
@@ -3473,6 +3473,15 @@ private:
     TRestrictedFloatingPredicateAuditToken() = default;
 };
 
+class TPassiveDoubleCarrierAuditor;
+
+class TPassiveDoubleCarrierAuditToken {
+    friend class TPassiveDoubleCarrierAuditor;
+
+private:
+    TPassiveDoubleCarrierAuditToken() = default;
+};
+
 enum class ERestrictedFloatingConstant : ui8 {
     PointNine,
     OnePointTwo,
@@ -3580,6 +3589,21 @@ public:
     {
     }
 
+    TOpaqueExpressionEncoder(
+        TPassiveDoubleCarrierAuditToken,
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns,
+        const TExprNode* passiveDoubleRoot,
+        const TExprNode* passiveDoubleDivision,
+        const TExprNode* passiveDoubleConstant)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+        , PassiveDoubleRoot(passiveDoubleRoot)
+        , PassiveDoubleDivision(passiveDoubleDivision)
+        , PassiveDoubleConstantNode(passiveDoubleConstant)
+    {
+    }
+
     void Validate(const TExprNode& node) {
         AllowNestedIfPresent = true;
         TStringBuilder fingerprint;
@@ -3592,7 +3616,21 @@ public:
         size_t argumentDepth)
     {
         bool nullable = false;
-        const TString resultType = ScalarTypeName(node, &nullable);
+        const TString resultType = [&] {
+            if (&node != PassiveDoubleRoot) {
+                return ScalarTypeName(node, &nullable);
+            }
+            if (!IsExactDataAnnotation(
+                    node.GetTypeAnn(),
+                    NUdf::EDataSlot::Double,
+                    true))
+            {
+                Unsupported(
+                    "Audited passive Double root lost Optional<Double> type");
+            }
+            nullable = true;
+            return TString("Double");
+        }();
 
         TStringBuilder fingerprint;
         EncodeRoot(node, fingerprint);
@@ -3606,7 +3644,8 @@ public:
         }
 
         auto result = JsonMap();
-        result["kind"] = "opaque";
+        result["kind"] =
+            &node == PassiveDoubleRoot ? "opaque_double" : "opaque";
         result["fingerprint"] = TString(fingerprint);
         result["type"] = resultType;
         result["nullable"] = nullable;
@@ -3629,7 +3668,12 @@ private:
         if (!node.IsCallable()) {
             Unsupported("Opaque scalar root is not a callable");
         }
-        AppendIdentityField(fingerprint, "format", "yql-opaque-v1");
+        AppendIdentityField(
+            fingerprint,
+            "format",
+            &node == PassiveDoubleRoot
+                ? TStringBuf("yql-passive-double-v1")
+                : TStringBuf("yql-opaque-v1"));
         Encode(node, fingerprint, 0);
         if (fingerprint.size() > MaxFingerprintBytes) {
             Unsupported("Opaque scalar fingerprint exceeds the audit limit");
@@ -3777,6 +3821,19 @@ private:
             AppendIdentityField(out, "children", "0");
             return;
         }
+        if (&node == PassiveDoubleConstantNode) {
+            AppendIdentityField(
+                out,
+                "node",
+                "passive-double-constant");
+            AppendIdentityField(
+                out,
+                "content",
+                "yql-double-bits-4008000000000000-v1");
+            AppendIdentityField(out, "type", TypeFingerprint(node));
+            AppendIdentityField(out, "children", "0");
+            return;
+        }
 
         switch (node.Type()) {
             case TExprNode::Callable:
@@ -3784,11 +3841,19 @@ private:
                     if (!AllowRestrictedConcat) {
                         Unsupported("Unsupported scalar callable Concat");
                     }
-                } else if (
-                    &node != RestrictedFloatingComparison ||
-                    depth != 0)
-                {
-                    CheckOpaqueCallable(node, allowExactUint32LiteralConversion);
+                } else {
+                    const bool auditedFloatingPredicateRoot =
+                        &node == RestrictedFloatingComparison && depth == 0;
+                    const bool auditedPassiveDoubleCallable =
+                        &node == PassiveDoubleRoot ||
+                        &node == PassiveDoubleDivision;
+                    if (!auditedFloatingPredicateRoot &&
+                        !auditedPassiveDoubleCallable)
+                    {
+                        CheckOpaqueCallable(
+                            node,
+                            allowExactUint32LiteralConversion);
+                    }
                 }
                 AppendIdentityField(out, "node", "callable");
                 AppendIdentityField(out, "content", node.Content());
@@ -3832,6 +3897,253 @@ private:
     bool AllowRestrictedConcat = false;
     const TExprNode* RestrictedFloatingComparison = nullptr;
     const TExprNode* RestrictedFloatingConstantNode = nullptr;
+    const TExprNode* PassiveDoubleRoot = nullptr;
+    const TExprNode* PassiveDoubleDivision = nullptr;
+    const TExprNode* PassiveDoubleConstantNode = nullptr;
+};
+
+bool IsPassiveDoubleCarrierCandidate(const TExprNode& node) {
+    return node.IsCallable({"*", "/"}) &&
+        IsExactDataAnnotation(
+            node.GetTypeAnn(),
+            NUdf::EDataSlot::Double,
+            true);
+}
+
+class TPassiveDoubleCarrierAuditor {
+public:
+    TPassiveDoubleCarrierAuditor(
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+    {
+    }
+
+    NJson::TJsonValue ExportAsOpaque(
+        const TExprNode& root,
+        TExactScalarBudget& budget,
+        size_t argumentDepth)
+    {
+        const auto shape = AuditRoot(root);
+        auto result = TOpaqueExpressionEncoder(
+            TPassiveDoubleCarrierAuditToken{},
+            RowArgument,
+            VisibleColumns,
+            &root,
+            shape.FloatingDivision,
+            shape.DoubleConstant).Export(
+                root,
+                budget,
+                argumentDepth);
+        if (result["args"].GetArraySafe().size() != 3) {
+            Fail("expression must expose exactly three nullable Int64 inputs");
+        }
+        return result;
+    }
+
+private:
+    struct TAuditedShape {
+        const TExprNode* FloatingDivision;
+        const TExprNode* DoubleConstant;
+    };
+
+    [[noreturn]] void Fail(TStringBuf reason) const {
+        Unsupported(TStringBuilder()
+            << "Passive Double carrier: " << reason);
+    }
+
+    void CheckOptionalInt64(
+        const TExprNode& node,
+        TStringBuf label) const
+    {
+        if (!IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Int64,
+                true))
+        {
+            Fail(TStringBuilder()
+                << label << " must have type Optional<Int64>");
+        }
+    }
+
+    TString AuditMember(
+        const TExprNode& node,
+        TStringBuf label) const
+    {
+        CheckOptionalInt64(node, label);
+        if (
+            !node.IsCallable("Member") ||
+            node.ChildrenSize() != 2 ||
+            node.Child(0) != RowArgument ||
+            !node.Child(1)->IsAtom())
+        {
+            Fail(TStringBuilder()
+                << label << " must be one direct visible member");
+        }
+        const TString column(node.Child(1)->Content());
+        if (!VisibleColumns.contains(column)) {
+            Fail(TStringBuilder()
+                << label << " references invisible member " << column);
+        }
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(1));
+        return column;
+    }
+
+    TVector<TString> AuditTotal(
+        const TExprNode& node,
+        TStringBuf label) const
+    {
+        CheckOptionalInt64(node, label);
+        if (!node.IsCallable("+") || node.ChildrenSize() != 2) {
+            Fail(TStringBuilder()
+                << label << " must be the left-associated sum of three "
+                   "nullable Int64 members");
+        }
+        CheckScalarSafetyMetadata(node);
+
+        const auto& pair = *node.Child(0);
+        CheckOptionalInt64(pair, "total prefix");
+        if (!pair.IsCallable("+") || pair.ChildrenSize() != 2) {
+            Fail(
+                "total prefix must add the first two nullable Int64 members");
+        }
+        CheckScalarSafetyMetadata(pair);
+
+        TVector<TString> members = {
+            AuditMember(*pair.Child(0), "total member 0"),
+            AuditMember(*pair.Child(1), "total member 1"),
+            AuditMember(*node.Child(1), "total member 2"),
+        };
+        THashSet<TString> distinct(members.begin(), members.end());
+        if (distinct.size() != members.size()) {
+            Fail("total must reference three distinct nullable Int64 members");
+        }
+        return members;
+    }
+
+    void AuditDeviationRatio(const TExprNode& node) const {
+        CheckOptionalInt64(node, "deviation ratio");
+        if (!node.IsCallable("/") || node.ChildrenSize() != 2) {
+            Fail(
+                "deviation ratio must divide one nullable Int64 member by "
+                "the three-member total");
+        }
+        CheckScalarSafetyMetadata(node);
+        const TString numerator =
+            AuditMember(*node.Child(0), "deviation numerator");
+        const auto members =
+            AuditTotal(*node.Child(1), "deviation denominator");
+        if (std::find(members.begin(), members.end(), numerator) == members.end()) {
+            Fail("deviation numerator must occur in its denominator total");
+        }
+    }
+
+    void AuditDoubleThree(const TExprNode& node) const {
+        if (
+            !node.IsCallable("Double") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom("3.0") ||
+            !IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Double,
+                false))
+        {
+            Fail(
+                "floating divisor must be the exact non-null Double(3.0) "
+                "literal");
+        }
+        constexpr ui32 CanonicalTextFlags =
+            TNodeFlags::ArbitraryContent | TNodeFlags::MultilineContent;
+        if (
+            node.Child(0)->Flags() & TNodeFlags::BinaryContent ||
+            node.Child(0)->GetFlagsToCompare() != CanonicalTextFlags)
+        {
+            Fail("Double(3.0) has noncanonical atom flags");
+        }
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(0));
+    }
+
+    void AuditHundred(const TExprNode& node) const {
+        if (
+            !node.IsCallable("Int32") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom("100") ||
+            !IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Int32,
+                false))
+        {
+            Fail("deviation multiplier must be exact non-null Int32(100)");
+        }
+        LiteralExpr(node);
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(0));
+    }
+
+    void CheckFloatingDivision(const TExprNode& node) const {
+        if (
+            !node.IsCallable("/") ||
+            node.ChildrenSize() != 2 ||
+            !IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Double,
+                true))
+        {
+            Fail(
+                "floating division must have type Optional<Double> and "
+                "arity two");
+        }
+        CheckOptionalInt64(
+            *node.Child(0),
+            "floating-division numerator");
+        AuditDoubleThree(*node.Child(1));
+        CheckScalarSafetyMetadata(node);
+    }
+
+    TAuditedShape AuditRoot(const TExprNode& root) const {
+        if (root.IsCallable("/")) {
+            CheckFloatingDivision(root);
+            AuditTotal(
+                *root.Child(0),
+                "average numerator");
+            TOpaqueExpressionEncoder(
+                RowArgument,
+                VisibleColumns).Validate(*root.Child(0));
+            return {&root, root.Child(1)};
+        }
+
+        if (
+            !root.IsCallable("*") ||
+            root.ChildrenSize() != 2 ||
+            !IsExactDataAnnotation(
+                root.GetTypeAnn(),
+                NUdf::EDataSlot::Double,
+                true))
+        {
+            Fail(
+                "root must be one reviewed average division or deviation "
+                "multiplication");
+        }
+        CheckScalarSafetyMetadata(root);
+        const auto& floatingDivision = *root.Child(0);
+        CheckFloatingDivision(floatingDivision);
+        AuditDeviationRatio(*floatingDivision.Child(0));
+        AuditHundred(*root.Child(1));
+        TOpaqueExpressionEncoder(
+            RowArgument,
+            VisibleColumns).Validate(*floatingDivision.Child(0));
+        return {
+            &floatingDivision,
+            floatingDivision.Child(1),
+        };
+    }
+
+private:
+    const TExprNode* RowArgument;
+    const THashSet<TString>& VisibleColumns;
 };
 
 bool IsRestrictedFloatingPredicateCandidate(const TExprNode& node) {
@@ -4250,6 +4562,15 @@ NJson::TJsonValue ExportExprNode(
             << MaxExactScalarDepth);
     }
     budget.Charge(normalizedDepth);
+
+    if (IsPassiveDoubleCarrierCandidate(node)) {
+        return TPassiveDoubleCarrierAuditor(
+            rowArgument,
+            visibleColumns).ExportAsOpaque(
+                node,
+                budget,
+                normalizedDepth + 1);
+    }
 
     if (IsRestrictedFloatingPredicateCandidate(node)) {
         return TRestrictedFloatingPredicateAuditor(
@@ -8213,13 +8534,37 @@ private:
                         Unsupported("Sort output IUs do not match its input");
                     }
 
+                    const auto* inputAnnotation =
+                        OutputType(*sort.GetInput(), inputName);
+                    const auto* outputAnnotation =
+                        OutputType(sort, outputName);
+                    const bool inputPassiveDouble =
+                        IsExactDataAnnotation(
+                            inputAnnotation,
+                            NUdf::EDataSlot::Double,
+                            true);
+                    const bool outputPassiveDouble =
+                        IsExactDataAnnotation(
+                            outputAnnotation,
+                            NUdf::EDataSlot::Double,
+                            true);
+                    if (inputPassiveDouble || outputPassiveDouble) {
+                        if (!inputPassiveDouble || !outputPassiveDouble) {
+                            Unsupported(TStringBuilder()
+                                << "Sort passive Double carrier type "
+                                   "disagrees with input IU "
+                                << inputName);
+                        }
+                        continue;
+                    }
+
                     bool inputNullable = false;
                     bool outputNullable = false;
                     const TString inputType = TypeName(
-                        OutputType(*sort.GetInput(), inputName),
+                        inputAnnotation,
                         &inputNullable);
                     const TString outputType = TypeName(
-                        OutputType(sort, outputName),
+                        outputAnnotation,
                         &outputNullable);
                     if (inputType != outputType || inputNullable != outputNullable) {
                         Unsupported(TStringBuilder()

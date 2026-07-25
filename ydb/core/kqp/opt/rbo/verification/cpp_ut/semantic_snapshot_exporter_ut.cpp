@@ -2239,8 +2239,9 @@ TSemanticSnapshotExportResult ExportOptionalInt64MapExpressionResult(
     const auto& table = AddTable(ctx, "/Root/FloatingPredicate", {
         {"x", "Int64", false},
         {"y", "Int64", false},
+        {"z", "Int64", false},
     });
-    auto read = MakeRead(ctx, table, alias, {"x", "y"});
+    auto read = MakeRead(ctx, table, alias, {"x", "y", "z"});
     auto map = MakeIntrusive<TOpMap>(
         read,
         TPositionHandle(),
@@ -2367,6 +2368,99 @@ TExprNode::TPtr TypedDoubleConstantDivision(
             TypedLiteral(ctx, "Double", denominator, type),
         },
         type);
+}
+
+TExprNode::TPtr TypedPassiveDoubleTotal(
+    TExportTestContext& ctx,
+    TStringBuf alias,
+    TStringBuf first = "x",
+    TStringBuf second = "y",
+    TStringBuf third = "z")
+{
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    return TypedCallable(
+        ctx,
+        "+",
+        {
+            TypedCallable(
+                ctx,
+                "+",
+                {
+                    TypedMember(
+                        ctx,
+                        TStringBuilder() << alias << "." << first,
+                        optionalInt64),
+                    TypedMember(
+                        ctx,
+                        TStringBuilder() << alias << "." << second,
+                        optionalInt64),
+                },
+                optionalInt64),
+            TypedMember(
+                ctx,
+                TStringBuilder() << alias << "." << third,
+                optionalInt64),
+        },
+        optionalInt64);
+}
+
+TExprNode::TPtr TypedPassiveDoubleAverage(
+    TExportTestContext& ctx,
+    TStringBuf alias,
+    TStringBuf divisor = "3.0")
+{
+    const auto* optionalDouble =
+        ScalarType(ctx, NUdf::EDataSlot::Double, true);
+    return TypedCallable(
+        ctx,
+        "/",
+        {
+            TypedPassiveDoubleTotal(ctx, alias),
+            TypedDoubleConstant(ctx, divisor),
+        },
+        optionalDouble);
+}
+
+TExprNode::TPtr TypedPassiveDoubleDeviation(
+    TExportTestContext& ctx,
+    TStringBuf alias,
+    TStringBuf numerator = "x",
+    TStringBuf multiplier = "100")
+{
+    const auto* int32 =
+        ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* optionalDouble =
+        ScalarType(ctx, NUdf::EDataSlot::Double, true);
+    auto ratio = TypedCallable(
+        ctx,
+        "/",
+        {
+            TypedMember(
+                ctx,
+                TStringBuilder() << alias << "." << numerator,
+                optionalInt64),
+            TypedPassiveDoubleTotal(ctx, alias),
+        },
+        optionalInt64);
+    auto divided = TypedCallable(
+        ctx,
+        "/",
+        {
+            std::move(ratio),
+            TypedDoubleConstant(ctx, "3.0"),
+        },
+        optionalDouble);
+    return TypedCallable(
+        ctx,
+        "*",
+        {
+            std::move(divided),
+            TypedLiteral(ctx, "Int32", multiplier, int32),
+        },
+        optionalDouble);
 }
 
 TExprNode::TPtr TypedRestrictedFloatingPredicate(
@@ -11102,7 +11196,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "Unsupported scalar type Double");
+                "floating-division numerator must have type Optional<Int64>");
         }
 
         for (const size_t arity : {size_t(1), size_t(3)}) {
@@ -11135,6 +11229,272 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 TStringBuilder() << "unsupported arity " << arity);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsPassiveDoubleCarriersAsWholeOpaqueValues) {
+        TExportTestContext average;
+        const auto averageExpression =
+            ExportOptionalInt64MapExpression(
+                average,
+                "initial",
+                TypedPassiveDoubleAverage(average, "initial"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["kind"].GetStringSafe(),
+            "opaque_double");
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["type"].GetStringSafe(),
+            "Double");
+        UNIT_ASSERT(
+            averageExpression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            averageExpression["fingerprint"].GetStringSafe(),
+            "format:21:yql-passive-double-v1;");
+        UNIT_ASSERT_STRING_CONTAINS(
+            averageExpression["fingerprint"].GetStringSafe(),
+            "yql-double-bits-4008000000000000-v1");
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["args"].GetArraySafe().size(),
+            3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["args"][0]["column"].GetStringSafe(),
+            "initial.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["args"][1]["column"].GetStringSafe(),
+            "initial.y");
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["args"][2]["column"].GetStringSafe(),
+            "initial.z");
+
+        TExportTestContext renamed;
+        const auto renamedExpression =
+            ExportOptionalInt64MapExpression(
+                renamed,
+                "final",
+                TypedPassiveDoubleAverage(renamed, "final"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            averageExpression["fingerprint"].GetStringSafe(),
+            renamedExpression["fingerprint"].GetStringSafe());
+
+        TExportTestContext deviation;
+        const auto deviationExpression =
+            ExportOptionalInt64MapExpression(
+                deviation,
+                "joined",
+                TypedPassiveDoubleDeviation(
+                    deviation,
+                    "joined"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            deviationExpression["kind"].GetStringSafe(),
+            "opaque_double");
+        UNIT_ASSERT_VALUES_EQUAL(
+            deviationExpression["args"].GetArraySafe().size(),
+            3);
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            averageExpression["fingerprint"].GetStringSafe(),
+            deviationExpression["fingerprint"].GetStringSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            deviationExpression["fingerprint"].GetStringSafe(),
+            "content:1:*");
+        UNIT_ASSERT_STRING_CONTAINS(
+            deviationExpression["fingerprint"].GetStringSafe(),
+            "content:3:100");
+    }
+
+    Y_UNIT_TEST(PassiveDoubleCarrierConstantTagMatchesRuntimeBits) {
+        const double value = NYql::DoubleFromString("3.0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            std::bit_cast<ui64>(value),
+            0x4008000000000000ULL);
+    }
+
+    Y_UNIT_TEST(PassiveDoubleCarrierCanTravelAsNonKeySortPayload) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/PassiveDoubleSort", {
+            {"x", "Int64", false},
+            {"y", "Int64", false},
+            {"z", "Int64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x", "y", "z"});
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* optionalDouble =
+            ScalarType(ctx, NUdf::EDataSlot::Double, true);
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                TExpression(
+                    TypedPassiveDoubleAverage(ctx, "a"),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        SetExactOutputType(ctx, *map, {
+            {"a.x", optionalInt64},
+            {"a.y", optionalInt64},
+            {"a.z", optionalInt64},
+            {"result", optionalDouble},
+        });
+        auto sort = MakeIntrusive<TOpSort>(
+            map,
+            TPositionHandle(),
+            TVector<TSortElement>{
+                TSortElement(TInfoUnit("a.x"), true, false)});
+        SetExactOutputType(ctx, *sort, {
+            {"a.x", optionalInt64},
+            {"a.y", optionalInt64},
+            {"a.z", optionalInt64},
+            {"result", optionalDouble},
+        });
+        TOpRoot root(sort, TPositionHandle(), {"result"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(snapshot, "project")["columns"][3]["expression"]["kind"]
+                .GetStringSafe(),
+            "opaque_double");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(snapshot, "sort")["order"][0]["column"].GetStringSafe(),
+            "a.x");
+    }
+
+    Y_UNIT_TEST(PassiveDoubleCarrierGateFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    TypedPassiveDoubleAverage(ctx, "a", "3.00"));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "exact non-null Double(3.0)");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    TypedPassiveDoubleDeviation(
+                        ctx,
+                        "a",
+                        "x",
+                        "99"));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "exact non-null Int32(100)");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalDouble =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    TypedCallable(
+                        ctx,
+                        "/",
+                        {
+                            TypedPassiveDoubleTotal(
+                                ctx,
+                                "a",
+                                "x",
+                                "x",
+                                "z"),
+                            TypedDoubleConstant(ctx, "3.0"),
+                        },
+                        optionalDouble));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "three distinct nullable Int64 members");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalInt64 =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* optionalDouble =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            auto rightAssociated = TypedCallable(
+                ctx,
+                "+",
+                {
+                    TypedMember(ctx, "a.x", optionalInt64),
+                    TypedCallable(
+                        ctx,
+                        "+",
+                        {
+                            TypedMember(ctx, "a.y", optionalInt64),
+                            TypedMember(ctx, "a.z", optionalInt64),
+                        },
+                        optionalInt64),
+                },
+                optionalInt64);
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    TypedCallable(
+                        ctx,
+                        "/",
+                        {
+                            std::move(rightAssociated),
+                            TypedDoubleConstant(ctx, "3.0"),
+                        },
+                        optionalDouble));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "total prefix must add");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto expression =
+                TypedPassiveDoubleAverage(ctx, "a");
+            expression->Child(0)->Child(0)->Child(1)->Child(1)
+                ->SetSideEffects(ESideEffects::General);
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    std::move(expression));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32 =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalDouble =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            const auto result =
+                ExportOptionalInt64MapExpressionResult(
+                    ctx,
+                    "a",
+                    TypedCallable(
+                        ctx,
+                        "*",
+                        {
+                            TypedLiteral(ctx, "Int32", "100", int32),
+                            TypedPassiveDoubleAverage(ctx, "a"),
+                        },
+                        optionalDouble));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "floating division must have type Optional<Double>");
         }
     }
 

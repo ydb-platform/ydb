@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import unittest
+from dataclasses import replace
 from itertools import product
 from pathlib import Path
 
@@ -8,9 +9,16 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     MAX_BOUND_DEPTH,
     MAX_EXPR_DEPTH,
     MAX_EXPR_NODES,
+    OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
+    Expr,
+    InSubplan,
+    OuterBind,
+    ScalarSubplan,
     SnapshotError,
+    SubplanOutput,
     load_snapshot,
     parse_snapshot,
+    validate_snapshot,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
     INTEGER_TYPES,
@@ -462,12 +470,625 @@ def boolean_expression_with_depth(depth):
     return expression
 
 
+def passive_double_snapshot():
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"].extend(
+        [
+            {"name": "x", "type": "Int64", "nullable": True},
+            {"name": "y", "type": "Int64", "nullable": True},
+        ]
+    )
+    for column in value["schema"]["tables"][0]["columns"]:
+        column["nullable"] = True
+    scan = value["plan"]["nodes"][0]
+    scan["columns"].extend(
+        [
+            {"source": "x", "output": "a.x"},
+            {"source": "y", "output": "a.y"},
+        ]
+    )
+    compute = {
+        "id": "compute",
+        "op": "project",
+        "input": "scan",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "d",
+                "expression": {
+                    "kind": "opaque_double",
+                    "fingerprint": (
+                        OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "identity:a.k:a.x:a.y"
+                    ),
+                    "type": "Double",
+                    "nullable": True,
+                    "args": [
+                        {"kind": "column", "column": "a.k"},
+                        {"kind": "column", "column": "a.x"},
+                        {"kind": "column", "column": "a.y"},
+                    ],
+                },
+            },
+            {
+                "output": "k",
+                "expression": {"kind": "column", "column": "a.k"},
+            },
+        ],
+    }
+    passthrough = {
+        "id": "passthrough",
+        "op": "project",
+        "input": "compute",
+        "ordered": False,
+        "columns": [
+            {
+                "output": "result",
+                "expression": {"kind": "column", "column": "d"},
+            }
+        ],
+    }
+    value["plan"].update(
+        nodes=[scan, compute, passthrough],
+        root="passthrough",
+        output=["result"],
+    )
+    return value
+
+
 class SnapshotTest(unittest.TestCase):
     def test_valid_snapshot_has_inferred_root_schema(self):
         snapshot = parse_snapshot(minimal_snapshot())
         self.assertEqual([(column.name, column.type, column.nullable) for column in snapshot.output_schema()], [
             ("a.k", "Int64", False)
         ])
+
+    def test_passive_double_is_an_exact_optional_carrier(self):
+        snapshot = parse_snapshot(passive_double_snapshot())
+        expression = snapshot.plan.nodes[1].columns[0].expression
+        self.assertEqual(
+            (
+                expression.kind,
+                expression.result_type,
+                expression.nullable,
+                len(expression.args),
+            ),
+            ("opaque_double", "Double", True, 3),
+        )
+        self.assertTrue(
+            expression.fingerprint.startswith(OPAQUE_DOUBLE_FINGERPRINT_PREFIX)
+        )
+        self.assertEqual(
+            [(column.type, column.nullable) for column in snapshot.output_schema()],
+            [("Double", True)],
+        )
+
+    def test_passive_double_decoder_is_closed_and_argument_types_are_exact(self):
+        valid = passive_double_snapshot()
+        expression = valid["plan"]["nodes"][1]["columns"][0]["expression"]
+
+        for field in ("fingerprint", "type", "nullable", "args"):
+            malformed = copy.deepcopy(valid)
+            del malformed["plan"]["nodes"][1]["columns"][0]["expression"][field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(SnapshotError, f"missing fields: {field}"):
+                    parse_snapshot(malformed)
+
+        for mutation, message in (
+            ({"type": "Int64"}, "result must be Optional<Double>"),
+            ({"nullable": False}, "result must be Optional<Double>"),
+            (
+                {"fingerprint": OPAQUE_DOUBLE_FINGERPRINT_PREFIX},
+                "non-empty identity suffix",
+            ),
+            (
+                {"fingerprint": "format:20:yql-passive-double-v1;identity"},
+                "fingerprint prefix",
+            ),
+            ({"args": expression["args"][:2]}, "exactly three arguments"),
+        ):
+            malformed = copy.deepcopy(valid)
+            malformed["plan"]["nodes"][1]["columns"][0]["expression"].update(
+                mutation
+            )
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(malformed)
+
+        unknown = copy.deepcopy(valid)
+        unknown["plan"]["nodes"][1]["columns"][0]["expression"]["rounding"] = "none"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: rounding"):
+            parse_snapshot(unknown)
+
+        non_nullable = copy.deepcopy(valid)
+        non_nullable["schema"]["tables"][0]["columns"][0]["nullable"] = False
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "arguments must be Optional<Int64>",
+        ):
+            parse_snapshot(non_nullable)
+
+        wrong_type = copy.deepcopy(valid)
+        wrong_type["plan"]["nodes"][1]["columns"][0]["expression"]["args"][1] = {
+            "kind": "column",
+            "column": "a.flag",
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "arguments must be Optional<Int64>",
+        ):
+            parse_snapshot(wrong_type)
+
+        computed = copy.deepcopy(valid)
+        computed["plan"]["nodes"][1]["columns"][0]["expression"]["args"][1] = {
+            "kind": "if",
+            "condition": {"kind": "literal", "type": "Bool", "value": True},
+            "then": {"kind": "column", "column": "a.x"},
+            "else": {"kind": "null", "type": "Int64"},
+            "type": "Int64",
+            "nullable": True,
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "arguments must be direct column references",
+        ):
+            parse_snapshot(computed)
+
+        duplicate = copy.deepcopy(valid)
+        duplicate["plan"]["nodes"][1]["columns"][0]["expression"]["args"][1] = {
+            "kind": "column",
+            "column": "a.k",
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "arguments must reference three distinct columns",
+        ):
+            parse_snapshot(duplicate)
+
+    def test_double_cannot_enter_or_escape_the_audited_constructor(self):
+        table = passive_double_snapshot()
+        table["schema"]["tables"][0]["columns"][0]["type"] = "Double"
+
+        generic_result = passive_double_snapshot()
+        generic_result["plan"]["nodes"][1]["columns"][0]["expression"][
+            "kind"
+        ] = "opaque"
+
+        generic_argument = passive_double_snapshot()
+        generic_argument["plan"]["nodes"][2]["columns"][0] = {
+            "output": "result",
+            "expression": {
+                "kind": "opaque",
+                "fingerprint": "generic-consumer",
+                "type": "Int64",
+                "nullable": True,
+                "args": [{"kind": "column", "column": "d"}],
+            },
+        }
+
+        double_null = passive_double_snapshot()
+        double_null["plan"]["nodes"][2]["columns"][0]["expression"] = {
+            "kind": "null",
+            "type": "Double",
+        }
+
+        for mutation, message in (
+            (table, "derived passive carrier"),
+            (generic_result, "returned only by opaque_double"),
+            (generic_argument, "opaque may not consume Double"),
+            (double_null, "returned only by opaque_double"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation)
+
+    def test_double_comparison_static_in_sort_and_stage_routing_are_rejected(self):
+        comparison = passive_double_snapshot()
+        comparison["plan"]["nodes"][2] = {
+            "id": "passthrough",
+            "op": "filter",
+            "input": "compute",
+            "predicate": {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "d"},
+                "right": {"kind": "column", "column": "d"},
+            },
+        }
+        comparison["plan"]["output"] = ["d"]
+
+        static_in = copy.deepcopy(comparison)
+        static_in["plan"]["nodes"][2]["predicate"] = {
+            "kind": "in",
+            "lookup": {"kind": "column", "column": "d"},
+            "items": [{"kind": "literal", "type": "Int64", "value": 0}],
+        }
+
+        sort = passive_double_snapshot()
+        sort["plan"]["nodes"][2] = {
+            "id": "passthrough",
+            "op": "sort",
+            "input": "compute",
+            "order": [
+                {"column": "d", "ascending": True, "nulls_first": True}
+            ],
+            "limit": None,
+            "phase": "undefined",
+        }
+        sort["plan"]["output"] = ["d"]
+
+        def staged_connection(connection):
+            value = passive_double_snapshot()
+            value["stage_graph"] = {
+                "root_stage": "root",
+                "stages": [
+                    {
+                        "id": "source",
+                        "nodes": ["scan", "compute"],
+                        "inputs": [],
+                        "outputs": [{"index": 0, "node": "compute"}],
+                        "source_storage": "column",
+                    },
+                    {
+                        "id": "root",
+                        "nodes": ["passthrough"],
+                        "inputs": ["compute"],
+                        "outputs": [{"index": 0, "node": "passthrough"}],
+                        "source_storage": None,
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "edge",
+                        "producer": "source",
+                        "consumer": "root",
+                        "occurrence": 0,
+                        "producer_output": 0,
+                        "consumer_input": 0,
+                        **connection,
+                    }
+                ],
+                "assumptions": [],
+            }
+            return value
+
+        hashed = staged_connection(
+            {
+                "kind": "hash_shuffle",
+                "keys": ["d"],
+                "hash_function": "HashV1",
+                "use_spilling": False,
+            }
+        )
+        merged = staged_connection(
+            {
+                "kind": "merge",
+                "order": [
+                    {"column": "d", "ascending": True, "nulls_first": True}
+                ],
+            }
+        )
+
+        for mutation, message in (
+            (comparison, "eq may not consume Double"),
+            (static_in, "in may not consume Double"),
+            (sort, "ordering type 'Double' is unsupported"),
+            (hashed, "hash routing may not consume Double"),
+            (merged, "ordering type 'Double' is unsupported"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation)
+
+    def test_double_join_and_aggregate_roles_are_rejected(self):
+        joined = passive_double_snapshot()
+        joined["plan"]["nodes"][2:] = [
+            {
+                "id": "left",
+                "op": "project",
+                "input": "compute",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "left.d",
+                        "expression": {"kind": "column", "column": "d"},
+                    }
+                ],
+            },
+            {
+                "id": "right",
+                "op": "project",
+                "input": "compute",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "right.d",
+                        "expression": {"kind": "column", "column": "d"},
+                    }
+                ],
+            },
+            {
+                "id": "join",
+                "op": "join",
+                "left": "left",
+                "right": "right",
+                "kind": "inner",
+                "keys": [{"left": "left.d", "right": "right.d"}],
+                "predicate": {
+                    "kind": "literal",
+                    "type": "Bool",
+                    "value": True,
+                },
+            },
+        ]
+        joined["plan"].update(root="join", output=["left.d"])
+
+        grouped = passive_double_snapshot()
+        grouped["plan"]["nodes"][2] = {
+            "id": "passthrough",
+            "op": "aggregate",
+            "input": "compute",
+            "keys": ["d"],
+            "aggregates": [
+                {
+                    "input": "k",
+                    "function": "count",
+                    "output": "count",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        grouped["plan"]["output"] = ["d"]
+
+        aggregated = copy.deepcopy(grouped)
+        aggregated["plan"]["nodes"][2]["keys"] = []
+        aggregated["plan"]["nodes"][2]["aggregates"][0]["input"] = "d"
+        aggregated["plan"]["output"] = ["count"]
+
+        for mutation, message in (
+            (joined, "join keys may not consume Double"),
+            (grouped, "aggregate keys may not consume Double"),
+            (aggregated, "aggregate inputs may not consume Double"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation)
+
+    def test_double_outer_bind_and_subplan_transport_are_rejected(self):
+        outer_bind = passive_double_snapshot()
+        outer_bind["plan"]["nodes"].append(
+            {
+                "id": "outer",
+                "op": "outer_bind",
+                "input": "compute",
+                "dependency": "outer.d",
+                "type": "Double",
+                "nullable": True,
+            }
+        )
+
+        subplan = passive_double_snapshot()
+        subplan["plan"]["subplans"] = [
+            {
+                "binding": "sub.d",
+                "kind": "scalar",
+                "root": "compute",
+                "type": "Double",
+                "nullable": True,
+                "dependencies": [],
+                "consumers": ["passthrough"],
+                "output": {
+                    "column": "d",
+                    "type": "Double",
+                    "nullable": True,
+                },
+            }
+        ]
+
+        for mutation, message in (
+            (outer_bind, "outer_bind may not transport Double"),
+            (subplan, "subplans may not transport Double"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(mutation)
+
+    def test_typed_snapshot_callers_cannot_bypass_double_gates(self):
+        snapshot = parse_snapshot(passive_double_snapshot())
+        compute = snapshot.plan.nodes[1]
+        expression = compute.columns[0].expression
+
+        def with_compute_expression(candidate):
+            changed_compute = replace(
+                compute,
+                columns=(
+                    replace(compute.columns[0], expression=candidate),
+                    *compute.columns[1:],
+                ),
+            )
+            return replace(
+                snapshot,
+                plan=replace(
+                    snapshot.plan,
+                    nodes=tuple(
+                        changed_compute if node.id == compute.id else node
+                        for node in snapshot.plan.nodes
+                    ),
+                ),
+            )
+
+        table = snapshot.tables[0]
+        invalid_table = replace(
+            snapshot,
+            tables=(
+                replace(
+                    table,
+                    columns=(
+                        replace(table.columns[0], type="Double"),
+                        *table.columns[1:],
+                    ),
+                ),
+            ),
+        )
+
+        invalid_outer_bind = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                nodes=(
+                    *snapshot.plan.nodes[:2],
+                    OuterBind(
+                        id="passthrough",
+                        input="compute",
+                        dependency="outer.d",
+                        type="Double",
+                        nullable=True,
+                    ),
+                ),
+                output=("d",),
+            ),
+        )
+
+        scalar_subplan = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                subplans=(
+                    ScalarSubplan(
+                        binding="sub.d",
+                        root="compute",
+                        output=SubplanOutput("d", "Double", True),
+                        consumers=("passthrough",),
+                    ),
+                ),
+            ),
+        )
+        in_subplan = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                subplans=(
+                    InSubplan(
+                        binding="sub.in",
+                        root="compute",
+                        lookup=SubplanOutput("d", "Double", True),
+                        output=SubplanOutput("d", "Double", True),
+                        consumers=("passthrough",),
+                    ),
+                ),
+            ),
+        )
+
+        computed_argument = Expr(
+            kind="opaque",
+            result_type="Int64",
+            nullable=True,
+            fingerprint="computed-argument",
+        )
+        generic_consumer = Expr(
+            kind="opaque",
+            args=(Expr(kind="column", column="d"),),
+            result_type="Int64",
+            nullable=True,
+            fingerprint="generic-consumer",
+        )
+        changed_passthrough = replace(
+            snapshot.plan.nodes[2],
+            columns=(
+                replace(
+                    snapshot.plan.nodes[2].columns[0],
+                    expression=generic_consumer,
+                ),
+            ),
+        )
+        generic_argument = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                nodes=(
+                    *snapshot.plan.nodes[:2],
+                    changed_passthrough,
+                ),
+            ),
+        )
+
+        cases = (
+            (invalid_table, "derived passive carrier"),
+            (invalid_outer_bind, "outer_bind may not transport Double"),
+            (scalar_subplan, "subplans may not transport Double"),
+            (in_subplan, "subplans may not transport Double"),
+            (
+                with_compute_expression(
+                    replace(expression, result_type="Int64")
+                ),
+                "result must be Optional<Double>",
+            ),
+            (
+                with_compute_expression(replace(expression, nullable=False)),
+                "result must be Optional<Double>",
+            ),
+            (
+                with_compute_expression(replace(expression, fingerprint=None)),
+                "fingerprint prefix",
+            ),
+            (
+                with_compute_expression(
+                    replace(expression, args=expression.args[:2])
+                ),
+                "exactly three arguments",
+            ),
+            (
+                with_compute_expression(
+                    replace(
+                        expression,
+                        args=(
+                            expression.args[0],
+                            computed_argument,
+                            expression.args[2],
+                        ),
+                    )
+                ),
+                "arguments must be direct column references",
+            ),
+            (
+                with_compute_expression(
+                    replace(
+                        expression,
+                        args=(
+                            expression.args[0],
+                            expression.args[0],
+                            expression.args[2],
+                        ),
+                    )
+                ),
+                "arguments must reference three distinct columns",
+            ),
+            (
+                with_compute_expression(
+                    replace(
+                        expression,
+                        args=(
+                            expression.args[0],
+                            Expr(kind="column", column="a.flag"),
+                            expression.args[2],
+                        ),
+                    )
+                ),
+                "arguments must be Optional<Int64>",
+            ),
+            (
+                with_compute_expression(replace(expression, kind="opaque")),
+                "returned only by opaque_double",
+            ),
+            (generic_argument, "opaque may not consume Double"),
+        )
+        for invalid, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    validate_snapshot(invalid)
 
     def test_expression_expanded_node_budget_has_exact_boundary(self):
         accepted = minimal_snapshot()

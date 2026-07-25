@@ -1,9 +1,10 @@
 #include "error.h"
 
 #include <grpcpp/impl/codegen/status_code_enum.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h> // for NKikimr::NRpcService::GrpcStatusToYdbStatus
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NYql::NConnector {
     NApi::TError NewSuccess() {
@@ -34,12 +35,10 @@ namespace NYql::NConnector {
     NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status) {
         NApi::TError result;
 
-        // XXX consider using/moving NKikimr::NRpcService::GrpcStatusToYdbStatus from ydb/core/grpc_services/local_rpc/local_rpc.h
-        if (status.GRpcStatusCode == grpc::OK) {
+        if (status.Ok()) {
             result.set_status(Ydb::StatusIds::SUCCESS);
         } else {
-            // FIXME: more appropriate error code for network error
-            result.set_status(Ydb::StatusIds::INTERNAL_ERROR);
+            result.set_status(status.InternalError ? Ydb::StatusIds::INTERNAL_ERROR : NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(status.GRpcStatusCode)));
             result.set_message(TString{status.Msg});
         }
 

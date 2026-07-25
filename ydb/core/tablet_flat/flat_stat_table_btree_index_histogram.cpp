@@ -254,7 +254,7 @@ public:
             }
             auto* pageColl = part->GetPageCollection(0);
             auto rootLoc = GetBTreeRootLocation(meta, pageColl, pageColl);
-            LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount, 0, meta.GetRowCount(), 0,
+            LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount(), 0, meta.GetRowCount(), 0,
                                           meta.GetTotalDataSize(), beginKey, endKey);
             if (part.Slices) ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
@@ -569,7 +569,8 @@ private:
             return false;
         }
 
-        LoadedBTreeNodes.emplace_back(*page);
+        bool v2Format = parent.Part->IndexPages.GetBTree({}).HasRootV2();
+        LoadedBTreeNodes.emplace_back(*page, v2Format);
         auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = parent.Part->Scheme->GetLayout({});
 
@@ -598,12 +599,13 @@ private:
     TCellsIterable MakeCellsIterableKey(const TPart* part, TSerializedCellVec serializedKey) {
         // Note: this method is only called for root nodes and don't worth optimizing
         // so let's simply create a new fake b-tree index node with a given key
+        // writeV2=false is fine: key encoding is same in V1/V2, children are dummy
         NPage::TBtreeIndexNodeWriter writer(part->Scheme, {});
         writer.AddChild({1, 1, 1, 0, 0});
         writer.AddKey(serializedKey.GetCells());
         writer.AddChild({2, 2, 2, 0, 0});
         TSharedData serializedNode = writer.Finish();
-        LoadedBTreeNodes.emplace_back(serializedNode);
+        LoadedBTreeNodes.emplace_back(serializedNode, /*v2Format=*/false);
         return LoadedBTreeNodes.back().GetKeyCellsIterable(0, part->Scheme->GetLayout({}).ColsKeyData);
     }
 

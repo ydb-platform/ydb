@@ -42,6 +42,7 @@ namespace NPageCollection {
                 }
             }
 
+            // Must match skipType condition in TBlocks::Write
             bool pageSkipped = V2OnlyMode && (type == ui32(NTable::NPage::EPage::BTreeIndexV2) ||
                                               type == ui32(NTable::NPage::EPage::DataPage));
             /* No TEntry/TExtra entry created */
@@ -69,7 +70,6 @@ namespace NPageCollection {
         {
             Record.PushInplace(page, body);
         }
-
 
         TSharedData Finish(bool empty)
         {

@@ -13,6 +13,7 @@
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 
+#include <type_traits>
 #include <variant>
 
 namespace NKikimr {
@@ -30,7 +31,7 @@ namespace NTable {
         const NPageCollection::IPageCollection* groupPages)
     {
         if (meta.HasRootV2()) return meta.RootV2;
-        return (meta.LevelCount == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
+        return (meta.LevelCount() == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
     }
 
     using TPageRef = NPage::TPageRef;

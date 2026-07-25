@@ -151,14 +151,17 @@ public:
         Y_ENSURE(room < PageCollections.size());
 
         auto& pageCollection = *PageCollections[room]->PageCollection;
-        auto total = pageCollection.MetaPages();
         auto meta =  IndexPages.HasBTree() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
-        bool skipV1 = meta && meta->HasRootV2() && meta->HasRootV1();
-        TVector<TPageLocation> pages(Reserve(total));
+        bool skipV1 = meta && meta->HasRootV2();
+        auto total = pageCollection.MetaPages();
+        TVector<TPageLocation> pages(Reserve(skipV1 ? 8 : total));
         for (ui32 i = 0; i < total; ++i) {
-            if (pageCollection.Page(i).Type == ui32(EPage::Skip)
-                || (skipV1 && pageCollection.Page(i).Type == ui32(EPage::BTreeIndex)))
+            auto type = pageCollection.Page(i).Type;
+            if (type == ui32(EPage::Skip) ||
+                (skipV1 && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
+                               type == ui32(EPage::DataPage)))) {
                 continue;
+            }
             pages.push_back(pageCollection.GetLocation(i));
         }
 

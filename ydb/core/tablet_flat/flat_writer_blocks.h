@@ -73,8 +73,9 @@ namespace NWriter {
         {
             ui32 crc32 = 0;
 
-            // Flush on none related V2 pages
-            if (type != EPage::BTreeIndexV2 && (!V2OnlyMode || type != EPage::DataPage))
+            // Flush skip entry on non-V2 pages
+            bool skipType = V2OnlyMode && (type == EPage::DataPage || type == EPage::BTreeIndexV2);
+            if (!skipType)
                 Writer.PushSkipEntry();
 
             auto pageId = Writer.AddPage(raw, (ui32)type, &crc32);

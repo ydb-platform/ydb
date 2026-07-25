@@ -176,9 +176,9 @@ namespace {
     {
         if (part.IndexPages.HasBTree()) {
             auto meta = part.IndexPages.GetBTree({});
-            if (meta.LevelCount) {
+            if (meta.LevelCount()) {
                 auto rootLoc = part.IndexPages.GetRootLocation(&part, {});
-                BTreeIndexNode(part, rootLoc, meta.ToString(), /* level */ 0, /* totalLevels */ meta.LevelCount);
+                BTreeIndexNode(part, rootLoc, meta.ToString(), /* level */ 0, /* totalLevels */ meta.LevelCount(), meta.HasRootV2());
             } else {
                 Out
                     << " + BTreeIndex{Empty, "
@@ -298,7 +298,7 @@ namespace {
         Out << "}";
     }
 
-    void TDump::BTreeIndexNode(const TPart &part, NPage::TPageLocation loc, const TString &parent, ui32 level, ui32 totalLevels)
+    void TDump::BTreeIndexNode(const TPart &part, NPage::TPageLocation loc, const TString &parent, ui32 level, ui32 totalLevels, bool v2Format)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
@@ -312,9 +312,8 @@ namespace {
         auto dumpChild = [&](const NPage::TBtreeIndexNode &node, NPage::TRecIdx pos) {
             auto childRef = node.GetChild(pos, isLeafLevel);
             auto childLoc = NTable::ResolvePageLocation(&part, childRef, {});
-            if (childLoc.Type == NPage::EPage::BTreeIndexV2 ||
-                childLoc.Type == NPage::EPage::BTreeIndex) {
-                BTreeIndexNode(part, childLoc, node.ChildToString(pos), level + 1, totalLevels - 1);
+            if (childLoc.Type == (v2Format ? NPage::EPage::BTreeIndexV2 : NPage::EPage::BTreeIndex)) {
+                BTreeIndexNode(part, childLoc, node.ChildToString(pos), level + 1, totalLevels - 1, v2Format);
             } else {
                 Out << intend << " | " << node.ChildToString(pos) << Endl;
             }
@@ -326,7 +325,7 @@ namespace {
             return;
         }
 
-        auto node = NPage::TBtreeIndexNode(*page);
+        auto node = NPage::TBtreeIndexNode(*page, v2Format);
 
         auto label = node.Label();
 

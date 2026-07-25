@@ -153,17 +153,17 @@ namespace NTest {
             }
 
             auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
-                auto rootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
+                ui32 lv1 = proto.HasLevelCount() ? proto.GetLevelCount() : Max<ui32>();
+                ui32 lv2 = proto.HasLevelCountV2() ? proto.GetLevelCountV2() : Max<ui32>();
+                auto rootType = (lv2 == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2);
                 auto v1Root = proto.HasRootPageId()
                     ? proto.GetRootPageId()
                     : Max<TPageId>();
                 auto v2Root = proto.HasRootOffset()
                     ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
                     : NPage::TPageLocation::Max();
-                return {v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
-                        proto.GetErasedRowCount(),
-                        proto.GetLevelCount(),
-                        proto.GetIndexSize()};
+                return { v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                    proto.GetErasedRowCount(), lv1, lv2, proto.GetIndexSize() };
             };
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes, BTreeHistoricIndexes;
             for (bool history : {false, true}) {

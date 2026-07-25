@@ -1287,9 +1287,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
-        /* Walk structural pages (MetaPages), skipping V2 pages absorbed with Skip entries */
+        auto skipBTreeIndexV1Shadow = pageCollection->SkipBTreeIndexV1Shadow();
+        /* Walk structural pages (MetaPages), skipping absorbed Skip entries
+           and dead V1 BTreeIndex pages when V2 pages exist */
         for (const auto& pageId : xrange(pageCollection->MetaPages())) {
-            if (pageCollection->Page(pageId).Type == ui32(NTable::NPage::EPage::Skip))
+            auto type = pageCollection->Page(pageId).Type;
+            if (type == ui32(NTable::NPage::EPage::Skip))
+                continue;
+            if (skipBTreeIndexV1Shadow && type == ui32(NTable::NPage::EPage::BTreeIndex))
                 continue;
 
             auto location = pageCollection->GetLocation(pageId);

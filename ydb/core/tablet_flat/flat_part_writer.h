@@ -43,7 +43,6 @@ namespace NTable {
             , CutIndexKeys(conf.CutIndexKeys)
             , WriteBTreeIndex(conf.WriteBTreeIndex)
             , WriteBTreeIndexV2(conf.WriteBTreeIndexV2)
-            , WriteBTreeIndexV2KeepV1Shadow(conf.BTreeIndexV2KeepV1Shadow)
             , WriteFlatIndex(!conf.WriteBTreeIndexV2 && (conf.WriteFlatIndex || !conf.WriteBTreeIndex))
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
@@ -574,6 +573,7 @@ namespace NTable {
                         if (g.BTreeIndexV1Shadow) {
                             auto v1ShadowMeta = g.BTreeIndexV1Shadow->Finish(Pager);
                             meta.RootV1 = v1ShadowMeta.RootV1PageId();
+                            meta.LevelCountV1 = v1ShadowMeta.LevelCountV1;
                             meta.IndexSize += v1ShadowMeta.IndexSize;
                         }
                         return meta;
@@ -755,21 +755,20 @@ namespace NTable {
                 }
 
                 if (WriteBTreeIndex) {
-                    lay->SetBTreeIndexesFormatVersion(WriteBTreeIndexV2 && !WriteBTreeIndexV2KeepV1Shadow
-                        ? NPage::TBtreeIndexNode::FormatVersionV2
-                        : NPage::TBtreeIndexNode::FormatVersionV1);
+                    lay->SetBTreeIndexesFormatVersion(NPage::TBtreeIndexNode::FormatVersion);
                     for (bool history : {false, true}) {
                         for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                             auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
                             if (meta.HasRootV1()) {
                                 m->SetRootPageId(meta.RootV1PageId());
+                                m->SetLevelCount(meta.LevelCountV1);
                             }
                             if (meta.HasRootV2()) {
                                 m->SetRootOffset(meta.RootV2.Offset.AsByteOffset());
                                 m->SetRootSize(meta.RootV2.Size);
                                 m->SetRootCrc32(meta.RootV2.Crc32);
+                                m->SetLevelCountV2(meta.LevelCountV2);
                             }
-                            m->SetLevelCount(meta.LevelCount);
                             m->SetIndexSize(meta.IndexSize);
                             m->SetDataSize(meta.GetDataSize());
                             m->SetGroupDataSize(meta.GetGroupDataSize());
@@ -1172,7 +1171,6 @@ namespace NTable {
         const bool CutIndexKeys;
         const bool WriteBTreeIndex;
         const bool WriteBTreeIndexV2;
-        const bool WriteBTreeIndexV2KeepV1Shadow;
         const bool WriteFlatIndex;
         const ui32 SmallEdge;
         const ui32 LargeEdge;

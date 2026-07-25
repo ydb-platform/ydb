@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
             Cerr << "  " << part->Label << " " << index->GetEndRowId() << " rows, "
                 << IndexTools::CountMainPages(*part.Part) << " pages, "
-                << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
+                << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount() : -1) << " levels: ";
             for (ui32 sample : xrange(1u, samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
                 Y_ENSURE(index->Seek(rowId) == EReady::Data);

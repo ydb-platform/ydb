@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(bar)), 0);
         }
         if (part->IndexPages.HasBTree()) {
-            UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.GetBTree({}).LevelCount, 0); // no index keys
+            UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.GetBTree({}).LevelCount(), 0); // no index keys
         }
 
         DumpPart(*(*wrap).Eggs.Lone(), 10);
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         { /*_  Ensure that B-Tree index has enough layers */
             if (part.IndexPages.BTreeGroups.size()) {
-                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, 3);
+                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), 3);
             }
         }
 

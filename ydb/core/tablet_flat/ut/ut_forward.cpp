@@ -1623,23 +1623,23 @@ struct TV2PageEntry {
 
 static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const TPartStore& part, const NPage::TBtreeIndexMeta& meta) {
     TVector<TVector<TV2PageEntry>> layout;
-    layout.resize(meta.LevelCount + 1);
+    layout.resize(meta.LevelCount() + 1);
 
     // Root level [0] — use meta.RootV2.Size (logical page size from index meta)
     auto rootLoc = meta.RootV2;
-    EPage rootType = meta.LevelCount > 0 ? EPage::BTreeIndexV2 : EPage::DataPage;
+    EPage rootType = meta.LevelCount() > 0 ? EPage::BTreeIndexV2 : EPage::DataPage;
     auto* rootData = part.Store->GetPage(0, rootLoc.Offset);
     UNIT_ASSERT(rootData);
     layout[0].push_back({rootLoc.Offset, rootType, rootLoc.Size, rootData->size()});
 
     // Walk down the tree level by level
-    for (ui32 level = 0; level < meta.LevelCount; level++) {
+    for (ui32 level = 0; level < meta.LevelCount(); level++) {
         for (auto& entry : layout[level]) {
             auto* blob = part.Store->GetPage(0, entry.Offset);
             UNIT_ASSERT(blob);
-            NPage::TBtreeIndexNode node(*blob);
+            NPage::TBtreeIndexNode node(*blob, meta.HasRootV2());
 
-            bool isLeafLevel = (level + 1 >= meta.LevelCount);
+            bool isLeafLevel = (level + 1 >= meta.LevelCount());
             for (auto pos : xrange(node.GetChildrenCount())) {
                 auto ref = node.GetChild(pos, isLeafLevel);
                 auto childLoc = ResolvePageLocation(&part, ref, NPage::TGroupId{0});
@@ -1867,7 +1867,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         const auto eggs = CookPartV2();
         const auto part = eggs.Lone();
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.LevelCount >= 1, "Need multi-level btree");
+        UNIT_ASSERT_C(meta.LevelCount() >= 1, "Need multi-level btree");
 
         auto layout = DiscoverV2Layout(*part, meta);
         TCacheWrapV2 wrap(part, nullptr, 200, Max<ui64>());

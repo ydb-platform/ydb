@@ -26,6 +26,9 @@ namespace NPageCollection {
         virtual bool Verify(const TPageLocation&, TArrayRef<const char>) const = 0;
         virtual size_t BackingSize() const noexcept = 0;
         virtual NTable::NPage::TPageLocation GetLocation(ui32 pageId) const = 0;
+        /// Returns true when the collection carries both BTreeIndex and BTreeIndexV2 pages
+        virtual bool SkipBTreeIndexV1Shadow() const noexcept { return false; }
+        virtual void SetSkipBTreeIndexV1Shadow(bool) const noexcept { }
     };
 
 }

@@ -83,7 +83,9 @@ void TLoader::StageParseMeta()
         }
 
         auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
-            auto v2RootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
+            ui32 lv1 = proto.HasLevelCount() ? proto.GetLevelCount() : Max<ui32>();
+            ui32 lv2 = proto.HasLevelCountV2() ? proto.GetLevelCountV2() : Max<ui32>();
+            auto v2RootType = (lv2 == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2);
             auto v1Root = proto.HasRootPageId()
                 ? proto.GetRootPageId()
                 : Max<TPageId>();
@@ -91,22 +93,19 @@ void TLoader::StageParseMeta()
                 ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), v2RootType)
                 : NPage::TPageLocation::Max();
             Y_ENSURE(v1Root != Max<TPageId>() || v2Root, "TBtreeIndexMeta has neither RootPageId nor RootOffset");
-            return {v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(), proto.GetErasedRowCount(),
-                    proto.GetLevelCount(),
-                    proto.GetIndexSize()};
+
+            return { v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                proto.GetErasedRowCount(), lv1, lv2, proto.GetIndexSize() };
         };
 
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        if (layout.HasBTreeIndexesFormatVersion()) {
-            auto version = layout.GetBTreeIndexesFormatVersion();
-            if (version == NPage::TBtreeIndexNode::FormatVersionV1 ||
-                version == NPage::TBtreeIndexNode::FormatVersionV2) {
-                for (bool history : {false, true}) {
-                    for (const auto& meta :
-                         history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                        (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
-                    }
+        if (layout.HasBTreeIndexesFormatVersion() &&
+            layout.GetBTreeIndexesFormatVersion() == NPage::TBtreeIndexNode::FormatVersion) {
+            for (bool history : {false, true}) {
+                for (const auto& meta :
+                     history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
                 }
             }
         }
@@ -124,14 +123,33 @@ void TLoader::StageParseMeta()
             for (auto& meta : BTreeGroupIndexes) {
                 if (meta.HasRootV2() && meta.HasRootV1()) {
                     meta.RootV2 = NPage::TPageLocation::Max();
+                    meta.LevelCountV2 = Max<ui32>();
                 }
             }
             for (auto& meta : BTreeHistoricIndexes) {
                 if (meta.HasRootV2() && meta.HasRootV1()) {
                     meta.RootV2 = NPage::TPageLocation::Max();
+                    meta.LevelCountV2 = Max<ui32>();
                 }
             }
-            // V2-only parts: it's forbidden configuration but keep RootV2
+            // if no RootV1, keep RootV2 even it's disable
+        } else {
+            // For dual-root (V2+V1) parts, strip V1 tree and mark the index
+            // page collection so the shared cache skips dead V1 BTreeIndex pages.
+            for (auto& meta : BTreeGroupIndexes) {
+                if (meta.HasRootV2() && meta.HasRootV1()) {
+                    meta.RootV1 = Max<TPageId>();
+                    meta.LevelCountV1 = Max<ui32>();
+                    PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(true);
+                }
+            }
+            for (auto& meta : BTreeHistoricIndexes) {
+                if (meta.HasRootV2() && meta.HasRootV1()) {
+                    meta.RootV1 = Max<TPageId>();
+                    meta.LevelCountV1 = Max<ui32>();
+                    PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(true);
+                }
+            }
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */
@@ -202,10 +220,10 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         if (preloadIndex) {
             // Note: preload root nodes only because we don't want to have multiple restarts here
             for (const auto& meta : BTreeGroupIndexes) {
-                if (meta.LevelCount) getMetaPage(meta);
+                if (meta.LevelCount()) getMetaPage(meta);
             }
             for (const auto& meta : BTreeHistoricIndexes) {
-                if (meta.LevelCount) getMetaPage(meta);
+                if (meta.LevelCount()) getMetaPage(meta);
             }
         }
     } else if (FlatGroupIndexes) {

@@ -325,11 +325,11 @@ namespace NFwd {
             }
 
             auto rootLoc = GetBTreeRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
-            Levels.resize(Meta.LevelCount + 1);
+            Levels.resize(Meta.LevelCount() + 1);
             Levels[0].Queue.push_back({rootLoc.Offset, rootLoc.Size, Meta.GetDataSize(), rootLoc.Crc32});
             Levels[0].BeginOffset = rootLoc.Offset;
             Levels[0].EndOffset = rootLoc.Offset;
-            if (Meta.LevelCount) {
+            if (Meta.LevelCount()) {
                 IndexPageLocator.Add(rootLoc.Offset, GroupId, 0);
             }
         }
@@ -394,7 +394,7 @@ namespace NFwd {
             Y_ENSURE(it != level.Pages.end() && it->Offset == page.Location.Offset, "Got page that hasn't been requested for load");
 
             if (levelId + 2 < Levels.size()) { // next level is index
-                NPage::TBtreeIndexNode node(page.Data);
+                NPage::TBtreeIndexNode node(page.Data, Meta.HasRootV2());
                 for (auto pos : xrange(node.GetChildrenCount())) {
                     auto childLoc = node.GetChildLocation(pos, false, Part, GroupId);
                     IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
@@ -463,7 +463,7 @@ namespace NFwd {
                 }
 
                 if (levelId + 1 < Levels.size() && page) {
-                    NPage::TBtreeIndexNode node(page.Data);
+                    NPage::TBtreeIndexNode node(page.Data, Meta.HasRootV2());
                     auto& nextLevel = Levels[levelId + 1];
                     bool isLeaf = (levelId + 1) == Levels.size() - 1;
                     for (auto pos : xrange(node.GetChildrenCount())) {

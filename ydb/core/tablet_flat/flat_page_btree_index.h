@@ -1,5 +1,7 @@
 #pragma once
 
+#include <variant>
+
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/bitmap.h>
@@ -441,20 +443,15 @@ namespace NKikimr::NTable::NPage {
 
     public:
         // Version = 0 didn't have GroupDataSize field
-        static const ui16 FormatVersionV1 = 1;
-        static const ui16 FormatVersionV2 = 2;
+        static const ui16 FormatVersion = 1;
 
-        TBtreeIndexNode(TSharedData raw)
+        TBtreeIndexNode(TSharedData raw, bool v2Format)
             : Raw(std::move(raw))
+            , IsV2Format(v2Format)
         {
-            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::Undef);
+            const auto data = NPage::TLabelWrapper().Read(Raw, v2Format ? EPage::BTreeIndexV2 : EPage::BTreeIndex);
 
-            Y_ENSURE(data.Type == EPage::BTreeIndex || data.Type == EPage::BTreeIndexV2,
-                "Page blob has an unexpected label type");
-            Y_ENSURE(data == ECodec::Plain);
-            Y_ENSURE(data.Version == FormatVersionV1 || data.Version == FormatVersionV2,
-                "Unexpected btree index version " << data.Version);
-            StoredVersion = data.Version;
+            Y_ENSURE(data == ECodec::Plain && data.Version == FormatVersion);
 
             Header = TDeref<const THeader>::At(data.Page.data());
             size_t offset = sizeof(THeader);
@@ -490,14 +487,9 @@ namespace NKikimr::NTable::NPage {
             return Header->FixedKeySize != Header->MaxFixedKeySize;
         }
 
-        ui16 GetStoredVersion() const noexcept
-        {
-            return StoredVersion;
-        }
-
         size_t ChildStructSize() const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return Header->IsShortChildFormat ? sizeof(TShortChildV2) : sizeof(TChildV2);
             }
             return Header->IsShortChildFormat ? sizeof(TShortChild) : sizeof(TChild);
@@ -526,35 +518,33 @@ namespace NKikimr::NTable::NPage {
     private:
         const TShortChild& GetShortChildV1(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV1, "GetShortChildV1 on v2 node, use GetShortChildV2");
+            Y_DEBUG_ABORT_UNLESS(!IsV2Format, "GetShortChildV1 called on v2 node, use GetShortChildV2");
             return *TDeref<const TShortChild>::At(Children, pos * ChildStructSize());
         }
 
         const TChild& GetChildV1(TRecIdx pos) const
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV1, "GetChildV2/GetShortChildV2 should be used instead");
+            Y_DEBUG_ABORT_UNLESS(!IsV2Format, "GetChildV2/GetShortChildV2 should be used instead");
             Y_DEBUG_ABORT_UNLESS(!Header->IsShortChildFormat, "GetShortChildV1 should be used instead");
             return *TDeref<const TChild>::At(Children, pos * ChildStructSize());
         }
 
         const TShortChildV2& GetShortChildV2(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetShortChildV2 on v1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetShortChildV2 called on v1 node");
             return *TDeref<const TShortChildV2>::At(Children, pos * ChildStructSize());
         }
 
         const TChildV2& GetChildV2(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetChildV2 on v1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetChildV2 called on v1 node");
+            Y_DEBUG_ABORT_UNLESS(!Header->IsShortChildFormat, "GetShortChildV2 should be used instead");
             return *TDeref<const TChildV2>::At(Children, pos * ChildStructSize());
         }
 
-        /// For v1 nodes, the caller must resolve via Part->GetPageLocation(pageId, groupId).
         TPageId GetChildV1PageId(TRecIdx pos) const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
-                return Max<TPageId>();
-            }
+            Y_DEBUG_ABORT_UNLESS(!IsV2Format,"GetChildV1PageId called on v2 node");
             return IsShortChildFormat() ? GetShortChildV1(pos).GetPageId()
                                         : GetChildV1(pos).GetPageId();
         }
@@ -562,7 +552,7 @@ namespace NKikimr::NTable::NPage {
         /// Returns the child's inline TPageLocation (v2 only).
         TPageLocation GetChildV2Location(TRecIdx pos, EPage type) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetChildV2Location called on V1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetChildV2Location called on V1 node");
             return IsShortChildFormat() ? GetShortChildV2(pos).GetLocation(type)
                                         : GetChildV2(pos).GetLocation(type);
         }
@@ -572,7 +562,7 @@ namespace NKikimr::NTable::NPage {
         /// V2 children carry byte-offset TPageLocation inline.
         /// V1 children carry TPageId (resolve via ResolvePageLocation/Part->GetPageLocation).
         TPageRef GetChild(TRecIdx pos, bool isDataPage) const noexcept {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 auto type = isDataPage ? EPage::DataPage : EPage::BTreeIndexV2;
                 return GetChildV2Location(pos, type);
             }
@@ -581,7 +571,7 @@ namespace NKikimr::NTable::NPage {
 
         TRowId GetChildRowCount(TRecIdx pos) const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos).GetRowCount()
                                             : GetChildV2(pos).GetRowCount();
             }
@@ -599,7 +589,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         TString ChildToString(TRecIdx pos) const {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos).ToString()
                                             : GetChildV2(pos).ToString();
             }
@@ -610,7 +600,7 @@ namespace NKikimr::NTable::NPage {
         /// Version-aware data size access for short children.
         ui64 GetChildDataSize(TRecIdx pos) const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos).GetDataSize()
                                             : GetChildV2(pos).GetDataSize();
             }
@@ -621,7 +611,7 @@ namespace NKikimr::NTable::NPage {
         /// Version-aware cumulative row count for the child at pos.
         TRowId GetChildNonErasedRowCount(TRecIdx pos) const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos).GetRowCount()
                                             : GetChildV2(pos).GetNonErasedRowCount();
             }
@@ -633,7 +623,7 @@ namespace NKikimr::NTable::NPage {
         ui64 GetPrevChildDataSize(TRecIdx pos) const noexcept
         {
             if (pos == 0) return 0;
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos - 1).GetDataSize()
                                             : GetChildV2(pos - 1).GetDataSize();
             }
@@ -645,7 +635,7 @@ namespace NKikimr::NTable::NPage {
         TRowId GetPrevChildNonErasedRowCount(TRecIdx pos) const noexcept
         {
             if (pos == 0) return 0;
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos - 1).GetRowCount()
                                             : GetChildV2(pos - 1).GetNonErasedRowCount();
             }
@@ -655,7 +645,7 @@ namespace NKikimr::NTable::NPage {
 
         ui64 GetChildTotalDataSize(TRecIdx pos) const noexcept
         {
-            if (StoredVersion == FormatVersionV2) {
+            if (IsV2Format) {
                 return IsShortChildFormat() ? GetShortChildV2(pos).GetDataSize()
                                             : GetChildV2(pos).GetTotalDataSize();
             }
@@ -812,7 +802,7 @@ namespace NKikimr::NTable::NPage {
         const void* Keys = nullptr;
         const TRecordsEntry* Offsets = nullptr;
         const void* Children = nullptr;
-        ui16 StoredVersion = FormatVersionV1;
+        bool IsV2Format = false;
     };
 
     struct TBtreeIndexMeta {
@@ -822,8 +812,9 @@ namespace NKikimr::NTable::NPage {
         ui64 DataSize_ = {};
         ui64 GroupDataSize_ = {};
         TRowId ErasedRowCount_ = {};
-        ui32 LevelCount = {};
-        ui64 IndexSize = {};
+        ui32 LevelCountV1 = Max<ui32>();
+        ui32 LevelCountV2 = Max<ui32>();
+        ui64 IndexSize = 0;
 
         auto operator<=>(const TBtreeIndexMeta&) const = default;
 
@@ -842,6 +833,18 @@ namespace NKikimr::NTable::NPage {
         bool HasRootV2() const noexcept
         {
             return RootV2 && RootV2.Offset.IsByteOffset();
+        }
+
+        /// Returns true when a V2-specific level count is available (non-sentinel).
+        bool HasLevelCountV2() const noexcept
+        {
+            return LevelCountV2 != Max<ui32>();
+        }
+
+        /// Returns the active tree's level count. V2 takes precedence.
+        ui32 LevelCount() const noexcept
+        {
+            return HasRootV2() ? LevelCountV2 : LevelCountV1;
         }
 
         /// Returns the root PageId for v1 format, or Max<TPageId>() when v1 root is not available.
@@ -866,7 +869,7 @@ namespace NKikimr::NTable::NPage {
                 result << " GroupDataSize: " << GetGroupDataSize();
             }
             result << " ErasedRowCount: " << GetErasedRowCount()
-                << " LevelCount: " << LevelCount << " IndexSize: " << IndexSize;
+                << " LevelCountV1: " << LevelCountV1 << " LevelCountV2: " << LevelCountV2 << " IndexSize: " << IndexSize;
             return result;
         }
     };

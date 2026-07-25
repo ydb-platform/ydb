@@ -22,6 +22,7 @@ namespace {
                                groupDataSize,
                                erasedRowCount,
                                levelCount,
+                               /*LevelCountV2=*/Max<ui32>(),
                                indexSize};
     }
 
@@ -37,7 +38,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetDataSize(), b.GetDataSize(), msg);
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetGroupDataSize(), b.GetGroupDataSize(), msg);
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetErasedRowCount(), b.GetErasedRowCount(), msg);
-        UNIT_ASSERT_VALUES_EQUAL_C(a.LevelCount, b.LevelCount, msg);
+        UNIT_ASSERT_VALUES_EQUAL_C(a.LevelCount(), b.LevelCount(), msg);
         // IndexSize may differ slightly due to TChildV2 being larger than TChild
     }
 
@@ -172,7 +173,7 @@ namespace {
             }
         };
 
-        auto node = TBtreeIndexNode(*store.GetPage(0, meta.GetPageId()));
+        auto node = TBtreeIndexNode(*store.GetPage(0, meta.GetPageId()), /*v2Format=*/false);
 
         auto label = node.Label();
 
@@ -240,7 +241,7 @@ namespace {
 
     void CheckKeys(TPageId pageId, const TVector<TString>& keys, const TPartScheme::TGroupInfo& groupInfo, const TStore& store) {
         auto page = store.GetPage(0, pageId);
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, /*v2Format=*/false);
         CheckKeys(node, keys, groupInfo);
     }
 
@@ -307,7 +308,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(aa.GetCells());
             writer.AddChild(MakeChild(1));
 
-            auto node = TBtreeIndexNode(writer.Finish());
+            auto node = TBtreeIndexNode(writer.Finish(), /*v2Format=*/false);
             TSerializedCellVec bb(b);
             return node.GetKeyCellsIter(0, scheme.GetLayout({}).ColsKeyIdx)
                 .CompareTo(bb.GetCells(), lay.RowScheme()->Keys.Get());
@@ -366,7 +367,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto serialized = writer.Finish();
 
-        auto node = TBtreeIndexNode(serialized);
+        auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
@@ -410,7 +411,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto serialized = writer.Finish();
 
-        auto node = TBtreeIndexNode(serialized);
+        auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
@@ -454,7 +455,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto serialized = writer.Finish();
 
-        auto node = TBtreeIndexNode(serialized);
+        auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
@@ -489,7 +490,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
             auto serialized = writer.Finish();
 
-            auto node = TBtreeIndexNode(serialized);
+            auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
             Dump(serialized, writer.GroupInfo);
             CheckKeys(node, keys, writer.GroupInfo);
@@ -543,7 +544,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto serialized = writer.Finish();
 
-        auto node = TBtreeIndexNode(serialized);
+        auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
@@ -588,7 +589,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto serialized = writer.Finish();
 
-        auto node = TBtreeIndexNode(serialized);
+        auto node = TBtreeIndexNode(serialized, /*v2Format=*/false);
 
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, fullKeys, writer.GroupInfo);
@@ -1161,8 +1162,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
 
         // Same level count
         UNIT_ASSERT_VALUES_EQUAL(
-            v1Part->IndexPages.BTreeGroups[0].LevelCount,
-            v2Part->IndexPages.BTreeGroups[0].LevelCount);
+            v1Part->IndexPages.BTreeGroups[0].LevelCount(),
+            v2Part->IndexPages.BTreeGroups[0].LevelCount());
 
         // Collect page locations and verify they are consistent
         auto v1Locs = CollectPageLocations(*v1Part);
@@ -1493,8 +1494,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         const auto v2Part = v2Eggs.Lone();
 
         // Must have >1 level
-        UNIT_ASSERT_C(v2Part->IndexPages.BTreeGroups[0].LevelCount > 1,
-            "Expected multi-level btree, got LevelCount=" + ToString(v2Part->IndexPages.BTreeGroups[0].LevelCount));
+        UNIT_ASSERT_C(v2Part->IndexPages.BTreeGroups[0].LevelCount() > 1,
+            "Expected multi-level btree, got LevelCount=" + ToString(v2Part->IndexPages.BTreeGroups[0].LevelCount()));
 
         AssertV2Root(v2Part->IndexPages.BTreeGroups[0], "Multi-level V2 root");
 
@@ -1629,8 +1630,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
     }
 
     Y_UNIT_TEST(V2_NodeChildrenAreByteOffset) {
-        // After writing in v2, verify that the btree nodes use FormatVersionV2
-        // and their children carry byte-offset locations
+        // After writing in v2, verify that btree node children carry byte-offset locations.
+        // V2 format is determined by root metadata (meta.HasRootV2()), not by page label version.
         TLayoutCook lay;
         lay
             .Col(0, 0,  NScheme::NTypeIds::Uint32)
@@ -1650,14 +1651,14 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // The btree has multi-level — load the root page and check its format version
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.LevelCount >= 2, "Expected LevelCount >= 2, got " + ToString(meta.LevelCount));
+        UNIT_ASSERT_C(meta.LevelCount() >= 2, "Expected LevelCount >= 2, got " + ToString(meta.LevelCount()));
 
         TTestEnv env;
         auto rootPage = env.TryGetPage(part.Get(), meta.RootV2, TGroupId{});
         UNIT_ASSERT_C(rootPage, "Failed to load V2 root page");
 
-        TBtreeIndexNode rootNode(*rootPage);
-        UNIT_ASSERT_VALUES_EQUAL(rootNode.GetStoredVersion(), ui16(TBtreeIndexNode::FormatVersionV2));
+        // V2 format is determined by root metadata — pass v2Format=true
+        TBtreeIndexNode rootNode(*rootPage, /*v2Format=*/true);
 
         // All children in the root node must have byte-offset locations
         for (TRecIdx i : xrange(rootNode.GetChildrenCount())) {
@@ -1967,6 +1968,182 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             "V1 fallback must have the same row count as V2-only part");
         UNIT_ASSERT_VALUES_EQUAL_C(v1Rows, 700,
             "V1 fallback must produce exactly 700 rows");
+    }
+
+    Y_UNIT_TEST(DualWrite_V1LevelCountSyncedFromShadow) {
+        // V2 child structs are larger (TShortChildV2=36 vs TShortChild=20 for
+        // group pages), so V2 btree nodes hold fewer children and may need more
+        // levels than V1 for large datasets. The two trees are independent:
+        // each has its own root and its own LevelCount. Nothing is shared.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.BTreeIndexV2KeepV1Shadow = true;
+        // Force many small btree pages so V2's larger children produce more levels.
+        // Group 1 uses short format (20 vs 36 bytes per child, 80% larger for V2).
+        conf.Group(0).BTreeIndexNodeTargetSize = 1024;
+        conf.Group(1).BTreeIndexNodeTargetSize = 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 2;
+        conf.Group(1).BTreeIndexNodeKeysMin = 2;
+        conf.Group(0).PageRows = 4;
+        conf.Group(1).PageRows = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(5000)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, TString(64, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        auto part = eggs.Lone();
+
+        const auto& metaOrig = part->IndexPages.BTreeGroups[1];
+        UNIT_ASSERT_C(metaOrig.HasRootV1() && metaOrig.HasRootV2(),
+            "Group 1 dual-write part must have both roots");
+
+        // ---------- Trees are independent: each has its own LevelCount ----------
+
+        UNIT_ASSERT_C(metaOrig.HasLevelCountV2(),
+            "Dual-write meta must have a valid (non-sentinel) LevelCountV2");
+        UNIT_ASSERT_C(metaOrig.LevelCountV1 != metaOrig.LevelCountV2,
+            "V1 and V2 level counts must diverge for large enough dataset"
+            << " (V1=" << metaOrig.LevelCountV1 << " V2=" << metaOrig.LevelCountV2 << ")");
+
+        // Helper: count actual V1 btree levels by walking from root downward.
+        const auto* store = part->Store.Get();
+        auto countV1Levels = [&](TPageId rootPageId, TGroupId) -> ui32 {
+            auto* page = store->GetPage(0, rootPageId);
+            UNIT_ASSERT_C(page, "V1 root page must be loadable");
+            TBtreeIndexNode node(*page, /*v2Format=*/false);
+            ui32 levels = 1;
+            auto child = node.GetChild(0, /*isDataPage=*/false);
+            while (std::holds_alternative<TPageId>(child)) {
+                ui32 childPageId = std::get<TPageId>(child);
+                auto* childPage = store->GetPage(0, childPageId);
+                UNIT_ASSERT_C(childPage, "V1 child page " << childPageId
+                    << " at level " << levels << " must be loadable");
+                auto childLabel = ReadUnaligned<NPage::TLabel>(childPage->data());
+                if (childLabel.Type != EPage::BTreeIndex) {
+                    break; // reached data pages
+                }
+                TBtreeIndexNode childNode(*childPage, /*v2Format=*/false);
+                child = childNode.GetChild(0, /*isDataPage=*/false);
+                levels++;
+            }
+            return levels;
+        };
+        ui32 v1ActualLevels = countV1Levels(metaOrig.RootV1PageId(), TGroupId{1});
+
+        // Helper: count actual V2 btree levels by walking from V2 root.
+        auto countV2Levels = [&](const NPage::TPageLocation& rootLoc, TGroupId) -> ui32 {
+            auto* page = store->GetPage(0, rootLoc.Offset);
+            UNIT_ASSERT_C(page, "V2 root page must be loadable");
+            auto label = ReadUnaligned<NPage::TLabel>(page->data());
+            UNIT_ASSERT_C(label.Type == EPage::BTreeIndexV2,
+                "V2 root must be BTreeIndexV2, got " << int(label.Type));
+            TBtreeIndexNode node(*page, /*v2Format=*/true);
+            ui32 levels = 1;
+            auto child = node.GetChild(0, /*isDataPage=*/false);
+            while (auto* loc = std::get_if<TPageLocation>(&child)) {
+                auto* childPage = store->GetPage(0, loc->Offset);
+                UNIT_ASSERT_C(childPage, "V2 child page at level " << levels
+                    << " must be loadable");
+                auto childLabel = ReadUnaligned<NPage::TLabel>(childPage->data());
+                if (childLabel.Type != EPage::BTreeIndexV2) {
+                    break; // reached data pages
+                }
+                TBtreeIndexNode childNode(*childPage, /*v2Format=*/true);
+                child = childNode.GetChild(0, /*isDataPage=*/false);
+                levels++;
+            }
+            return levels;
+        };
+        ui32 v2ActualLevels = countV2Levels(metaOrig.RootV2, TGroupId{1});
+
+        // Each tree's LevelCount matches its own actual structure.
+        UNIT_ASSERT_VALUES_EQUAL_C(metaOrig.LevelCountV1, v1ActualLevels,
+            "metadata LevelCountV1 must match V1 shadow (actual=" << v1ActualLevels << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(metaOrig.LevelCountV2, v2ActualLevels,
+            "metadata LevelCountV2 must match V2 tree (actual=" << v2ActualLevels << ")");
+
+        // ---------- Each tree is independently workable ----------
+
+        size_t v1Pages = 0, v2Pages = 0;
+
+        // 1) V1-only fallback: strip V2 root and LevelCountV2.
+        {
+            auto btreeGroups = part->IndexPages.BTreeGroups;
+            btreeGroups[1].RootV2 = NPage::TPageLocation::Max();
+            btreeGroups[1].LevelCountV2 = Max<ui32>();
+
+            UNIT_ASSERT_C(btreeGroups[1].HasRootV1() && !btreeGroups[1].HasRootV2(),
+                "After V2 strip: must have V1 root only");
+            UNIT_ASSERT_C(!btreeGroups[1].HasLevelCountV2(),
+                "After V2 strip: LevelCountV2 must be sentinel'd");
+            UNIT_ASSERT_VALUES_EQUAL_C(btreeGroups[1].LevelCount(), v1ActualLevels,
+                "V1 LevelCount must be preserved after V2 strip");
+            // LevelCountV1 already holds V1's value (set in proto field 2 by the writer)
+
+            TPart::TIndexPages strippedPages{
+                part->IndexPages.FlatGroups,
+                part->IndexPages.FlatHistoric,
+                std::move(btreeGroups),
+                part->IndexPages.BTreeHistoric,
+            };
+
+            auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+                part->Store, part->Label,
+                TPart::TParams{
+                    part->Epoch, part->Scheme, std::move(strippedPages),
+                    part->Blobs, part->ByKeyPrefixes, part->Large, part->Small,
+                    part->IndexesRawSize, part->MinRowVersion, part->MaxRowVersion,
+                    part->GarbageStats, part->TxIdStats,
+                },
+                part->Stat, part->Slices));
+
+            v1Pages = IndexTools::CountMainPages(*strippedPart);
+            UNIT_ASSERT_C(v1Pages > 0, "V1-only fallback must find data pages");
+        }
+
+        // 2) V2-only path: strip V1 tree — sentinel its fields.
+        {
+            auto btreeGroups = part->IndexPages.BTreeGroups;
+            btreeGroups[1].RootV1 = Max<TPageId>();
+            btreeGroups[1].LevelCountV1 = Max<ui32>();
+
+            UNIT_ASSERT_C(!btreeGroups[1].HasRootV1() && btreeGroups[1].HasRootV2(),
+                "After V1 strip: must have V2 root only");
+            UNIT_ASSERT_C(btreeGroups[1].HasLevelCountV2(),
+                "V2 LevelCount must be valid (non-sentinel) after V1 strip");
+            UNIT_ASSERT_VALUES_EQUAL_C(btreeGroups[1].LevelCount(), v2ActualLevels,
+                "ActiveLevelCount must be V2 value after V1 strip");
+
+            TPart::TIndexPages strippedPages{
+                part->IndexPages.FlatGroups,
+                part->IndexPages.FlatHistoric,
+                std::move(btreeGroups),
+                part->IndexPages.BTreeHistoric,
+            };
+
+            auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+                part->Store, part->Label,
+                TPart::TParams{
+                    part->Epoch, part->Scheme, std::move(strippedPages),
+                    part->Blobs, part->ByKeyPrefixes, part->Large, part->Small,
+                    part->IndexesRawSize, part->MinRowVersion, part->MaxRowVersion,
+                    part->GarbageStats, part->TxIdStats,
+                },
+                part->Stat, part->Slices));
+
+            v2Pages = IndexTools::CountMainPages(*strippedPart);
+            UNIT_ASSERT_C(v2Pages > 0, "V2-only path must find data pages");
+        }
+
+        // Both trees index the same data pages — different structures, same result.
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Pages, v2Pages,
+            "V1 and V2 trees must reach the same data pages");
     }
 }
 
@@ -2395,7 +2572,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
         UNIT_ASSERT(meta.HasRootV2());
-        UNIT_ASSERT_C(meta.LevelCount > 0, "Expected multi-level b-tree");
+        UNIT_ASSERT_C(meta.LevelCount() > 0, "Expected multi-level b-tree");
 
         TBTreePartWalker walker;
         walker.Start(meta);
@@ -2424,7 +2601,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
         UNIT_ASSERT(meta.HasRootV2());
-        UNIT_ASSERT_VALUES_EQUAL_C(meta.LevelCount, 0u,
+        UNIT_ASSERT_VALUES_EQUAL_C(meta.LevelCount(), 0u,
             "Expected LevelCount == 0 for a single data page root");
 
         TBTreePartWalker walker;
@@ -2462,9 +2639,9 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
         const auto& meta = part->IndexPages.BTreeGroups[1];
         UNIT_ASSERT(meta.HasRootV2());
-        UNIT_ASSERT_C(meta.LevelCount > 0,
+        UNIT_ASSERT_C(meta.LevelCount() > 0,
             "Non-main group must have multi-level B-tree, got LevelCount="
-            + ToString(meta.LevelCount));
+            + ToString(meta.LevelCount()));
 
         TBTreePartWalker walker;
         walker.Start(meta);
@@ -2495,7 +2672,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         const auto part = eggs.Lone();
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT(meta.LevelCount > 0);
+        UNIT_ASSERT(meta.LevelCount() > 0);
 
         struct TMockPages : public IPages {
             const TPartStore* Part;
@@ -2646,7 +2823,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             const auto& meta = part->IndexPages.BTreeGroups[i];
             UNIT_ASSERT_C(meta.HasRootV2(),
                 "Group " << i << " must have V2 root");
-            UNIT_ASSERT_C(meta.LevelCount > 0,
+            UNIT_ASSERT_C(meta.LevelCount() > 0,
                 "Group " << i << " must have multi-level B-tree");
             walkers[i] = MakeHolder<TBTreePartWalker>();
             walkers[i]->Start(meta);
@@ -2787,7 +2964,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             const auto& meta = part->IndexPages.BTreeGroups[i];
             UNIT_ASSERT_C(meta.HasRootV2(),
                 "Group " << i << " must have V2 root");
-            UNIT_ASSERT_C(meta.LevelCount > 0,
+            UNIT_ASSERT_C(meta.LevelCount() > 0,
                 "Group " << i << " must have multi-level B-tree");
             walkers[i] = MakeHolder<TBTreePartWalker>();
             walkers[i]->Start(meta);

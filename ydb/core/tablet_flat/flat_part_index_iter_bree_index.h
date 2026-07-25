@@ -115,7 +115,7 @@ public:
         , GroupId(groupId)
         , GroupInfo(Part->Scheme->GetLayout(GroupId))
         , Meta(Part->IndexPages.GetBTree(GroupId))
-        , State(Reserve(Meta.LevelCount + 1))
+        , State(Reserve(Meta.LevelCount() + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
         State.emplace_back(Part->IndexPages.GetRootLocation(Part, GroupId), 0, GetEndRowId(), EmptyKey, EmptyKey);
@@ -180,7 +180,7 @@ public:
     EReady Next() override {
         Y_ENSURE(!IsExhausted());
 
-        if (Meta.LevelCount == 0) {
+        if (Meta.LevelCount() == 0) {
             return Exhaust();
         }
 
@@ -194,7 +194,7 @@ public:
             PushNextState(*State.back().Pos + 1);
         }
 
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount())) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -211,7 +211,7 @@ public:
     EReady Prev() override {
         Y_ENSURE(!IsExhausted());
 
-        if (Meta.LevelCount == 0) {
+        if (Meta.LevelCount() == 0) {
             return Exhaust();
         }
 
@@ -225,7 +225,7 @@ public:
             PushNextState(*State.back().Pos - 1);
         }
 
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount())) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -298,7 +298,7 @@ private:
             State[0].Pos = { };
         }
 
-        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount())) {
             auto &state = State[level];
             Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(state));
             if (!TryLoad(state)) {
@@ -328,7 +328,7 @@ private:
     bool IsLeaf() const noexcept {
         // Note: it is possible to have 0 levels in B-Tree
         // so we may have exhausted state with leaf (data) node
-        return State.size() == Meta.LevelCount + 1 && !IsExhausted();
+        return State.size() == Meta.LevelCount() + 1 && !IsExhausted();
     }
 
     EReady Exhaust() {
@@ -344,7 +344,7 @@ private:
         Y_ENSURE(pos < current.Node->GetChildrenCount(), "Should point to some child");
         current.Pos.emplace(pos);
 
-        bool isLeafLevel = State.size() == Meta.LevelCount;
+        bool isLeafLevel = State.size() == Meta.LevelCount();
         auto location = current.Node->GetChildLocation(pos, isLeafLevel, Part, GroupId);
         TRowId beginRowId = pos ? current.Node->GetChildRowCount(pos - 1) : current.BeginRowId;
         TRowId endRowId = current.Node->GetChildRowCount(pos);
@@ -361,7 +361,7 @@ private:
 
         auto page = Env->TryGetPage(Part, state.Location, {});
         if (page) {
-            state.Node.emplace(*page);
+            state.Node.emplace(*page, Meta.HasRootV2());
             return true;
         }
         return false;

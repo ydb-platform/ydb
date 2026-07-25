@@ -57,7 +57,7 @@ public:
      * Returns the size of page data stored in the currently active buffer
      */
     size_t DataSize() const noexcept {
-        auto flags = Flags.load(std::memory_order_relaxed);
+        auto flags = Flags.load(std::memory_order_acquire);
         return Data[flags & DataIndexMask].size();
     }
 

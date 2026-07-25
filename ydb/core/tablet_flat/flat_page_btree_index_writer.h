@@ -119,8 +119,7 @@ namespace NKikimr::NTable::NPage {
 
             WriteUnaligned<TLabel>(
                 Advance(sizeof(TLabel)),
-                TLabel::Encode(PageType(),
-                               WriteV2 ? TBtreeIndexNode::FormatVersionV2 : TBtreeIndexNode::FormatVersionV1, pageSize));
+                TLabel::Encode(PageType(), TBtreeIndexNode::FormatVersion, pageSize));
 
             auto &header = Place<THeader>();
             header.KeysCount = Keys.size();
@@ -529,12 +528,17 @@ namespace NKikimr::NTable::NPage {
             auto page = Writer.Finish();
             IndexSize += page.size();
             auto location = pager.Write(std::move(page), Writer.PageType(), 0);
+            TPageId pageId = pager.GetLastWrittenPageId(0);
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
                 Y_ENSURE(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
             }
-            std::visit([&](auto& child) { SetChildPageRef(child, location, pager); }, lastChild);
+            if (auto* v1 = std::get_if<TChild>(&lastChild)) {
+                FillChildLocation(*v1, pageId);
+            } else {
+                FillChildLocation(std::get<TChildV2>(lastChild), location);
+            }
             Levels[levelIndex + 1].PushChild(std::move(lastChild));
             if (!last) {
                 Levels[levelIndex + 1].PushKey(Levels[levelIndex].PopKey());
@@ -557,11 +561,11 @@ namespace NKikimr::NTable::NPage {
             std::visit([this](auto&& c) { Writer.AddChild(std::move(c)); }, std::move(child));
         }
 
-        static void SetChildPageRef(TChild& child, const TPageLocation&, IPageWriter& pager) {
-            child.PageId_ = pager.GetLastWrittenPageId(0);
+        static void FillChildLocation(TChild& child, TPageId pageId) {
+            child.PageId_ = pageId;
         }
 
-        static void SetChildPageRef(TChildV2& child, const TPageLocation& location, IPageWriter&) {
+        static void FillChildLocation(TChildV2& child, const TPageLocation& location) {
             child.Offset_ = location.Offset;
             child.Size_ = location.Size;
             child.Crc32_ = location.Crc32;
@@ -572,8 +576,9 @@ namespace NKikimr::NTable::NPage {
                     c.GetRowCount(), c.GetDataSize(),
                     c.GetGroupDataSize(),
                     c.GetErasedRowCount(),
-                    levelCount,
-                    indexSize};
+                    /*LevelCountV1=*/levelCount,
+                    /*LevelCountV2=*/Max<ui32>(),
+                    /*IndexSize=*/indexSize};
         }
 
         static TBtreeIndexMeta MakeMeta(const TChildV2& c, ui32 levelCount, ui64 indexSize) {
@@ -581,8 +586,9 @@ namespace NKikimr::NTable::NPage {
             return {/*V1Root=*/Max<TPageId>(), /*V2Root=*/c.GetLocation(type),
                     c.GetRowCount(), c.GetDataSize(), c.GetGroupDataSize(),
                     c.GetErasedRowCount(),
-                    levelCount,
-                    indexSize};
+                    /*LevelCountV1=*/Max<ui32>(),
+                    /*LevelCountV2=*/levelCount,
+                    /*IndexSize=*/indexSize};
         }
 
         size_t CalcPageSize(const TLevel& level) const {

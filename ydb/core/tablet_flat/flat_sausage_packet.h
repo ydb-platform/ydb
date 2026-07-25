@@ -83,6 +83,16 @@ namespace NPageCollection {
             return Meta.BackingSize();
         }
 
+        bool SkipBTreeIndexV1Shadow() const noexcept override
+        {
+            return SkipBTreeIndexV1Shadow_;
+        }
+
+        void SetSkipBTreeIndexV1Shadow(bool v) const noexcept override
+        {
+            SkipBTreeIndexV1Shadow_ = v;
+        }
+
         template<typename TContainer>
         void SaveAllBlobIdsTo(TContainer &vec) const
         {
@@ -97,12 +107,15 @@ namespace NPageCollection {
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
         const ui32 SkippedInMeta;
+        mutable bool SkipBTreeIndexV1Shadow_ = false;
     };
 
     /// Page-index TPageOffset to satisfy forward cache
     class TOuterPageCollection : public TPageCollection {
     public:
-        using TPageCollection::TPageCollection;
+        TOuterPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
+            : TPageCollection(std::move(largeGlobId), std::move(raw), 0)
+        {}
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
         {

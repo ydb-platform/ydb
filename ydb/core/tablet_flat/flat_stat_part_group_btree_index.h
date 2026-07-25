@@ -63,7 +63,7 @@ public:
             Part->GetPageCollection(GroupId.Index));  // data pages in the group's room
         Nodes.emplace_back(TPageRef(rootLoc), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
-        for (ui32 height = 0; height < Meta.LevelCount; height++) {
+        for (ui32 height = 0; height < Meta.LevelCount(); height++) {
             bool hasChanges = false;
             size_t splitPointIndex = 0;
 
@@ -85,9 +85,9 @@ public:
                     ready = false;
                     continue; // continue requesting other nodes
                 }
-                TBtreeIndexNode node(*page);
+                TBtreeIndexNode node(*page, Meta.HasRootV2());
 
-                bool isLeafLevel = (height + 1 == Meta.LevelCount);
+                bool isLeafLevel = (height + 1 == Meta.LevelCount());
 
                 for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
                     TPageRef ref = node.GetChild(pos, isLeafLevel);

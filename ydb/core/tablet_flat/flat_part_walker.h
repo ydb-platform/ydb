@@ -15,7 +15,7 @@ public:
     {
         Y_ENSURE(meta.HasRootV2(), "TBTreePartWalker requires V2 root");
 
-        LevelCount_ = meta.LevelCount;
+        LevelCount_ = meta.LevelCount();
         Levels.clear();
         Levels.resize(LevelCount_ + 1);
         Levels[0].push_back(meta.RootV2);
@@ -46,7 +46,7 @@ public:
                 const TSharedData* data = pages->TryGetPage(part, loc, pageGroupId);
                 if (data) {
                     if (!isDataLevel) {
-                        auto node = NPage::TBtreeIndexNode(*data);
+                        auto node = NPage::TBtreeIndexNode(*data, /*v2Format=*/true);
                         bool childrenAreData = (LevelCount_ > 0 && level + 1 >= LevelCount_);
                         if (!(skipDataPages && childrenAreData)) {
                             for (NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {

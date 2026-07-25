@@ -34,6 +34,7 @@ message TBTreeIndexMeta {
     optional uint64 RootOffset = 8; // Direct root page offset (v2 format, byte offset)
     optional uint64 RootSize = 9;   // Direct root page size (v2 format)
     optional uint32 RootCrc32 = 10; // Direct root page crc32 (v2 format)
+    optional uint32 LevelCountV2 = 11; // V2 b-tree level count (V2 tree may have more levels than V1)
 }
 
 message TBloomFilterMeta {

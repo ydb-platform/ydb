@@ -37,16 +37,16 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
     auto location = RootLocation(part, meta, groupId);
     ui64 prevDataSize = 0;
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
         auto page = env->TryGetPage(part, location, {});
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(rowId);
 
-        bool isLeafLevel = (height + 1 == meta.LevelCount);
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
         location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
             prevDataSize = node.GetPrevChildDataSize(pos);
@@ -84,16 +84,16 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     };
     TCells key1{ key1Cells, 3 };
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
         auto page = env->TryGetPage(part, location, {});
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
-        bool isLeafLevel = (height + 1 == meta.LevelCount);
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
         location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
             prevDataSize = node.GetPrevChildDataSize(pos);

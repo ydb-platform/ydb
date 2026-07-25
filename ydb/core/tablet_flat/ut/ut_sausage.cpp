@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
     {
         /* Test TWriter in v2 mode:
            - DataPage pages are not individually recorded (V2Mode=true hides them)
-           - BTreeIndexV2 pages are always hidden
+           - BTreeIndexV2 pages are hidden (v2-only mode)
            - Their bytes go to the blob buffer
            - PushSkipEntry creates the skip entry
            - Structural pages have correct TEntry indices */
@@ -820,7 +820,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         auto r2 = writer.AddPage(dataPage2, (ui32)NTable::NPage::EPage::DataPage, &crc2);
         UNIT_ASSERT_VALUES_EQUAL(r2, Max<ui32>());
 
-        // V2 BTreeIndex page (50 bytes) — always hidden
+        // V2 BTreeIndex page (50 bytes) — hidden in v2-only mode
         TString btreePage(50, 'B');
         auto r3 = writer.AddPage(btreePage, (ui32)NTable::NPage::EPage::BTreeIndexV2);
         UNIT_ASSERT_VALUES_EQUAL(r3, Max<ui32>());
@@ -868,9 +868,9 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
     {
         /* Verify that a v2 TMeta blob contains only structural page entries:
            - DataPage pages absorbed into EPage::Skip entries (hidden by V2Mode)
-           - BTreeIndexV2 pages always absorbed
+           - BTreeIndexV2 pages absorbed (v2-only mode)
            - Structural pages (Frames, Schem2) have normal entries
-           - No TEntry has type DataPage or BTreeIndex or BTreeIndexV2
+           - No TEntry has type DataPage or BTreeIndexV2
            - Tests realistic compaction order: data/btree → structural */
 
         TCookieAllocator cookieAllocator(10, (ui64(20) << 32) | 30, { 0, 999 }, {{ 1, 777 }});
@@ -880,7 +880,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         // Data pages (100 + 200 bytes) — hidden by V2Mode
         writer.AddPage(TString(100, 'D'), (ui32)NTable::NPage::EPage::DataPage);
         writer.AddPage(TString(200, 'D'), (ui32)NTable::NPage::EPage::DataPage);
-        // V2 BTreeIndex pages (50 + 60 bytes) — always hidden
+        // V2 BTreeIndex pages (50 + 60 bytes) — hidden in v2-only mode
         writer.AddPage(TString(50, 'B'), (ui32)NTable::NPage::EPage::BTreeIndexV2);
         writer.AddPage(TString(60, 'B'), (ui32)NTable::NPage::EPage::BTreeIndexV2);
 
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         // TotalPages: 3 (Skip + Frames + Schem2, not 6)
         UNIT_ASSERT_VALUES_EQUAL(meta.TotalPages(), 3);
 
-        // Verify every page type — no DataPage or BTreeIndex entries
+        // Verify every page type — no DataPage or BTreeIndexV2 entries
         UNIT_ASSERT_VALUES_EQUAL(meta.GetPageType(0), (ui32)NTable::NPage::EPage::Skip);
         UNIT_ASSERT_VALUES_EQUAL(meta.GetPageType(1), (ui32)NTable::NPage::EPage::Frames);
         UNIT_ASSERT_VALUES_EQUAL(meta.GetPageType(2), (ui32)NTable::NPage::EPage::Schem2);

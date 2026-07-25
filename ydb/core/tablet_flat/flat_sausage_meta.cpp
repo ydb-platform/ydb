@@ -115,18 +115,22 @@ TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
 
 ui32 TMeta::SkippedPages() const noexcept
 {
-    if (!Extra || !Header->Pages)
-        return 0;
+    if (SkippedPages_ != Max<ui32>()) {
+        return SkippedPages_;
+    }
 
-    ui32 skipped = 0;
+    SkippedPages_ = 0;
     /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip); the off-by-one
        is deliberate — each skip entry itself is counted in MetaPages(), so
        Total = MetaPages + SkippedPages gives the correct full page count. */
-    for (ui32 i = 0; i < Header->Pages; i++) {
-        if (Extra[i].Type == ui32(NTable::NPage::EPage::Skip))
-            skipped += Extra[i].Crc32;
+    if (Extra && Header->Pages) {
+        for (ui32 i = 0; i < Header->Pages; i++) {
+            if (Extra[i].Type == ui32(NTable::NPage::EPage::Skip)) {
+                SkippedPages_ += Extra[i].Crc32;
+            }
+        }
     }
-    return skipped;
+    return SkippedPages_;
 }
 
 ui32 Checksum(TArrayRef<const char> body) noexcept

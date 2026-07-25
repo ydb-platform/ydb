@@ -25,6 +25,7 @@
 #include <yql/essentials/utils/parse_double.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <functional>
 #include <initializer_list>
@@ -3467,6 +3468,433 @@ struct TNestedInSubplanExportFixture {
     TExpression OuterBindingValue;
     TIntrusivePtr<TOpFilter> MainConsumer;
 };
+
+struct TInt64RangeAnnotations {
+    const TTypeAnnotationNode* Internal = nullptr;
+    const TTypeAnnotationNode* Finalized = nullptr;
+    const TTypeAnnotationNode* UserBoundary = nullptr;
+    const TTypeAnnotationNode* UserRange = nullptr;
+};
+
+TInt64RangeAnnotations Int64RangeAnnotations(
+    TExportTestContext& ctx)
+{
+    const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* internalBoundary =
+        ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                int32,
+                optionalInt64,
+                int32,
+            });
+    const auto* internalRange =
+        ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                internalBoundary,
+                internalBoundary,
+            });
+    const auto* userBoundary =
+        ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                optionalInt64,
+                int32,
+            });
+    const auto* userRange =
+        ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                userBoundary,
+                userBoundary,
+            });
+    return {
+        .Internal = ctx.ExprCtx.MakeType<TListExprType>(internalRange),
+        .Finalized = ctx.ExprCtx.MakeType<TListExprType>(userRange),
+        .UserBoundary = userBoundary,
+        .UserRange = userRange,
+    };
+}
+
+void StripGeneratedRangeAnnotations(
+    const TExprNode::TPtr& node)
+{
+    if (!node || node->IsAtom()) {
+        return;
+    }
+    // These are reused typed SQL literals in the direct/static shapes.  The
+    // extractor-generated wrappers and descriptors around them are created
+    // after its annotation pipeline and are intentionally stripped here to
+    // reproduce the real pre-physical snapshot boundary.
+    if (node->IsCallable({"Int32", "Uint64"})) {
+        return;
+    }
+
+    node->SetTypeAnn(nullptr);
+    if (node->IsCallable("Just") &&
+        node->ChildrenSize() == 1 &&
+        node->Child(0)->IsList())
+    {
+        return;
+    }
+    for (const auto& child : node->Children()) {
+        StripGeneratedRangeAnnotations(child);
+    }
+}
+
+TExprNode::TPtr ExactPointRangeCompute(
+    TExportTestContext& ctx,
+    TStringBuf value,
+    TStringBuf operation = "===",
+    TStringBuf keyDescriptor = "Int64",
+    TStringBuf outerCap = "10000",
+    bool mismatchedDescriptorAnnotation = false,
+    bool keepGeneratedAnnotations = false)
+{
+    const auto pos = TPositionHandle();
+    const auto rangeTypes = Int64RangeAnnotations(ctx);
+    const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto descriptorSlot = keyDescriptor == "Int64"
+        ? NUdf::EDataSlot::Int64
+        : NUdf::EDataSlot::Int32;
+    const auto* descriptorType = ScalarType(ctx, descriptorSlot);
+    auto descriptor =
+        DataTypeDescriptor(ctx, keyDescriptor, descriptorType);
+    if (mismatchedDescriptorAnnotation) {
+        descriptor->SetTypeAnn(ctx.ExprCtx.MakeType<TTypeExprType>(
+            ScalarType(ctx, NUdf::EDataSlot::Int32)));
+    }
+    auto point = TypedCallable(
+        ctx,
+        "RangeFor",
+        {
+            ctx.ExprCtx.NewAtom(pos, operation),
+            TypedLiteral(ctx, "Int32", value, int32),
+            std::move(descriptor),
+        },
+        rangeTypes.Internal);
+    auto rangeUnion = TypedCallable(
+        ctx,
+        "RangeUnion",
+        {std::move(point)},
+        rangeTypes.Internal);
+    auto multiply = TypedCallable(
+        ctx,
+        "RangeMultiply",
+        {
+            TypedLiteral(
+                ctx,
+                "Uint64",
+                outerCap,
+                ScalarType(ctx, NUdf::EDataSlot::Uint64)),
+            std::move(rangeUnion),
+        },
+        rangeTypes.Internal);
+    auto result = TypedCallable(
+        ctx,
+        "RangeFinalize",
+        {std::move(multiply)},
+        rangeTypes.Finalized);
+    if (!keepGeneratedAnnotations) {
+        StripGeneratedRangeAnnotations(result);
+    }
+    return result;
+}
+
+enum class EFinitePointRangeMutation {
+    None,
+    DuplicateStaticPoint,
+    WrongOuterCap,
+    WrongNormalizationIndex,
+    ForeignNormalizationArgument,
+    WrongPointOperation,
+    ForeignPointArgument,
+    WrongPointCap,
+    WrongOverflowProbe,
+    UnsharedCollect,
+    UnsharedFullBoundary,
+    WrongEmptyDescriptor,
+};
+
+TExprNode::TPtr ExactFinitePointRangeCompute(
+    TExportTestContext& ctx,
+    EFinitePointRangeMutation mutation = EFinitePointRangeMutation::None)
+{
+    const auto pos = TPositionHandle();
+    const auto rangeTypes = Int64RangeAnnotations(ctx);
+    const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* int64 = ScalarType(ctx, NUdf::EDataSlot::Int64);
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* uint64 = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+    const auto* boolean = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    constexpr std::array<TStringBuf, 10> Values = {
+        "2", "3", "5", "7", "11", "13", "17", "19", "23", "29",
+    };
+
+    TExprNode::TListType literalNodes;
+    TTypeAnnotationNode::TListType tupleItems;
+    literalNodes.reserve(Values.size());
+    tupleItems.reserve(Values.size());
+    for (size_t index = 0; index < Values.size(); ++index) {
+        const TStringBuf value =
+            mutation == EFinitePointRangeMutation::DuplicateStaticPoint &&
+                index == Values.size() - 1
+            ? Values.front()
+            : Values[index];
+        literalNodes.push_back(TypedLiteral(ctx, "Int32", value, int32));
+        tupleItems.push_back(int32);
+    }
+    const auto* tupleType =
+        ctx.ExprCtx.MakeType<TTupleExprType>(std::move(tupleItems));
+    auto tuple = ctx.ExprCtx.NewList(pos, std::move(literalNodes));
+    tuple->SetTypeAnn(tupleType);
+    const auto* optionalTuple =
+        ctx.ExprCtx.MakeType<TOptionalExprType>(tupleType);
+    auto just = TypedCallable(ctx, "Just", {tuple}, optionalTuple);
+
+    const auto* listType = ctx.ExprCtx.MakeType<TListExprType>(int32);
+    const auto* optionalList =
+        ctx.ExprCtx.MakeType<TOptionalExprType>(listType);
+    auto tupleArgument = ctx.ExprCtx.NewArgument(pos, "input");
+    tupleArgument->SetTypeAnn(tupleType);
+    auto foreignTupleArgument =
+        ctx.ExprCtx.NewArgument(pos, "foreign_input");
+    foreignTupleArgument->SetTypeAnn(tupleType);
+    TExprNode::TListType normalizedItems;
+    for (size_t index = 0; index < Values.size(); ++index) {
+        const TString tupleIndex =
+            mutation == EFinitePointRangeMutation::WrongNormalizationIndex &&
+                index == Values.size() - 1
+            ? "0"
+            : ToString(index);
+        normalizedItems.push_back(TypedCallable(
+            ctx,
+            "Nth",
+            {
+                mutation ==
+                        EFinitePointRangeMutation::ForeignNormalizationArgument &&
+                    index == 0
+                    ? foreignTupleArgument
+                    : tupleArgument,
+                ctx.ExprCtx.NewAtom(pos, tupleIndex),
+            },
+            int32));
+    }
+    auto normalized = TypedCallable(
+        ctx,
+        "AsList",
+        std::move(normalizedItems),
+        listType);
+    auto normalizeLambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {tupleArgument}),
+        std::move(normalized));
+    auto mappedCollection = TypedCallable(
+        ctx,
+        "Map",
+        {std::move(just), std::move(normalizeLambda)},
+        optionalList);
+
+    auto collectionArgument =
+        ctx.ExprCtx.NewArgument(pos, "collection");
+    collectionArgument->SetTypeAnn(listType);
+    auto itemArgument = ctx.ExprCtx.NewArgument(pos, "item");
+    itemArgument->SetTypeAnn(int32);
+    auto foreignItemArgument =
+        ctx.ExprCtx.NewArgument(pos, "foreign_item");
+    foreignItemArgument->SetTypeAnn(int32);
+    auto point = TypedCallable(
+        ctx,
+        "RangeFor",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EFinitePointRangeMutation::WrongPointOperation
+                    ? "=="
+                    : "==="),
+            mutation == EFinitePointRangeMutation::ForeignPointArgument
+                ? foreignItemArgument
+                : itemArgument,
+            DataTypeDescriptor(ctx, "Int64", int64),
+        },
+        rangeTypes.Internal);
+    auto pointMultiply = TypedCallable(
+        ctx,
+        "RangeMultiply",
+        {
+            TypedLiteral(
+                ctx,
+                "Uint64",
+                mutation == EFinitePointRangeMutation::WrongPointCap
+                    ? "9999"
+                    : "10000",
+                uint64),
+            std::move(point),
+        },
+        rangeTypes.Internal);
+    auto pointLambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {itemArgument}),
+        std::move(pointMultiply));
+    auto flatMap = TypedCallable(
+        ctx,
+        "FlatMap",
+        {collectionArgument, std::move(pointLambda)},
+        rangeTypes.Internal);
+    auto take = TypedCallable(
+        ctx,
+        "Take",
+        {
+            std::move(flatMap),
+            TypedLiteral(
+                ctx,
+                "Uint64",
+                mutation == EFinitePointRangeMutation::WrongOverflowProbe
+                    ? "10000"
+                    : "10001",
+                uint64),
+        },
+        rangeTypes.Internal);
+    auto collect = TypedCallable(
+        ctx,
+        "Collect",
+        {std::move(take)},
+        rangeTypes.Internal);
+    auto length = TypedCallable(
+        ctx,
+        "Length",
+        {collect},
+        uint64);
+    auto overflow = TypedCallable(
+        ctx,
+        ">",
+        {
+            std::move(length),
+            TypedLiteral(ctx, "Uint64", "10000", uint64),
+        },
+        boolean);
+
+    auto fullNothing = TypedCallable(
+        ctx,
+        "Nothing",
+        {
+            OptionalDataTypeDescriptor(
+                ctx,
+                "Int64",
+                int64,
+                optionalInt64),
+        },
+        optionalInt64);
+    auto boundary = ctx.ExprCtx.NewList(
+        pos,
+        {
+            std::move(fullNothing),
+            TypedLiteral(ctx, "Int32", "0", int32),
+        });
+    boundary->SetTypeAnn(rangeTypes.UserBoundary);
+    TExprNode::TPtr secondBoundary = boundary;
+    if (mutation == EFinitePointRangeMutation::UnsharedFullBoundary) {
+        secondBoundary =
+            ctx.ExprCtx.NewList(pos, boundary->ChildrenList());
+        secondBoundary->SetTypeAnn(boundary->GetTypeAnn());
+    }
+    auto userRange = ctx.ExprCtx.NewList(
+        pos,
+        {boundary, std::move(secondBoundary)});
+    userRange->SetTypeAnn(rangeTypes.UserRange);
+    auto fullRange = TypedCallable(
+        ctx,
+        "AsRange",
+        {std::move(userRange)},
+        rangeTypes.Internal);
+
+    TExprNode::TPtr finalCollect = collect;
+    if (mutation == EFinitePointRangeMutation::UnsharedCollect) {
+        finalCollect = TypedCallable(
+            ctx,
+            "Collect",
+            {collect->HeadPtr()},
+            rangeTypes.Internal);
+    }
+    auto finalUnion = TypedCallable(
+        ctx,
+        "RangeUnion",
+        {std::move(finalCollect)},
+        rangeTypes.Internal);
+    auto strict = TypedCallable(
+        ctx,
+        "IfStrict",
+        {
+            std::move(overflow),
+            std::move(fullRange),
+            std::move(finalUnion),
+        },
+        rangeTypes.Internal);
+    auto presentLambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {collectionArgument}),
+        std::move(strict));
+    const TStringBuf emptyType =
+        mutation == EFinitePointRangeMutation::WrongEmptyDescriptor
+        ? "Int32"
+        : "Int64";
+    const auto* emptyAnnotation =
+        emptyType == "Int64" ? int64 : int32;
+    auto empty = TypedCallable(
+        ctx,
+        "RangeEmpty",
+        {DataTypeDescriptor(ctx, emptyType, emptyAnnotation)},
+        rangeTypes.Internal);
+    auto ifPresent = TypedCallable(
+        ctx,
+        "IfPresent",
+        {
+            std::move(mappedCollection),
+            std::move(presentLambda),
+            std::move(empty),
+        },
+        rangeTypes.Internal);
+    auto innerUnion = TypedCallable(
+        ctx,
+        "RangeUnion",
+        {std::move(ifPresent)},
+        rangeTypes.Internal);
+    auto outerMultiply = TypedCallable(
+        ctx,
+        "RangeMultiply",
+        {
+            TypedLiteral(
+                ctx,
+                "Uint64",
+                mutation == EFinitePointRangeMutation::WrongOuterCap
+                    ? "9999"
+                    : "10000",
+                uint64),
+            std::move(innerUnion),
+        },
+        rangeTypes.Internal);
+    auto result = TypedCallable(
+        ctx,
+        "RangeFinalize",
+        {std::move(outerMultiply)},
+        rangeTypes.Finalized);
+    StripGeneratedRangeAnnotations(result);
+    return result;
+}
+
+void SetReadRange(
+    TOpRead& read,
+    TExprNode::TPtr compute,
+    TString keyColumn,
+    size_t expectedMaxRanges)
+{
+    read.RangeInfo = TOpRead::TRangeInfo{
+        .ComputeNode = std::move(compute),
+        .KeyColumns = {std::move(keyColumn)},
+        .UsedPrefixLen = 1,
+        .ExpectedMaxRanges = expectedMaxRanges,
+    };
+}
 
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
@@ -16051,6 +16479,424 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         result = ExportSemanticSnapshotV1(columnRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "range or ordering semantics");
+    }
+
+    Y_UNIT_TEST(ExportsExecutedPointRangeAndCombinesItWithOlapFilter) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/PointRange", {
+            {"k", "Int64", true},
+            {"v", "Int32", true},
+        }, {"k"});
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k", "v"},
+            NYql::EStorageType::ColumnStorage);
+        SetOutputType(ctx, *read, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"a.v", NUdf::EDataSlot::Int32},
+        });
+        SetReadRange(
+            *read,
+            ExactPointRangeCompute(ctx, "1"),
+            "a.k",
+            1);
+        read->OlapFilterLambda =
+            MakeOlapComparisonProcess(ctx, "eq", "v", "7");
+
+        const auto setOriginalPredicate = [&](TStringBuf value) {
+            auto argument =
+                ctx.ExprCtx.NewArgument(TPositionHandle(), "row");
+            read->OriginalPredicate = TExpression(
+                TypedUnaryLambda(
+                    ctx,
+                    argument,
+                    TypedLiteral(
+                        ctx,
+                        "Bool",
+                        value,
+                        ScalarType(ctx, NUdf::EDataSlot::Bool))),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+        };
+        setOriginalPredicate("false");
+
+        TOpRoot root(read, TPositionHandle(), {"a.k", "a.v"});
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+        const auto first = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        const auto snapshot = ParseSupported(first);
+        const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "and");
+        const auto& args = predicate["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(args.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(args[0]["kind"].GetStringSafe(), "eq");
+        UNIT_ASSERT_VALUES_EQUAL(
+            args[0]["left"]["column"].GetStringSafe(),
+            "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            args[0]["right"]["value"].GetIntegerSafe(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(args[1]["kind"].GetStringSafe(), "eq");
+        UNIT_ASSERT_VALUES_EQUAL(
+            args[1]["left"]["column"].GetStringSafe(),
+            "a.v");
+
+        setOriginalPredicate("true");
+        const auto changedMetadataOnly =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT_C(
+            changedMetadataOnly.IsSupported(),
+            changedMetadataOnly.UnsupportedReason);
+        UNIT_ASSERT_VALUES_EQUAL(
+            first.Json,
+            changedMetadataOnly.Json);
+
+        read->RangeInfo->ComputeNode =
+            ExactPointRangeCompute(ctx, "2");
+        const auto changedCompute =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& changedPredicate =
+            FindNode(changedCompute, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            changedPredicate["args"][0]["right"]["value"].GetIntegerSafe(),
+            2);
+    }
+
+    Y_UNIT_TEST(PointRangeNearMatchesFailClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/PointRangeMutations",
+            {{"k", "Int64", true}},
+            {"k"});
+        const auto exportRange = [&](
+            TExprNode::TPtr compute,
+            const std::function<void(TOpRead&)>& mutate = {})
+        {
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int64},
+            });
+            SetReadRange(
+                *read,
+                std::move(compute),
+                "a.k",
+                1);
+            if (mutate) {
+                mutate(*read);
+            }
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        auto result = exportRange(
+            ExactPointRangeCompute(ctx, "1", "=="));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "point operation");
+
+        result = exportRange(
+            ExactPointRangeCompute(ctx, "1", "===", "Int32"));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "point key descriptor");
+
+        result = exportRange(
+            ExactPointRangeCompute(
+                ctx,
+                "1",
+                "===",
+                "Int64",
+                "10000",
+                true,
+                true));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "Type annotation disagrees");
+
+        result = exportRange(
+            ExactPointRangeCompute(
+                ctx,
+                "1",
+                "===",
+                "Int64",
+                "9999"));
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "outer range cap");
+
+        result = exportRange(
+            ExactPointRangeCompute(ctx, "1"),
+            [](TOpRead& read) {
+                read.RangeInfo->UsedPrefixLen = 0;
+            });
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "complete key prefix");
+
+        result = exportRange(
+            ExactPointRangeCompute(ctx, "1"),
+            [](TOpRead& read) {
+                read.RangeInfo->ExpectedMaxRanges = TMaybe<size_t>();
+            });
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "ExpectedMaxRanges");
+    }
+
+    Y_UNIT_TEST(ExportsCanonicalFinitePointSetRange) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/FinitePointRange",
+            {{"k", "Int64", true}},
+            {"k"});
+        auto read = MakeRead(
+            ctx,
+            table,
+            "item",
+            {"k"},
+            NYql::EStorageType::ColumnStorage);
+        SetOutputType(ctx, *read, {
+            {"item.k", NUdf::EDataSlot::Int64},
+        });
+        SetReadRange(
+            *read,
+            ExactFinitePointRangeCompute(ctx),
+            "item.k",
+            10);
+        TOpRoot root(read, TPositionHandle(), {"item.k"});
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+            NYql::EStorageType::ColumnStorage);
+
+        const auto snapshot =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "in");
+        UNIT_ASSERT_VALUES_EQUAL(
+            predicate["lookup"]["column"].GetStringSafe(),
+            "item.k");
+        constexpr std::array<i64, 10> Expected = {
+            2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+        };
+        const auto& items = predicate["items"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), Expected.size());
+        for (size_t index = 0; index < Expected.size(); ++index) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                items[index]["type"].GetStringSafe(),
+                "Int32");
+            UNIT_ASSERT_VALUES_EQUAL(
+                items[index]["value"].GetIntegerSafe(),
+                Expected[index]);
+        }
+
+        read->RangeInfo->ComputeNode =
+            ExactFinitePointRangeCompute(
+                ctx,
+                EFinitePointRangeMutation::DuplicateStaticPoint);
+        const auto duplicateSnapshot =
+            ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& duplicateItems =
+            FindNode(duplicateSnapshot, "scan")["predicate"]["items"]
+                .GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(duplicateItems.size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(
+            duplicateItems.front()["value"].GetIntegerSafe(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            duplicateItems.back()["value"].GetIntegerSafe(),
+            2);
+    }
+
+    Y_UNIT_TEST(FinitePointSetRangeNearMatchesFailClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(
+            ctx,
+            "/Root/FiniteRangeMutations",
+            {{"k", "Int64", true}},
+            {"k"});
+        const auto exportMutation =
+            [&](EFinitePointRangeMutation mutation)
+        {
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int64},
+            });
+            SetReadRange(
+                *read,
+                ExactFinitePointRangeCompute(ctx, mutation),
+                "a.k",
+                10);
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+        const std::array mutations = {
+            std::pair{
+                EFinitePointRangeMutation::WrongOuterCap,
+                TStringBuf("outer range cap")},
+            std::pair{
+                EFinitePointRangeMutation::WrongNormalizationIndex,
+                TStringBuf("collection Tuple index")},
+            std::pair{
+                EFinitePointRangeMutation::ForeignNormalizationArgument,
+                TStringBuf("normalization must read its own argument")},
+            std::pair{
+                EFinitePointRangeMutation::WrongPointOperation,
+                TStringBuf("point operation")},
+            std::pair{
+                EFinitePointRangeMutation::ForeignPointArgument,
+                TStringBuf("exact point-lambda argument")},
+            std::pair{
+                EFinitePointRangeMutation::WrongPointCap,
+                TStringBuf("point range cap")},
+            std::pair{
+                EFinitePointRangeMutation::WrongOverflowProbe,
+                TStringBuf("overflow probe")},
+            std::pair{
+                EFinitePointRangeMutation::UnsharedCollect,
+                TStringBuf("must share one Collect")},
+            std::pair{
+                EFinitePointRangeMutation::UnsharedFullBoundary,
+                TStringBuf("reuse one boundary twice")},
+            std::pair{
+                EFinitePointRangeMutation::WrongEmptyDescriptor,
+                TStringBuf("empty-range descriptor")},
+        };
+        for (const auto& [mutation, reason] : mutations) {
+            const auto result = exportMutation(mutation);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "mutation unexpectedly accepted: "
+                    << static_cast<ui32>(mutation));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                reason);
+        }
+    }
+
+    Y_UNIT_TEST(ReadRangeKeyMustMatchThePhysicalPrimaryKey) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/WrongRangeKey", {
+                {"k", "Int64", true},
+                {"other", "Int64", true},
+            }, {"k"});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k", "other"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int64},
+                {"a.other", NUdf::EDataSlot::Int64},
+            });
+            SetReadRange(
+                *read,
+                ExactPointRangeCompute(ctx, "1"),
+                "a.other",
+                1);
+            TOpRoot root(read, TPositionHandle(), {"a.k", "a.other"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "does not identify its emitted physical primary key");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/MissingRangeKey", {
+                {"k", "Int64", true},
+                {"other", "Int64", true},
+            }, {"k"});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"other"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.other", NUdf::EDataSlot::Int64},
+            });
+            SetReadRange(
+                *read,
+                ExactPointRangeCompute(ctx, "1"),
+                "a.other",
+                1);
+            TOpRoot root(read, TPositionHandle(), {"a.other"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must emit its physical primary key exactly once");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/CompositeRangeKey", {
+                {"k", "Int64", true},
+                {"other", "Int64", true},
+            }, {"k", "other"});
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k", "other"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int64},
+                {"a.other", NUdf::EDataSlot::Int64},
+            });
+            SetReadRange(
+                *read,
+                ExactPointRangeCompute(ctx, "1"),
+                "a.k",
+                1);
+            TOpRoot root(read, TPositionHandle(), {"a.k", "a.other"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "single-column primary key");
+        }
     }
 
     Y_UNIT_TEST(InitialCatalogSurvivesAPlanThatRemovesItsTable) {

@@ -174,6 +174,43 @@
   .run-card .t { font-weight: 650; margin-bottom: 4px; }
   /* active/hover styles declared above with delta cells */
   .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .q-split {
+    display: grid; grid-template-columns: 1fr 2fr; gap: 12px;
+    align-items: stretch; margin-top: 4px; min-height: 420px;
+  }
+  .q-split-list {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+  }
+  .q-split-list .qlist {
+    display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+    gap: 4px; margin-top: 0; overflow-y: auto; max-height: 560px; flex: 1;
+  }
+  .q-split-list .qlist .pill,
+  .q-split-list button.pill {
+    width: 100%; border-radius: 6px; text-align: left; justify-content: flex-start;
+    white-space: normal; line-height: 1.25; padding: 5px 8px;
+  }
+  .q-split-charts {
+    min-width: 0; display: flex; flex-direction: column;
+  }
+  .q-split-charts .qdetail {
+    margin-top: 0; flex: 1; display: flex; flex-direction: column; min-height: 0;
+  }
+  .q-split-charts .q-charts-stack {
+    display: grid; grid-template-columns: 1fr; gap: 10px; flex: 1;
+  }
+  .q-split-charts .chart-box { height: 240px; min-height: 200px; }
+  .q-split-charts .q-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: #fff; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--muted); padding: 24px; text-align: center;
+  }
+  @media (max-width: 1000px) {
+    .q-split { grid-template-columns: 1fr; min-height: 0; }
+    .q-split-list .qlist { max-height: 220px; flex-direction: row; flex-wrap: wrap; }
+    .q-split-list .qlist .pill { width: auto; }
+  }
   /* soft vs hard: pale amber outline vs solid orange fill */
   .pill.watch { background: #fffdf5; color: #9a6700; box-shadow: inset 0 0 0 1.5px #d4a72c; }
   .pill.slow { background: #e8590c; color: #fff; }
@@ -1462,14 +1499,14 @@ function mountQueryHistory(item, diveId, testName) {
 
   if (!q || !(q.history && q.history.labels && q.history.labels.length)) {
     box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
-      <div class="muted">Нет run history для этого запроса</div></div>`;
+      <div class="q-empty" style="min-height:280px">Нет run history для этого запроса</div></div>`;
     return;
   }
   const hist = sliceHist(q.history);
   const marks = markIndicesForQuery(item, diveId, q, hist);
   if (!(hist.labels || []).length) {
     box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
-      <div class="muted">Нет точек в выбранном интервале дат</div></div>`;
+      <div class="q-empty" style="min-height:280px">Нет точек в выбранном интервале дат</div></div>`;
     return;
   }
 
@@ -1524,14 +1561,14 @@ function mountQueryHistory(item, diveId, testName) {
         : rawLine
     }</div>
     <div class="muted" style="margin-bottom:6px">
-      график = <b>каждый запуск</b> (YdbSumMeans) · ось X = datetime · цвет точки vs <b>median mavg(prev${win} runs)</b> ·
-      клик → report${nReports ? ` (${nReports})` : ''}
+      график = <b>каждый запуск</b> · цвет vs <b>median mavg(prev${win})</b> · клик → report${nReports ? ` (${nReports})` : ''}
+      · <span style="color:#0969da">now</span> · <span style="color:#9a6700">cmp</span>
       ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
     </div>
     <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
       <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7 runs)
     </label>
-    <div class="pair">
+    <div class="q-charts-stack">
       <div class="chart-box"><canvas id="${diveId}_q_ydb"></canvas></div>
       <div class="chart-box"><canvas id="${diveId}_q_fail"></canvas></div>
     </div>
@@ -1905,8 +1942,12 @@ function diveHtml(r, id) {
       <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = focus queries${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
-    <div id="${id}_qblock">${buildQueryBlockHtml(r, id)}</div>
-    <div id="${id}_qhist"></div>
+    <div class="q-split">
+      <div class="q-split-list" id="${id}_qblock">${buildQueryBlockHtml(r, id)}</div>
+      <div class="q-split-charts" id="${id}_qhist">
+        <div class="q-empty">Выбери query слева — справа YdbSumMeans и Fail rate</div>
+      </div>
+    </div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
     </div>

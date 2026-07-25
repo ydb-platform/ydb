@@ -1,0 +1,5 @@
+RECURSE(
+    a
+    b
+    program
+)

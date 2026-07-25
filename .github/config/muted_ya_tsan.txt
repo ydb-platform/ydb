@@ -106,6 +106,7 @@ ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
+ydb/core/kqp/ut/tli unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
 ydb/core/kqp/workload_service/ut KqpWorkloadService.TestResourcePoolAfterTenantRecreation

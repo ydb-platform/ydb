@@ -3533,8 +3533,66 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             2);
     }
 
-    Y_UNIT_TEST(RestrictedStoredStringConcatFailsClosed) {
-        {
+    Y_UNIT_TEST(FoldsExactLiteralStringConcatToCanonicalLiteral) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/LiteralConcat", {
+            {"id", "Int32", true},
+        });
+        auto read = MakeRead(ctx, table, "a", {"id"});
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("folded"),
+                    TExpression(
+                        StringConcat(
+                            ctx,
+                            StringConcat(
+                                ctx,
+                                StringLiteral(ctx, "DIAMOND"),
+                                StringLiteral(ctx, ",")),
+                            StringLiteral(ctx, "AIRBORNE")),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+                TMapElement(
+                    TInfoUnit("direct"),
+                    TExpression(
+                        StringLiteral(ctx, "DIAMOND,AIRBORNE"),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps)),
+            });
+        TOpRoot root(map, TPositionHandle(), {"folded", "direct"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& columns =
+            FindNode(snapshot, "project")["columns"].GetArraySafe();
+        THashMap<TString, const NJson::TJsonValue*> expressions;
+        for (const auto& column : columns) {
+            expressions.emplace(
+                column["output"].GetStringSafe(),
+                &column["expression"]);
+        }
+
+        const auto& folded = **expressions.FindPtr("folded");
+        const auto& direct = **expressions.FindPtr("direct");
+        UNIT_ASSERT_VALUES_EQUAL(
+            folded["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            folded["type"].GetStringSafe(),
+            "String");
+        UNIT_ASSERT_VALUES_EQUAL(
+            folded["value"].GetStringSafe(),
+            "DIAMOND,AIRBORNE");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NJson::WriteJson(folded, false),
+            NJson::WriteJson(direct, false));
+    }
+
+    Y_UNIT_TEST(LiteralStringConcatFailsClosed) {
+        const auto exportExpression = [](const auto& buildExpression) {
             TExportTestContext ctx;
             const auto& table = AddTable(ctx, "/Root/LiteralOnly", {
                 {"id", "Int32", true},
@@ -3544,17 +3602,118 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ctx,
                 read,
                 "result",
+                buildExpression(ctx));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto assertRejected = [&](const auto& buildExpression, TStringBuf reason) {
+            const auto result = exportExpression(buildExpression);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
+        };
+
+        assertRejected(
+            [](TExportTestContext& ctx) {
+                auto expression = StringConcat(
+                    ctx,
+                    StringLiteral(ctx, "left"),
+                    StringLiteral(ctx, "right"));
+                expression->SetTypeAnn(
+                    ScalarType(ctx, NUdf::EDataSlot::String, true));
+                return expression;
+            },
+            "not exactly non-null String");
+        assertRejected(
+            [](TExportTestContext& ctx) {
+                auto left = StringLiteral(ctx, "left");
+                left->SetTypeAnn(
+                    ScalarType(ctx, NUdf::EDataSlot::String, true));
+                return StringConcat(
+                    ctx,
+                    std::move(left),
+                    StringLiteral(ctx, "right"));
+            },
+            "not exactly non-null String");
+        assertRejected(
+            [](TExportTestContext& ctx) {
+                return TypedCallable(
+                    ctx,
+                    "Concat",
+                    {StringLiteral(ctx, "only")},
+                    ScalarType(ctx, NUdf::EDataSlot::String));
+            },
+            "Concat is not binary");
+        assertRejected(
+            [](TExportTestContext& ctx) {
+                TString invalid;
+                invalid.push_back(static_cast<char>(0xff));
+                return StringConcat(
+                    ctx,
+                    StringLiteral(ctx, invalid),
+                    StringLiteral(ctx, "right"));
+            },
+            "literal is not valid UTF-8");
+        assertRejected(
+            [](TExportTestContext& ctx) {
+                auto expression = StringLiteral(ctx, "leaf");
+                for (size_t index = 0; index < 130; ++index) {
+                    expression = StringConcat(
+                        ctx,
+                        StringLiteral(ctx, "x"),
+                        std::move(expression));
+                }
+                return expression;
+            },
+            "exceeds the scalar audit limit");
+
+        const auto exportMutatedMetadata = [](const auto& mutate) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/LiteralMetadata", {
+                {"id", "Int32", true},
+            });
+            auto read = MakeRead(ctx, table, "a", {"id"});
+            TExpression expression(
                 StringConcat(
                     ctx,
                     StringLiteral(ctx, "left"),
-                    StringLiteral(ctx, "right")));
+                    StringLiteral(ctx, "right")),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            mutate(*expression.GetExpressionBody());
+            auto map = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("result"),
+                    std::move(expression))});
             TOpRoot root(map, TPositionHandle(), {"result"});
-            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        {
+            const auto result = exportMutatedMetadata(
+                [](TExprNode& node) {
+                    node.SetSideEffects(ESideEffects::General);
+                });
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "no storage-bounded String member");
+                "side-effecting or CSE-unsafe");
         }
+        {
+            const auto result = exportMutatedMetadata(
+                [](TExprNode& node) {
+                    node.SetUnorderedChildren();
+                });
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "unordered children");
+        }
+    }
+
+    Y_UNIT_TEST(RestrictedStoredStringConcatFailsClosed) {
 
         {
             TExportTestContext ctx;

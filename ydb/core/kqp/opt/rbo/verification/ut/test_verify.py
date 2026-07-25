@@ -3732,6 +3732,66 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                         Counter({(expected,): 1}),
                     )
 
+    def test_projected_decimal_integral_arithmetic_supplies_sum_headroom(self):
+        scalar_type = "Decimal(35,0)"
+
+        def decimal_literal(scaled):
+            return {
+                "kind": "literal",
+                "type": scalar_type,
+                "value": {"kind": "finite", "scaled": str(scaled)},
+            }
+
+        product = {
+            "kind": "mul",
+            "left": decimal_literal(7),
+            "right": {"kind": "column", "column": "a.x"},
+            "type": scalar_type,
+            "nullable": False,
+        }
+        quotient = {
+            "kind": "div",
+            "left": product,
+            "right": {"kind": "literal", "type": "Int8", "value": 2},
+            "type": scalar_type,
+            "nullable": False,
+        }
+        snapshot = projected_decimal_sum_snapshot(quotient, "Int8")
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        self.assertEqual(
+            relation.rows[0].values["result"].decimal_finite_abs_bound,
+            2 * 7 * 128,
+        )
+        self.assertEqual(
+            self._symbolic_bag(
+                relation,
+                self._constants(database, ((0, -128), (0, 127))),
+            ),
+            Counter({(-4,): 1}),
+        )
+
+        with self.assertRaisesRegex(
+            RelationError,
+            "non-associative overflow is not modeled",
+        ):
+            same_decimal_snapshot = projected_decimal_sum_snapshot(
+                product,
+                scalar_type,
+            )
+            same_decimal_script = smt.Script()
+            RelationEvaluator(
+                same_decimal_snapshot,
+                Database(same_decimal_snapshot, 2, same_decimal_script),
+                ScalarEncoder(same_decimal_script),
+            ).root()
+
     def test_integral_decimal_cast_supplies_sum_headroom(self):
         expression = {
             "kind": "cast_decimal",

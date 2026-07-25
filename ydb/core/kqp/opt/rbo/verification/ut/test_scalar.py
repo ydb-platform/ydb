@@ -839,6 +839,137 @@ class DecimalFiniteAbsBoundTest(unittest.TestCase):
         )
         self.assertIsNone(result.decimal_finite_abs_bound)
 
+    def test_integral_multiply_uses_full_type_domain_and_decimal_saturation(self):
+        cases = (
+            ("Int8", "Decimal(5,2)", 20, 2_560),
+            ("Uint8", "Decimal(5,2)", 20, 5_100),
+            ("Int64", "Decimal(35,2)", 20, 20 * (1 << 63)),
+            ("Uint64", "Decimal(35,2)", 20, 20 * ((1 << 64) - 1)),
+            ("Int8", "Decimal(3,0)", 20, 999),
+        )
+        for right_type, result_type, left_bound, expected in cases:
+            expression = _arithmetic(
+                "mul",
+                result_type,
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            )
+            with self.subTest(right_type=right_type, result_type=result_type):
+                result = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "left": Value(
+                            result_type,
+                            smt.FALSE,
+                            smt.ONE,
+                            left_bound,
+                        ),
+                        "right": Value(right_type, smt.FALSE, smt.ONE),
+                    },
+                )
+                self.assertEqual(result.decimal_finite_abs_bound, expected)
+
+    def test_integral_division_preserves_known_left_bound(self):
+        expression = _arithmetic(
+            "div",
+            "Decimal(35,2)",
+            Expr(kind="column", column="left"),
+            Expr(kind="column", column="right"),
+        )
+        for right_type in sorted(INTEGER_TYPES):
+            with self.subTest(right_type=right_type):
+                result = Encoder(smt.Script()).evaluate(
+                    expression,
+                    {
+                        "left": Value(
+                            "Decimal(35,2)",
+                            smt.FALSE,
+                            smt.int_value(-125),
+                            125,
+                        ),
+                        "right": Value(
+                            right_type,
+                            smt.FALSE,
+                            smt.int_value(-1 if right_type.startswith("Int") else 1),
+                        ),
+                    },
+                )
+                self.assertEqual(result.decimal_finite_abs_bound, 125)
+
+    def test_integral_arithmetic_bounds_cover_boundary_and_special_results(self):
+        scalar_type = "Decimal(5,0)"
+        left_values = (
+            -decimal.INF,
+            -17,
+            -1,
+            0,
+            1,
+            17,
+            decimal.INF,
+            decimal.NAN,
+        )
+        right_values = (-128, -2, -1, 0, 1, 2, 127)
+        expected_bounds = {"mul": 17 * 128, "div": 17}
+        for kind, expected_bound in expected_bounds.items():
+            expression = _arithmetic(
+                kind,
+                scalar_type,
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            )
+            for left in left_values:
+                for right in right_values:
+                    with self.subTest(kind=kind, left=left, right=right):
+                        result = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "left": Value(
+                                    scalar_type,
+                                    smt.FALSE,
+                                    smt.int_value(left),
+                                    17,
+                                ),
+                                "right": Value(
+                                    "Int8",
+                                    smt.FALSE,
+                                    smt.int_value(right),
+                                ),
+                            },
+                        )
+                        self.assertEqual(
+                            result.decimal_finite_abs_bound,
+                            expected_bound,
+                        )
+                        value = _ground(result.value)
+                        if abs(value) < 10**5:
+                            self.assertLessEqual(abs(value), expected_bound)
+
+    def test_unknown_and_same_decimal_multiplicative_bounds_stay_unknown(self):
+        for kind in ("mul", "div"):
+            expression = _arithmetic(
+                kind,
+                "Decimal(5,2)",
+                Expr(kind="column", column="left"),
+                Expr(kind="column", column="right"),
+            )
+            cases = (
+                (
+                    Value("Decimal(5,2)", smt.FALSE, smt.ONE),
+                    Value("Int8", smt.FALSE, smt.ONE),
+                ),
+                (
+                    Value("Decimal(5,2)", smt.FALSE, smt.ONE, 1),
+                    Value("Decimal(5,2)", smt.FALSE, smt.ONE, 1),
+                ),
+            )
+            for left, right in cases:
+                with self.subTest(kind=kind, right_type=right.type):
+                    result = Encoder(smt.Script()).evaluate(
+                        expression,
+                        {"left": left, "right": right},
+                    )
+                    self.assertIsNone(result.decimal_finite_abs_bound)
+
     def test_integral_cast_uses_source_domain_scale_and_saturation(self):
         cases = (
             ("Int8", "Decimal(5,2)", 12_800),

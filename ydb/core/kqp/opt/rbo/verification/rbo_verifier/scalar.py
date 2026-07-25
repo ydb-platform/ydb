@@ -176,15 +176,19 @@ class Encoder:
                         expression.result_type,
                         right.type,
                     )
-                finite_abs_bound = (
-                    _decimal_additive_finite_abs_bound(
+                if expression.kind in {"add", "sub"}:
+                    finite_abs_bound = _decimal_additive_finite_abs_bound(
                         left,
                         right,
                         expression.result_type,
                     )
-                    if expression.kind in {"add", "sub"}
-                    else None
-                )
+                else:
+                    finite_abs_bound = _decimal_integral_arithmetic_finite_abs_bound(
+                        expression.kind,
+                        left,
+                        right,
+                        expression.result_type,
+                    )
                 return Value(
                     expression.result_type,
                     operand_is_null,
@@ -558,6 +562,35 @@ def _decimal_additive_finite_abs_bound(
     return min(
         10**decimal_type.precision - 1,
         left.decimal_finite_abs_bound + right.decimal_finite_abs_bound,
+    )
+
+
+def _decimal_integral_arithmetic_finite_abs_bound(
+    kind: str,
+    left: Value,
+    right: Value,
+    result_type: str,
+) -> int | None:
+    """Bound finite Decimal products and quotients with an integral right side."""
+
+    if left.decimal_finite_abs_bound is None or family(right.type) != "int":
+        return None
+    if kind == "div":
+        # Every nonzero integral divisor has absolute value at least one.
+        # Rounded division therefore cannot increase the coefficient's
+        # magnitude.  A zero divisor and a special left operand produce only
+        # Decimal specials, outside the finite-bound contract.
+        return left.decimal_finite_abs_bound
+
+    assert kind == "mul"
+    right_bounds = integer_bounds(right.type)
+    decimal_type = decimal.parse_type(result_type)
+    assert right_bounds is not None and decimal_type is not None
+    right_lower, right_upper = right_bounds
+    right_abs_bound = max(abs(right_lower), abs(right_upper - 1))
+    return min(
+        10**decimal_type.precision - 1,
+        left.decimal_finite_abs_bound * right_abs_bound,
     )
 
 

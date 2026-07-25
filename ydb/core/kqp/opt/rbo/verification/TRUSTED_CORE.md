@@ -154,7 +154,10 @@ order-sensitive inspector digests, an omitted-second-correlation
 `COUNTEREXAMPLE`, and a real-host two-dependency capture. Focused TPCH q21 and
 TPC-DS q16/q94 all return `VERIFIED_BOUNDED` at two rows per table and two
 tasks. The current complete policy gate independently returns 11/11 TPCH and
-15/15 TPC-DS `VERIFIED_BOUNDED`, confirming all 26/26 curated obligations.
+16/16 TPC-DS `VERIFIED_BOUNDED`, confirming all 27/27 curated obligations.
+TPC-DS q34 is the new proof: its focused run returns `VERIFIED_BOUNDED` after
+263/2,471 ms with report SHA-256
+`44bdcd9f105d4f334b628bb672fa8d6b4f6ffd43ceece0666cd03829dfa5b677`.
 These results extend the bounded proof floor; they do not establish unbounded
 SQL equivalence.
 
@@ -248,7 +251,7 @@ items remain fail-closed. This is a proof of presence at export time, not a
 general nullable-item rule.
 
 Together, the one-level nested-`IN` and Date-tuple slices move q83 past its
-former initial and final boundaries. Its current complete-dashboard row
+former initial and final boundaries. At that checkpoint its complete-dashboard row
 prepares in 1,351 ms, then both snapshots reject
 `Unsupported scalar type Double` before verifier entry; verifier work is 0 ms.
 The complete TPC-DS report SHA-256 is
@@ -256,8 +259,43 @@ The complete TPC-DS report SHA-256 is
 the preceding focused 1,310/0-ms report SHA-256 is
 `7f1bae257dfcede11aa2f6a37f8e1bc45e079be4f13f8b836887a1768b6d7113`.
 There is no formula, bounded proof, policy change, or optimizer finding.
-Complete validation passes 577/577 Python verifier tests, 214/214 C++
+Validation at that checkpoint passed 577/577 Python verifier tests, 214/214 C++
 exporter tests, and 14/14 coverage-policy tests.
+
+The next C++-only audit admits four restricted floating predicates as complete
+typed opaque expressions rather than attempting general floating arithmetic:
+`Optional<Int64> >= 2/3`, `Optional<Int64> <= 3/2`,
+`Optional<Int64> > 1.2`, and `Optional<Int64> < 0.9`, optionally inside the
+exact `Coalesce(Optional<Bool>, false)` envelope. Exact IEEE-754 binary64
+fingerprints identify the four constants. A pointer-scoped exception admits
+only the reviewed root comparison and its constant; the whole input subtree
+still passes the ordinary opaque-expression visibility, metadata, type, and
+node-budget audit. Swapped operands, a mismatched operator/constant, a
+different constant spelling or payload, nested floating arithmetic, a
+different envelope, and general or passive `Double` dataflow fail closed.
+Because the exported node remains an opaque expression, no new Python
+floating-point semantics enter the TCB.
+
+The following C++-only audit folds a bare complete conversion from one direct
+non-null integer literal to a non-null integer target as an exact target-typed
+literal. The target descriptor and type annotation must agree and
+`CastResult == Complete`. Separately, only `Just(Date literal)` and
+`Just(complete integer-literal Convert)` are normalized as always-present
+wrappers through the existing typed `If(true, value, NULL)` IR, preserving
+their Optional result. All nearby wrapper and conversion shapes remain opaque
+or unsupported. These two audits add TPC-DS q21/q34/q75 to formula
+construction. q34 is
+`VERIFIED_BOUNDED` after 263/2,471 ms
+(`44bdcd9f105d4f334b628bb672fa8d6b4f6ffd43ceece0666cd03829dfa5b677`);
+q21 is `UNKNOWN` after 170/60,950 ms
+(`15ee95f2b59bc4ee41dddc19c8b98cdceb89bb3a2868678ab41539931c2c2a0e`);
+and q75 remains `UNKNOWN` in retained 1,134/128,182 ms evidence
+(`1322068b8d57dfa984e91f6f775b063cc3c10e997e30a841e40c46f8d2058a9f`).
+The q21 wrapper normalization eliminates the preceding spurious candidate.
+q83 remains unsupported because
+its passive `Double` carrier is outside the reviewed whole-predicate shape.
+Current validation passes 577/577 Python verifier tests, 221/221 C++ exporter
+tests, and 14/14 coverage-policy tests.
 
 The exact duplicate-source Map projection changes only
 `semantic_snapshot.cpp`; the existing Project IR and evaluator already copy a
@@ -500,7 +538,7 @@ Independent exhaustive guarded-code and concrete aggregate references, staged
 routing, wrong-shuffle checks, and a final-min-to-max solver mutation cover the
 path.
 
-The post-q83-precursor 2026-07-24 physical-line audit records implementation,
+The preceding post-q83-precursor 2026-07-24 physical-line audit recorded implementation,
 test, and diagnostic rows at source `7e7429bdcae`; documentation includes this
 evidence update:
 
@@ -532,6 +570,24 @@ nested-binding ownership/topology validation in
 `semantic_snapshot.cpp`. Existing membership evaluation, Date literals, and
 static-`IN` semantics are reused. There is no q83-specific equivalence axiom or
 new diagnostic path.
+
+The latest post-wrapper 2026-07-25 physical-line audit uses source
+`a0ec2bc866b` plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 12,247 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 9,900 |
+| **Proof-producing code total** | **22,147** |
+| Tests, outside the TCB | 55,449 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+| Documentation, outside the TCB | 7,885 |
+
+Relative to the preceding q83 audit, the restricted floating-predicate and
+exact-wrapper slices add 487 trusted C++ lines and 1,055 test lines. Trusted
+Python and diagnostic-tool size are unchanged. The new TCB surface is confined
+to the two fail-closed C++ exporter audits described above; existing Python
+opaque, literal, and `If` semantics are reused.
 
 ## External assumptions
 
@@ -666,7 +722,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, and proven-present raw-tuple Date-`SafeCast` mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, and exact literal-wrapper mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

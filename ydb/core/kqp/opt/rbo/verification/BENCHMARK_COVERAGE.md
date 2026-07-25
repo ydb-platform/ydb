@@ -63,10 +63,10 @@ set -o pipefail
   2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the twenty-six curated obligations with the
+The checked-in proof floor runs the twenty-seven curated obligations with the
 pinned Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH
 q3, q4, q6, q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16,
-q38, q42, q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96 directly
+q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96 directly
 from the policy, accepts only `VERIFIED_BOUNDED`, and ignores every ambient
 `RBO_COVERAGE_*` variable:
 
@@ -142,13 +142,13 @@ failed-preparation pair can enter a semantic floor without automatically
 entering the preparation floor. The
 formula-construction floor requires TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10,
-q15, q16, q18, q19, q25, q29, q33,
+q15, q16, q18, q19, q21, q25, q29, q33, q34,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61,
-q62, q65, q68, q69, q71, q73, q76, q77, q78, q79, q80, q82, q87, q88, q90,
+q62, q65, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q87, q88, q90,
 q91, q93, q94, q95, q96, q97, and q99.
 The preparation-success, verifier-entry, and formula floors are enforced only
 for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
-q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16, q38, q42,
+q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16, q34, q38, q42,
 q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96; dedicated hermetic
 tests require each one both to complete preparation and to remain
 `VERIFIED_BOUNDED`.
@@ -222,15 +222,16 @@ execution divergence can coexist.
 ## Latest measured formula coverage
 
 The current complete version-five formula-only dashboards were generated on
-2026-07-24 after the closed scalar-inside-`IN`, symbolic producer-order Merge,
-one-level nested-`IN`, and proven-present static Date-tuple milestones. They
-emit 68 formulas, record both a semantic and preparation outcome for every
+2026-07-25 after the restricted floating-predicate and exact proven-present
+wrapper milestones. They emit 71 formulas, record both a semantic and
+preparation outcome for every
 workload entry, and meet both suite policies.
 
-The current proof-floor gate confirms all twenty-six checked-in obligations as
-`VERIFIED_BOUNDED`: 11/11 TPCH and 15/15 TPC-DS at two rows per table and two
-tasks. Focused solver runs separately retain per-query evidence for q73 and the
-preceding three proof-floor additions, TPCH q21 and TPC-DS q16/q94. The
+The current proof-floor gate confirms all twenty-seven checked-in obligations
+as `VERIFIED_BOUNDED`: 11/11 TPCH and 16/16 TPC-DS at two rows per table and
+two tasks. Focused solver runs separately retain per-query evidence for q34,
+q73, and the preceding three proof-floor additions, TPCH q21 and TPC-DS
+q16/q94. The
 verifier-entry floor remains TPCH q1 and TPC-DS q5, q59, q65, q78, and q80;
 every one also belongs to the formula floor.
 `FORMULA_EMITTED` alone is not a solver proof.
@@ -248,7 +249,7 @@ The complete semantic-outcome partition is:
 | Suite | Formula emitted | Unsupported | No-pair `OPTIMIZER_FAILURE` | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 18 (q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q21, q22) | 2 | 2 | 22 |
-| TPCDS_YQL | 50 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q25, q29, q33, q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q65, q68, q69, q71, q73, q76, q77, q78, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 31 | 18 | 99 |
+| TPCDS_YQL | 53 (q2, q3, q5, q6, q10, q15, q16, q18, q19, q21, q25, q29, q33, q34, q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q65, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 28 | 18 | 99 |
 
 Preparation is an independent partition:
 
@@ -257,19 +258,20 @@ Preparation is an independent partition:
 | TPCH_YQL | 20 | 2 | 22 |
 | TPCDS_YQL | 73 | 26 | 99 |
 
-Eighteen TPCH and fifty-five TPC-DS queries pass both exporters and enter the
+Eighteen TPCH and fifty-eight TPC-DS queries pass both exporters and enter the
 verifier. TPCH has twenty exact Initial/Final boundary-result pairs; TPC-DS has
 eighty-one.
 
-The current complete TPCH dashboard spent 2,925/31,081 ms in
+The current complete TPCH dashboard spent 2,785/30,469 ms in
 preparation/verifier work and produced report SHA-256
-`661faa60f96e73c1de5ffd61c1506edada8b6aa72626b3e59cecfe6570aaaf4b`.
-Its TPC-DS counterpart spent 64,642/572,869 ms and produced
-`595ac871a19699ebc6731bf0eb0f610bd6ba100c65251cca3545493d10f4ab90`.
+`25df3e7d8f72933b2df8d6b39916b5bb52a62163f49ab5297513c5808ec6cb7d`.
+Its TPC-DS counterpart spent 63,814/634,467 ms and produced
+`8b68c7c4243ce02c4824ddba26893874739d600408246e2d2cceaae16919c44e`.
 Both complete formula policies are valid.
 
-A q83 row in that complete TPC-DS dashboard covers the two exact precursor
-slices without changing those totals. One-level closed `IN`-inside-`IN`
+A q83 row in the preceding complete TPC-DS dashboard covered two exact precursor
+slices without changing that checkpoint's 50-formula/31-unsupported totals.
+One-level closed `IN`-inside-`IN`
 admission clears the initial boundary, and a narrow proven-present raw-tuple
 Date-cast fold clears the final static `SqlIn` boundary. q83 prepares
 successfully in 1,351 ms, but both snapshots first reject
@@ -277,9 +279,31 @@ successfully in 1,351 ms, but both snapshots first reject
 run spent 1,310/0 ms and produced report SHA-256
 `7f1bae257dfcede11aa2f6a37f8e1bc45e079be4f13f8b836887a1768b6d7113`.
 This is neither formula/verifier-entry coverage nor a bounded proof or
-optimizer-bug finding, so no coverage policy changes. Current validation
-passes 577/577 Python verifier tests, 214/214 C++ exporter tests, and 14/14
-coverage-policy tests.
+optimizer-bug finding, so that checkpoint made no coverage-policy change.
+
+The new restricted bridge admits only reviewed whole predicates over
+`Optional<Int64>` with the exact floating constants and operators `>= 2/3`,
+`<= 3/2`, `> 1.2`, and `< 0.9`, optionally under
+`Coalesce(..., false)`. Exact IEEE-bit fingerprints bind the constants, and
+all other floating values, arithmetic, and passive `Double` carriers fail
+closed. Exact proven-present wrapper handling is likewise limited to
+`Just(Date literal)` and `Just(Convert(integer literal))` with a complete,
+target-typed conversion and matching descriptor/type annotations. These gates
+move q21/q34/q75 through formula construction. q83 remains unsupported as a
+passive `Double` carrier and is the next narrow target.
+
+Current validation passes 221/221 C++ exporter tests and 14/14
+coverage-policy tests, and the Python verifier suite passes 577/577.
+
+Focused solver evidence distinguishes the three promotions. q34 is
+`VERIFIED_BOUNDED` after 263/2,471 ms, report SHA-256
+`44bdcd9f105d4f334b628bb672fa8d6b4f6ffd43ceece0666cd03829dfa5b677`.
+q21 is `UNKNOWN` after 170/60,950 ms, report SHA-256
+`15ee95f2b59bc4ee41dddc19c8b98cdceb89bb3a2868678ab41539931c2c2a0e`;
+the exact-wrapper repair eliminated its earlier spurious candidate. q75
+remains `UNKNOWN` in the retained 1,134/128,182 ms evidence, report SHA-256
+`1322068b8d57dfa984e91f6f775b063cc3c10e997e30a841e40c46f8d2058a9f`.
+Only q34 joins the proof floor.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. All eight rows have `prepare_status: FAILED` and an exact
@@ -323,15 +347,22 @@ coverage, not a bounded proof, and q54 is not in the proof floor.
 The milestone passes 529/529 Python verifier tests, 205/205 C++ exporter
 tests, 39/39 real-host integration tests, and 12/12 coverage-policy tests.
 
-The current 26-obligation proof-floor gate is policy-valid and green: TPCH
-passes 11/11 after 1,328/62,929 ms and produced report SHA-256
+The current 27-obligation proof-floor gate is policy-valid and green: TPCH
+passes 11/11 after 1,340/62,090 ms and produced report SHA-256
+`ca2b86b2c1f699023a4caab9bbe73f27c2f482ec64dc3fb6278f1df5e393d9b4`;
+TPC-DS passes 16/16 after 3,590/57,493 ms and produced
+`ac70caec1fe717655ed5f4381ab30e224c1009bf7dd51bf54dd2505a59dc3d07`.
+All 27 are `VERIFIED_BOUNDED`, or 27/121 (22.3%) of the workload. The
+focused proof-floor policy target passes 5/5. The focused q34 evidence is
+recorded above.
+
+The immediately preceding 26-obligation gate passed 11/11 TPCH after
+1,328/62,929 ms and produced report SHA-256
 `a4604150df2e3875a18401c9e44fbbce62cf843843b601828258dea7cd42134b`;
-TPC-DS passes 15/15 after 3,273/56,501 ms and produced
+TPC-DS passed 15/15 after 3,273/56,501 ms and produced
 `4c297e703cf16dfb9b1eddefeea87ec90f5cdb509a68529d517324ead8e8afbd`.
-All 26 are `VERIFIED_BOUNDED`, or 26/121 (21.5%) of the workload. The
-focused proof-floor policy target passes 5/5. The incremental focused q73
-evidence is the 239/8,940 ms, SHA-bound proof above.
-The immediately preceding retained version-four 25-obligation gate passed
+The incremental focused q73 evidence for that gate is the 239/8,940 ms,
+SHA-bound proof above. The preceding retained version-four 25-obligation gate passed
 11/11 TPCH after 1,445/67,977 ms and produced report SHA-256
 `c5668fdda1f40493fdcef4729118d634a63c25f44024106198cdd89775d9d4ed`.
 TPC-DS passed 14/14 after 3,328/49,834 ms and produced
@@ -409,51 +440,44 @@ canonical direct render is 32,055,251 bytes after the exact
 already-alternative Sort ordinal representation; a 60-second solver experiment
 remains `UNKNOWN`.
 
-The current complete formula slice is 68/121 queries (56.2%). Its semantic
-partition is 68 formula-emitted, 33 unsupported, and 20 without an exact
+The current complete formula slice is 71/121 queries (58.7%). Its semantic
+partition is 71 formula-emitted, 30 unsupported, and 20 without an exact
 initial/final pair because whole-query preparation failed. Preparation is a
 separate axis: 93 queries succeed and 28 fail, with eight
 failed preparations that nevertheless preserve an exact pair and therefore
 also reach a semantic unsupported result.
 
-Thus 101/121 queries have exact boundary-result pairs, 68/101 (67.3%) of those
-pairs construct formulas, and 68/93 (73.1%) construct formulas within the
-preparation-successful subset. Seventy-three pairs enter the Python verifier,
-where 68/73 (93.2%) construct formulas. This is a useful end-to-end pre-physical
+Thus 101/121 queries have exact boundary-result pairs, 71/101 (70.3%) of those
+pairs construct formulas, and 71/93 (76.3%) construct formulas within the
+preparation-successful subset. Seventy-six pairs enter the Python verifier,
+where 71/76 (93.4%) construct formulas. This is a useful end-to-end pre-physical
 optimizer sample, not a claim about larger inputs. Formula construction is not
 a bounded proof.
 
-The 33 semantic unsupported rows split by primary reason into 26
+The 30 semantic unsupported rows split by primary reason into 23
 initial-export, two final-export, and five verifier results. The two exporter
-columns contain 28 pair rejections in total; the five remaining exact pairs
+columns contain 25 unique pair rejections in total; the five remaining exact pairs
 fail closed in the verifier itself.
 
 These counts also expose the approximate work needed to make formulas for most
-of the captured workload. The preparation-successful gap currently clusters
-into roughly 6--8 semantic families. The preceding 9--15 narrow-milestone
-estimate has consumed three milestones, leaving roughly 6--12:
-floating-point/`Double` semantics (ten primary first blockers in the current
-complete dashboard, including q83); factorized Sort/Merge/join
+of the captured workload. The remaining primary blockers include
+floating-point/`Double` semantics (seven queries, with q83 the next passive
+carrier target); factorized Sort/Merge/join
 shapes (five after TPCH q2 and TPC-DS q59/q78 moved to formula construction);
 range reads; scalar `Apply`/`Map`; and smaller Date/`Unwrap`, count-distinct,
 and `Concat` slices.
 Same-type integral division removed q73 and q78 from the numeric first-blocker
 inventory; both now emit formulas. Floating-point division and floating `avg`
-remain parts of the broader `Double` program, but neither is a current primary
-`/` blocker.
+remain parts of the broader `Double` program. The whole-predicate bridge is
+deliberately not general floating arithmetic.
 The focused eight-query failed-preparation audit adds exact window semantics
 and lowering as the main captured-pair family, Decimal scale-changing casts
 for q49, and a secondary range-read boundary for q51. Including that overlap,
 the captured-pair gap is approximately 8--10 families or 10--18 milestones.
 
-These are planning estimates, not coverage floors. Starting from 68 formulas,
-the preceding projections have consumed three milestones: roughly another
-1--3 may reach 73--79, 4--8 may reach 83--91, and 6--12 may reach 89--93 formulas
-among preparation-successful queries. Later
-blockers can invalidate the ranges. They assume deliberately workload-targeted
-semantic gates; a safer remaining budget for clean, reusable implementations
-is approximately 9--16 milestones for the preparation-successful gap and
-14--24 for all currently captured pairs. The remaining 20 workload entries
+These are planning estimates, not coverage floors. The new bridge starts the
+next planning pass from 71 formulas; later blockers can invalidate any
+query-count projection. The remaining 20 workload entries
 have no exact captured pair and require frontend/optimizer work before verifier
 semantics can help; consequently the present captured-pair ceiling is 101/121.
 Even reaching that ceiling would establish formula construction, not solver
@@ -829,8 +853,8 @@ Eight failures--q12, q20, q49, q51, q53, q63, q89, and q98--still preserve
 exact initial/final boundary results and therefore overlap the semantic
 unsupported inventory. The other 18 are terminal no-pair preparation failures.
 
-The exporter matrix below covers the recorded boundary failures among 26 of
-the 31 unsupported TPC-DS queries in the current complete dashboard. IDs can
+The exporter matrix below covers the recorded boundary failures among 23 of
+the 28 unsupported TPC-DS queries in the current complete dashboard. IDs can
 appear in both exporter columns or under more than one reason because both
 snapshots are audited independently. The five queries that pass export and
 fail closed inside the verifier are listed after the matrix.
@@ -847,7 +871,7 @@ fail closed inside the verifier are listed after the matrix.
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `Unwrap` | q8 | q8 |
 | Restricted `Concat` exceeds its allocation-totality bound | q84 | q84 |
-| Type `Double` | q7, q13, q21, q22, q26, q34, q35, q75, q83, q85 | q7, q13, q21, q22, q26, q34, q35, q75, q83, q85 |
+| Type `Double` | q7, q13, q22, q26, q35, q83, q85 | q7, q13, q22, q26, q35, q83, q85 |
 | Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 
 After both snapshots export, q4 rejects a 20,736-pair join match above the
@@ -1121,36 +1145,53 @@ The exact sorting network then adds TPCH q2 to preparation and formula
 construction without changing the proof floor. The packed-row network carrier
 then adds TPC-DS q59/q78 to formula construction, also without changing the
 proof floor. The closed scalar-inside-`IN` and symbolic producer-order Merge
-slices then add TPC-DS q58. The checked-in floor is therefore 18/22 TPCH and
-50/99 TPC-DS formulas, or 68/121 (56.2%); its complete semantic
-partition contains 33 unsupported and 20 no-pair optimizer-failure queries.
+slices then add TPC-DS q58. One-level closed `IN` nesting and exact
+proven-present Date wrappers expose q83's `Double` carrier without changing
+the floor. The restricted whole floating-predicate bridge and exact
+proven-present wrapper normalization then add TPC-DS q21/q34/q75, while q34
+also joins the proof floor. The checked-in floor is therefore 18/22 TPCH and
+53/99 TPC-DS formulas, or 71/121 (58.7%); its complete semantic
+partition contains 30 unsupported and 20 no-pair optimizer-failure queries.
 Independently, preparation succeeds for 93 and fails for 28. Eight failed
 preparations retain exact pairs and overlap the unsupported inventory. There
-are 101 exact pairs and 73 verifier entrants, so the corresponding formula
-ratios are 68/101 (67.3%), 68/93 (73.1%) within the preparation-successful
-subset, and 68/73 (93.2%) at verifier entry.
+are 101 exact pairs and 76 verifier entrants, so the corresponding formula
+ratios are 71/101 (70.3%), 71/93 (76.3%) within the preparation-successful
+subset, and 71/76 (93.4%) at verifier entry.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
 159/63,937 ms. Focused q65 emits a formula after 687/30,318 ms. The proof floor
-contains twenty-six confirmed `VERIFIED_BOUNDED` obligations.
+contains twenty-seven confirmed `VERIFIED_BOUNDED` obligations.
 
 ## Curated proof floor and focused results
 
 - The checked-in proof floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16,
-  q38, q42, q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96, each
-  at two rows per referenced table and two tasks. These are twenty-six bounded
-  proofs, 26/121 (21.5%) of the workload,
+  q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96,
+  each at two rows per referenced table and two tasks. These are twenty-seven
+  bounded proofs, 27/121 (22.3%) of the workload,
   for the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
-  The current complete gates pass 11/11 TPCH after 1,328/62,929 ms and 15/15
-  TPC-DS after 3,273/56,501 ms, all `VERIFIED_BOUNDED`. Their report SHA-256
+  The current complete gates pass 11/11 TPCH after 1,340/62,090 ms and 16/16
+  TPC-DS after 3,590/57,493 ms, all `VERIFIED_BOUNDED`. Their report SHA-256
   values are
-  `a4604150df2e3875a18401c9e44fbbce62cf843843b601828258dea7cd42134b` and
-  `4c297e703cf16dfb9b1eddefeea87ec90f5cdb509a68529d517324ead8e8afbd`.
+  `ca2b86b2c1f699023a4caab9bbe73f27c2f482ec64dc3fb6278f1df5e393d9b4` and
+  `ac70caec1fe717655ed5f4381ab30e224c1009bf7dd51bf54dd2505a59dc3d07`.
+  Focused q34 is `VERIFIED_BOUNDED` after 263/2,471 ms with report SHA-256
+  `44bdcd9f105d4f334b628bb672fa8d6b4f6ffd43ceece0666cd03829dfa5b677`.
+  Focused q21 is `UNKNOWN` after 170/60,950 ms with report SHA-256
+  `15ee95f2b59bc4ee41dddc19c8b98cdceb89bb3a2868678ab41539931c2c2a0e`;
+  its former candidate was eliminated by exact wrapper normalization.
+  Focused q75 remains `UNKNOWN` in retained 1,134/128,182 ms evidence with
+  report SHA-256
+  `1322068b8d57dfa984e91f6f775b063cc3c10e997e30a841e40c46f8d2058a9f`.
   The focused q73 proof spent 239/8,940 ms and produced report SHA-256
   `2c9dd4e765f4507bd952189055d67a0db5cf818ecb84abe188bfcdd8a15122e0`.
-  The immediately preceding 25-obligation reports passed 11/11 TPCH after
+  The immediately preceding 26-obligation reports passed 11/11 TPCH after
+  1,328/62,929 ms and 15/15 TPC-DS after 3,273/56,501 ms. Their SHA-256 values
+  were
+  `a4604150df2e3875a18401c9e44fbbce62cf843843b601828258dea7cd42134b` and
+  `4c297e703cf16dfb9b1eddefeea87ec90f5cdb509a68529d517324ead8e8afbd`.
+  The preceding 25-obligation reports passed 11/11 TPCH after
   1,445/67,977 ms and 14/14 TPC-DS after 3,328/49,834 ms. Their SHA-256 values
   were
   `c5668fdda1f40493fdcef4729118d634a63c25f44024106198cdd89775d9d4ed` and
@@ -1591,9 +1632,10 @@ q11, q12, q14, q15, q18, q19, and q22 plus
 TPC-DS q3, q38, q42, q48, q52, q55, q69, q87, q90, q93, q95, and q96. That
 preceding complete expanded run confirmed all twenty-two as
 `VERIFIED_BOUNDED`. The current policy additionally contains TPCH q21 and
-TPC-DS q16/q73/q94; the current complete gate confirms all twenty-six.
+TPC-DS q16/q34/q73/q94; the current complete gate confirms all twenty-seven.
 TPC-DS
-q5, q10, q19, q25, q29, q46, q54, q56, q60, q65, q68, q77, q80, q91, and q99
+q5, q10, q19, q21, q25, q29, q46, q54, q56, q60, q65, q68, q75, q77, q80,
+q91, and q99
 construct formulas but return `UNKNOWN` in their latest solver runs. TPCH q1,
 q7, q8, and q9 also construct formulas and are `UNKNOWN` in their focused
 60-second runs.
@@ -1775,15 +1817,19 @@ integral division raises the next floor to 64. The bounded exact sorting
 network raises the next floor to 65 through TPCH q2, and the packed-row carrier
 raises the next floor to 67 through TPC-DS q59/q78. Exact nullable-Date dynamic
 `IN`, closed scalar-inside-`IN` consumption, and symbolic producer-order Merge
-then move q58 through formula construction and raise the current floor to 68.
+then move q58 through formula construction and raise that floor to 68.
 One-level closed `IN` nesting and exact proven-present literal Date casts in
 raw static-`SqlIn` tuples then move q83 to `Double` without changing that
-floor. Floating-point semantics, more than two dependencies, other correlation
+floor. The restricted whole floating-predicate bridge and exact proven-present
+literal-wrapper normalization then add TPC-DS q21/q34/q75, raising the current
+floor to 71; q34 also raises the proof floor to twenty-seven. Passive `Double`
+carriers, beginning with q83, broader floating arithmetic, more than two
+dependencies, other correlation
 shapes, coercing dynamic `IN`, nullable String and non-positive nullable
 contexts, range reads, and other OLAP pushdowns remain later work;
 solver/formula-size work promotes supported queries only after reproducible
-`VERIFIED_BOUNDED` results. The required policy now contains twenty-six
-obligations, and the current complete gates confirm all 26/26.
+`VERIFIED_BOUNDED` results. The required policy now contains twenty-seven
+obligations, and the current complete gates confirm all 27/27.
 
 ### Confirmed subplan optimizer defects
 

@@ -38,7 +38,8 @@ EXPECTED_MIN_SHARE = 0.50
 WAVE_COMPLETE_HOURS = 6
 WAVE_COVERAGE_DONE = 0.85
 STALE_HOURS = 36
-HISTORY_MAX_POINTS = 40
+# 0 = keep full --since window in history (needed for compare-to-any-wave).
+HISTORY_MAX_POINTS = 0
 INBOX_LIMIT = 80
 INBOX_PER_BRANCH = 45
 INBOX_PER_KIND = {
@@ -276,10 +277,16 @@ def run_view(p: dict) -> dict:
     }
 
 
+def _history_tail(ordered: list[dict]) -> list[dict]:
+    if HISTORY_MAX_POINTS and HISTORY_MAX_POINTS > 0:
+        return ordered[-HISTORY_MAX_POINTS:]
+    return ordered
+
+
 def history_view(pts: list[dict]) -> dict:
     """History keyed by run timestamp (default order)."""
     ordered = sorted(pts, key=lambda p: p["ts"])
-    tail = ordered[-HISTORY_MAX_POINTS:]
+    tail = _history_tail(ordered)
     return {
         "labels": [p["label"] for p in tail],
         "days": [p["ts_iso"][:10] for p in tail],
@@ -296,7 +303,7 @@ def history_by_commit_view(pts: list[dict]) -> dict:
         pts,
         key=lambda p: (p["commit_ts"] or p["ts"], p["ts"]),
     )
-    tail = ordered[-HISTORY_MAX_POINTS:]
+    tail = _history_tail(ordered)
     return {
         "labels": [p["commit_label"] for p in tail],
         "days": [
@@ -782,12 +789,27 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
 
     display_waves = build_waves(points, since, branch_set, cluster_set)
     display_expected = expected_suites(display_waves)
+    # Best sha8 per (branch, cluster, day) for compare dropdown labels.
+    wave_sha: dict[tuple[str, str, str], str] = {}
+    for p in points:
+        if p["cluster"] not in cluster_set or p["branch"] not in branch_set:
+            continue
+        ver = (p.get("version") or "").strip()
+        if not ver or ver == "—":
+            continue
+        key3 = (p["branch"], p["cluster"], p["ts"].date().isoformat())
+        prev = wave_sha.get(key3)
+        if prev is None or (len(ver) >= 8 and len(prev) < 8):
+            wave_sha[key3] = ver[:8]
+
     waves_meta = {}
+    wave_list: dict[str, list[dict]] = {}
     for (br, cl), waves in display_waves.items():
         if not waves:
             continue
         last = waves[-1]
         max_ts = last["max_ts"]
+        exp_n = len(display_expected.get((br, cl), ()))
         waves_meta[f"{br}|{cl}"] = {
             "branch": br,
             "db": cl,
@@ -795,10 +817,30 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "day": last["day"],
             "ci_version": last["day"],
             "suites": len(last["suites"]),
-            "expected": len(display_expected.get((br, cl), ())),
+            "expected": exp_n,
             "max_ts": max_ts.isoformat().replace("+00:00", "")[:19],
             "age_hours": round((now_utc - max_ts).total_seconds() / 3600.0, 1),
         }
+        entries = []
+        for w in reversed(waves):  # newest first — full --since window
+            w_max = w["max_ts"]
+            w_min = w["min_ts"]
+            day = w["day"]
+            entries.append(
+                {
+                    "id": day,
+                    "ci_version": day,
+                    "day": day,
+                    "max_ts": w_max.isoformat().replace("+00:00", "")[:19],
+                    "min_ts": w_min.isoformat().replace("+00:00", "")[:19],
+                    "sha8": wave_sha.get((br, cl, day), "—"),
+                    "suites": len(w["suites"]),
+                    "expected": exp_n,
+                    "suite_names": sorted(w["suites"]),
+                    "current": w is last,
+                }
+            )
+        wave_list[f"{br}|{cl}"] = entries
 
     waves_by_db: dict[str, dict] = {}
     for meta in waves_meta.values():
@@ -848,6 +890,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "ui": {
             "now_runs": NOW_RUNS,
             "display_runs": DISPLAY_RUNS,
+            # null = compare dropdown lists every day-wave in the window (no top-N cut).
+            "compare_runs": None,
             "baseline_runs": BASELINE_RUNS,
             "stale_hours": STALE_HOURS,
             "wave_complete_hours": WAVE_COMPLETE_HOURS,
@@ -870,6 +914,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "cells": cells,
         },
         "waves": waves_meta,
+        "wave_list": wave_list,
         "waves_by_db": waves_by_db,
         "last_activity": last_activity,
         "inbox": inbox,
@@ -884,6 +929,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "expected": f"suites in ≥{int(EXPECTED_MIN_SHARE*100)}% of day-waves / {EXPECTED_LOOKBACK_DAYS}d",
             "wave": "calendar day × Branch × Cluster",
             "wave_view": "finished (default) = last completed run; all = latest incl. in_progress",
+            "compare": "per-cluster day-wave select; full history in window (no top-7 cut)",
         },
     }
 

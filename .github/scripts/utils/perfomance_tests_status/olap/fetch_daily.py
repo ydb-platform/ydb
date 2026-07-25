@@ -32,6 +32,14 @@ ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
 SQL_BY_MODE = {
     "runs": ROOT / "queries" / "fetch_olap_test_runs.sql",
     "daily": ROOT / "queries" / "fetch_olap_test_daily.sql",
+    "suites": ROOT / "queries" / "fetch_olap_suites.sql",
+    "tests": ROOT / "queries" / "fetch_olap_test_issues.sql",
+}
+DEFAULT_OUT = {
+    "runs": ROOT / "out" / "raw_test_runs.json",
+    "daily": ROOT / "out" / "raw_test_daily.json",
+    "suites": ROOT / "out" / "raw.json",
+    "tests": ROOT / "out" / "raw_tests.json",
 }
 DEFAULT_WINDOW_DAYS = 30
 
@@ -128,15 +136,10 @@ def main() -> int:
         datetime.now(timezone.utc).date() - timedelta(days=max(1, args.days))
     ).isoformat()
     sql = build_sql(since, args.mode)
-    out = Path(
-        args.output
-        or (
-            ROOT / "out" / ("raw_test_runs.json" if args.mode == "runs" else "raw_test_daily.json")
-        )
-    )
+    out = Path(args.output or DEFAULT_OUT[args.mode])
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    qname = f"fetch_olap_test_{args.mode}"
+    qname = f"fetch_olap_{args.mode}"
     print(f"scan fetch mode={args.mode} since={since} → {out}", flush=True)
     with YDBWrapper(
         config_path=args.config,
@@ -149,12 +152,25 @@ def main() -> int:
             raise SystemExit("YDB credentials check failed")
         rows = ydb_w.execute_scan_query(sql, query_name=qname)
 
-    n = 0
-    with out.open("w") as f:
-        for row in rows:
-            f.write(json.dumps(row_to_obj(row), ensure_ascii=False, separators=(",", ":")) + "\n")
-            n += 1
-    print(f"wrote {n} rows → {out}", flush=True)
+    # suites/tests → MCP-shaped JSON for generate.load_rows; runs/daily → jsonl
+    if args.mode in ("suites", "tests"):
+        objs = [row_to_obj(row) for row in rows]
+        cols = list(objs[0].keys()) if objs else []
+        payload = {
+            "result_sets": [{
+                "columns": [{"name": c} for c in cols],
+                "rows": [[o.get(c) for c in cols] for o in objs],
+            }]
+        }
+        out.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"wrote {len(objs)} rows (MCP JSON) → {out}", flush=True)
+    else:
+        n = 0
+        with out.open("w") as f:
+            for row in rows:
+                f.write(json.dumps(row_to_obj(row), ensure_ascii=False, separators=(",", ":")) + "\n")
+                n += 1
+        print(f"wrote {n} rows (jsonl) → {out}", flush=True)
     return 0
 
 

@@ -65,9 +65,11 @@ python3 generate.py \
 | Slice | `Branch × Cluster × run_type@warehouses` |
 | Date interval | From/To; filters inbox, heatmap, history; Reset → full `--since..until` |
 | Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest day-wave state (prefer in_progress when slice not in today yet) |
+| Compare wave | Per-cluster select = past day-waves (≥1 suite). Dive cards = **this slice’s** history days (incomplete cluster days OK — other families may show no data). Selecting cmp recalculates baseline / Δ% / heatmap. Alert prev7 kept as secondary note. |
+| Heatmap compare | Both sides = `%` vs the **same** prev7 baseline (before compare day). Paint only on **significant** hard changes: cross lat↑(+10%) / tpmC↓(−10%) / broken, or already-hard and moved another full ≥10pp. Watch/noise → solid now color (no gradient). Dive Δ still pairwise vs compare run. |
 
 ## UI layers
 
-1. **Now** — counters + Cluster×run_type heatmap + problem inbox
-2. **Deep dive** — click inbox row → last 3 runs (context; alert uses last only)
-3. **History** — “Show history” charts (tpmC + lat)
+1. **Now** — compact top-filters (Wave + Branch/dates) · counters · heatmap · inbox
+2. **Deep dive** — compare-run cards + charts on row expand
+3. **History** — tpmC + lat by run/commit date

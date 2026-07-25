@@ -1093,6 +1093,8 @@ def _merge_query(item: dict, q: dict, limit: int = 25) -> None:
             if q.get("ydb_now") is not None:
                 x["ydb_now"] = q["ydb_now"]
                 x["ydb_base"] = q.get("ydb_base")
+            if q.get("error_class"):
+                x["error_class"] = q["error_class"]
             if q.get("history") and not x.get("history"):
                 x["history"] = q["history"]
             elif q.get("history"):
